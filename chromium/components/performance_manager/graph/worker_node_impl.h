@@ -76,10 +76,8 @@ class WorkerNodeImpl
   uint64_t resident_set_kb_estimate() const;
   uint64_t private_footprint_kb_estimate() const;
 
-  base::WeakPtr<WorkerNodeImpl> GetWeakPtr() {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    return weak_factory_.GetWeakPtr();
-  }
+  base::WeakPtr<WorkerNodeImpl> GetWeakPtrOnUIThread();
+  base::WeakPtr<WorkerNodeImpl> GetWeakPtr();
 
   // Implementation details below this point.
 
@@ -106,7 +104,9 @@ class WorkerNodeImpl
   resource_attribution::WorkerContext GetResourceContext() const override;
   const GURL& GetURL() const override;
   const base::flat_set<const FrameNode*> GetClientFrames() const override;
+  bool VisitClientFrames(const FrameNodeVisitor&) const override;
   const base::flat_set<const WorkerNode*> GetClientWorkers() const override;
+  bool VisitClientWorkers(const WorkerNodeVisitor&) const override;
   const base::flat_set<const WorkerNode*> GetChildWorkers() const override;
   bool VisitChildDedicatedWorkers(const WorkerNodeVisitor&) const override;
   const PriorityAndReason& GetPriorityAndReason() const override;
@@ -169,6 +169,7 @@ class WorkerNodeImpl
   std::unique_ptr<NodeAttachedData> execution_context_
       GUARDED_BY_CONTEXT(sequence_checker_);
 
+  base::WeakPtr<WorkerNodeImpl> weak_this_;
   base::WeakPtrFactory<WorkerNodeImpl> weak_factory_
       GUARDED_BY_CONTEXT(sequence_checker_){this};
 };

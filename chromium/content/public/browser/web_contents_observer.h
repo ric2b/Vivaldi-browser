@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include "base/memory/raw_ptr.h"
+#include "base/observer_list_types.h"
 #include "base/process/kill.h"
 #include "base/process/process_handle.h"
 #include "base/threading/thread_restrictions.h"
@@ -27,6 +28,7 @@
 #include "third_party/blink/public/mojom/css/preferred_color_scheme.mojom.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom-forward.h"
+#include "third_party/blink/public/mojom/frame/lifecycle.mojom.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-forward.h"
 #include "third_party/blink/public/mojom/media/capture_handle_config.mojom-forward.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -106,9 +108,11 @@ struct TrustTokenAccessDetails;
 //
 // Usually, observers should only care about the current RenderViewHost as
 // returned by GetRenderViewHost().
-class CONTENT_EXPORT WebContentsObserver {
+class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
  public:
+  WebContentsObserver(WebContentsObserver&&) = delete;
   WebContentsObserver(const WebContentsObserver&) = delete;
+  WebContentsObserver& operator=(WebContentsObserver&&) = delete;
   WebContentsObserver& operator=(const WebContentsObserver&) = delete;
 
   // Frames and Views ----------------------------------------------------------
@@ -686,6 +690,13 @@ class CONTENT_EXPORT WebContentsObserver {
   // Called when the audio state of an individual frame changes.
   virtual void OnFrameAudioStateChanged(RenderFrameHost* rfh, bool audible) {}
 
+  // Called when an individual frame's visibility inside the viewport of the
+  // page changes. Note that this value is independent from the visibility of
+  // the page.
+  virtual void OnFrameVisibilityChanged(
+      RenderFrameHost* rfh,
+      blink::mojom::FrameVisibility visibility) {}
+
   // Called when the connected to USB device state changes.
   virtual void OnIsConnectedToUsbDeviceChanged(
       bool is_connected_to_usb_device) {}
@@ -891,8 +902,7 @@ class CONTENT_EXPORT WebContentsObserver {
   // part of its lifetime.  It can then call Observe() to start and stop
   // observing.
   WebContentsObserver();
-
-  virtual ~WebContentsObserver();
+  ~WebContentsObserver() override;
 
   // Start observing a different WebContents; used with the default constructor.
   void Observe(WebContents* web_contents);

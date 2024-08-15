@@ -23,9 +23,9 @@ void InitTestEnvironment() {
 void InitTestPathEnvironment() {
   if (!done_init_path) {
     base::FilePath src_dir;
-    base::PathService::Get(base::DIR_SOURCE_ROOT, &src_dir);
+    base::PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, &src_dir);
 
-    base::PathService::Override(base::DIR_SOURCE_ROOT,
+    base::PathService::Override(base::DIR_SRC_TEST_DATA_ROOT,
                                 src_dir.Append(FILE_PATH_LITERAL("chromium")));
     done_init_path = true;
   }

@@ -37,10 +37,10 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.homepage.HomepageManager;
 import org.chromium.chrome.browser.ntp.RecentlyClosedBridge;
 import org.chromium.chrome.browser.ntp.RecentlyClosedBridgeJni;
+import org.chromium.chrome.browser.price_tracking.PriceTrackingFeatures;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.MockTab;
 import org.chromium.chrome.browser.tab.Tab;
@@ -64,8 +64,6 @@ import org.chromium.chrome.browser.tabmodel.TabPersistentStore;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore.TabModelSelectorMetadata;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore.TabPersistentStoreObserver;
 import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 
 import java.io.File;
 import java.nio.ByteBuffer;
@@ -83,10 +81,9 @@ public class TabPersistentStoreIntegrationTest {
             return false;
         }
     }
-    @Rule
-    public JniMocker jniMocker = new JniMocker();
-    @Rule
-    public TestRule mProcessor = new Features.JUnitProcessor();
+
+    @Rule public JniMocker jniMocker = new JniMocker();
+    @Rule public TestRule mProcessor = new Features.JUnitProcessor();
 
     private static final int TAB_ID = 42;
     private static final WebContentsState WEB_CONTENTS_STATE =
@@ -96,28 +93,17 @@ public class TabPersistentStoreIntegrationTest {
     private TabModelSelector mTabModelSelector;
     private TabPersistentStore mTabPersistentStore;
 
-    @Mock
-    private ChromeTabbedActivity mChromeActivity;
-    @Mock
-    private TabCreatorManager mTabCreatorManager;
-    @Mock
-    private ChromeTabCreator mChromeTabCreator;
-    @Mock
-    private NextTabPolicySupplier mNextTabPolicySupplier;
-    @Mock
-    private TabContentManager mTabContentManager;
-    @Mock
-    private Profile mProfile;
-    @Mock
-    private TabModelJniBridge.Natives mTabModelJniBridgeJni;
-    @Mock
-    private RecentlyClosedBridge.Natives mRecentlyClosedBridgeJni;
-    @Mock
-    private Resources mResources;
-    @Mock
-    private TabImpl.Natives mTabImplJni;
-    @Mock
-    private PersistedTabData.Natives mPersistedTabDataJni;
+    @Mock private ChromeTabbedActivity mChromeActivity;
+    @Mock private TabCreatorManager mTabCreatorManager;
+    @Mock private ChromeTabCreator mChromeTabCreator;
+    @Mock private NextTabPolicySupplier mNextTabPolicySupplier;
+    @Mock private TabContentManager mTabContentManager;
+    @Mock private Profile mProfile;
+    @Mock private TabModelJniBridge.Natives mTabModelJniBridgeJni;
+    @Mock private RecentlyClosedBridge.Natives mRecentlyClosedBridgeJni;
+    @Mock private Resources mResources;
+    @Mock private TabImpl.Natives mTabImplJni;
+    @Mock private PersistedTabData.Natives mPersistedTabDataJni;
 
     private PausedExecutorService mExecutor = new PausedExecutorService();
 
@@ -133,7 +119,7 @@ public class TabPersistentStoreIntegrationTest {
         when(mResources.getInteger(org.chromium.ui.R.integer.min_screen_width_bucket))
                 .thenReturn(1);
         when(mTabCreatorManager.getTabCreator(anyBoolean())).thenReturn(mChromeTabCreator);
-        mOrchestrator = new TabbedModeTabModelOrchestrator(/*tabMergingEnabled=*/true);
+        mOrchestrator = new TabbedModeTabModelOrchestrator(/* tabMergingEnabled= */ true);
         mOrchestrator.createTabModels(
                 mChromeActivity, mTabCreatorManager, mNextTabPolicySupplier, 0);
         mTabModelSelector = mOrchestrator.getTabModelSelector();
@@ -141,6 +127,8 @@ public class TabPersistentStoreIntegrationTest {
 
         // Pretend native was loaded, creating TabModelImpls.
         Profile.setLastUsedProfileForTesting(mProfile);
+        PriceTrackingFeatures.setPriceTrackingEnabledForTesting(false);
+
         jniMocker.mock(TabModelJniBridgeJni.TEST_HOOKS, mTabModelJniBridgeJni);
         jniMocker.mock(RecentlyClosedBridgeJni.TEST_HOOKS, mRecentlyClosedBridgeJni);
         jniMocker.mock(TabImplJni.TEST_HOOKS, mTabImplJni);
@@ -163,24 +151,14 @@ public class TabPersistentStoreIntegrationTest {
     @Test
     @SmallTest
     @Feature({"TabPersistentStore"})
-    @DisableFeatures(ChromeFeatureList.CRITICAL_PERSISTED_TAB_DATA)
     public void testOpenAndCloseTabCreatesAndDeletesFile_tabState() {
-        doTestOpenAndCloseTabCreatesAndDeletesFile();
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"TabPersistentStore"})
-    @EnableFeatures(ChromeFeatureList.CRITICAL_PERSISTED_TAB_DATA)
-    public void testOpenAndCloseTabCreatesAndDeletesFile_persistedTabData() {
         doTestOpenAndCloseTabCreatesAndDeletesFile();
     }
 
     private void doTestOpenAndCloseTabCreatesAndDeletesFile() {
         // Setup the test: Create a tab
         TabModel tabModel = mTabModelSelector.getModel(false);
-        MockTab tab =
-                (MockTab) MockTab.createAndInitialize(TAB_ID, false, TabLaunchType.FROM_CHROME_UI);
+        MockTab tab = MockTab.createAndInitialize(TAB_ID, mProfile, TabLaunchType.FROM_CHROME_UI);
         // Ordinarily, TabState comes from native, so setup a stub in TabStateExtractor.
         TabState tabState = new TabState();
         tabState.contentsState = WEB_CONTENTS_STATE;
@@ -211,16 +189,7 @@ public class TabPersistentStoreIntegrationTest {
     @Test
     @SmallTest
     @Feature({"TabPersistentStore"})
-    @DisableFeatures(ChromeFeatureList.CRITICAL_PERSISTED_TAB_DATA)
     public void testUndoTabClosurePersistsState_tabState() {
-        doTestUndoTabClosurePersistsState();
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"TabPersistentStore"})
-    @EnableFeatures(ChromeFeatureList.CRITICAL_PERSISTED_TAB_DATA)
-    public void testUndoTabClosurePersistsState_persistedTabData() {
         doTestUndoTabClosurePersistsState();
     }
 
@@ -230,7 +199,7 @@ public class TabPersistentStoreIntegrationTest {
 
         // Setup the test: Create a tab and close it
         TabModel tabModel = mTabModelSelector.getModel(false);
-        Tab tab = MockTab.createAndInitialize(TAB_ID, false, TabLaunchType.FROM_CHROME_UI);
+        Tab tab = MockTab.createAndInitialize(TAB_ID, mProfile, TabLaunchType.FROM_CHROME_UI);
         tabModel.addTab(tab, 0, TabLaunchType.FROM_CHROME_UI, TabCreationState.LIVE_IN_FOREGROUND);
         tabModel.closeTab(tab, false, false, true);
         runAllAsyncTasks();
@@ -247,14 +216,13 @@ public class TabPersistentStoreIntegrationTest {
     @Test
     @SmallTest
     @Feature({"TabPersistentStore"})
-    @EnableFeatures(ChromeFeatureList.CRITICAL_PERSISTED_TAB_DATA)
     public void testCloseTabPersistsState() {
         AtomicInteger timesMetadataSaved = new AtomicInteger();
         observeOnMetadataSavedAsynchronously(timesMetadataSaved);
 
         // Setup the test: Create a tab and close it.
         TabModel tabModel = mTabModelSelector.getModel(false);
-        Tab tab = MockTab.createAndInitialize(1, false, TabLaunchType.FROM_CHROME_UI);
+        Tab tab = MockTab.createAndInitialize(1, mProfile, TabLaunchType.FROM_CHROME_UI);
         tabModel.addTab(tab, 0, TabLaunchType.FROM_CHROME_UI, TabCreationState.LIVE_IN_FOREGROUND);
 
         int timesMetadataSavedBefore = timesMetadataSaved.intValue();
@@ -273,19 +241,20 @@ public class TabPersistentStoreIntegrationTest {
     @Test
     @SmallTest
     @Feature({"TabPersistentStore"})
-    @Config(manifest = Config.NONE, shadows = {ShadowHomepageManager.class})
-    @EnableFeatures(ChromeFeatureList.CRITICAL_PERSISTED_TAB_DATA)
+    @Config(
+            manifest = Config.NONE,
+            shadows = {ShadowHomepageManager.class})
     public void testCloseAllTabsPersistsState() {
         AtomicInteger timesMetadataSaved = new AtomicInteger();
         observeOnMetadataSavedAsynchronously(timesMetadataSaved);
 
         // Setup the test: Create three tabs and close them all.
         TabModel tabModel = mTabModelSelector.getModel(false);
-        Tab tab1 = MockTab.createAndInitialize(1, false, TabLaunchType.FROM_CHROME_UI);
+        Tab tab1 = MockTab.createAndInitialize(1, mProfile, TabLaunchType.FROM_CHROME_UI);
         tabModel.addTab(tab1, 0, TabLaunchType.FROM_CHROME_UI, TabCreationState.LIVE_IN_FOREGROUND);
-        Tab tab2 = MockTab.createAndInitialize(2, false, TabLaunchType.FROM_CHROME_UI);
+        Tab tab2 = MockTab.createAndInitialize(2, mProfile, TabLaunchType.FROM_CHROME_UI);
         tabModel.addTab(tab2, 1, TabLaunchType.FROM_CHROME_UI, TabCreationState.LIVE_IN_FOREGROUND);
-        Tab tab3 = MockTab.createAndInitialize(3, false, TabLaunchType.FROM_CHROME_UI);
+        Tab tab3 = MockTab.createAndInitialize(3, mProfile, TabLaunchType.FROM_CHROME_UI);
         tabModel.addTab(tab3, 2, TabLaunchType.FROM_CHROME_UI, TabCreationState.LIVE_IN_FOREGROUND);
 
         int timesMetadataSavedBefore = timesMetadataSaved.intValue();
@@ -310,13 +279,14 @@ public class TabPersistentStoreIntegrationTest {
     }
 
     private void observeOnMetadataSavedAsynchronously(AtomicInteger timesMetadataSaved) {
-        TabPersistentStoreObserver observer = new TabPersistentStoreObserver() {
-            @Override
-            public void onMetadataSavedAsynchronously(
-                    TabModelSelectorMetadata modelSelectorMetadata) {
-                timesMetadataSaved.incrementAndGet();
-            }
-        };
+        TabPersistentStoreObserver observer =
+                new TabPersistentStoreObserver() {
+                    @Override
+                    public void onMetadataSavedAsynchronously(
+                            TabModelSelectorMetadata modelSelectorMetadata) {
+                        timesMetadataSaved.incrementAndGet();
+                    }
+                };
         mTabPersistentStore.addObserver(observer);
     }
 }

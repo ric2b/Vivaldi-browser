@@ -2,15 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {AcceleratorAction, ActionChoice, CustomizableButton, GraphicsTablet, Keyboard, MetaKey, ModifierKey, Mouse, PointingStick, SimulateRightClickModifier, SixPackKeyInfo, SixPackShortcutModifier, Stylus, Touchpad, Vkey} from './input_device_settings_types.js';
+import {AcceleratorAction, ActionChoice, CustomizableButton, CustomizationRestriction, ExtendedFkeysModifier, GraphicsTablet, Keyboard, MetaKey, ModifierKey, Mouse, PointingStick, SimulateRightClickModifier, SixPackKeyInfo, SixPackShortcutModifier, StaticShortcutAction, Stylus, TopRowActionKey, Touchpad, Vkey} from './input_device_settings_types.js';
 
 const defaultSixPackKeyRemappings: SixPackKeyInfo = {
   pageDown: SixPackShortcutModifier.kSearch,
   pageUp: SixPackShortcutModifier.kSearch,
   del: SixPackShortcutModifier.kSearch,
   insert: SixPackShortcutModifier.kSearch,
-  home: SixPackShortcutModifier.kAlt,
-  end: SixPackShortcutModifier.kAlt,
+  home: SixPackShortcutModifier.kSearch,
+  end: SixPackShortcutModifier.kSearch,
 };
 
 export const fakeKeyboards: Keyboard[] = [
@@ -27,6 +27,18 @@ export const fakeKeyboards: Keyboard[] = [
       ModifierKey.kControl,
       ModifierKey.kEscape,
       ModifierKey.kMeta,
+    ],
+    topRowActionKeys: [
+      TopRowActionKey.kBack,
+      TopRowActionKey.kForward,
+      TopRowActionKey.kRefresh,
+      TopRowActionKey.kFullscreen,
+      TopRowActionKey.kOverview,
+      TopRowActionKey.kScreenBrightnessDown,
+      TopRowActionKey.kScreenBrightnessUp,
+      TopRowActionKey.kVolumeMute,
+      TopRowActionKey.kVolumeDown,
+      TopRowActionKey.kVolumeUp,
     ],
     settings: {
       modifierRemappings: {
@@ -57,7 +69,21 @@ export const fakeKeyboards: Keyboard[] = [
       topRowAreFkeys: true,
       suppressMetaFkeyRewrites: true,
       sixPackKeyRemappings: defaultSixPackKeyRemappings,
+      f11: ExtendedFkeysModifier.kAlt,
+      f12: ExtendedFkeysModifier.kShift,
     },
+    topRowActionKeys: [
+      TopRowActionKey.kBack,
+      TopRowActionKey.kForward,
+      TopRowActionKey.kRefresh,
+      TopRowActionKey.kFullscreen,
+      TopRowActionKey.kOverview,
+      TopRowActionKey.kScreenBrightnessDown,
+      TopRowActionKey.kScreenBrightnessUp,
+      TopRowActionKey.kVolumeMute,
+      TopRowActionKey.kVolumeDown,
+      TopRowActionKey.kVolumeUp,
+    ],
   },
   {
     id: 8,
@@ -73,6 +99,18 @@ export const fakeKeyboards: Keyboard[] = [
       ModifierKey.kControl,
       ModifierKey.kEscape,
       ModifierKey.kMeta,
+    ],
+    topRowActionKeys: [
+      TopRowActionKey.kBack,
+      TopRowActionKey.kForward,
+      TopRowActionKey.kRefresh,
+      TopRowActionKey.kFullscreen,
+      TopRowActionKey.kOverview,
+      TopRowActionKey.kScreenBrightnessDown,
+      TopRowActionKey.kScreenBrightnessUp,
+      TopRowActionKey.kVolumeMute,
+      TopRowActionKey.kVolumeDown,
+      TopRowActionKey.kVolumeUp,
     ],
     settings: {
       modifierRemappings: {[ModifierKey.kAlt]: ModifierKey.kAssistant},
@@ -94,6 +132,18 @@ export const fakeKeyboards: Keyboard[] = [
       ModifierKey.kControl,
       ModifierKey.kEscape,
       ModifierKey.kMeta,
+    ],
+    topRowActionKeys: [
+      TopRowActionKey.kBack,
+      TopRowActionKey.kForward,
+      TopRowActionKey.kRefresh,
+      TopRowActionKey.kFullscreen,
+      TopRowActionKey.kOverview,
+      TopRowActionKey.kScreenBrightnessDown,
+      TopRowActionKey.kScreenBrightnessUp,
+      TopRowActionKey.kVolumeMute,
+      TopRowActionKey.kVolumeDown,
+      TopRowActionKey.kVolumeUp,
     ],
     settings: {
       modifierRemappings: {
@@ -129,6 +179,18 @@ export const fakeKeyboards2: Keyboard[] = [
       ModifierKey.kEscape,
       ModifierKey.kMeta,
     ],
+    topRowActionKeys: [
+      TopRowActionKey.kBack,
+      TopRowActionKey.kForward,
+      TopRowActionKey.kRefresh,
+      TopRowActionKey.kFullscreen,
+      TopRowActionKey.kOverview,
+      TopRowActionKey.kScreenBrightnessDown,
+      TopRowActionKey.kScreenBrightnessUp,
+      TopRowActionKey.kVolumeMute,
+      TopRowActionKey.kVolumeDown,
+      TopRowActionKey.kVolumeUp,
+    ],
     settings: {
       modifierRemappings: {
         [ModifierKey.kControl]: ModifierKey.kCapsLock,
@@ -152,6 +214,18 @@ export const fakeKeyboards2: Keyboard[] = [
       ModifierKey.kControl,
       ModifierKey.kEscape,
       ModifierKey.kMeta,
+    ],
+    topRowActionKeys: [
+      TopRowActionKey.kBack,
+      TopRowActionKey.kForward,
+      TopRowActionKey.kRefresh,
+      TopRowActionKey.kFullscreen,
+      TopRowActionKey.kOverview,
+      TopRowActionKey.kScreenBrightnessDown,
+      TopRowActionKey.kScreenBrightnessUp,
+      TopRowActionKey.kVolumeMute,
+      TopRowActionKey.kVolumeDown,
+      TopRowActionKey.kVolumeUp,
     ],
     settings: {
       modifierRemappings: {},
@@ -234,6 +308,7 @@ export const fakeMice: Mouse[] = [
     deviceKey: 'test:key',
     name: 'Razer Basilisk V3',
     isExternal: true,
+    customizationRestriction: CustomizationRestriction.kAllowCustomizations,
     settings: {
       swapRight: true,
       sensitivity: 5,
@@ -248,7 +323,7 @@ export const fakeMice: Mouse[] = [
             customizableButton: CustomizableButton.kBack,
           },
           remappingAction: {
-            action: AcceleratorAction.kCycleBackwardMru,
+            staticShortcutAction: StaticShortcutAction.kDisable,
           },
         },
         {
@@ -257,7 +332,7 @@ export const fakeMice: Mouse[] = [
             customizableButton: CustomizableButton.kForward,
           },
           remappingAction: {
-            action: AcceleratorAction.kCycleForwardMru,
+            acceleratorAction: AcceleratorAction.kCycleForwardMru,
           },
         },
         {
@@ -298,6 +373,7 @@ export const fakeMice: Mouse[] = [
     deviceKey: 'test:key',
     name: 'MX Anywhere 2S',
     isExternal: false,
+    customizationRestriction: CustomizationRestriction.kDisableKeyEventRewrites,
     settings: {
       swapRight: false,
       sensitivity: 1,
@@ -327,7 +403,7 @@ export const fakeMice: Mouse[] = [
             customizableButton: CustomizableButton.kMiddle,
           },
           remappingAction: {
-            action: AcceleratorAction.kToggleClipboardHistory,
+            acceleratorAction: AcceleratorAction.kToggleClipboardHistory,
           },
         },
       ],
@@ -341,6 +417,7 @@ export const fakeMice2: Mouse[] = [
     deviceKey: 'test:key',
     name: 'Fake Razer Basilisk V3',
     isExternal: true,
+    customizationRestriction: CustomizationRestriction.kDisallowCustomizations,
     settings: {
       swapRight: true,
       sensitivity: 5,
@@ -418,7 +495,7 @@ export const fakeGraphicsTablets: GraphicsTablet[] = [
             vkey: Vkey.kNum0,
           },
           remappingAction: {
-            action: AcceleratorAction.kCycleBackwardMru,
+            acceleratorAction: AcceleratorAction.kCycleBackwardMru,
           },
         },
         {
@@ -427,7 +504,7 @@ export const fakeGraphicsTablets: GraphicsTablet[] = [
             vkey: Vkey.kNum1,
           },
           remappingAction: {
-            action: AcceleratorAction.kCycleForwardMru,
+            acceleratorAction: AcceleratorAction.kCycleForwardMru,
           },
         },
       ],
@@ -477,7 +554,7 @@ export const fakeGraphicsTablets: GraphicsTablet[] = [
             vkey: Vkey.kNum0,
           },
           remappingAction: {
-            action: AcceleratorAction.kBrightnessUp,
+            acceleratorAction: AcceleratorAction.kBrightnessUp,
           },
         },
         {
@@ -486,7 +563,7 @@ export const fakeGraphicsTablets: GraphicsTablet[] = [
             vkey: Vkey.kNum1,
           },
           remappingAction: {
-            action: AcceleratorAction.kBrightnessDown,
+            acceleratorAction: AcceleratorAction.kBrightnessDown,
           },
         },
       ],
@@ -527,20 +604,103 @@ export const fakeGraphicsTablets: GraphicsTablet[] = [
 ];
 
 export const fakeMouseButtonActions: ActionChoice[] = [
-  {actionId: AcceleratorAction.kCycleBackwardMru, name: 'Back'},
-  {actionId: AcceleratorAction.kCycleForwardMru, name: 'Forward'},
-  {actionId: AcceleratorAction.kLockScreen, name: 'Lock screen'},
-  {actionId: AcceleratorAction.kToggleClipboardHistory, name: 'Open clipboard'},
-  {actionId: AcceleratorAction.kToggleFullscreen, name: 'Fullscreen'},
-  {actionId: AcceleratorAction.kVolumeMute, name: 'Mute'},
-  {actionId: AcceleratorAction.kWindowMinimize, name: 'Minimize window'},
+  {
+    actionType: {
+      staticShortcutAction: StaticShortcutAction.kDisable,
+    },
+    name: 'Disable',
+  },
+  {
+    actionType: {
+      staticShortcutAction: StaticShortcutAction.kCopy,
+    },
+    name: 'Copy',
+  },
+  {
+    actionType: {
+      staticShortcutAction: StaticShortcutAction.kPaste,
+    },
+    name: 'Paste',
+  },
+  {
+    actionType: {
+      acceleratorAction: AcceleratorAction.kCycleForwardMru,
+    },
+    name: 'Forward',
+  },
+  {
+    actionType: {
+      acceleratorAction: AcceleratorAction.kLockScreen,
+    },
+    name: 'Lock screen',
+  },
+  {
+    actionType: {
+      acceleratorAction: AcceleratorAction.kToggleClipboardHistory,
+    },
+    name: 'Open clipboard',
+  },
+  {
+    actionType: {
+      acceleratorAction: AcceleratorAction.kToggleFullscreen,
+    },
+    name: 'Fullscreen',
+  },
+  {
+    actionType: {
+      acceleratorAction: AcceleratorAction.kVolumeMute,
+    },
+    name: 'Mute',
+  },
+  {
+    actionType: {
+      acceleratorAction: AcceleratorAction.kWindowMinimize,
+    },
+    name: 'Minimize window',
+  },
+  {
+    actionType: {
+      acceleratorAction: AcceleratorAction.kBrightnessDown,
+    },
+    name: 'Brightness down',
+  },
 ];
 
 export const fakeGraphicsTabletButtonActions: ActionChoice[] = [
-  {actionId: AcceleratorAction.kBrightnessDown, name: 'Brightness down'},
-  {actionId: AcceleratorAction.kBrightnessUp, name: 'Brightness up'},
-  {actionId: AcceleratorAction.kCycleBackwardMru, name: 'Back'},
-  {actionId: AcceleratorAction.kCycleForwardMru, name: 'Forward'},
-  {actionId: AcceleratorAction.kMagnifierZoomIn, name: 'Zoom in'},
-  {actionId: AcceleratorAction.kMagnifierZoomOut, name: 'Zoom out'},
+  {
+    actionType: {
+      acceleratorAction: AcceleratorAction.kBrightnessDown,
+    },
+    name: 'Brightness down',
+  },
+  {
+    actionType: {
+      acceleratorAction: AcceleratorAction.kBrightnessUp,
+    },
+    name: 'Brightness up',
+  },
+  {
+    actionType: {
+      acceleratorAction: AcceleratorAction.kCycleBackwardMru,
+    },
+    name: 'Back',
+  },
+  {
+    actionType: {
+      acceleratorAction: AcceleratorAction.kCycleForwardMru,
+    },
+    name: 'Forward',
+  },
+  {
+    actionType: {
+      acceleratorAction: AcceleratorAction.kMagnifierZoomIn,
+    },
+    name: 'Zoom in',
+  },
+  {
+    actionType: {
+      acceleratorAction: AcceleratorAction.kMagnifierZoomOut,
+    },
+    name: 'Zoom out',
+  },
 ];

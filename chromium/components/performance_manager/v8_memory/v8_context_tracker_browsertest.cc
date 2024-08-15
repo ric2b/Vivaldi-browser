@@ -9,7 +9,9 @@
 #include "base/strings/stringprintf.h"
 #include "components/performance_manager/execution_context/execution_context_registry_impl.h"
 #include "components/performance_manager/public/graph/graph.h"
+#include "components/performance_manager/public/performance_manager.h"
 #include "components/performance_manager/test_support/performance_manager_browsertest_harness.h"
+#include "components/performance_manager/test_support/run_in_graph.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -52,7 +54,13 @@ class V8ContextTrackerTest : public PerformanceManagerBrowserTestHarness {
   }
 };
 
-IN_PROC_BROWSER_TEST_F(V8ContextTrackerTest, AboutBlank) {
+// TODO(crbug.com/1482180): Re-enable on Mac.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_AboutBlank DISABLED_AboutBlank
+#else
+#define MAYBE_AboutBlank AboutBlank
+#endif
+IN_PROC_BROWSER_TEST_F(V8ContextTrackerTest, MAYBE_AboutBlank) {
   ExpectCounts(0, 0, 0, 0);
   ASSERT_TRUE(NavigateToURL(shell(), GURL("about:blank")));
   ExpectCounts(1, 1, 0, 0);

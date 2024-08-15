@@ -12,6 +12,9 @@ class TabListContainerProperties {
     public static final PropertyModel.WritableBooleanPropertyKey IS_VISIBLE =
             new PropertyModel.WritableBooleanPropertyKey();
 
+    public static final PropertyModel.WritableBooleanPropertyKey BLOCK_TOUCH_INPUT =
+            new PropertyModel.WritableBooleanPropertyKey();
+
     public static final PropertyModel.WritableBooleanPropertyKey IS_INCOGNITO =
             new PropertyModel.WritableBooleanPropertyKey();
 
@@ -66,9 +69,10 @@ class TabListContainerProperties {
     // Vivaldi
     public static final PropertyModel.WritableObjectPropertyKey<Integer> SCROLL_INDEX_PRIVATE =
             new PropertyModel.WritableObjectPropertyKey<>(true);
-    public static final PropertyKey[] ALL_KEYS = new PropertyKey[] {IS_VISIBLE, IS_INCOGNITO,
-            VISIBILITY_LISTENER, BROWSER_CONTROLS_STATE_PROVIDER, INITIAL_SCROLL_INDEX,
-            ANIMATE_VISIBILITY_CHANGES, TOP_MARGIN, BOTTOM_CONTROLS_HEIGHT, SHADOW_TOP_OFFSET,
-            BOTTOM_PADDING, MODE, FOCUS_TAB_INDEX_FOR_ACCESSIBILITY,
+
+    public static final PropertyKey[] ALL_KEYS = new PropertyKey[] {IS_VISIBLE, BLOCK_TOUCH_INPUT,
+            IS_INCOGNITO, VISIBILITY_LISTENER, BROWSER_CONTROLS_STATE_PROVIDER,
+            INITIAL_SCROLL_INDEX, ANIMATE_VISIBILITY_CHANGES, TOP_MARGIN, BOTTOM_CONTROLS_HEIGHT,
+            SHADOW_TOP_OFFSET, BOTTOM_PADDING, MODE, FOCUS_TAB_INDEX_FOR_ACCESSIBILITY,
             SCROLL_INDEX_NORMAL, SCROLL_INDEX_PRIVATE}; // Vivaldi
 }

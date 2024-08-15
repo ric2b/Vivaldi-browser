@@ -37,7 +37,7 @@
 #include "chrome/browser/upgrade_detector/upgrade_detector.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/grit/chromium_strings.h"
+#include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/google/core/common/google_util.h"
 #include "components/policy/core/common/management/management_service.h"
@@ -394,7 +394,7 @@ void AboutHandler::OnJavascriptAllowed() {
   policy_registrar_->Observe(
       policy::key::kDeviceAutoUpdateDisabled,
       base::BindRepeating(&AboutHandler::OnDeviceAutoUpdatePolicyChanged,
-                          base::Unretained(this)));
+                          weak_factory_.GetWeakPtr()));
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
@@ -402,6 +402,7 @@ void AboutHandler::OnJavascriptDisallowed() {
   apply_changes_from_upgrade_observer_ = false;
   version_updater_.reset();
   policy_registrar_.reset();
+  weak_factory_.InvalidateWeakPtrs();
 }
 
 void AboutHandler::OnUpgradeRecommended() {
@@ -446,7 +447,7 @@ void AboutHandler::RefreshUpdateStatus() {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   static_cast<VersionUpdaterCros*>(version_updater_.get())
       ->GetUpdateStatus(base::BindRepeating(&AboutHandler::SetUpdateStatus,
-                                            base::Unretained(this)));
+                                            weak_factory_.GetWeakPtr()));
 #else
   RequestUpdate();
 #endif
@@ -460,16 +461,14 @@ void AboutHandler::PromoteUpdater(const base::Value::List& args) {
 
 void AboutHandler::HandleOpenFeedbackDialog(const base::Value::List& args) {
   DCHECK(args.empty());
-  Browser* browser =
-      chrome::FindBrowserWithWebContents(web_ui()->GetWebContents());
+  Browser* browser = chrome::FindBrowserWithTab(web_ui()->GetWebContents());
   chrome::OpenFeedbackDialog(browser,
                              chrome::kFeedbackSourceMdSettingsAboutPage);
 }
 
 void AboutHandler::HandleOpenHelpPage(const base::Value::List& args) {
   DCHECK(args.empty());
-  Browser* browser =
-      chrome::FindBrowserWithWebContents(web_ui()->GetWebContents());
+  Browser* browser = chrome::FindBrowserWithTab(web_ui()->GetWebContents());
   chrome::ShowHelp(browser, chrome::HELP_SOURCE_WEBUI);
 }
 
@@ -506,8 +505,7 @@ void AboutHandler::HandleLaunchReleaseNotes(const base::Value::List& args) {
 
 void AboutHandler::HandleOpenOsHelpPage(const base::Value::List& args) {
   DCHECK(args.empty());
-  Browser* browser =
-      chrome::FindBrowserWithWebContents(web_ui()->GetWebContents());
+  Browser* browser = chrome::FindBrowserWithTab(web_ui()->GetWebContents());
   chrome::ShowHelp(browser, chrome::HELP_SOURCE_WEBUI_CHROME_OS);
 }
 
@@ -531,7 +529,7 @@ void AboutHandler::HandleSetChannel(const base::Value::List& args) {
     // Check for update after switching release channel.
     version_updater_->CheckForUpdate(
         base::BindRepeating(&AboutHandler::SetUpdateStatus,
-                            base::Unretained(this)),
+                            weak_factory_.GetWeakPtr()),
         VersionUpdater::PromoteCallback());
   }
 }
@@ -644,7 +642,7 @@ void AboutHandler::RequestUpdateOverCellular(const std::string& update_version,
                                              int64_t update_size) {
   version_updater_->SetUpdateOverCellularOneTimePermission(
       base::BindRepeating(&AboutHandler::SetUpdateStatus,
-                          base::Unretained(this)),
+                          weak_factory_.GetWeakPtr()),
       update_version, update_size);
 }
 
@@ -681,14 +679,13 @@ void AboutHandler::OnGetEndOfLifeInfo(
     int eol_string_id =
         has_eol_passed ? IDS_SETTINGS_ABOUT_PAGE_END_OF_LIFE_MESSAGE_PAST
                        : IDS_SETTINGS_ABOUT_PAGE_END_OF_LIFE_MESSAGE_FUTURE;
-    response.Set(
-        "aboutPageEndOfLifeMessage",
-        l10n_util::GetStringFUTF16(
-            eol_string_id,
-            base::TimeFormatMonthAndYearForTimeZone(eol_info.eol_date,
-                                                    icu::TimeZone::getGMT()),
-            base::ASCIIToUTF16(has_eol_passed ? chrome::kEolNotificationURL
-                                              : chrome::kAutoUpdatePolicyURL)));
+    response.Set("aboutPageEndOfLifeMessage",
+                 l10n_util::GetStringFUTF16(
+                     eol_string_id,
+                     base::TimeFormatMonthAndYearForTimeZone(
+                         eol_info.eol_date, icu::TimeZone::getGMT()),
+                     has_eol_passed ? chrome::kEolNotificationURL
+                                    : chrome::kAutoUpdatePolicyURL));
     const ash::eol_incentive_util::EolIncentiveType eolIncentiveType =
         ash::eol_incentive_util::ShouldShowEolIncentive(
             profile_, eol_info.eol_date, clock_->Now());
@@ -781,10 +778,10 @@ void AboutHandler::HandleOpenProductLicenseOther(
 void AboutHandler::RequestUpdate() {
   version_updater_->CheckForUpdate(
       base::BindRepeating(&AboutHandler::SetUpdateStatus,
-                          base::Unretained(this)),
+                          weak_factory_.GetWeakPtr()),
 #if BUILDFLAG(IS_MAC)
       base::BindRepeating(&AboutHandler::SetPromotionState,
-                          base::Unretained(this)));
+                          weak_factory_.GetWeakPtr()));
 #else
       VersionUpdater::PromoteCallback());
 #endif  // BUILDFLAG(IS_MAC)

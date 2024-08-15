@@ -558,8 +558,8 @@ class SystemWebAppManagerMultiDesktopLaunchBrowserTest
     run_loop.Run();
   }
 
-  AppId GetAppId(Profile* profile) {
-    absl::optional<AppId> app_id =
+  webapps::AppId GetAppId(Profile* profile) {
+    absl::optional<webapps::AppId> app_id =
         ash::SystemWebAppManager::Get(profile)->GetAppIdForSystemApp(
             installation_->GetType());
     CHECK(app_id.has_value());
@@ -567,7 +567,7 @@ class SystemWebAppManagerMultiDesktopLaunchBrowserTest
   }
 
   Browser* LaunchAppOnProfile(Profile* profile) {
-    AppId app_id = GetAppId(profile);
+    webapps::AppId app_id = GetAppId(profile);
 
     auto launch_params = apps::AppLaunchParams(
         app_id, apps::LaunchContainer::kLaunchContainerWindow,
@@ -678,8 +678,8 @@ IN_PROC_BROWSER_TEST_F(SystemWebAppManagerMultiDesktopLaunchBrowserTest,
   Profile* profile2 = ash::ProfileHelper::Get()->GetProfileByUser(
       user_manager->FindUser(account_id2_));
   WaitForSystemWebAppInstall(profile2);
-  const AppId& app_id1 = GetAppId(profile1);
-  const AppId& app_id2 = GetAppId(profile2);
+  const webapps::AppId& app_id1 = GetAppId(profile1);
+  const webapps::AppId& app_id2 = GetAppId(profile2);
 
   g_browser_process->profile_manager()
       ->GetDeleteProfileHelper()
@@ -820,7 +820,8 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppLaunchOmniboxNavigateBrowsertest,
   EXPECT_EQ(web_contents->GetLastCommittedURL(), GetStartUrl());
   EXPECT_EQ(1, browser()->tab_strip_model()->count());
 
-  // Verifies the tab has an associated tab helper for System App's AppId.
+  // Verifies the tab has an associated tab helper for System App's
+  // webapps::AppId.
   EXPECT_EQ(*web_app::WebAppTabHelper::GetAppId(web_contents),
             *ash::GetAppIdForSystemWebApp(browser()->profile(), GetAppType()));
 }
@@ -902,8 +903,8 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppOpenInAshFromLacrosTests,
   EXPECT_FALSE(ChromeWebUIControllerFactory::GetInstance()->CanHandleUrl(url1));
   EXPECT_FALSE(url_handler_->OpenUrlInternal(url1));
 
-  // Test that an unknown internal os url gets rejected.
-  GURL url2 = GURL("os://foo-bar");
+  // Test that an unknown internal url gets rejected.
+  GURL url2 = GURL("chrome://foo-bar");
   EXPECT_FALSE(ChromeWebUIControllerFactory::GetInstance()->CanHandleUrl(url2));
   EXPECT_FALSE(url_handler_->OpenUrlInternal(url2));
 
@@ -913,7 +914,7 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppOpenInAshFromLacrosTests,
   EXPECT_FALSE(url_handler_->OpenUrlInternal(url3));
 
   // Test that a known internal url gets accepted.
-  GURL url4 = GURL("os://version");
+  GURL url4 = GURL("chrome://version");
   EXPECT_TRUE(ChromeWebUIControllerFactory::GetInstance()->CanHandleUrl(url4));
   LaunchAndWaitForActivationChange(url4);
   EXPECT_EQ(initial_browser_count + 1, BrowserList::GetInstance()->size());
@@ -954,44 +955,7 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppOpenInAshFromLacrosTests, TrailingSlashes) {
   }
 
   {
-    GURL url = GURL("os://settings");
-    EXPECT_TRUE(ChromeWebUIControllerFactory::GetInstance()->CanHandleUrl(url));
-    LaunchAndWaitForActivationChange(url);
-    EXPECT_EQ(initial_browser_count + 1, BrowserList::GetInstance()->size());
-    EXPECT_TRUE(ash::IsBrowserForSystemWebApp(
-        BrowserList::GetInstance()->GetLastActive(),
-        ash::SystemWebAppType::SETTINGS));
-    CloseApp(ash::SystemWebAppType::SETTINGS);
-  }
-
-  {
-    GURL url = GURL("os://settings/");
-    // os:// is not a real scheme, so there is no canonicalization.
-    DCHECK_NE(url, "os://settings");
-    EXPECT_TRUE(ChromeWebUIControllerFactory::GetInstance()->CanHandleUrl(url));
-    LaunchAndWaitForActivationChange(url);
-    EXPECT_EQ(initial_browser_count + 1, BrowserList::GetInstance()->size());
-    EXPECT_TRUE(ash::IsBrowserForSystemWebApp(
-        BrowserList::GetInstance()->GetLastActive(),
-        ash::SystemWebAppType::SETTINGS));
-    CloseApp(ash::SystemWebAppType::SETTINGS);
-  }
-
-  {
-    GURL url = GURL("os://settings//");
-    // Non-empty path. The app may not expect this but it mustn't crash.
-    DCHECK_NE(url, "os://settings/");
-    EXPECT_TRUE(ChromeWebUIControllerFactory::GetInstance()->CanHandleUrl(url));
-    LaunchAndWaitForActivationChange(url);
-    EXPECT_EQ(initial_browser_count + 1, BrowserList::GetInstance()->size());
-    EXPECT_TRUE(ash::IsBrowserForSystemWebApp(
-        BrowserList::GetInstance()->GetLastActive(),
-        ash::SystemWebAppType::SETTINGS));
-    CloseApp(ash::SystemWebAppType::SETTINGS);
-  }
-
-  {
-    GURL url = GURL("os://flags");
+    GURL url = GURL("chrome://flags");
     EXPECT_TRUE(ChromeWebUIControllerFactory::GetInstance()->CanHandleUrl(url));
     LaunchAndWaitForActivationChange(url);
     EXPECT_EQ(initial_browser_count + 1, BrowserList::GetInstance()->size());
@@ -1002,22 +966,9 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppOpenInAshFromLacrosTests, TrailingSlashes) {
   }
 
   {
-    GURL url = GURL("os://flags/");
-    // os:// is not a real scheme, so there is no canonicalization.
-    DCHECK_NE(url, "os://flags");
-    EXPECT_TRUE(ChromeWebUIControllerFactory::GetInstance()->CanHandleUrl(url));
-    LaunchAndWaitForActivationChange(url);
-    EXPECT_EQ(initial_browser_count + 1, BrowserList::GetInstance()->size());
-    EXPECT_TRUE(ash::IsBrowserForSystemWebApp(
-        BrowserList::GetInstance()->GetLastActive(),
-        ash::SystemWebAppType::OS_FLAGS));
-    CloseApp(ash::SystemWebAppType::OS_FLAGS);
-  }
-
-  {
-    GURL url = GURL("os://flags//");
+    GURL url = GURL("chrome://flags//");
     // Non-empty path. The app may not expect this but it mustn't crash.
-    DCHECK_NE(url, "os://flags/");
+    DCHECK_NE(url, "chrome://flags/");
     EXPECT_TRUE(ChromeWebUIControllerFactory::GetInstance()->CanHandleUrl(url));
     LaunchAndWaitForActivationChange(url);
     EXPECT_EQ(initial_browser_count + 1, BrowserList::GetInstance()->size());
@@ -1051,42 +1002,6 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppOpenInAshFromLacrosTests, TrailingSlashes) {
         ash::SystemWebAppType::SCANNING));
     CloseApp(ash::SystemWebAppType::SCANNING);
   }
-
-  {
-    GURL url = GURL("os://scanning");
-    EXPECT_TRUE(ChromeWebUIControllerFactory::GetInstance()->CanHandleUrl(url));
-    LaunchAndWaitForActivationChange(url);
-    EXPECT_EQ(initial_browser_count + 1, BrowserList::GetInstance()->size());
-    EXPECT_TRUE(ash::IsBrowserForSystemWebApp(
-        BrowserList::GetInstance()->GetLastActive(),
-        ash::SystemWebAppType::SCANNING));
-    CloseApp(ash::SystemWebAppType::SCANNING);
-  }
-
-  {
-    GURL url = GURL("os://scanning/");
-    // os:// is not a real scheme, so there is no canonicalization.
-    DCHECK_NE(url, "os://scanning");
-    EXPECT_TRUE(ChromeWebUIControllerFactory::GetInstance()->CanHandleUrl(url));
-    LaunchAndWaitForActivationChange(url);
-    EXPECT_EQ(initial_browser_count + 1, BrowserList::GetInstance()->size());
-    EXPECT_TRUE(ash::IsBrowserForSystemWebApp(
-        BrowserList::GetInstance()->GetLastActive(),
-        ash::SystemWebAppType::SCANNING));
-    CloseApp(ash::SystemWebAppType::SCANNING);
-  }
-
-  {
-    GURL url = GURL("os://scanning//");
-    DCHECK_NE(url, "os://scanning/");
-    EXPECT_TRUE(ChromeWebUIControllerFactory::GetInstance()->CanHandleUrl(url));
-    LaunchAndWaitForActivationChange(url);
-    EXPECT_EQ(initial_browser_count + 1, BrowserList::GetInstance()->size());
-    EXPECT_TRUE(ash::IsBrowserForSystemWebApp(
-        BrowserList::GetInstance()->GetLastActive(),
-        ash::SystemWebAppType::SCANNING));
-    CloseApp(ash::SystemWebAppType::SCANNING);
-  }
 }
 
 // This test will make sure that opening the same system URL multiple times will
@@ -1099,21 +1014,21 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppOpenInAshFromLacrosTests,
   size_t initial_browser_count = BrowserList::GetInstance()->size();
 
   // Start an application which uses the OS url handler.
-  LaunchAndWaitForActivationChange(GURL("os://credits"));
+  LaunchAndWaitForActivationChange(GURL("chrome://credits"));
   EXPECT_EQ(initial_browser_count + 1, BrowserList::GetInstance()->size());
   EXPECT_TRUE(
       ash::IsBrowserForSystemWebApp(BrowserList::GetInstance()->GetLastActive(),
                                     ash::SystemWebAppType::OS_URL_HANDLER));
 
   // Start another application.
-  LaunchAndWaitForActivationChange(GURL(chrome::kOsUIFlagsURL));
+  LaunchAndWaitForActivationChange(GURL("chrome://flags"));
   EXPECT_EQ(initial_browser_count + 2, BrowserList::GetInstance()->size());
   EXPECT_TRUE(
       ash::IsBrowserForSystemWebApp(BrowserList::GetInstance()->GetLastActive(),
                                     ash::SystemWebAppType::OS_FLAGS));
 
   // Start an application of the first type and see that no new app got created.
-  LaunchAndWaitForActivationChange(GURL("os://credits"));
+  LaunchAndWaitForActivationChange(GURL("chrome://credits"));
   EXPECT_EQ(initial_browser_count + 2, BrowserList::GetInstance()->size());
   EXPECT_TRUE(
       ash::IsBrowserForSystemWebApp(BrowserList::GetInstance()->GetLastActive(),
@@ -1130,14 +1045,14 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppOpenInAshFromLacrosTests,
   size_t initial_browser_count = BrowserList::GetInstance()->size();
 
   // Start an application using the OS Url handler.
-  LaunchAndWaitForActivationChange(GURL("os://credits"));
+  LaunchAndWaitForActivationChange(GURL("chrome://credits"));
   EXPECT_EQ(initial_browser_count + 1, BrowserList::GetInstance()->size());
   EXPECT_TRUE(
       ash::IsBrowserForSystemWebApp(BrowserList::GetInstance()->GetLastActive(),
                                     ash::SystemWebAppType::OS_URL_HANDLER));
 
   // Start another application using the OS Url handler.
-  LaunchAndWaitForActivationChange(GURL(chrome::kOsUIComponentsURL));
+  LaunchAndWaitForActivationChange(GURL("chrome://components"));
   EXPECT_EQ(initial_browser_count + 2, BrowserList::GetInstance()->size());
   EXPECT_TRUE(
       ash::IsBrowserForSystemWebApp(BrowserList::GetInstance()->GetLastActive(),

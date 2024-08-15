@@ -17,6 +17,7 @@
 #include "base/threading/platform_thread.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_model_delegate.h"
 #include "chrome/browser/media/clear_key_cdm_test_helper.h"
+#include "chrome/browser/privacy_sandbox/privacy_sandbox_attestations/privacy_sandbox_attestations_mixin.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_settings_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -24,7 +25,7 @@
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_info.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/chrome_test_utils.h"
-#include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/base/mixin_based_in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/browsing_data/content/browsing_data_model.h"
 #include "components/browsing_data/content/browsing_data_model_test_util.h"
@@ -34,7 +35,6 @@
 #include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/privacy_sandbox/privacy_sandbox_attestations/privacy_sandbox_attestations.h"
-#include "components/privacy_sandbox/privacy_sandbox_attestations/scoped_privacy_sandbox_attestations.h"
 #include "components/privacy_sandbox/privacy_sandbox_settings.h"
 #include "components/services/storage/public/mojom/local_storage_control.mojom.h"
 #include "components/services/storage/public/mojom/storage_usage_info.mojom.h"
@@ -64,6 +64,11 @@
 #include "third_party/blink/public/common/features.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+
+#if BUILDFLAG(IS_WIN)
+#include "base/base_paths_win.h"
+#include "base/test/scoped_path_override.h"
+#endif  // BUILDFLAG(IS_WIN)
 
 using base::test::FeatureRef;
 using base::test::FeatureRefAndParams;
@@ -242,8 +247,8 @@ using browsing_data_test_util::HasDataForType;
 using browsing_data_test_util::SetDataForType;
 
 class BrowsingDataModelBrowserTest
-    : public InProcessBrowserTest,
-      public ::testing::WithParamInterface<bool> {
+    : public MixinBasedInProcessBrowserTest,
+      public ::testing::WithParamInterface<std::tuple<bool, bool>> {
  public:
   BrowsingDataModelBrowserTest() {
     auto& field_trial_param =
@@ -264,6 +269,10 @@ class BrowsingDataModelBrowserTest
         {blink::features::kFledge, {}},
         {blink::features::kFencedFrames, {}},
         {blink::features::kBrowsingTopics, {}},
+        // WebSQL is disabled by default as of M119 (crbug/695592).
+        // Enable feature in tests during deprecation trial and enterprise
+        // policy support.
+        {blink::features::kWebSQLAccess, {}},
         {net::features::kThirdPartyStoragePartitioning, {}},
         {network::features::kCompressionDictionaryTransportBackend, {}},
         {network::features::kCompressionDictionaryTransport, {}}};
@@ -273,12 +282,20 @@ class BrowsingDataModelBrowserTest
     enabled_features.push_back({media::kExternalClearKeyForTesting, {}});
 #endif
 
-    if (GetParam()) {
+    if (IsMigrateStorageToBDMEnabled()) {
       enabled_features.push_back(
           {browsing_data::features::kMigrateStorageToBDM, {}});
     } else {
       disabled_features.emplace_back(
           browsing_data::features::kMigrateStorageToBDM);
+    }
+
+    if (IsDeprecateCookiesTreeModelEnabled()) {
+      enabled_features.push_back(
+          {browsing_data::features::kDeprecateCookiesTreeModel, {}});
+    } else {
+      disabled_features.emplace_back(
+          browsing_data::features::kDeprecateCookiesTreeModel);
     }
 
     feature_list_.InitWithFeaturesAndParameters(enabled_features,
@@ -290,9 +307,6 @@ class BrowsingDataModelBrowserTest
   void SetUpOnMainThread() override {
     PrivacySandboxSettingsFactory::GetForProfile(browser()->profile())
         ->SetAllPrivacySandboxAllowedForTesting();
-    scoped_attestations_ =
-        std::make_unique<privacy_sandbox::ScopedPrivacySandboxAttestations>(
-            privacy_sandbox::PrivacySandboxAttestations::CreateForTesting());
     // Mark all Privacy Sandbox APIs as attested since the test cases are
     // testing behaviors not related to attestations.
     privacy_sandbox::PrivacySandboxAttestations::GetInstance()
@@ -356,13 +370,22 @@ class BrowsingDataModelBrowserTest
     return https_test_server()->GetURL(kTestHost, replaced_path);
   }
 
+  bool IsMigrateStorageToBDMEnabled() { return std::get<0>(GetParam()); }
+
+  bool IsDeprecateCookiesTreeModelEnabled() { return std::get<1>(GetParam()); }
+
   network::test::TrustTokenRequestHandler request_handler_;
 
  private:
+#if BUILDFLAG(IS_WIN)
+  // This is used to prevent creating shortcuts in the start menu dir.
+  base::ScopedPathOverride override_start_dir_{base::DIR_START_MENU};
+#endif  // BUILDFLAG(IS_WIN)
+
   base::test::ScopedFeatureList feature_list_;
   std::unique_ptr<net::EmbeddedTestServer> https_server_;
-  std::unique_ptr<privacy_sandbox::ScopedPrivacySandboxAttestations>
-      scoped_attestations_;
+  privacy_sandbox::PrivacySandboxAttestationsMixin
+      privacy_sandbox_attestations_mixin_{&mixin_host_};
 };
 
 IN_PROC_BROWSER_TEST_P(BrowsingDataModelBrowserTest,
@@ -791,8 +814,7 @@ IN_PROC_BROWSER_TEST_P(BrowsingDataModelBrowserTest,
     // Ensure that quota data is fetched
     browsing_data_model = BuildBrowsingDataModel();
 
-    bool is_migrate_storage_to_bdm_enabled = GetParam();
-    if (is_migrate_storage_to_bdm_enabled) {
+    if (IsMigrateStorageToBDMEnabled()) {
       // Validate that quota data is fetched to browsing data model.
       url::Origin testOrigin = https_test_server()->GetOrigin(kTestHost);
       auto data_key = blink::StorageKey::CreateFirstParty(testOrigin);
@@ -841,7 +863,7 @@ IN_PROC_BROWSER_TEST_P(BrowsingDataModelBrowserTest,
   ValidateBrowsingDataEntries(browsing_data_model.get(), {});
   ASSERT_EQ(browsing_data_model->size(), 0u);
 
-  if (!GetParam()) {
+  if (!IsMigrateStorageToBDMEnabled()) {
     return;
   }
 
@@ -906,7 +928,7 @@ IN_PROC_BROWSER_TEST_P(BrowsingDataModelBrowserTest,
   ASSERT_EQ(allowed_browsing_data_model->size(), 0u);
 
   SetDataForType("LocalStorage", web_contents());
-  if (GetParam()) {
+  if (IsMigrateStorageToBDMEnabled()) {
     WaitForModelUpdate(allowed_browsing_data_model, /*expected_size=*/1);
 
     // Validate Local Storage is reported.
@@ -944,7 +966,7 @@ IN_PROC_BROWSER_TEST_P(BrowsingDataModelBrowserTest,
       content_settings->allowed_browsing_data_model();
   ValidateBrowsingDataEntries(allowed_browsing_data_model, {});
   ASSERT_EQ(allowed_browsing_data_model->size(), 0u);
-  if (!GetParam()) {
+  if (!IsMigrateStorageToBDMEnabled()) {
     return;
   }
 
@@ -1013,7 +1035,7 @@ IN_PROC_BROWSER_TEST_P(BrowsingDataModelBrowserTest,
     ValidateBrowsingDataEntries(allowed_browsing_data_model, {});
     ASSERT_EQ(allowed_browsing_data_model->size(), 0u);
 
-    if (!GetParam()) {
+    if (!IsMigrateStorageToBDMEnabled()) {
       return;
     }
 
@@ -1058,7 +1080,7 @@ IN_PROC_BROWSER_TEST_P(BrowsingDataModelBrowserTest,
   ASSERT_EQ(allowed_browsing_data_model->size(), 0u);
 
   SetDataForType("SharedWorker", web_contents());
-  if (GetParam()) {
+  if (IsMigrateStorageToBDMEnabled()) {
     WaitForModelUpdate(allowed_browsing_data_model, /*expected_size=*/1);
 
     // Validate Shared Worker is reported.
@@ -1086,12 +1108,12 @@ IN_PROC_BROWSER_TEST_P(BrowsingDataModelBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_P(BrowsingDataModelBrowserTest,
-                       PartitionedLocalStorageRemoved) {
+                       LocalStorageRemovedBasedOnPartition) {
   // Build BDM from disk.
   std::unique_ptr<BrowsingDataModel> browsing_data_model =
       BuildBrowsingDataModel();
   ValidateBrowsingDataEntries(browsing_data_model.get(), {});
-  if (!GetParam()) {
+  if (!IsMigrateStorageToBDMEnabled()) {
     return;
   }
 
@@ -1201,6 +1223,26 @@ IN_PROC_BROWSER_TEST_P(BrowsingDataModelBrowserTest,
          test_entry_storage_size[0].Get(),
          /*cookie_count=*/0}},
        {kTestHost,
+        storage_key_c,
+        {{BrowsingDataModel::StorageType::kLocalStorage},
+         test_entry_storage_size[2].Get(),
+         /*cookie_count=*/0}}});
+
+  // Remove {a on a}
+  {
+    base::RunLoop run_loop;
+    browsing_data_model->RemoveUnpartitionedBrowsingData(
+        kTestHost, run_loop.QuitClosure());
+    run_loop.Run();
+  }
+
+  // Rebuild from disk.
+  browsing_data_model = BuildBrowsingDataModel();
+
+  // Validate entries {{a on c}}.
+  ValidateBrowsingDataEntries(
+      browsing_data_model.get(),
+      {{kTestHost,
         storage_key_c,
         {{BrowsingDataModel::StorageType::kLocalStorage},
          test_entry_storage_size[2].Get(),
@@ -1444,5 +1486,54 @@ IN_PROC_BROWSER_TEST_P(
          /*cookie_count=*/0}}});
 }
 
-// Boolean parameter used to enable/disable the feature `kMigrateStorageToBDM`.
-INSTANTIATE_TEST_SUITE_P(All, BrowsingDataModelBrowserTest, ::testing::Bool());
+IN_PROC_BROWSER_TEST_P(BrowsingDataModelBrowserTest, CookiesHandledCorrectly) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(),
+      https_test_server()->GetURL(kTestHost, "/browsing_data/site_data.html")));
+  // Ensure that there isn't any data fetched.
+  std::unique_ptr<BrowsingDataModel> browsing_data_model =
+      BuildBrowsingDataModel();
+  ValidateBrowsingDataEntries(browsing_data_model.get(), {});
+  ASSERT_EQ(browsing_data_model->size(), 0u);
+
+  if (!IsDeprecateCookiesTreeModelEnabled()) {
+    return;
+  }
+
+  SetDataForType("Cookie", web_contents());
+
+  // Ensure that cookie is fetched.
+  browsing_data_model = BuildBrowsingDataModel();
+
+  // Validate that cookie is fetched to browsing data model.
+  url::Origin testOrigin = https_test_server()->GetOrigin(kTestHost);
+  std::unique_ptr<net::CanonicalCookie> data_key = net::CanonicalCookie::Create(
+      testOrigin.GetURL(), "foo=bar; Path=/browsing_data", base::Time::Now(),
+      absl::nullopt /* server_time */,
+      absl::nullopt /* cookie_partition_key */);
+  ValidateBrowsingDataEntries(browsing_data_model.get(),
+                              {{kTestHost,
+                                *(data_key.get()),
+                                {{BrowsingDataModel::StorageType::kCookie},
+                                 /*storage_size=*/0,
+                                 /*cookie_count=*/1}}});
+  ASSERT_EQ(browsing_data_model->size(), 1u);
+
+  // Remove cookie entry.
+  RemoveBrowsingDataForDataOwner(browsing_data_model.get(), kTestHost);
+
+  // Rebuild Browsing Data Model and verify entries are empty.
+  browsing_data_model = BuildBrowsingDataModel();
+  ValidateBrowsingDataEntries(browsing_data_model.get(), {});
+  ASSERT_EQ(browsing_data_model->size(), 0u);
+  ASSERT_FALSE(HasDataForType("Cookie", web_contents()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    BrowsingDataModelBrowserTest,
+    ::testing::Combine(
+        // Enable/disable `kMigrateStorageToBDM` feature.
+        ::testing::Bool(),
+        // Enable/disable `kDeprecateCookiesTreeModel` feature.
+        ::testing::Bool()));

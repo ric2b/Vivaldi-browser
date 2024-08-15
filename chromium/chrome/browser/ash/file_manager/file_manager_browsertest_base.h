@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "base/base_paths.h"
 #include "base/containers/flat_map.h"
 #include "base/memory/raw_ptr.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -20,8 +21,8 @@
 #include "chrome/browser/ash/login/test/logged_in_user_mixin.h"
 #include "chrome/browser/extensions/mixin_based_extension_apitest.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/test/base/devtools_listener.h"
+#include "components/webapps/common/web_app_id.h"
 #include "content/public/browser/devtools_agent_host_observer.h"
 
 class NotificationDisplayServiceTester;
@@ -32,6 +33,7 @@ class FakeFileSystemInstance;
 }  // namespace arc
 
 namespace content {
+class TestNavigationObserver;
 class WebContents;
 }  // namespace content
 
@@ -179,17 +181,15 @@ class FileManagerBrowserTestBase
     // Whether test should use report-only mode for the file transfer connector.
     bool file_transfer_connector_report_only = false;
 
-    // Whether tests should enable V2 of search.
-    bool enable_search_v2 = false;
+    // Whether tests should set up justification mode for the file transfer
+    // connector.
+    bool bypass_requires_justification = false;
 
-    // Whether tests should enable image content search.
-    bool enable_image_content_search = false;
+    // Whether tests should enable local image search by query.
+    bool enable_local_image_search = false;
 
     // Whether test should run with the fsps-in-recents flag.
     bool enable_fsps_in_recents = false;
-
-    // Whether tests should enable OS Feedback.
-    bool enable_os_feedback = false;
 
     // Whether tests should enable Google One offer Files banner.
     bool enable_google_one_offer_files_banner = false;
@@ -200,11 +200,11 @@ class FileManagerBrowserTestBase
     // Whether to enable Drive shortcuts showing a badge or not.
     bool enable_drive_shortcuts = false;
 
-    // Whether to enable jellybean styles.
-    bool enable_jellybean = false;
-
     // Whether to enable jellybean UI elements.
     bool enable_cros_components = false;
+
+    // Whether to enable new directory tree implementation.
+    bool enable_new_directory_tree = false;
 
     // Feature IDs associated for mapping test cases and features.
     std::vector<std::string> feature_ids;
@@ -258,10 +258,12 @@ class FileManagerBrowserTestBase
 
   class MockFileTasksObserver;
 
-  // Launches the test extension with manifest |manifest_name|. The extension
-  // manifest_name file should reside in the specified |path| relative to the
-  // Chromium src directory.
-  void LaunchExtension(const base::FilePath& path, const char* manifest_name);
+  // Launches the test extension with manifest `manifest_name`. The extension
+  // manifest_name file should reside in the specified `path` relative to the
+  // Chromium `root` directory.
+  void LaunchExtension(base::BasePathKey root,
+                       const base::FilePath& path,
+                       const char* manifest_name);
 
   // Runs the test: awaits chrome.test messsage commands and chrome.test PASS
   // or FAIL messsages to process. |OnCommand| is used to handle the commands
@@ -314,9 +316,6 @@ class FileManagerBrowserTestBase
   // File Manager app.
   content::WebContents* GetLastOpenWindowWebContents();
 
-  // Loads the test utils in the WebContents.
-  void LoadSwaTestUtils(content::WebContents*);
-
   // Returns appId from its WebContents.
   std::string GetSwaAppId(content::WebContents*);
 
@@ -355,6 +354,7 @@ class FileManagerBrowserTestBase
   std::unique_ptr<SmbfsTestVolume> smbfs_volume_;
   std::unique_ptr<HiddenTestVolume> hidden_volume_;
   std::unique_ptr<FileSystemProviderTestVolume> file_system_provider_volume_;
+  std::unique_ptr<content::TestNavigationObserver> test_navigation_observer_;
 
   // Map from source path (e.g. sftp://1:2) to volume.
   base::flat_map<std::string, std::unique_ptr<GuestOsTestVolume>>

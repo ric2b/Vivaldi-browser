@@ -158,6 +158,7 @@ bool SupportsInvalidation(CSSSelector::PseudoType type) {
     case CSSSelector::kPseudoFullScreenAncestor:
     case CSSSelector::kPseudoFullscreen:
     case CSSSelector::kPseudoPaused:
+    case CSSSelector::kPseudoPermissionGranted:
     case CSSSelector::kPseudoPictureInPicture:
     case CSSSelector::kPseudoPlaying:
     case CSSSelector::kPseudoInRange:
@@ -200,7 +201,6 @@ bool SupportsInvalidation(CSSSelector::PseudoType type) {
     case CSSSelector::kPseudoViewTransitionImagePair:
     case CSSSelector::kPseudoViewTransitionNew:
     case CSSSelector::kPseudoViewTransitionOld:
-    case CSSSelector::kPseudoToggle:
       return true;
     case CSSSelector::kPseudoUnknown:
     case CSSSelector::kPseudoLeftPage:
@@ -484,8 +484,6 @@ bool RuleFeatureSet::operator==(const RuleFeatureSet& other) const {
                                 other.nth_invalidation_set_) &&
          base::ValuesEquivalent(universal_sibling_invalidation_set_,
                                 other.universal_sibling_invalidation_set_) &&
-         base::ValuesEquivalent(type_rule_invalidation_set_,
-                                other.type_rule_invalidation_set_) &&
          media_query_result_flags_ == other.media_query_result_flags_ &&
          classes_in_has_argument_ == other.classes_in_has_argument_ &&
          attributes_in_has_argument_ == other.attributes_in_has_argument_ &&
@@ -734,6 +732,7 @@ InvalidationSet* RuleFeatureSet::InvalidationSetForSimpleSelector(
       case CSSSelector::kPseudoFullScreenAncestor:
       case CSSSelector::kPseudoFullscreen:
       case CSSSelector::kPseudoPaused:
+      case CSSSelector::kPseudoPermissionGranted:
       case CSSSelector::kPseudoPictureInPicture:
       case CSSSelector::kPseudoPlaying:
       case CSSSelector::kPseudoInRange:
@@ -750,7 +749,6 @@ InvalidationSet* RuleFeatureSet::InvalidationSetForSimpleSelector(
       case CSSSelector::kPseudoMultiSelectFocus:
       case CSSSelector::kPseudoModal:
       case CSSSelector::kPseudoSelectorFragmentAnchor:
-      case CSSSelector::kPseudoToggle:
         return &EnsurePseudoInvalidationSet(selector.GetPseudoType(), type,
                                             position);
       case CSSSelector::kPseudoFirstOfType:
@@ -790,7 +788,6 @@ void RuleFeatureSet::UpdateInvalidationSets(const CSSSelector& selector,
   if (style_scope) {
     UpdateFeaturesFromStyleScope(*style_scope, features);
   }
-  UpdateRuleSetInvalidation(features);
 }
 
 // Update all invalidation sets for a given CSS selector; this is usually
@@ -877,30 +874,6 @@ RuleFeatureSet::UpdateInvalidationSetsForComplex(
   return last_in_compound ? kNormalInvalidation : kRequiresSubtreeInvalidation;
 }
 
-void RuleFeatureSet::UpdateRuleSetInvalidation(
-    const InvalidationSetFeatures& features) {
-  if (features.has_features_for_rule_set_invalidation) {
-    return;
-  }
-  if (features.invalidation_flags.WholeSubtreeInvalid() ||
-      (!features.invalidation_flags.InvalidateCustomPseudo() &&
-       features.tag_names.empty())) {
-    metadata_.needs_full_recalc_for_rule_set_invalidation = true;
-    return;
-  }
-
-  EnsureTypeRuleInvalidationSet();
-
-  if (features.invalidation_flags.InvalidateCustomPseudo()) {
-    type_rule_invalidation_set_->SetCustomPseudoInvalid();
-    type_rule_invalidation_set_->SetTreeBoundaryCrossing();
-  }
-
-  for (auto tag_name : features.tag_names) {
-    type_rule_invalidation_set_->AddTagName(tag_name);
-  }
-}
-
 void RuleFeatureSet::ExtractInvalidationSetFeaturesFromSelectorList(
     const CSSSelector& simple_selector,
     bool in_nth_child,
@@ -928,7 +901,6 @@ void RuleFeatureSet::ExtractInvalidationSetFeaturesFromSelectorList(
   DCHECK(SupportsInvalidationWithSelectorList(pseudo_type));
 
   bool all_sub_selectors_have_features = true;
-  bool all_sub_selectors_have_features_for_ruleset_invalidation = true;
   InvalidationSetFeatures any_features;
 
   for (; sub_selector; sub_selector = CSSSelectorList::Next(*sub_selector)) {
@@ -940,8 +912,6 @@ void RuleFeatureSet::ExtractInvalidationSetFeaturesFromSelectorList(
       features.invalidation_flags.SetWholeSubtreeInvalid(true);
       continue;
     }
-    all_sub_selectors_have_features_for_ruleset_invalidation &=
-        complex_features.has_features_for_rule_set_invalidation;
     if (complex_features.has_nth_pseudo) {
       features.has_nth_pseudo = true;
     }
@@ -968,8 +938,6 @@ void RuleFeatureSet::ExtractInvalidationSetFeaturesFromSelectorList(
     if (all_sub_selectors_have_features) {
       features.NarrowToFeatures(any_features);
     }
-    features.has_features_for_rule_set_invalidation |=
-        all_sub_selectors_have_features_for_ruleset_invalidation;
   }
 }
 
@@ -1839,7 +1807,6 @@ void RuleFeatureSet::FeatureMetadata::Merge(const FeatureMetadata& other) {
 void RuleFeatureSet::FeatureMetadata::Clear() {
   uses_first_line_rules = false;
   uses_window_inactive_selector = false;
-  needs_full_recalc_for_rule_set_invalidation = false;
   max_direct_adjacent_selectors = 0;
   invalidates_parts = false;
   uses_has_inside_nth = false;
@@ -1849,8 +1816,6 @@ bool RuleFeatureSet::FeatureMetadata::operator==(
     const FeatureMetadata& other) const {
   return uses_first_line_rules == other.uses_first_line_rules &&
          uses_window_inactive_selector == other.uses_window_inactive_selector &&
-         needs_full_recalc_for_rule_set_invalidation ==
-             other.needs_full_recalc_for_rule_set_invalidation &&
          max_direct_adjacent_selectors == other.max_direct_adjacent_selectors &&
          invalidates_parts == other.invalidates_parts &&
          uses_has_inside_nth == other.uses_has_inside_nth;
@@ -1919,7 +1884,6 @@ void RuleFeatureSet::Clear() {
   pseudo_invalidation_sets_.clear();
   universal_sibling_invalidation_set_ = nullptr;
   nth_invalidation_set_ = nullptr;
-  type_rule_invalidation_set_ = nullptr;
   media_query_result_flags_.Clear();
   classes_in_has_argument_.clear();
   attributes_in_has_argument_.clear();
@@ -2172,23 +2136,6 @@ void RuleFeatureSet::CollectPartInvalidationSet(
   }
 }
 
-void RuleFeatureSet::CollectTypeRuleInvalidationSet(
-    InvalidationLists& invalidation_lists,
-    ContainerNode& root_node) const {
-  if (type_rule_invalidation_set_) {
-    invalidation_lists.descendants.push_back(type_rule_invalidation_set_);
-    TRACE_SCHEDULE_STYLE_INVALIDATION(root_node, *type_rule_invalidation_set_,
-                                      RuleSetInvalidation);
-  }
-}
-
-DescendantInvalidationSet& RuleFeatureSet::EnsureTypeRuleInvalidationSet() {
-  if (!type_rule_invalidation_set_) {
-    type_rule_invalidation_set_ = DescendantInvalidationSet::Create();
-  }
-  return *type_rule_invalidation_set_;
-}
-
 void RuleFeatureSet::AddFeaturesToUniversalSiblingInvalidationSet(
     const InvalidationSetFeatures& sibling_features,
     const InvalidationSetFeatures& descendant_features) {
@@ -2316,9 +2263,8 @@ String RuleFeatureSet::ToString() const {
     kPseudo = 1 << 3,
     kDescendant = 1 << 4,
     kSibling = 1 << 5,
-    kType = 1 << 6,
-    kUniversal = 1 << 7,
-    kNth = 1 << 8,
+    kUniversal = 1 << 6,
+    kNth = 1 << 7,
   };
 
   struct Entry {
@@ -2401,7 +2347,6 @@ String RuleFeatureSet::ToString() const {
     add_invalidation_sets(name, i.value.get(), kPseudo, ":", "");
   }
 
-  add_invalidation_sets("type", type_rule_invalidation_set_.get(), kType);
   add_invalidation_sets("*", universal_sibling_invalidation_set_.get(),
                         kUniversal);
   add_invalidation_sets("nth", nth_invalidation_set_.get(), kNth);
@@ -2422,8 +2367,6 @@ String RuleFeatureSet::ToString() const {
   StringBuilder metadata;
   metadata.Append(metadata_.uses_first_line_rules ? "F" : "");
   metadata.Append(metadata_.uses_window_inactive_selector ? "W" : "");
-  metadata.Append(metadata_.needs_full_recalc_for_rule_set_invalidation ? "R"
-                                                                        : "");
   metadata.Append(metadata_.invalidates_parts ? "P" : "");
   metadata.Append(
       format_max_direct_adjancent(metadata_.max_direct_adjacent_selectors));

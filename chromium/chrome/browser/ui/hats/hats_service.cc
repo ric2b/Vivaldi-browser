@@ -344,8 +344,8 @@ void HatsService::LaunchSurveyForWebContents(
     const SurveyStringData& product_specific_string_data) {
   if (ShouldShowSurvey(trigger) && web_contents &&
       web_contents->GetVisibility() == content::Visibility::VISIBLE) {
-    LaunchSurveyForBrowser(chrome::FindBrowserWithWebContents(web_contents),
-                           trigger, base::DoNothing(), base::DoNothing(),
+    LaunchSurveyForBrowser(chrome::FindBrowserWithTab(web_contents), trigger,
+                           base::DoNothing(), base::DoNothing(),
                            product_specific_bits_data,
                            product_specific_string_data);
   }
@@ -470,17 +470,24 @@ bool HatsService::CanShowAnySurvey(bool user_prompted) const {
   if (vivaldi::IsVivaldiRunning()) {
     return false;
   }
-  // Surveys can always be shown in Demo mode.
-  if (base::FeatureList::IsEnabled(
-          features::kHappinessTrackingSurveysForDesktopDemo)) {
-    return true;
-  }
 
   // HaTS requires metrics consent to run. This is also how HaTS can be disabled
   // by policy.
   if (!g_browser_process->GetMetricsServicesManager()
            ->IsMetricsConsentGiven()) {
     return false;
+  }
+
+  // HaTs can also be disabled by policy if metrics consent is given.
+  if (!profile_->GetPrefs()->GetBoolean(
+          policy::policy_prefs::kFeedbackSurveysEnabled)) {
+    return false;
+  }
+
+  // Surveys can always be shown in Demo mode.
+  if (base::FeatureList::IsEnabled(
+          features::kHappinessTrackingSurveysForDesktopDemo)) {
+    return true;
   }
 
   // Do not show surveys if Chrome's last exit was a crash. This avoids

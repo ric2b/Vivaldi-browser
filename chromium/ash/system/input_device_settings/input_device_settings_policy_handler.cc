@@ -17,6 +17,7 @@ mojom::InputDeviceSettingsPolicyPtr GetBooleanPreferencePolicy(
     const std::string& pref_name) {
   mojom::InputDeviceSettingsPolicyPtr policy;
 
+  CHECK(pref_service);
   const auto* pref = pref_service->FindPreference(pref_name);
   if (!pref) {
     return policy;
@@ -40,6 +41,36 @@ mojom::InputDeviceSettingsPolicyPtr GetBooleanPreferencePolicy(
   return policy;
 }
 
+mojom::InputDeviceSettingsFkeyPolicyPtr GetFkeyPreferencePolicy(
+    const PrefService* pref_service) {
+  mojom::InputDeviceSettingsFkeyPolicyPtr policy;
+
+  const auto* pref =
+      pref_service->FindPreference(prefs::kExtendedFkeysModifier);
+  if (!pref) {
+    return policy;
+  }
+
+  if (pref->IsManaged()) {
+    auto* value = pref->GetValue();
+    CHECK(value && value->is_int());
+    policy = mojom::InputDeviceSettingsFkeyPolicy::New(
+        mojom::PolicyStatus::kManaged,
+        static_cast<ui::mojom::ExtendedFkeysModifier>(value->GetInt()));
+
+    // Prefs with recommended values must use `GetRecommendedValue` instead
+    // of `IsRecommended` as `IsRecommended` may return false even if the pref
+    // has a recommended value.
+  } else if (auto* value = pref->GetRecommendedValue(); value) {
+    CHECK(value->is_int());
+    policy = mojom::InputDeviceSettingsFkeyPolicy::New(
+        mojom::PolicyStatus::kRecommended,
+        static_cast<ui::mojom::ExtendedFkeysModifier>(value->GetInt()));
+  }
+
+  return policy;
+}
+
 }  // namespace
 
 InputDeviceSettingsPolicyHandler::InputDeviceSettingsPolicyHandler(
@@ -51,8 +82,21 @@ InputDeviceSettingsPolicyHandler::~InputDeviceSettingsPolicyHandler() = default;
 
 void InputDeviceSettingsPolicyHandler::Initialize(PrefService* local_state,
                                                   PrefService* pref_service) {
+  has_user_prefs_ = pref_service != nullptr;
+  if (local_state) {
+    pref_change_registrar_local_state_.Init(local_state);
+    pref_change_registrar_local_state_.Add(
+        prefs::kOwnerPrimaryMouseButtonRight,
+        base::BindRepeating(
+            &InputDeviceSettingsPolicyHandler::OnMousePoliciesChanged,
+            base::Unretained(this)));
+    pref_change_registrar_local_state_.Add(
+        prefs::kDeviceSwitchFunctionKeysBehaviorEnabled,
+        base::BindRepeating(
+            &InputDeviceSettingsPolicyHandler::OnKeyboardPoliciesChanged,
+            base::Unretained(this)));
+  }
   if (pref_service) {
-    initialized_with_local_state_prefs_ = false;
     pref_change_registrar_.Init(pref_service);
     pref_change_registrar_.Add(
         prefs::kPrimaryMouseButtonRight,
@@ -64,14 +108,10 @@ void InputDeviceSettingsPolicyHandler::Initialize(PrefService* local_state,
         base::BindRepeating(
             &InputDeviceSettingsPolicyHandler::OnKeyboardPoliciesChanged,
             base::Unretained(this)));
-  } else {
-    CHECK(local_state);
-    initialized_with_local_state_prefs_ = true;
-    pref_change_registrar_.Init(local_state);
     pref_change_registrar_.Add(
-        prefs::kOwnerPrimaryMouseButtonRight,
+        prefs::kExtendedFkeysModifier,
         base::BindRepeating(
-            &InputDeviceSettingsPolicyHandler::OnMousePoliciesChanged,
+            &InputDeviceSettingsPolicyHandler::OnKeyboardPoliciesChanged,
             base::Unretained(this)));
   }
 
@@ -80,9 +120,19 @@ void InputDeviceSettingsPolicyHandler::Initialize(PrefService* local_state,
 }
 
 void InputDeviceSettingsPolicyHandler::RefreshKeyboardPolicies(bool notify) {
-  if (!initialized_with_local_state_prefs_) {
+  if (has_user_prefs_) {
     keyboard_policies_.top_row_are_fkeys_policy = GetBooleanPreferencePolicy(
         pref_change_registrar_.prefs(), prefs::kSendFunctionKeys);
+
+    keyboard_policies_.extended_fkeys_policy =
+        GetFkeyPreferencePolicy(pref_change_registrar_.prefs());
+  }
+
+  if (pref_change_registrar_local_state_.prefs()) {
+    keyboard_policies_.enable_meta_fkey_rewrites_policy =
+        GetBooleanPreferencePolicy(
+            pref_change_registrar_local_state_.prefs(),
+            prefs::kDeviceSwitchFunctionKeysBehaviorEnabled);
   }
 
   if (notify) {
@@ -91,12 +141,13 @@ void InputDeviceSettingsPolicyHandler::RefreshKeyboardPolicies(bool notify) {
 }
 
 void InputDeviceSettingsPolicyHandler::RefreshMousePolicies(bool notify) {
-  if (!initialized_with_local_state_prefs_) {
+  if (has_user_prefs_) {
     mouse_policies_.swap_right_policy = GetBooleanPreferencePolicy(
         pref_change_registrar_.prefs(), prefs::kPrimaryMouseButtonRight);
   } else {
-    mouse_policies_.swap_right_policy = GetBooleanPreferencePolicy(
-        pref_change_registrar_.prefs(), prefs::kOwnerPrimaryMouseButtonRight);
+    mouse_policies_.swap_right_policy =
+        GetBooleanPreferencePolicy(pref_change_registrar_local_state_.prefs(),
+                                   prefs::kOwnerPrimaryMouseButtonRight);
   }
 
   if (notify) {

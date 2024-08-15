@@ -22,6 +22,7 @@
 #include "chrome/browser/ui/views/location_bar/custom_tab_bar_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/profiles/avatar_toolbar_button.h"
+#include "chrome/browser/ui/views/toolbar/overflow_button.h"
 #include "chrome/browser/ui/views/toolbar/side_panel_toolbar_button.h"
 #include "components/prefs/pref_member.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -53,8 +54,10 @@ class IntentChipButton;
 class MediaToolbarButtonView;
 class ReloadButton;
 class SidePanelToolbarContainer;
+class PinnedToolbarActionsContainer;
 class ToolbarButton;
 class AvatarToolbarButtonBrowserTest;
+class ToolbarController;
 
 namespace media_router {
 class CastToolbarButton;
@@ -156,6 +159,9 @@ class ToolbarView : public views::AccessiblePaneView,
   SidePanelToolbarContainer* side_panel_container() const {
     return side_panel_container_;
   }
+  PinnedToolbarActionsContainer* pinned_toolbar_actions_container() const {
+    return pinned_toolbar_actions_container_;
+  }
   SidePanelToolbarButton* GetSidePanelButton() override;
   MediaToolbarButtonView* media_button() const { return media_button_; }
   send_tab_to_self::SendTabToSelfToolbarIconView* send_tab_to_self_button()
@@ -167,6 +173,11 @@ class ToolbarView : public views::AccessiblePaneView,
   AppMenuIconController* app_menu_icon_controller() {
     return &app_menu_icon_controller_;
   }
+  const ToolbarController* toolbar_controller() const {
+    return toolbar_controller_.get();
+  }
+
+  views::View* new_tab_button_for_testing() { return new_tab_button_; }
 
   // LocationBarView::Delegate:
   content::WebContents* GetWebContents() override;
@@ -261,6 +272,8 @@ class ToolbarView : public views::AccessiblePaneView,
   // Called when active state for the window changes.
   void ActiveStateChanged();
 
+  void NewTabButtonPressed(const ui::Event& event);
+
   gfx::SlideAnimation size_animation_{this};
 
   // Controls. Most of these can be null, e.g. in popup windows. Only
@@ -278,6 +291,8 @@ class ToolbarView : public views::AccessiblePaneView,
   raw_ptr<BatterySaverButton> battery_saver_button_ = nullptr;
   raw_ptr<media_router::CastToolbarButton> cast_ = nullptr;
   raw_ptr<SidePanelToolbarContainer> side_panel_container_ = nullptr;
+  raw_ptr<PinnedToolbarActionsContainer> pinned_toolbar_actions_container_ =
+      nullptr;
   raw_ptr<SidePanelToolbarButton> side_panel_button_ = nullptr;
   raw_ptr<AvatarToolbarButton> avatar_ = nullptr;
   raw_ptr<MediaToolbarButtonView> media_button_ = nullptr;
@@ -285,6 +300,7 @@ class ToolbarView : public views::AccessiblePaneView,
       send_tab_to_self_button_ = nullptr;
   raw_ptr<BrowserAppMenuButton> app_menu_button_ = nullptr;
   raw_ptr<DownloadToolbarButtonView> download_button_ = nullptr;
+  raw_ptr<views::View> new_tab_button_ = nullptr;
 
   const raw_ptr<Browser> browser_;
   const raw_ptr<BrowserView> browser_view_;
@@ -303,6 +319,8 @@ class ToolbarView : public views::AccessiblePaneView,
   // The display mode used when laying out the toolbar.
   const DisplayMode display_mode_;
 
+  std::unique_ptr<ToolbarController> toolbar_controller_;
+
   base::CallbackListSubscription subscription_ =
       ui::TouchUiController::Get()->RegisterCallback(
           base::BindRepeating(&ToolbarView::OnTouchUiChanged,
@@ -319,6 +337,11 @@ class ToolbarView : public views::AccessiblePaneView,
   // background_view_left_ and background_view_right_.
   // the future.
   raw_ptr<ContainerView> container_view_ = nullptr;
+
+  // A chevron button that indicates some toolbar elements have overflowed
+  // due to small toolbar view width. Visibility controlled by
+  // `toolbar_controller_`.
+  raw_ptr<OverflowButton> overflow_button_ = nullptr;
 
   // There are two situations where background_view_left_ and
   // background_view_right_ need be repainted: window active state change and

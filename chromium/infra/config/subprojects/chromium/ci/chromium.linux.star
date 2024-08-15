@@ -9,6 +9,7 @@ load("//lib/builders.star", "builders", "os", "reclient", "sheriff_rotations")
 load("//lib/branches.star", "branches")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
+load("//lib/gn_args.star", "gn_args")
 
 ci.defaults.set(
     executable = ci.DEFAULT_EXECUTABLE,
@@ -19,6 +20,7 @@ ci.defaults.set(
     sheriff_rotations = sheriff_rotations.CHROMIUM,
     tree_closing = True,
     main_console_view = "main",
+    contact_team_email = "chrome-linux-engprod@google.com",
     execution_timeout = ci.DEFAULT_EXECUTION_TIMEOUT,
     notifies = ["chromium.linux"],
     reclient_instance = reclient.instance.DEFAULT_TRUSTED,
@@ -159,9 +161,6 @@ ci.builder(
     ),
     execution_timeout = 6 * time.hour,
     notifies = ["Deterministic Linux", "close-on-any-step-failure"],
-    reclient_bootstrap_env = {
-        "RBE_clang_depscan_archive": "true",
-    },
     reclient_jobs = reclient.jobs.DEFAULT,
 )
 
@@ -174,8 +173,11 @@ ci.builder(
         short_name = "det",
     ),
     execution_timeout = 7 * time.hour,
-    reclient_bootstrap_env = {
-        "RBE_clang_depscan_archive": "true",
+    gn_args = {
+        "local": "debug_build",
+        "reclient": gn_args.config(
+            configs = ["debug_build", "reclient"],
+        ),
     },
     reclient_jobs = reclient.jobs.DEFAULT,
 )
@@ -229,9 +231,6 @@ ci.builder(
         short_name = "bld",
     ),
     cq_mirrors_console_view = "mirrors",
-    reclient_bootstrap_env = {
-        "RBE_clang_depscan_archive": "true",
-    },
 )
 
 ci.builder(
@@ -254,10 +253,7 @@ ci.builder(
         short_name = "64",
     ),
     cq_mirrors_console_view = "mirrors",
-    reclient_bootstrap_env = {
-        "RBE_clang_depscan_archive": "true",
-    },
-    reclient_jobs = reclient.jobs.DEFAULT,
+    reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
 )
 
 ci.builder(
@@ -285,9 +281,6 @@ ci.builder(
         short_name = "bld-wl",
     ),
     cq_mirrors_console_view = "mirrors",
-    reclient_bootstrap_env = {
-        "RBE_clang_depscan_archive": "true",
-    },
     reclient_jobs = reclient.jobs.DEFAULT,
 )
 
@@ -505,7 +498,6 @@ ci.builder(
         ),
         build_gs_bucket = "chromium-linux-archive",
     ),
-    sheriff_rotations = args.ignore_default(None),
     tree_closing = False,
     console_view_entry = consoles.console_view_entry(
         category = "linux",

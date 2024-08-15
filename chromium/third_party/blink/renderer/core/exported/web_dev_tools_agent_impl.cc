@@ -64,6 +64,7 @@
 #include "third_party/blink/renderer/core/inspector/inspector_dom_debugger_agent.h"
 #include "third_party/blink/renderer/core/inspector/inspector_dom_snapshot_agent.h"
 #include "third_party/blink/renderer/core/inspector/inspector_emulation_agent.h"
+#include "third_party/blink/renderer/core/inspector/inspector_event_breakpoints_agent.h"
 #include "third_party/blink/renderer/core/inspector/inspector_io_agent.h"
 #include "third_party/blink/renderer/core/inspector/inspector_layer_tree_agent.h"
 #include "third_party/blink/renderer/core/inspector/inspector_log_agent.h"
@@ -85,6 +86,7 @@
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_controller.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
@@ -110,14 +112,15 @@ class ClientMessageLoopAdapter : public MainThreadDebugger::ClientMessageLoop {
     instance_ = nullptr;
   }
 
-  static void EnsureMainThreadDebuggerCreated() {
+  static void EnsureMainThreadDebuggerCreated(v8::Isolate* isolate) {
     if (instance_)
       return;
     std::unique_ptr<ClientMessageLoopAdapter> instance(
         new ClientMessageLoopAdapter(
             Platform::Current()->CreateNestedMessageLoopRunner()));
     instance_ = instance.get();
-    MainThreadDebugger::Instance()->SetClientMessageLoop(std::move(instance));
+    MainThreadDebugger::Instance(isolate)->SetClientMessageLoop(
+        std::move(instance));
   }
 
   static void ContinueProgram() {
@@ -235,6 +238,9 @@ class ClientMessageLoopAdapter : public MainThreadDebugger::ClientMessageLoop {
     // 0. Flush pending frontend messages.
     WebDevToolsAgentImpl* agent = frame->DevToolsAgentImpl();
     agent->FlushProtocolNotifications();
+    agent->MainThreadDebuggerPaused();
+    CHECK(!paused_frame_);
+    paused_frame_ = WrapWeakPersistent(frame);
 
     // 1. Disable input events.
     CHECK(!input_events_disabler_);
@@ -268,6 +274,12 @@ class ClientMessageLoopAdapter : public MainThreadDebugger::ClientMessageLoop {
     message_loop_->QuitNow();
     page_pauser_.reset();
     input_events_disabler_.reset();
+
+    CHECK(paused_frame_);
+    if (paused_frame_->GetFrame()) {
+      paused_frame_->DevToolsAgentImpl()->MainThreadDebuggerResumed();
+    }
+    paused_frame_ = nullptr;
   }
 
   absl::optional<MessageLoopKind> running_for_debug_break_kind_;
@@ -275,6 +287,7 @@ class ClientMessageLoopAdapter : public MainThreadDebugger::ClientMessageLoop {
   std::unique_ptr<Platform::NestedMessageLoopRunner> message_loop_;
   std::unique_ptr<ScopedInputEventsDisabler> input_events_disabler_;
   std::unique_ptr<WebScopedPagePauser> page_pauser_;
+  WeakPersistent<WebLocalFrameImpl> paused_frame_;
   scoped_refptr<InspectorTaskRunner>
       inspector_task_runner_for_instrumentation_pause_;
   static ClientMessageLoopAdapter* instance_;
@@ -287,10 +300,12 @@ void WebDevToolsAgentImpl::AttachSession(DevToolsSession* session,
   if (!network_agents_.size())
     Thread::Current()->AddTaskObserver(this);
 
-  ClientMessageLoopAdapter::EnsureMainThreadDebuggerCreated();
-  MainThreadDebugger* main_thread_debugger = MainThreadDebugger::Instance();
-  v8::Isolate* isolate = V8PerIsolateData::MainThreadIsolate();
   InspectedFrames* inspected_frames = inspected_frames_.Get();
+  v8::Isolate* isolate =
+      inspected_frames->Root()->GetPage()->GetAgentGroupScheduler().Isolate();
+  ClientMessageLoopAdapter::EnsureMainThreadDebuggerCreated(isolate);
+  MainThreadDebugger* main_thread_debugger =
+      MainThreadDebugger::Instance(isolate);
 
   int context_group_id =
       main_thread_debugger->ContextGroupId(inspected_frames->Root());
@@ -313,6 +328,9 @@ void WebDevToolsAgentImpl::AttachSession(DevToolsSession* session,
   InspectorDOMDebuggerAgent* dom_debugger_agent =
       session->CreateAndAppend<InspectorDOMDebuggerAgent>(isolate, dom_agent,
                                                           session->V8Session());
+
+  session->CreateAndAppend<InspectorEventBreakpointsAgent>(
+      session->V8Session());
 
   session->CreateAndAppend<InspectorPerformanceAgent>(inspected_frames);
 
@@ -584,19 +602,31 @@ void WebDevToolsAgentImpl::FlushProtocolNotifications() {
   agent_->FlushProtocolNotifications();
 }
 
+void WebDevToolsAgentImpl::MainThreadDebuggerPaused() {
+  agent_->DebuggerPaused();
+}
+
+void WebDevToolsAgentImpl::MainThreadDebuggerResumed() {
+  agent_->DebuggerResumed();
+}
+
 void WebDevToolsAgentImpl::WillProcessTask(
     const base::PendingTask& pending_task,
     bool was_blocked_or_low_priority) {
   if (network_agents_.empty())
     return;
-  ThreadDebugger::IdleFinished(V8PerIsolateData::MainThreadIsolate());
+  v8::Isolate* isolate =
+      inspected_frames_->Root()->GetPage()->GetAgentGroupScheduler().Isolate();
+  ThreadDebugger::IdleFinished(isolate);
 }
 
 void WebDevToolsAgentImpl::DidProcessTask(
     const base::PendingTask& pending_task) {
   if (network_agents_.empty())
     return;
-  ThreadDebugger::IdleStarted(V8PerIsolateData::MainThreadIsolate());
+  v8::Isolate* isolate =
+      inspected_frames_->Root()->GetPage()->GetAgentGroupScheduler().Isolate();
+  ThreadDebugger::IdleStarted(isolate);
   FlushProtocolNotifications();
 }
 

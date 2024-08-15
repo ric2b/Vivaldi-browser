@@ -1,0 +1,63 @@
+name: CI Android JNI
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+# Cancel the workflow if a new one is triggered from the same PR, branch, or tag, except on main.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  build-android-jni:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.1.0
+      - name: Download and Setup the Android NDK
+        uses: nttld/setup-ndk@dbacc5871a0fac6eef9a09d2ca86bc8bf79432c3 # v1.3.1
+        id: setup-ndk
+        with:
+          # r25c is the same as 25.2.9519653.
+          ndk-version: r25c
+          add-to-path: false
+      - name: Setup ninja
+        uses: seanmiddleditch/gha-setup-ninja@16b940825621068d98711680b6c3ff92201f8fc0 # v3
+      - name: Setup cmake
+        uses: jwlawson/actions-setup-cmake@187efd9581ed20ee4e03c0dfb9ac2cd5896c4835 # v1.14.1
+        with:
+          cmake-version: "3.19.x"
+      - name: Setup python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - name: Setup meson
+        run: pip install meson
+      - name: Setup nasm
+        uses: ilammy/setup-nasm@v1
+      - name: Build dav1d with the Android NDK
+        working-directory: ext
+        run: bash dav1d_android.sh ${{ steps.setup-ndk.outputs.ndk-path }}
+      - name: Build libyuv with the Android NDK
+        working-directory: ext
+        run: bash libyuv_android.sh ${{ steps.setup-ndk.outputs.ndk-path }}
+      - name: Setup JDK
+        uses: actions/setup-java@0ab4596768b603586c0de567f2430c30f5b0d2b0 # v3.13.0
+        with:
+          distribution: "zulu"
+          java-version: 17
+      - name: Download and Setup the Android SDK
+        uses: android-actions/setup-android@13f81365a437096ca29f87b1e7389bf0ea1385ed # v3.0.0
+      - name: Install CMake in the Android SDK
+        # This is the same version of cmake that is found in build.gradle. This
+        # will be used to build libavif and the JNI bindings.
+        run: sdkmanager "cmake;3.22.1"
+      - name: Build the libavif JNI Wrapper
+        working-directory: android_jni
+        run: ./gradlew --no-daemon assembleRelease
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}

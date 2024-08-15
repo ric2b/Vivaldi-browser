@@ -26,7 +26,7 @@ TEST_F(NGPhysicalFragmentTest, DumpFragmentTreeBasic) {
   )HTML");
   String dump = DumpAll();
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
-  Box (out-of-flow-positioned block-flow)(self paint) offset:unplaced size:800x600 LayoutNGView #document
+  Box (out-of-flow-positioned block-flow)(self paint) offset:unplaced size:800x600 LayoutView #document
     Box (block-flow-root block-flow)(self paint) offset:0,0 size:800x8 LayoutNGBlockFlow HTML
       Box (block-flow) offset:8,8 size:784x0 LayoutNGBlockFlow BODY
         Box (block-flow) offset:0,0 size:784x0 LayoutNGBlockFlow DIV id='block'
@@ -42,7 +42,7 @@ TEST_F(NGPhysicalFragmentTest, DumpFragmentTreeWithAbspos) {
 
   String dump = DumpAll();
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
-  Box (out-of-flow-positioned block-flow)(self paint) offset:unplaced size:800x600 LayoutNGView #document
+  Box (out-of-flow-positioned block-flow)(self paint) offset:unplaced size:800x600 LayoutView #document
     Box (block-flow-root block-flow)(self paint) offset:0,0 size:800x8 LayoutNGBlockFlow HTML
       Box (block-flow) offset:8,8 size:784x0 LayoutNGBlockFlow BODY
     Box (out-of-flow-positioned block-flow)(self paint) offset:8,8 size:0x0 LayoutNGBlockFlow (positioned) DIV id='abs'
@@ -60,7 +60,7 @@ TEST_F(NGPhysicalFragmentTest, DumpFragmentTreeWithAbsposInRelpos) {
 
   String dump = DumpAll();
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
-  Box (out-of-flow-positioned block-flow)(self paint) offset:unplaced size:800x600 LayoutNGView #document
+  Box (out-of-flow-positioned block-flow)(self paint) offset:unplaced size:800x600 LayoutView #document
     Box (block-flow-root block-flow)(self paint) offset:0,0 size:800x8 LayoutNGBlockFlow HTML
       Box (block-flow) offset:8,8 size:784x0 LayoutNGBlockFlow BODY
         Box (block-flow)(self paint) offset:0,0 size:784x0 LayoutNGBlockFlow (relative positioned) DIV id='rel'
@@ -86,11 +86,11 @@ TEST_F(NGPhysicalFragmentTest, DumpFragmentTreeWithGrid) {
 
   String dump = DumpAll();
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
-  Box (out-of-flow-positioned block-flow)(self paint) offset:unplaced size:800x600 LayoutNGView #document
+  Box (out-of-flow-positioned block-flow)(self paint) offset:unplaced size:800x600 LayoutView #document
     Box (block-flow-root block-flow)(self paint) offset:0,0 size:800x16 LayoutNGBlockFlow HTML
       Box (block-flow) offset:8,8 size:784x0 LayoutNGBlockFlow BODY
-        Box (block-flow-root) offset:0,0 size:784x0 LayoutNGGrid DIV id='outer-grid'
-          Box (block-flow-root) offset:0,0 size:784x0 LayoutNGGrid DIV id='grid-as-item'
+        Box (block-flow-root) offset:0,0 size:784x0 LayoutGrid DIV id='outer-grid'
+          Box (block-flow-root) offset:0,0 size:784x0 LayoutGrid DIV id='grid-as-item'
             Box (block-flow-root block-flow) offset:0,0 size:784x0 LayoutNGBlockFlow DIV id='inner-grid-item'
               Box (block-flow) offset:0,0 size:784x0 LayoutNGBlockFlow DIV id='foo'
           Box (block-flow-root block-flow) offset:0,0 size:784x0 LayoutNGBlockFlow DIV id='block-container-item'
@@ -116,7 +116,7 @@ TEST_F(NGPhysicalFragmentTest, DumpFragmentTreeWithTargetInsideColumn) {
 
   String dump = DumpAll(second_child_fragment);
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
-  Box (out-of-flow-positioned block-flow)(self paint) offset:unplaced size:800x600 LayoutNGView #document
+  Box (out-of-flow-positioned block-flow)(self paint) offset:unplaced size:800x600 LayoutView #document
     Box (block-flow-root block-flow)(self paint) offset:0,0 size:800x66 LayoutNGBlockFlow HTML
       Box (block-flow) offset:8,8 size:784x50 LayoutNGBlockFlow BODY
         Box (block-flow-root block-flow) offset:0,0 size:784x50 LayoutNGBlockFlow DIV id='multicol'

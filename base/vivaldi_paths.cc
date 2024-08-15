@@ -19,7 +19,7 @@ bool PathProvider(int key, base::FilePath* result) {
         // PathExists() triggers IO restriction.
         base::VivaldiScopedAllowBlocking allow_blocking;
 
-        if (!PathService::Get(base::DIR_SOURCE_ROOT, result))
+        if (!PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, result))
           return false;
         // Src dir is in the vivaldi chromium folder
         *result = result->DirName();

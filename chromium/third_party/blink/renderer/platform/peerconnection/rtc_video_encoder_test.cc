@@ -6,6 +6,7 @@
 
 #include "base/functional/bind.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/sequenced_task_runner.h"
@@ -311,7 +312,7 @@ class RTCVideoEncoderTest {
     mock_vea_ = new media::MockVideoEncodeAccelerator();
 
     EXPECT_CALL(*mock_gpu_factories_.get(), DoCreateVideoEncodeAccelerator())
-        .WillRepeatedly(Return(mock_vea_));
+        .WillRepeatedly(Return(mock_vea_.get()));
     EXPECT_CALL(*mock_vea_,
                 Initialize(CheckConfig(pixel_format, storage_type), _, _))
         .WillOnce(Invoke(this, &RTCVideoEncoderTest::Initialize));
@@ -535,7 +536,7 @@ class RTCVideoEncoderTest {
                        const webrtc::EncodedImage& encoded_image,
                        const webrtc::CodecSpecificInfo* codec_specific_info) {
     DVLOG(3) << __func__;
-    EXPECT_EQ(rtp_timestamp, encoded_image.Timestamp());
+    EXPECT_EQ(rtp_timestamp, encoded_image.RtpTimestamp());
     EXPECT_EQ(capture_time_ms, encoded_image.capture_time_ms_);
   }
 
@@ -577,14 +578,10 @@ class RTCVideoEncoderTest {
         features::kWebRtcInitializeEncoderOnFirstFrame);
   }
 
-  bool AsyncEncodingIsEnabled() const {
-    return base::FeatureList::IsEnabled(features::kWebRtcEncoderAsyncEncode);
-  }
-
-  media::MockVideoEncodeAccelerator* mock_vea_;
+  raw_ptr<media::MockVideoEncodeAccelerator, DanglingUntriaged> mock_vea_;
   std::unique_ptr<RTCVideoEncoderWrapper> rtc_encoder_;
   absl::optional<media::VideoEncodeAccelerator::Config> config_;
-  media::VideoEncodeAccelerator::Client* client_;
+  raw_ptr<media::VideoEncodeAccelerator::Client, DanglingUntriaged> client_;
   base::Thread encoder_thread_;
 
   std::unique_ptr<media::MockGpuVideoAcceleratorFactories> mock_gpu_factories_;
@@ -707,7 +704,6 @@ INSTANTIATE_TEST_SUITE_P(InitTimingAndCodecProfiles,
 
 struct RTCVideoEncoderEncodeTestParam {
   bool init_on_first_frame;
-  bool async_encode;
 };
 
 class RTCVideoEncoderEncodeTest
@@ -726,11 +722,6 @@ class RTCVideoEncoderEncodeTest
     } else {
       disabled_features.push_back(
           features::kWebRtcInitializeEncoderOnFirstFrame);
-    }
-    if (GetParam().async_encode) {
-      enabled_features.push_back(features::kWebRtcEncoderAsyncEncode);
-    } else {
-      disabled_features.push_back(features::kWebRtcEncoderAsyncEncode);
     }
     feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
@@ -855,22 +846,8 @@ TEST_P(RTCVideoEncoderEncodeTest, SoftwareFallbackOnBadEncodeInput) {
   frame->set_timestamp(base::Milliseconds(1));
   rtc::scoped_refptr<webrtc::VideoFrameBuffer> frame_adapter(
       new rtc::RefCountedObject<WebRtcVideoFrameAdapter>(
-          frame, std::vector<scoped_refptr<media::VideoFrame>>(),
-          new WebRtcVideoFrameAdapter::SharedResources(nullptr)));
+          frame, new WebRtcVideoFrameAdapter::SharedResources(nullptr)));
   std::vector<webrtc::VideoFrameType> frame_types;
-
-  // Expect SW fallback because the frame isn't a GpuMemoryBuffer-based frame.
-  if (!AsyncEncodingIsEnabled()) {
-    EXPECT_EQ(WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE,
-              rtc_encoder_->Encode(webrtc::VideoFrame::Builder()
-                                       .set_video_frame_buffer(frame_adapter)
-                                       .set_timestamp_rtp(1000)
-                                       .set_timestamp_us(2000)
-                                       .set_rotation(webrtc::kVideoRotation_0)
-                                       .build(),
-                                   &frame_types));
-    return;
-  }
 
   // The frame type check is done in media thread asynchronously. The error is
   // reported in the second Encode callback.
@@ -954,8 +931,7 @@ TEST_P(RTCVideoEncoderEncodeTest, NonZeroCopyEncodingIfFirstFrameisShmem) {
       place_holder_mailbox_holders, base::DoNothing(), base::Milliseconds(1));
   rtc::scoped_refptr<webrtc::VideoFrameBuffer> frame_adapter(
       new rtc::RefCountedObject<WebRtcVideoFrameAdapter>(
-          gmb_frame, std::vector<scoped_refptr<media::VideoFrame>>(),
-          new WebRtcVideoFrameAdapter::SharedResources(nullptr)));
+          gmb_frame, new WebRtcVideoFrameAdapter::SharedResources(nullptr)));
   std::vector<webrtc::VideoFrameType> frame_types;
   ExpectCreateInitAndDestroyVEA(
       media::PIXEL_FORMAT_NV12,
@@ -1067,8 +1043,7 @@ TEST_P(RTCVideoEncoderEncodeTest, AcceptsRepeatedWrappedMediaVideoFrame) {
   frame->set_timestamp(base::Milliseconds(1));
   rtc::scoped_refptr<webrtc::VideoFrameBuffer> frame_adapter(
       new rtc::RefCountedObject<WebRtcVideoFrameAdapter>(
-          frame, std::vector<scoped_refptr<media::VideoFrame>>(),
-          new WebRtcVideoFrameAdapter::SharedResources(nullptr)));
+          frame, new WebRtcVideoFrameAdapter::SharedResources(nullptr)));
   std::vector<webrtc::VideoFrameType> frame_types;
   if (InitializeOnFirstFrameEnabled()) {
     ExpectCreateInitAndDestroyVEA();
@@ -1182,10 +1157,16 @@ TEST_P(RTCVideoEncoderEncodeTest, EncodeSpatialLayer) {
         }
       }
 
-      if (encoded_image.Timestamp() == kNumEncodeFrames - 1 &&
+      if (encoded_image.RtpTimestamp() == kNumEncodeFrames - 1 &&
           codec_specific_info->end_of_picture) {
         waiter_.Signal();
       }
+
+      if (encoded_image.TemporalIndex().has_value()) {
+        EXPECT_EQ(encoded_image.TemporalIndex(),
+                  codec_specific_info->codecSpecific.VP9.temporal_idx);
+      }
+
       return Result(Result::OK);
     }
 
@@ -1400,17 +1381,6 @@ TEST_P(RTCVideoEncoderEncodeTest, RaiseErrorOnMissingEndOfPicture) {
   FillFrameBuffer(buffer);
   std::vector<webrtc::VideoFrameType> frame_types{
       webrtc::VideoFrameType::kVideoFrameKey};
-  if (!AsyncEncodingIsEnabled()) {
-    EXPECT_NE(rtc_encoder_->Encode(webrtc::VideoFrame::Builder()
-                                       .set_video_frame_buffer(buffer)
-                                       .set_timestamp_rtp(0)
-                                       .set_timestamp_us(0)
-                                       .set_rotation(webrtc::kVideoRotation_0)
-                                       .build(),
-                                   &frame_types),
-              WEBRTC_VIDEO_CODEC_OK);
-    return;
-  }
 
   // BitstreamBufferReady() is called after the first Encode() returns.
   // The error is reported on the second call.
@@ -1471,18 +1441,6 @@ TEST_P(RTCVideoEncoderEncodeTest, RaiseErrorOnMismatchingResolutions) {
   FillFrameBuffer(buffer);
   std::vector<webrtc::VideoFrameType> frame_types{
       webrtc::VideoFrameType::kVideoFrameKey};
-
-  if (!AsyncEncodingIsEnabled()) {
-    EXPECT_NE(rtc_encoder_->Encode(webrtc::VideoFrame::Builder()
-                                       .set_video_frame_buffer(buffer)
-                                       .set_timestamp_rtp(0)
-                                       .set_timestamp_us(0)
-                                       .set_rotation(webrtc::kVideoRotation_0)
-                                       .build(),
-                                   &frame_types),
-              WEBRTC_VIDEO_CODEC_OK);
-    return;
-  }
 
   // BitstreamBufferReady() is called after the first Encode() returns.
   // The error is reported on the second call.
@@ -1660,6 +1618,11 @@ TEST_P(RTCVideoEncoderEncodeTest, LowerSpatialLayerTurnedOffAndOnAgain) {
         EXPECT_EQ(codec_specific_info->codecType, webrtc::kVideoCodecVP9);
         infos_.push_back(codec_specific_info->codecSpecific.VP9);
       }
+      if (encoded_image.TemporalIndex().has_value()) {
+        EXPECT_EQ(encoded_image.TemporalIndex(),
+                  codec_specific_info->codecSpecific.VP9.temporal_idx);
+      }
+
       return Result(Result::OK);
     }
 
@@ -1846,7 +1809,7 @@ TEST_P(RTCVideoEncoderEncodeTest, MetricsProviderSetErrorIsCalledOnError) {
   // factory.CreateVideoEncodeAccelerator() is called.
   mock_vea_ = new media::MockVideoEncodeAccelerator();
   EXPECT_CALL(*mock_gpu_factories_.get(), DoCreateVideoEncodeAccelerator())
-      .WillRepeatedly(Return(mock_vea_));
+      .WillRepeatedly(Return(mock_vea_.get()));
   EXPECT_CALL(*mock_encoder_metrics_provider_factory_,
               CreateVideoEncoderMetricsProvider())
       .WillOnce(Return(::testing::ByMove(std::move(encoder_metrics_provider))));
@@ -1917,7 +1880,7 @@ TEST_P(RTCVideoEncoderEncodeTest, EncodeVp9FrameWithMetricsProvider) {
   // factory.CreateVideoEncodeAccelerator() is called.
   mock_vea_ = new media::MockVideoEncodeAccelerator();
   EXPECT_CALL(*mock_gpu_factories_.get(), DoCreateVideoEncodeAccelerator())
-      .WillRepeatedly(Return(mock_vea_));
+      .WillRepeatedly(Return(mock_vea_.get()));
   EXPECT_CALL(*mock_encoder_metrics_provider_factory_,
               CreateVideoEncoderMetricsProvider())
       .WillOnce(Return(::testing::ByMove(std::move(encoder_metrics_provider))));
@@ -1995,8 +1958,7 @@ TEST_P(RTCVideoEncoderEncodeTest, EncodeFrameWithAdapter) {
       gfx::Size(kInputFrameWidth, kInputFrameHeight));
   rtc::scoped_refptr<webrtc::VideoFrameBuffer> frame_adapter(
       new rtc::RefCountedObject<WebRtcVideoFrameAdapter>(
-          frame, std::vector<scoped_refptr<media::VideoFrame>>(),
-          new WebRtcVideoFrameAdapter::SharedResources(nullptr)));
+          frame, new WebRtcVideoFrameAdapter::SharedResources(nullptr)));
   std::vector<webrtc::VideoFrameType> frame_types;
   EXPECT_EQ(WEBRTC_VIDEO_CODEC_OK,
             rtc_encoder_->Encode(webrtc::VideoFrame::Builder()
@@ -2012,8 +1974,7 @@ TEST_P(RTCVideoEncoderEncodeTest, EncodeFrameWithAdapter) {
   frame = media::VideoFrame::CreateBlackFrame(
       gfx::Size(kInputFrameWidth * 2, kInputFrameHeight * 2));
   frame_adapter = new rtc::RefCountedObject<WebRtcVideoFrameAdapter>(
-      frame, std::vector<scoped_refptr<media::VideoFrame>>(),
-      new WebRtcVideoFrameAdapter::SharedResources(nullptr));
+      frame, new WebRtcVideoFrameAdapter::SharedResources(nullptr));
   EXPECT_EQ(WEBRTC_VIDEO_CODEC_OK,
             rtc_encoder_->Encode(webrtc::VideoFrame::Builder()
                                      .set_video_frame_buffer(frame_adapter)
@@ -2047,7 +2008,7 @@ TEST_P(RTCVideoEncoderEncodeTest, EncodedBufferLifetimeExceedsEncoderLifetime) {
         const webrtc::EncodedImage& encoded_image,
         const webrtc::CodecSpecificInfo* codec_specific_info) override {
       last_encoded_image_ = encoded_image.GetEncodedData();
-      if (encoded_image.Timestamp() == kNumEncodeFrames - 1 &&
+      if (encoded_image.RtpTimestamp() == kNumEncodeFrames - 1 &&
           codec_specific_info->end_of_picture) {
         waiter_.Signal();
       }
@@ -2100,10 +2061,8 @@ TEST_P(RTCVideoEncoderEncodeTest, EncodedBufferLifetimeExceedsEncoderLifetime) {
 }
 
 const RTCVideoEncoderEncodeTestParam kEncodeTestCases[] = {
-    {false, false},
-    {false, true},
-    {true, false},
-    {true, true},
+    {false},
+    {true},
 };
 
 INSTANTIATE_TEST_SUITE_P(InitTimingAndSyncAndAsynEncoding,

@@ -6,6 +6,7 @@
 
 #include "base/containers/contains.h"
 #include "base/ranges/algorithm.h"
+#include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_parsing/credit_card_field.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/browser/rationalization_util.h"
@@ -27,14 +28,10 @@ namespace {
 ServerFieldTypeSet GetNecessaryTypesFor(ServerFieldType type) {
   switch (type) {
     case PHONE_HOME_COUNTRY_CODE: {
-      ServerFieldTypeSet necessary_types{PHONE_HOME_NUMBER,
-                                         PHONE_HOME_NUMBER_PREFIX,
-                                         PHONE_HOME_CITY_AND_NUMBER};
-      if (base::FeatureList::IsEnabled(
-              features::kAutofillEnableSupportForPhoneNumberTrunkTypes)) {
-        necessary_types.insert(PHONE_HOME_CITY_AND_NUMBER_WITHOUT_TRUNK_PREFIX);
-      }
-      return necessary_types;
+      return ServerFieldTypeSet{
+          PHONE_HOME_NUMBER, PHONE_HOME_NUMBER_PREFIX,
+          PHONE_HOME_CITY_AND_NUMBER,
+          PHONE_HOME_CITY_AND_NUMBER_WITHOUT_TRUNK_PREFIX};
     }
     default:
       return {};
@@ -103,16 +100,15 @@ void FormStructureRationalizer::RationalizeAutocompleteAttributes(
     auto set_html_type = [&field](HtmlFieldType type) {
       field->SetHtmlType(type, field->html_mode());
     };
-    // The following rationalization operates only on text fields.
-    bool is_text_field = field->FormControlType() == FormControlType::kText ||
-                         field->FormControlType() == FormControlType::kTextarea;
-    if (!is_text_field) {
-      continue;
-    }
-    // TODO(crbug.com/1441057) For <select> elements we may rationalize the
-    // HtmlFieldType based on the length of option values.
+    // Some of the following rationalization operates only on text fields.
+    bool is_text_field =
+        field->FormControlType() == DeprecatedFormControlType::kText ||
+        field->FormControlType() == DeprecatedFormControlType::kTextarea;
     switch (field->html_type()) {
       case HtmlFieldType::kAdditionalName:
+        if (!is_text_field) {
+          continue;
+        }
         if (field->max_length == 1) {
           set_html_type(HtmlFieldType::kAdditionalNameInitial);
         }
@@ -125,6 +121,9 @@ void FormStructureRationalizer::RationalizeAutocompleteAttributes(
       case HtmlFieldType::kCreditCardExp:
       case HtmlFieldType::kCreditCardExpDate2DigitYear:
       case HtmlFieldType::kCreditCardExpDate4DigitYear:
+        if (!is_text_field) {
+          continue;
+        }
         if (base::FeatureList::IsEnabled(
                 features::kAutofillEnableExpirationDateImprovements)) {
           ServerFieldType server_hint = field->server_type();
@@ -148,10 +147,29 @@ void FormStructureRationalizer::RationalizeAutocompleteAttributes(
         }
         break;
       case HtmlFieldType::kCreditCardExpYear:
+      case HtmlFieldType::kCreditCardExp2DigitYear:
+      case HtmlFieldType::kCreditCardExp4DigitYear:
+        if (!is_text_field & !field->IsSelectOrSelectListElement()) {
+          continue;
+        }
         if (base::FeatureList::IsEnabled(
                 features::kAutofillEnableExpirationDateImprovements)) {
-          // TODO(crbug.com/1441057) Look for YYYY vs. YY in placeholder/label.
-          set_html_type(field->max_length == 4
+          ServerFieldType server_hint = field->server_type();
+          ServerFieldType forced_field_type =
+              field->server_type_prediction_is_override() ? field->server_type()
+                                                          : NO_SERVER_DATA;
+          // The default for select or list elements does not really matter
+          // because it's practically always chosen from the select options.
+          // The default for text elements was chosen base on statistics from
+          // server side classifications (go/iqwtu).
+          // Keep this in sync with CreditCardField::GetExpirationYearType().
+          ServerFieldType overall_type =
+              CreditCardField::DetermineExpirationYearType(
+                  *field,
+                  /*fallback_type=*/CREDIT_CARD_EXP_4_DIGIT_YEAR,
+                  /*server_hint=*/server_hint,
+                  /*forced_field_type=*/forced_field_type);
+          set_html_type(overall_type == CREDIT_CARD_EXP_4_DIGIT_YEAR
                             ? HtmlFieldType::kCreditCardExp4DigitYear
                             : HtmlFieldType::kCreditCardExp2DigitYear);
         } else {
@@ -325,7 +343,7 @@ void FormStructureRationalizer::RationalizeCreditCardFieldPredictions(
                   << "Credit card rationalization: Found multiple expiration "
                      "months and the field following one is not an "
                      "expiration year but "
-                  << FieldTypeToStringPiece(next_field_type) << ".";
+                  << FieldTypeToStringView(next_field_type) << ".";
               field->SetTypeTo(AutofillType(UNKNOWN_TYPE));
             }
           }
@@ -340,7 +358,7 @@ void FormStructureRationalizer::RationalizeCreditCardFieldPredictions(
                 << LoggingScope::kRationalization
                 << LogMessage::kRationalization
                 << "Credit card rationalization: Found expiration year but no "
-                   "full expriration date.";
+                   "full expiration date.";
           }
         }
         break;
@@ -429,8 +447,7 @@ void FormStructureRationalizer::RationalizeMultiOriginCreditCardFields(
               << LoggingScope::kRationalization << LogMessage::kRationalization
               << "Multi-origin Credit Card Rationalization: Converting type of "
               << field->global_id() << " from "
-              << AutofillType::ServerFieldTypeToString(relevant_type)
-              << " to UNKNOWN_TYPE";
+              << FieldTypeToStringView(relevant_type) << " to UNKNOWN_TYPE";
         }
       }
     }
@@ -455,7 +472,7 @@ void FormStructureRationalizer::RationalizeCreditCardNumberOffsets(
   // iff all fields in the range
   // 1. `{f, f + N + 1}` are credit card number fields, and
   // 2. `{f, f + N + 1}` originate from the same form in the same frame, and
-  // 3. `{f, f + N + 1}` are all focuseable or all unfocusable,
+  // 3. `{f, f + N + 1}` are all focusable or all unfocusable,
   // 4. `{f, f + N}` have the same `FormFieldData::max_length <
   //    kMaxGroupElementLength`.
   //
@@ -573,9 +590,8 @@ void FormStructureRationalizer::RationalizePhoneNumberTrunkTypes(
         field.SetTypeTo(AutofillType(new_type));
         LOG_AF(log_manager)
             << LoggingScope::kRationalization << LogMessage::kRationalization
-            << "Converting "
-            << AutofillType::ServerFieldTypeToString(current_type) << " to "
-            << AutofillType::ServerFieldTypeToString(new_type)
+            << "Converting " << FieldTypeToStringView(current_type) << " to "
+            << FieldTypeToStringView(new_type)
             << " as part of phone number trunk type rationalization";
       };
 
@@ -769,8 +785,9 @@ bool FormStructureRationalizer::FieldShouldBeRationalizedToCountry(
   // is a country.
   for (int field_index = upper_index - 1; field_index >= 0; --field_index) {
     if ((*fields_)[field_index]->IsFocusable() &&
-        AutofillType((*fields_)[field_index]->Type().GetStorableType())
-                .group() == FieldTypeGroup::kAddress &&
+        GroupTypeOfServerFieldType(
+            (*fields_)[field_index]->Type().GetStorableType()) ==
+            FieldTypeGroup::kAddress &&
         (*fields_)[field_index]->section == (*fields_)[upper_index]->section) {
       return false;
     }
@@ -946,12 +963,12 @@ void FormStructureRationalizer::RationalizeTypeRelationships(
     ServerFieldType field_type = field->Type().GetStorableType();
     ServerFieldTypeSet necessary_types = GetNecessaryTypesFor(field_type);
     if (!necessary_types.empty() && !types.contains_any(necessary_types)) {
-      // We have relationship rules for this type, but no `neccessary_type` was
+      // We have relationship rules for this type, but no `necessary_type` was
       // found. Disabling Autofill for this field.
       field->SetTypeTo(AutofillType(UNKNOWN_TYPE));
       LOG_AF(log_manager)
           << "RationalizeTypeRelationships: Fields of type "
-          << FieldTypeToStringPiece(field_type)
+          << FieldTypeToStringView(field_type)
           << " can only exist if other fields of specific types exist.";
     }
   }

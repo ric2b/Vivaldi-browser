@@ -204,6 +204,7 @@ COMPONENT_EXPORT(ONC) extern const char kIpTypeIpv4Ipv6[];
 COMPONENT_EXPORT(ONC) extern const char kApnTypes[];
 COMPONENT_EXPORT(ONC) extern const char kApnTypeDefault[];
 COMPONENT_EXPORT(ONC) extern const char kApnTypeAttach[];
+COMPONENT_EXPORT(ONC) extern const char kApnTypeTether[];
 }  // namespace cellular_apn
 
 namespace cellular_found_network {
@@ -552,6 +553,9 @@ extern const char* const kAllowTextMessages;
 COMPONENT_EXPORT(ONC) extern const char kBlacklistedHexSSIDs[];  // Deprecated
 COMPONENT_EXPORT(ONC) extern const char kBlockedHexSSIDs[];
 COMPONENT_EXPORT(ONC) extern const char kDisableNetworkTypes[];
+COMPONENT_EXPORT(ONC) extern const char kRecommendedValuesAreEphemeral[];
+COMPONENT_EXPORT(ONC)
+extern const char kUserCreatedNetworkConfigurationsAreEphemeral[];
 }  // namespace global_network_config
 
 namespace device_state {

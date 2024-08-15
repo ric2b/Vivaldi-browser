@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
+#include "third_party/blink/renderer/core/dom/qualified_name.h"
 #include "third_party/blink/renderer/core/events/web_input_event_conversion.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
@@ -210,6 +211,18 @@ bool IsVisible(blink::WebElement element) {
   return true;
 }
 
+// Special cases where the element has focusable children but should still
+// be navigable.
+bool IsDateTimeOrFile(blink::WebElement element) {
+  return element.GetAttribute("type").Utf8() == "date" ||
+         element.GetAttribute("type").Utf8() == "time" ||
+         element.GetAttribute("type").Utf8() == "file";
+}
+
+bool IsRadioButton(blink::Element* element) {
+  return element->getAttribute(blink::html_names::kTypeAttr).Utf8() == "radio";
+}
+
 void HoverElement(blink::Element* element) {
   gfx::PointF event_position(-1, -1);
   if (element) {
@@ -313,7 +326,7 @@ std::vector<blink::WebElement> GetSpatialNavigationElements(
         }
       } else if (!IsTooSmallOrBig(document, rect) && IsUnobscured(elm) &&
                  IsVisible(element)) {
-        if (!HasFocusableChildren(elm)) {
+        if (!HasFocusableChildren(elm) || IsDateTimeOrFile(element)) {
           spatnav_elements.push_back(element);
         }
       }

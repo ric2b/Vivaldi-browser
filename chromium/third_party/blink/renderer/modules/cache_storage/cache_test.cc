@@ -9,6 +9,7 @@
 #include <string>
 #include <utility>
 
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/task/single_thread_task_runner.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
@@ -258,9 +259,11 @@ class ErrorCacheForTests : public mojom::blink::CacheStorageCache {
 
   const mojom::blink::CacheStorageError error_;
 
-  const String* expected_url_;
-  const mojom::blink::CacheQueryOptionsPtr* expected_query_options_;
-  const Vector<mojom::blink::BatchOperationPtr>* expected_batch_operations_;
+  raw_ptr<const String, ExperimentalRenderer> expected_url_;
+  raw_ptr<const mojom::blink::CacheQueryOptionsPtr, ExperimentalRenderer>
+      expected_query_options_;
+  raw_ptr<const Vector<mojom::blink::BatchOperationPtr>, ExperimentalRenderer>
+      expected_batch_operations_;
 
   std::string last_error_web_cache_method_called_;
 };
@@ -296,7 +299,7 @@ class TestCache : public Cache {
   AbortController* CreateAbortController(ScriptState* script_state) override {
     if (!abort_controller_)
       abort_controller_ = AbortController::Create(script_state);
-    return abort_controller_;
+    return abort_controller_.Get();
   }
 
  private:

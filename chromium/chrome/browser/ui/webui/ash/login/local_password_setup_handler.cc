@@ -16,19 +16,48 @@ LocalPasswordSetupHandler::LocalPasswordSetupHandler()
 
 LocalPasswordSetupHandler::~LocalPasswordSetupHandler() = default;
 
-void LocalPasswordSetupHandler::Show() {
-  ShowInWebUI();
+void LocalPasswordSetupHandler::Show(bool can_go_back, bool is_recovery_flow) {
+  base::Value::Dict dict;
+  dict.Set("showBackButton", can_go_back);
+  dict.Set("isRecoveryFlow", is_recovery_flow);
+  ShowInWebUI(std::move(dict));
 }
 
 void LocalPasswordSetupHandler::DeclareLocalizedValues(
     ::login::LocalizedValuesBuilder* builder) {
+  const std::u16string device_name = ui::GetChromeOSDeviceName();
+
   builder->AddF("localPasswordSetupTitle", IDS_LOGIN_LOCAL_PASSWORD_SETUP_TITLE,
-                ui::GetChromeOSDeviceName());
+                device_name);
+  builder->AddF("localPasswordResetTitle", IDS_LOGIN_LOCAL_PASSWORD_RESET_TITLE,
+                device_name);
+  builder->AddF("localPasswordSetupDoneSubtitle",
+                IDS_LOGIN_LOCAL_PASSWORD_SETUP_DONE_SUBTITLE, device_name);
+  builder->Add("localPasswordSetupDoneTitle",
+               IDS_LOGIN_LOCAL_PASSWORD_SETUP_DONE_TITLE);
+  builder->Add("localPasswordResetDoneTitle",
+               IDS_LOGIN_LOCAL_PASSWORD_RESET_DONE_TITLE);
   builder->Add("passwordInputPlaceholderText",
                IDS_LOGIN_MANUAL_PASSWORD_INPUT_LABEL);
   builder->Add("confirmPasswordInputPlaceholderText",
                IDS_LOGIN_CONFIRM_PASSWORD_LABEL);
   builder->Add("passwordMismatchError", IDS_LOGIN_MANUAL_PASSWORD_MISMATCH);
+  builder->Add("setLocalPasswordPlaceholder",
+               IDS_AUTH_SETUP_SET_LOCAL_PASSWORD_PLACEHOLDER);
+  builder->Add("setLocalPasswordConfirmPlaceholder",
+               IDS_AUTH_SETUP_SET_LOCAL_PASSWORD_CONFIRM_PLACEHOLDER);
+  builder->Add("setLocalPasswordMinCharsHint",
+               IDS_AUTH_SETUP_SET_LOCAL_PASSWORD_MIN_CHARS_HINT);
+  builder->Add("setLocalPasswordNoMatchError",
+               IDS_AUTH_SETUP_SET_LOCAL_PASSWORD_NO_MATCH_ERROR);
+}
+
+void LocalPasswordSetupHandler::ShowLocalPasswordSetupSuccess() {
+  CallExternalAPI("showLocalPasswordSetupSuccess");
+}
+
+void LocalPasswordSetupHandler::ShowLocalPasswordSetupFailure() {
+  CallExternalAPI("showLocalPasswordSetupFailure");
 }
 
 }  // namespace ash

@@ -35,6 +35,7 @@
 #include "media/base/format_utils.h"
 #include "media/base/media_log.h"
 #include "media/base/media_switches.h"
+#include "media/base/platform_features.h"
 #include "media/base/video_bitrate_allocation.h"
 #include "media/gpu/chromeos/platform_video_frame_utils.h"
 #include "media/gpu/gpu_video_encode_accelerator_helpers.h"
@@ -150,25 +151,28 @@ bool VaapiVideoEncodeAccelerator::Initialize(
   client_ = client_ptr_factory_->GetWeakPtr();
 
   if (config.HasSpatialLayer()) {
-#if BUILDFLAG(IS_CHROMEOS)
-    if (!base::FeatureList::IsEnabled(kVaapiVp9kSVCHWEncoding) &&
-        !IsConfiguredForTesting()) {
-      MEDIA_LOG(ERROR, media_log.get())
-          << "Spatial layer encoding is not yet enabled by default";
-      return false;
-    }
-#endif  // BUILDFLAG(IS_CHROMEOS)
-
-    if (config.inter_layer_pred != SVCInterLayerPredMode::kOnKeyPic) {
-      MEDIA_LOG(ERROR, media_log.get()) << "Only K-SVC encoding is supported.";
-      return false;
-    }
-
     if (config.output_profile != VideoCodecProfile::VP9PROFILE_PROFILE0) {
       MEDIA_LOG(ERROR, media_log.get())
           << "Spatial layers are only supported for VP9 encoding";
       return false;
     }
+
+    if (config.inter_layer_pred != SVCInterLayerPredMode::kOnKeyPic &&
+        config.inter_layer_pred != SVCInterLayerPredMode::kOff) {
+      MEDIA_LOG(ERROR, media_log.get())
+          << "Only K-SVC and S mode encoding are supported.";
+      return false;
+    }
+
+#if BUILDFLAG(IS_CHROMEOS)
+    if (!IsConfiguredForTesting()) {
+      if (config.inter_layer_pred == SVCInterLayerPredMode::kOff &&
+          !base::FeatureList::IsEnabled(kVaapiVp9SModeHWEncoding)) {
+        MEDIA_LOG(ERROR, media_log.get()) << "Vp9 S-mode encoding is disabled";
+        return false;
+      }
+    }
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
     // TODO(crbug.com/1186051): Remove this restriction.
     for (size_t i = 0; i < config.spatial_layers.size(); ++i) {

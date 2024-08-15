@@ -48,6 +48,8 @@ class ASH_EXPORT AcceleratorPrefs : public SessionObserver {
   void ObservePrefs(PrefService* prefs);
   void OnCustomizationPolicyChanged();
   bool IsCustomizationAllowed();
+  bool IsCustomizationAllowedByPolicy();
+  bool IsUserEnterpriseManaged();
 
  private:
   // The delegate responsible for communicating with between Ash and the

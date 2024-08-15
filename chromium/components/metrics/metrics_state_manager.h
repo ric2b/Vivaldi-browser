@@ -21,10 +21,6 @@
 #include "components/metrics/entropy_state.h"
 #include "components/variations/entropy_provider.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "components/metrics/structured/neutrino_logging.h"  // nogncheck
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
 class PrefService;
 class PrefRegistrySimple;
 
@@ -109,8 +105,10 @@ class MetricsStateManager final {
   // not opted in to metrics reporting.
   const std::string& client_id() const { return client_id_; }
 
-  // Returns the low entropy source for this client.
+  // Returns the low entropy sources for this client.
   int GetLowEntropySource();
+  int GetOldLowEntropySource();
+  int GetPseudoLowEntropySource();
 
   // The CleanExitBeacon, used to determine whether the previous Chrome browser
   // session terminated gracefully.
@@ -301,9 +299,6 @@ class MetricsStateManager final {
   // |kMetricsProvisionalClientID| must be set before calling this.
   std::string GetHighEntropySource();
 
-  // Returns the old low entropy source for this client.
-  int GetOldLowEntropySource();
-
   // Updates |entropy_source_returned_| with |type| iff the current value is
   // ENTROPY_SOURCE_NONE and logs the new value in a histogram.
   void UpdateEntropySourceReturnedValue(EntropySourceType type);
@@ -324,12 +319,6 @@ class MetricsStateManager final {
   void ResetMetricsIDsIfNecessary();
 
   bool ShouldGenerateProvisionalClientId(bool is_first_run);
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  // Log to structured metrics when the client id is changed.
-  void LogClientIdChanged(metrics::structured::NeutrinoDevicesLocation location,
-                          std::string previous_client_id);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   // Whether an instance of this class exists. Used to enforce that there aren't
   // multiple instances of this class at a given time.

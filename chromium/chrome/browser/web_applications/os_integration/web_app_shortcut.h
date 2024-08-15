@@ -16,8 +16,8 @@
 #include "base/sequence_checker.h"
 #include "build/build_config.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
-#include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
+#include "components/webapps/common/web_app_id.h"
 #include "ui/gfx/image/image_family.h"
 #include "url/gurl.h"
 
@@ -94,7 +94,7 @@ struct ShortcutInfo {
 };
 
 std::unique_ptr<ShortcutInfo> BuildShortcutInfoWithoutFavicon(
-    const AppId& app_id,
+    const webapps::AppId& app_id,
     const GURL& start_url,
     const base::FilePath& profile_path,
     const std::string& profile_name,

@@ -39,7 +39,7 @@ bool IsFullScreenMode(Browser* browser) {
   LocationBarView* location_bar = browser_view->GetLocationBarView();
 
   return !location_bar || !location_bar->IsDrawn() ||
-         location_bar->GetWidget()->IsFullscreen();
+         location_bar->GetWidget()->GetTopLevelWidget()->IsFullscreen();
 }
 
 LocationBarView* GetLocationBarView(Browser* browser) {
@@ -78,9 +78,6 @@ bool ShouldUseChip(permissions::PermissionPrompt::Delegate* delegate) {
     return false;
   }
 
-  if (!base::FeatureList::IsEnabled(permissions::features::kPermissionChip))
-    return false;
-
   // Permission request chip should not be shown if `delegate->Requests()` were
   // requested without a user gesture.
   if (!permissions::PermissionUtil::HasUserGesture(delegate))
@@ -98,16 +95,12 @@ bool ShouldUseChip(permissions::PermissionPrompt::Delegate* delegate) {
 
 bool IsLocationBarDisplayed(Browser* browser) {
   LocationBarView* lbv = GetLocationBarView(browser);
-  return lbv && lbv->IsDrawn() && !lbv->GetWidget()->IsFullscreen();
+  return lbv && lbv->IsDrawn() &&
+         !lbv->GetWidget()->GetTopLevelWidget()->IsFullscreen();
 }
 
 bool ShouldCurrentRequestUseQuietChip(
     permissions::PermissionPrompt::Delegate* delegate) {
-  if (!base::FeatureList::IsEnabled(
-          permissions::features::kPermissionQuietChip)) {
-    return false;
-  }
-
   std::vector<permissions::PermissionRequest*> requests = delegate->Requests();
   return base::ranges::all_of(
       requests, [](permissions::PermissionRequest* request) {
@@ -193,7 +186,7 @@ std::unique_ptr<permissions::PermissionPrompt> CreateQuietPrompt(
 std::unique_ptr<permissions::PermissionPrompt> CreatePermissionPrompt(
     content::WebContents* web_contents,
     permissions::PermissionPrompt::Delegate* delegate) {
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+  Browser* browser = chrome::FindBrowserWithTab(web_contents);
   if (!browser) {
     DLOG(WARNING) << "Permission prompt suppressed because the WebContents is "
                      "not attached to any Browser window.";

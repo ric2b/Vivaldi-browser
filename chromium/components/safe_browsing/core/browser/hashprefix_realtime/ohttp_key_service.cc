@@ -58,7 +58,7 @@ constexpr int kServerTriggeredFetchMaxDelayTimeSec = 60;
 // Backoff constants
 const size_t kNumFailuresToEnforceBackoff = 3;
 const size_t kMinBackOffResetDurationInSeconds = 5 * 60;   //  5 minutes.
-const size_t kMaxBackOffResetDurationInSeconds = 30 * 60;  // 30 minutes.
+const size_t kMaxBackOffResetDurationInSeconds = 24 * 60 * 60;  // 1 day.
 
 constexpr net::NetworkTrafficAnnotationTag kOhttpKeyTrafficAnnotation =
     net::DefineNetworkTrafficAnnotation("safe_browsing_ohttp_key_fetch",
@@ -113,8 +113,13 @@ constexpr net::NetworkTrafficAnnotationTag kOhttpKeyTrafficAnnotation =
 bool IsEnabled(PrefService* pref_service) {
   safe_browsing::SafeBrowsingState state =
       safe_browsing::GetSafeBrowsingState(*pref_service);
+  // If this class has been created, it is already known that the session is not
+  // off-the-record and that the user's location is eligible, so
+  // |is_off_the_record| is passed through as false and
+  // |stored_permanent_country| as nullopt.
   return safe_browsing::hash_realtime_utils::DetermineHashRealTimeSelection(
-             /*is_off_the_record=*/false, pref_service) ==
+             /*is_off_the_record=*/false, pref_service,
+             /*stored_permanent_country=*/absl::nullopt) ==
              safe_browsing::hash_realtime_utils::HashRealTimeSelection::
                  kHashRealTimeService ||
          // The service is enabled when enhanced protection and
@@ -205,7 +210,8 @@ void OhttpKeyService::GetOhttpKey(Callback callback) {
     return;
   }
 
-  StartFetch(std::move(callback));
+  StartFetch(std::move(callback),
+             FetchTriggerReason::kDuringHashRealTimeLookup);
 }
 
 void OhttpKeyService::NotifyLookupResponse(
@@ -234,7 +240,8 @@ void OhttpKeyService::NotifyLookupResponse(
     base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&OhttpKeyService::MaybeStartServerTriggeredFetch,
-                       weak_factory_.GetWeakPtr(), key),
+                       weak_factory_.GetWeakPtr(), key,
+                       FetchTriggerReason::kKeyRelatedHttpErrorCode),
         base::Seconds(base::RandInt(0, kServerTriggeredFetchMaxDelayTimeSec)));
     return;
   }
@@ -247,13 +254,18 @@ void OhttpKeyService::NotifyLookupResponse(
     base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&OhttpKeyService::MaybeStartServerTriggeredFetch,
-                       weak_factory_.GetWeakPtr(), key),
+                       weak_factory_.GetWeakPtr(), key,
+                       FetchTriggerReason::kKeyRotatedHeader),
         base::Seconds(base::RandInt(0, kServerTriggeredFetchMaxDelayTimeSec)));
     return;
   }
 }
 
-void OhttpKeyService::StartFetch(Callback callback) {
+void OhttpKeyService::StartFetch(Callback callback,
+                                 FetchTriggerReason trigger_reason) {
+  base::UmaHistogramEnumeration(
+      "SafeBrowsing.HPRT.OhttpKeyService.FetchKeyTriggerReason",
+      trigger_reason);
   bool in_backoff = backoff_operator_->IsInBackoffMode();
   base::UmaHistogramBoolean("SafeBrowsing.HPRT.OhttpKeyService.BackoffState",
                             in_backoff);
@@ -262,9 +274,7 @@ void OhttpKeyService::StartFetch(Callback callback) {
     return;
   }
 
-  if (callback) {
-    pending_callbacks_.AddUnsafe(std::move(callback));
-  }
+  pending_callbacks_.AddUnsafe(std::move(callback));
   // If url_loader_ is not null, that means a request is already in progress.
   // Will notify the callback when it is completed.
   if (url_loader_) {
@@ -320,7 +330,8 @@ void OhttpKeyService::MaybeStartOrRescheduleAsyncFetch() {
 
   if (ShouldStartAsyncFetch()) {
     StartFetch(base::BindOnce(&OhttpKeyService::OnAsyncFetchCompleted,
-                              weak_factory_.GetWeakPtr()));
+                              weak_factory_.GetWeakPtr()),
+               FetchTriggerReason::kAsyncFetch);
   } else {
     async_fetch_timer_.Start(
         FROM_HERE, kAsyncFetchCheckInterval, this,
@@ -352,14 +363,16 @@ bool OhttpKeyService::ShouldStartAsyncFetch() {
                             base::Time::Now() + kKeyCloseToExpirationThreshold;
 }
 
-void OhttpKeyService::MaybeStartServerTriggeredFetch(std::string previous_key) {
+void OhttpKeyService::MaybeStartServerTriggeredFetch(
+    std::string previous_key,
+    FetchTriggerReason trigger_reason) {
   server_triggered_fetch_scheduled_ = false;
   if (ohttp_key_ && ohttp_key_->key != previous_key) {
     // The key has already been updated, no action needed.
     return;
   }
 
-  StartFetch(base::NullCallback());
+  StartFetch(base::DoNothing(), trigger_reason);
 }
 
 void OhttpKeyService::PopulateKeyFromPref() {

@@ -8,10 +8,10 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/devtools/devtools_toggle_action.h"
-#include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
@@ -25,8 +25,10 @@ class Browser;
 class CommandObserver;
 class GURL;
 class Profile;
+enum class DevToolsOpenedByAction;
 
 namespace content {
+class NavigationHandle;
 class WebContents;
 }
 
@@ -174,6 +176,7 @@ void MigrateLocalCards(Browser* browser);
 void SaveAutofillAddress(Browser* browser);
 void ShowVirtualCardManualFallbackBubble(Browser* browser);
 void ShowVirtualCardEnrollBubble(Browser* browser);
+void StartTabOrganizationRequest(Browser* browser);
 void ShowTranslateBubble(Browser* browser);
 void ManagePasswordsForPage(Browser* browser);
 bool CanSendTabToSelf(const Browser* browser);

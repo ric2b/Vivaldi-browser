@@ -17,10 +17,10 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.browser.signin.services.ProfileDataCache;
 import org.chromium.chrome.browser.signin.services.SigninMetricsUtils;
 import org.chromium.chrome.browser.signin.services.SigninPreferencesManager;
-import org.chromium.chrome.browser.ui.signin.DeviceLockActivityLauncher;
 import org.chromium.chrome.browser.ui.signin.SigninUtils;
 import org.chromium.chrome.browser.ui.signin.account_picker.AccountPickerBottomSheetCoordinator.EntryPoint;
 import org.chromium.chrome.browser.ui.signin.account_picker.AccountPickerBottomSheetProperties.ViewState;
+import org.chromium.components.browser_ui.device_lock.DeviceLockActivityLauncher;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.AccountUtils;
@@ -255,11 +255,16 @@ class AccountPickerBottomSheetMediator implements AccountPickerCoordinator.Liste
                 || viewState == ViewState.SIGNIN_GENERAL_ERROR) {
             if (BuildInfo.getInstance().isAutomotive) {
                 mDeviceLockActivityLauncher.launchDeviceLockActivity(
-                        mActivity, mSelectedAccountEmail, mWindowAndroid, (resultCode, data) -> {
+                        mActivity,
+                        mSelectedAccountEmail, /* requireDeviceLockReauthentication */
+                        true,
+                        mWindowAndroid,
+                        (resultCode, data) -> {
                             if (resultCode == Activity.RESULT_OK) {
                                 signIn();
                             }
-                        });
+                        },
+                        DeviceLockActivityLauncher.Source.ACCOUNT_PICKER);
             } else {
                 signIn();
             }

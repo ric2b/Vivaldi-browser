@@ -68,6 +68,7 @@ using ::testing::AtMost;
 using ::testing::Contains;
 using ::testing::DoAll;
 using ::testing::ElementsAre;
+using ::testing::Eq;
 using ::testing::IsEmpty;
 using ::testing::Not;
 using ::testing::Pointee;
@@ -129,15 +130,10 @@ class TestPasswordManagerClient
               (override));
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
-  scoped_refptr<device_reauth::DeviceAuthenticator> GetDeviceAuthenticator()
-      override {
-    return mock_authenticator_.get();
-  }
-
-  void SetAuthenticator(scoped_refptr<device_reauth::MockDeviceAuthenticator>
-                            mock_authenticator) {
-    mock_authenticator_ = mock_authenticator;
-  }
+  MOCK_METHOD(std::unique_ptr<device_reauth::DeviceAuthenticator>,
+              GetDeviceAuthenticator,
+              (),
+              (override));
 #endif
 
   MockPasswordStoreInterface* GetProfilePasswordStore() const override {
@@ -146,9 +142,6 @@ class TestPasswordManagerClient
 
  private:
   scoped_refptr<MockPasswordStoreInterface> mock_profile_store_;
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
-  scoped_refptr<device_reauth::MockDeviceAuthenticator> mock_authenticator_;
-#endif
 };
 
 // This subclass is used to disable some code paths which are not essential for
@@ -330,14 +323,15 @@ ManagePasswordsUIControllerTest::CreateFormManagerWithBestMatches(
   auto form_manager =
       std::make_unique<testing::StrictMock<MockPasswordFormManagerForUI>>();
   EXPECT_CALL(*form_manager, GetBestMatches())
-      .Times(AtMost(1))
-      .WillOnce(ReturnRef(*best_matches));
+      .Times(AtMost(2))
+      .WillRepeatedly(ReturnRef(*best_matches));
   EXPECT_CALL(*form_manager, GetFederatedMatches())
-      .Times(AtMost(1))
-      .WillOnce(Return(std::vector<const password_manager::PasswordForm*>()));
+      .Times(AtMost(2))
+      .WillRepeatedly(
+          Return(std::vector<const password_manager::PasswordForm*>()));
   EXPECT_CALL(*form_manager, GetURL())
-      .Times(AtMost(1))
-      .WillOnce(ReturnRef(test_local_form_.url));
+      .Times(AtMost(2))
+      .WillRepeatedly(ReturnRef(test_local_form_.url));
   EXPECT_CALL(*form_manager, IsBlocklisted())
       .Times(AtMost(1))
       .WillOnce(Return(is_blocklisted));
@@ -359,7 +353,7 @@ void ManagePasswordsUIControllerTest::TestNotChangingStateOnAutofill(
     password_manager::ui::State state) {
   DCHECK(state == password_manager::ui::PENDING_PASSWORD_STATE ||
          state == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE ||
-         state == password_manager::ui::CONFIRMATION_STATE);
+         state == password_manager::ui::SAVE_CONFIRMATION_STATE);
 
   // Set the bubble state to |state|.
   std::vector<const PasswordForm*> best_matches;
@@ -371,8 +365,9 @@ void ManagePasswordsUIControllerTest::TestNotChangingStateOnAutofill(
   } else if (state == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE) {
     best_matches.push_back(&test_local_form());
     controller()->OnUpdatePasswordSubmitted(std::move(test_form_manager));
-  } else {  // password_manager::ui::CONFIRMATION_STATE
-    controller()->OnAutomaticPasswordSave(std::move(test_form_manager));
+  } else {  // password_manager::ui::SAVE_CONFIRMATION_STATE
+    controller()->OnAutomaticPasswordSave(std::move(test_form_manager),
+                                          /*is_update_confirmation=*/false);
   }
   ASSERT_EQ(state, controller()->GetState());
 
@@ -510,6 +505,26 @@ TEST_F(ManagePasswordsUIControllerTest, PasswordSaved) {
   controller()->OnPasswordSubmitted(std::move(test_form_manager));
 
   base::HistogramTester histogram_tester;
+  controller()->SavePassword(submitted_form().username_value,
+                             submitted_form().password_value);
+  ExpectIconAndControllerStateIs(password_manager::ui::MANAGE_STATE);
+}
+
+TEST_F(ManagePasswordsUIControllerTest, PhishedPasswordUpdated) {
+  auto* mock_sentiment_service = static_cast<MockTrustSafetySentimentService*>(
+      TrustSafetySentimentServiceFactory::GetInstance()
+          ->SetTestingFactoryAndUse(
+              profile(),
+              base::BindRepeating(&BuildMockTrustSafetySentimentService)));
+
+  submitted_form().password_issues.insert(
+      {InsecureType::kPhished, InsecurityMetadata()});
+  std::vector<const PasswordForm*> best_matches;
+  auto test_form_manager = CreateFormManagerWithBestMatches(&best_matches);
+  EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
+  EXPECT_CALL(*test_form_manager, Save());
+  controller()->OnPasswordSubmitted(std::move(test_form_manager));
+  EXPECT_CALL(*mock_sentiment_service, PhishedPasswordUpdateFinished());
   controller()->SavePassword(submitted_form().username_value,
                              submitted_form().password_value);
   ExpectIconAndControllerStateIs(password_manager::ui::MANAGE_STATE);
@@ -774,8 +789,10 @@ TEST_F(ManagePasswordsUIControllerTest, AutomaticPasswordSave) {
   std::vector<const PasswordForm*> best_matches;
   auto test_form_manager = CreateFormManagerWithBestMatches(&best_matches);
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
-  controller()->OnAutomaticPasswordSave(std::move(test_form_manager));
-  EXPECT_EQ(password_manager::ui::CONFIRMATION_STATE, controller()->GetState());
+  controller()->OnAutomaticPasswordSave(std::move(test_form_manager),
+                                        /*is_update_confirmation=*/false);
+  EXPECT_EQ(password_manager::ui::SAVE_CONFIRMATION_STATE,
+            controller()->GetState());
 
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
   controller()->OnBubbleHidden();
@@ -1049,7 +1066,7 @@ TEST_F(ManagePasswordsUIControllerTest, UpdatePendingStatePasswordAutofilled) {
 }
 
 TEST_F(ManagePasswordsUIControllerTest, ConfirmationStatePasswordAutofilled) {
-  TestNotChangingStateOnAutofill(password_manager::ui::CONFIRMATION_STATE);
+  TestNotChangingStateOnAutofill(password_manager::ui::SAVE_CONFIRMATION_STATE);
 }
 
 TEST_F(ManagePasswordsUIControllerTest, OpenBubbleTwice) {
@@ -1336,7 +1353,8 @@ TEST_F(ManagePasswordsUIControllerTest,
     EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
     controller()->OnShowManualFallbackForSaving(
         std::move(test_form_manager), true /* has_generated_password */, false);
-    ExpectIconAndControllerStateIs(password_manager::ui::CONFIRMATION_STATE);
+    ExpectIconAndControllerStateIs(
+        password_manager::ui::SAVE_CONFIRMATION_STATE);
     EXPECT_FALSE(controller()->opened_automatic_bubble());
 
     EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
@@ -1581,7 +1599,7 @@ TEST_F(ManagePasswordsUIControllerTest, OpenBubbleForMovableForm) {
 TEST_F(ManagePasswordsUIControllerTest, OpenSafeStateBubble) {
   profile()->GetPrefs()->SetDouble(
       password_manager::prefs::kLastTimePasswordCheckCompleted,
-      (base::Time::Now() - base::Minutes(1)).ToDoubleT());
+      (base::Time::Now() - base::Minutes(1)).InSecondsFSinceUnixEpoch());
   submitted_form() = test_local_form();
   submitted_form().password_value = u"new_password";
 
@@ -1623,7 +1641,7 @@ TEST_F(ManagePasswordsUIControllerTest, OpenSafeStateBubble) {
 TEST_F(ManagePasswordsUIControllerTest, OpenMoreToFixBubble) {
   profile()->GetPrefs()->SetDouble(
       password_manager::prefs::kLastTimePasswordCheckCompleted,
-      (base::Time::Now() - base::Minutes(1)).ToDoubleT());
+      (base::Time::Now() - base::Minutes(1)).InSecondsFSinceUnixEpoch());
   submitted_form() = test_local_form();
   submitted_form().password_value = u"new_password";
 
@@ -1673,7 +1691,7 @@ TEST_F(ManagePasswordsUIControllerTest, OpenMoreToFixBubble) {
 TEST_F(ManagePasswordsUIControllerTest, NoMoreToFixBubbleIfPromoStillOpen) {
   profile()->GetPrefs()->SetDouble(
       password_manager::prefs::kLastTimePasswordCheckCompleted,
-      (base::Time::Now() - base::Minutes(1)).ToDoubleT());
+      (base::Time::Now() - base::Minutes(1)).InSecondsFSinceUnixEpoch());
   submitted_form() = test_local_form();
   submitted_form().password_value = u"new_password";
 
@@ -1753,15 +1771,36 @@ TEST_F(ManagePasswordsUIControllerTest, ReauthenticateFailsBeforeMove) {
       password_manager::ui::CAN_MOVE_PASSWORD_TO_ACCOUNT_STATE);
 }
 
+TEST_F(ManagePasswordsUIControllerTest, UsernameAdded) {
+  std::vector<const PasswordForm*> best_matches;
+  auto test_form_manager = CreateFormManagerWithBestMatches(&best_matches);
+  MockPasswordFormManagerForUI* test_form_manager_raw = test_form_manager.get();
+  controller()->OnAutomaticPasswordSave(std::move(test_form_manager),
+                                        /*is_update_confirmation=*/false);
+
+  EXPECT_CALL(*test_form_manager_raw, Save());
+  EXPECT_CALL(*test_form_manager_raw,
+              OnUpdateUsernameFromPrompt(Eq(kExampleUsername)));
+  EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
+  controller()->OnAddUsernameSaveClicked(kExampleUsername);
+
+  EXPECT_TRUE(controller()->opened_automatic_bubble());
+  EXPECT_EQ(password_manager::ui::SAVE_CONFIRMATION_STATE,
+            controller()->GetState());
+}
+
 TEST_F(ManagePasswordsUIControllerTest, IsDeviceAuthenticatorObtained) {
   base::MockCallback<base::OnceCallback<void(bool)>> result_callback;
 #if !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS)
   EXPECT_CALL(result_callback, Run(/*success=*/true));
 #else
-  scoped_refptr<device_reauth::MockDeviceAuthenticator> mock_authenticator =
-      base::MakeRefCounted<device_reauth::MockDeviceAuthenticator>();
-  client().SetAuthenticator(mock_authenticator);
-  EXPECT_CALL(*mock_authenticator.get(), AuthenticateWithMessage);
+  auto mock_authenticator =
+      std::make_unique<device_reauth::MockDeviceAuthenticator>();
+
+  EXPECT_CALL(*mock_authenticator, AuthenticateWithMessage);
+
+  EXPECT_CALL(client(), GetDeviceAuthenticator)
+      .WillOnce(Return(testing::ByMove(std::move(mock_authenticator))));
 #endif
   controller()->AuthenticateUserWithMessage(
       /*message=*/u"Do you want to enable this feature", result_callback.Get());
@@ -1973,26 +2012,40 @@ TEST_F(ManagePasswordsUIControllerTest,
 
 TEST_F(ManagePasswordsUIControllerTest,
        AuthenticateWithMessageTwiceCancelsFirstCall) {
-  scoped_refptr<device_reauth::MockDeviceAuthenticator> mock_authenticator =
-      base::MakeRefCounted<device_reauth::MockDeviceAuthenticator>();
-  client().SetAuthenticator(mock_authenticator);
-  EXPECT_CALL(*mock_authenticator.get(), AuthenticateWithMessage);
+  auto mock_authenticator =
+      std::make_unique<device_reauth::MockDeviceAuthenticator>();
+  auto* mock_authenticator_ptr = mock_authenticator.get();
+
+  EXPECT_CALL(*mock_authenticator_ptr, AuthenticateWithMessage);
+  EXPECT_CALL(client(), GetDeviceAuthenticator)
+      .WillOnce(Return(testing::ByMove(std::move(mock_authenticator))));
+
   controller()->AuthenticateUserWithMessage(/*message=*/u"", base::DoNothing());
 
-  EXPECT_CALL(*mock_authenticator.get(), Cancel);
-  EXPECT_CALL(*mock_authenticator.get(), AuthenticateWithMessage);
+  auto mock_authenticator2 =
+      std::make_unique<device_reauth::MockDeviceAuthenticator>();
+
+  EXPECT_CALL(*mock_authenticator_ptr, Cancel);
+  EXPECT_CALL(*mock_authenticator2.get(), AuthenticateWithMessage);
+  EXPECT_CALL(client(), GetDeviceAuthenticator)
+      .WillOnce(Return(testing::ByMove(std::move(mock_authenticator2))));
+
   controller()->AuthenticateUserWithMessage(/*message=*/u"", base::DoNothing());
 }
 
 TEST_F(ManagePasswordsUIControllerTest, AuthenticationCancledOnPageChange) {
   base::MockCallback<base::OnceCallback<void(bool)>> result_callback;
-  scoped_refptr<device_reauth::MockDeviceAuthenticator> mock_authenticator =
-      base::MakeRefCounted<device_reauth::MockDeviceAuthenticator>();
-  client().SetAuthenticator(mock_authenticator);
-  EXPECT_CALL(*mock_authenticator.get(), AuthenticateWithMessage);
+  auto mock_authenticator =
+      std::make_unique<device_reauth::MockDeviceAuthenticator>();
+  auto* mock_authenticator_ptr = mock_authenticator.get();
+
+  EXPECT_CALL(*mock_authenticator_ptr, AuthenticateWithMessage);
+  EXPECT_CALL(client(), GetDeviceAuthenticator)
+      .WillOnce(Return(testing::ByMove(std::move(mock_authenticator))));
+
   controller()->AuthenticateUserWithMessage(/*message=*/u"", base::DoNothing());
 
-  EXPECT_CALL(*mock_authenticator.get(), Cancel);
+  EXPECT_CALL(*mock_authenticator_ptr, Cancel);
 
   static_cast<content::WebContentsObserver*>(controller())
       ->PrimaryPageChanged(controller()->GetWebContents()->GetPrimaryPage());

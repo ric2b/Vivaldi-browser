@@ -79,12 +79,13 @@ public class PageInfoHistoryController
     @Override
     public View createViewForSubpage(ViewGroup parent) {
         assert !mDelegate.isIncognito();
+        Profile profile = (Profile) mDelegate.getBrowserContext();
         mContentManager = new HistoryContentManager(mMainController.getActivity(), this,
                 /* isSeparateActivity */ false,
-                /* isIncognito */ false, /* shouldShowPrivacyDisclaimers */ true,
+                /* profile */ profile, /* shouldShowPrivacyDisclaimers */ true,
                 /* shouldShowClearData */ false, mHost,
                 /* selectionDelegate */ null, mTabSupplier, new ObservableSupplierImpl<>(),
-                vg -> null, new BrowsingHistoryBridge(Profile.getLastUsedRegularProfile()));
+                vg -> null, new BrowsingHistoryBridge(profile));
         mContentManager.startLoadingItems();
         return mContentManager.getRecyclerView();
     }
@@ -98,9 +99,10 @@ public class PageInfoHistoryController
     }
 
     private void updateLastVisit() {
-        mHistoryProvider = sProviderForTests != null
-                ? sProviderForTests
-                : new BrowsingHistoryBridge(Profile.getLastUsedRegularProfile());
+        mHistoryProvider =
+                sProviderForTests != null
+                        ? sProviderForTests
+                        : new BrowsingHistoryBridge((Profile) mDelegate.getBrowserContext());
         mHistoryProvider.getLastVisitToHostBeforeRecentNavigations(mHost, (timestamp) -> {
             mLastVisitedTimestamp = timestamp;
             if (mHistoryProvider != null) {

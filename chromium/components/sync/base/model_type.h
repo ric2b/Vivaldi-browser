@@ -74,15 +74,12 @@ enum ModelType {
   AUTOFILL_WALLET_USAGE,
   // A theme object.
   THEMES,
-  // A typed_url object, i.e. a URL the user has typed into the Omnibox.
-  TYPED_URLS,
   // An extension object.
   EXTENSIONS,
   // An object representing a custom search engine.
   SEARCH_ENGINES,
   // An object representing a browser session, e.g. an open tab. This is used
-  // for both "History" (together with TYPED_URLS) and "Tabs" (depending on
-  // PROXY_TABS).
+  // for "Open Tabs".
   SESSIONS,
   // An app object.
   APPS,
@@ -157,14 +154,7 @@ enum ModelType {
   // Notes items
   NOTES,
 
-  // Proxy types are excluded from the sync protocol, but are still considered
-  // real user types. By convention, we prefix them with 'PROXY_' to distinguish
-  // them from normal protocol types.
-  //
-  // Tab sync. This is a placeholder type, so that Sessions can be implicitly
-  // enabled for history sync and tabs sync.
-  PROXY_TABS,
-  LAST_USER_MODEL_TYPE = PROXY_TABS,
+  LAST_USER_MODEL_TYPE = NOTES,
 
   // ---- Control Types ----
   // An object representing a set of Nigori keys.
@@ -177,18 +167,9 @@ enum ModelType {
 
 using ModelTypeSet =
     base::EnumSet<ModelType, FIRST_REAL_MODEL_TYPE, LAST_REAL_MODEL_TYPE>;
-using FullModelTypeSet =
-    base::EnumSet<ModelType, UNSPECIFIED, LAST_REAL_MODEL_TYPE>;
-using ModelTypeNameMap = std::map<ModelType, const char*>;
 
 constexpr int GetNumModelTypes() {
   return static_cast<int>(ModelType::LAST_ENTRY) + 1;
-}
-
-inline ModelType ModelTypeFromInt(int i) {
-  DCHECK_GE(i, 0);
-  DCHECK_LT(i, GetNumModelTypes());
-  return static_cast<ModelType>(i);
 }
 
 // A version of the ModelType enum for use in histograms. ModelType does not
@@ -209,7 +190,7 @@ enum class ModelTypeForHistograms {
   kAutofillProfile = 5,
   kAutofill = 6,
   kThemes = 7,
-  kTypedUrls = 8,
+  // kDeprecatedTypedUrls = 8,
   kExtensions = 9,
   kSearchEngines = 10,
   kSessions = 11,
@@ -277,56 +258,12 @@ void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics);
 ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics);
 
 // Protocol types are those types that have actual protocol buffer
-// representations. This distinguishes them from Proxy types, which have no
-// protocol representation and are never sent to the server.
+// representations. This is the same as the "real" model types, i.e. all types
+// except UNSPECIFIED.
 constexpr ModelTypeSet ProtocolTypes() {
-  return {BOOKMARKS,
-          NOTES,
-          PREFERENCES,
-          PASSWORDS,
-          AUTOFILL_PROFILE,
-          AUTOFILL,
-          AUTOFILL_WALLET_CREDENTIAL,
-          AUTOFILL_WALLET_DATA,
-          AUTOFILL_WALLET_METADATA,
-          AUTOFILL_WALLET_OFFER,
-          AUTOFILL_WALLET_USAGE,
-          THEMES,
-          TYPED_URLS,
-          EXTENSIONS,
-          SEARCH_ENGINES,
-          SESSIONS,
-          APPS,
-          APP_SETTINGS,
-          EXTENSION_SETTINGS,
-          HISTORY_DELETE_DIRECTIVES,
-          DICTIONARY,
-          DEVICE_INFO,
-          PRIORITY_PREFERENCES,
-          SUPERVISED_USER_SETTINGS,
-          APP_LIST,
-          ARC_PACKAGE,
-          PRINTERS,
-          READING_LIST,
-          USER_EVENTS,
-          NIGORI,
-          USER_CONSENTS,
-          SEND_TAB_TO_SELF,
-          SECURITY_EVENTS,
-          WEB_APPS,
-          WIFI_CONFIGURATIONS,
-          OS_PREFERENCES,
-          OS_PRIORITY_PREFERENCES,
-          SHARING_MESSAGE,
-          WORKSPACE_DESK,
-          HISTORY,
-          PRINTERS_AUTHORIZATION_SERVERS,
-          CONTACT_INFO,
-          SAVED_TAB_GROUP,
-          POWER_BOOKMARK,
-          WEBAUTHN_CREDENTIAL,
-          INCOMING_PASSWORD_SHARING_INVITATION,
-          OUTGOING_PASSWORD_SHARING_INVITATION};
+  // Note that ModelTypeSet only covers the real types, not UNSPECIFIED.
+  static_assert(!ModelTypeSet::All().Has(ModelType::UNSPECIFIED));
+  return ModelTypeSet::All();
 }
 
 // These are the normal user-controlled types. This is to distinguish from
@@ -390,7 +327,11 @@ constexpr ModelTypeSet LowPriorityUserTypes() {
       // of other data types.
       HISTORY,
       // User Events should not block or delay commits for other data types.
-      USER_EVENTS};
+      USER_EVENTS,
+      // Incoming password sharing invitations must be processed after
+      // Passwords data type to prevent storing incoming passwords locally first
+      // and overwriting the remote password during conflict resolution.
+      INCOMING_PASSWORD_SHARING_INVITATION};
 }
 
 // Returns a list of all control types.
@@ -456,8 +397,6 @@ ModelTypeSet GetModelTypeSetFromSpecificsFieldNumberList(
 // a model type.
 int GetSpecificsFieldNumberFromModelType(ModelType model_type);
 
-// TODO(sync): The functions below badly need some cleanup.
-
 // Returns a string with application lifetime that represents the name of
 // |model_type|.
 const char* ModelTypeToDebugString(ModelType model_type);
@@ -476,17 +415,11 @@ ModelTypeForHistograms ModelTypeHistogramValue(ModelType model_type);
 // time and thus can be used when persisting data.
 int ModelTypeToStableIdentifier(ModelType model_type);
 
-// Handles all model types, and not just real ones.
-base::Value ModelTypeToValue(ModelType model_type);
-
 // Returns the comma-separated string representation of |model_types|.
 std::string ModelTypeSetToDebugString(ModelTypeSet model_types);
 
 // Necessary for compatibility with EXPECT_EQ and the like.
 std::ostream& operator<<(std::ostream& out, ModelTypeSet model_type_set);
-
-// Generates a base::Value::List from |model_types|.
-base::Value::List ModelTypeSetToValue(ModelTypeSet model_types);
 
 // Returns a string corresponding to the root tag as exposed in the sync
 // protocol as the root entity's ID, which makes the root entity trivially
@@ -507,16 +440,7 @@ bool IsRealDataType(ModelType model_type);
 // Returns true if |model_type| is an act-once type. Act once types drop
 // entities after applying them. Drops are deletes that are not synced to other
 // clients.
-// TODO(haitaol): Make entries of act-once data types immutable.
 bool IsActOnceDataType(ModelType model_type);
-
-// Returns true if |model_type| requires its root folder to be explicitly
-// created on the server during initial sync.
-bool IsTypeWithServerGeneratedRoot(ModelType model_type);
-
-// Returns true if root folder for |model_type| is created on the client when
-// that type is initially synced.
-bool IsTypeWithClientGeneratedRoot(ModelType model_type);
 
 }  // namespace syncer
 

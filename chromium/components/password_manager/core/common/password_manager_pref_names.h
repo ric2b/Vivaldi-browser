@@ -65,9 +65,10 @@ extern const char kOfferToSavePasswordsEnabledGMS[];
 // can only be stricter than any policy applied
 extern const char kSavePasswordsSuspendedByError[];
 
-// Boolean value indicating whether the regular prefs were migrated to UPM
-// settings.
-extern const char kSettingsMigratedToUPM[];
+// Boolean value indicating whether the regular prefs that apply to the local
+// password store were migrated to UPM settings. It will be set to true
+// automatically if there is nothing to migrate.
+extern const char kSettingsMigratedToUPMLocal[];
 
 // Integer value which indicates the version used to migrate passwords from
 // built in storage to Google Mobile Services.
@@ -76,6 +77,17 @@ extern const char kCurrentMigrationVersionToGoogleMobileServices[];
 // Timestamps of when credentials from the GMS Core to the built in storage were
 // last time migrated, in microseconds since Windows epoch.
 extern const char kTimeOfLastMigrationAttempt[];
+
+// Boolean value indicating whether the client is ready to use UPM for local
+// passwords and settings and split password stores for syncing users.
+// The preconditions for the pref to be set to true:
+// - M2: For users syncing passwords, the profile store contents have been
+// moved to the account store. For the users who are not syncing passwords, the
+// login database is empty and prefs are default.
+// - M3: For the users who are not syncing passwords, the passwords have been
+// successfully copied to GMS Core. The settings will be migrated as well, but
+// their migration doesn't impact this pref.
+extern const char kPasswordsUseUPMLocalAndSeparateStores[];
 
 // Boolean value that indicated the need of data migration between the two
 // backends due to sync settings change.
@@ -129,6 +141,10 @@ extern const char kLocalPasswordMigrationWarningShownAtStartup[];
 
 // The version of the password migration warning prefs.
 extern const char kLocalPasswordMigrationWarningPrefsVersion[];
+
+// How many times the password generation bottom sheet was dismissed by the user
+// in a row. The counter resets when the user applies password generation.
+extern const char kPasswordGenerationBottomSheetDismissCount[];
 #endif
 
 #if BUILDFLAG(IS_WIN)
@@ -251,6 +267,10 @@ extern const char kAccountStorageNewFeatureIconImpressions[];
 // in the Password Manager UI.
 extern const char kPasswordManagerPromoCardsList[];
 #endif
+
+// Boolean pref indicating whether password sharing is enabled. Enables both
+// sending and receiving passwords.
+extern const char kPasswordSharingEnabled[];
 
 }  // namespace password_manager::prefs
 

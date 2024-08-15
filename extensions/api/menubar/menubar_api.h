@@ -27,6 +27,19 @@ class MenubarAPI {
                                const std::string& parameter = "");
 };
 
+
+class MenubarGetHasWindowsFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("menubar.getHasWindows", MENUBAR_GET_HAS_WINDOWS)
+  MenubarGetHasWindowsFunction() = default;
+
+ private:
+  ~MenubarGetHasWindowsFunction() override = default;
+
+  // ExtensionFunction
+  ExtensionFunction::ResponseAction Run() override;
+};
+
 class MenubarSetupFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("menubar.setup", MENUBAR_SETUP)

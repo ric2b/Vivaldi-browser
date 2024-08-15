@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/gtest_prod_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "components/safe_browsing/content/common/safe_browsing.mojom.h"
@@ -104,7 +105,7 @@ class RendererURLLoaderThrottle : public blink::URLLoaderThrottle,
 
   void OnMojoDisconnect();
 
-  mojom::SafeBrowsing* safe_browsing_;
+  raw_ptr<mojom::SafeBrowsing, ExperimentalRenderer> safe_browsing_;
   const int render_frame_id_;
 
   // These fields hold the connection to this instance's private connection to
@@ -145,7 +146,8 @@ class RendererURLLoaderThrottle : public blink::URLLoaderThrottle,
   // originated from an extension and destination is HTTP/HTTPS scheme only.
   void MaybeSendExtensionWebRequestData(network::ResourceRequest* request);
 
-  mojom::ExtensionWebRequestReporter* extension_web_request_reporter_;
+  raw_ptr<mojom::ExtensionWebRequestReporter, ExperimentalRenderer>
+      extension_web_request_reporter_;
   mojo::PendingRemote<mojom::ExtensionWebRequestReporter>
       extension_web_request_reporter_pending_remote_;
   mojo::Remote<mojom::ExtensionWebRequestReporter>
@@ -153,6 +155,7 @@ class RendererURLLoaderThrottle : public blink::URLLoaderThrottle,
   // Tracks if the request originated from an extension, used during redirects
   // to send web request data to the telemetry service.
   std::string origin_extension_id_;
+  bool initiated_from_content_script_ = false;
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
   base::WeakPtrFactory<RendererURLLoaderThrottle> weak_factory_{this};

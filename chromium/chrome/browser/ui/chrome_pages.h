@@ -123,6 +123,12 @@ enum FeedbackSource {
   kFeedbackSourceWindowLayoutMenu,
   kFeedbackSourcePriceInsights,
   kFeedbackSourceCookieControls,
+  kFeedbackSourceGameDashboard,
+  kFeedbackSourceLogin,
+
+  // ATTENTION: Before making any changes or adding to feedback collection,
+  // please ensure the teams that operationalize feedback are aware and
+  // supportive. Contact: chrome-gtech@
 
   // Must be last.
   kFeedbackSourceCount,

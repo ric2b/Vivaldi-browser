@@ -13,12 +13,14 @@ import android.os.Process;
 
 import androidx.annotation.VisibleForTesting;
 
+import org.jni_zero.CalledByNative;
+import org.jni_zero.JNINamespace;
+import org.jni_zero.NativeMethods;
+
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
-import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.annotations.JNINamespace;
-import org.chromium.base.annotations.NativeMethods;
 import org.chromium.net.NetworkChangeNotifier;
+import org.chromium.net.httpflags.BaseFeature;
 import org.chromium.net.httpflags.Flags;
 import org.chromium.net.httpflags.HttpFlagsLoader;
 import org.chromium.net.httpflags.ResolvedFlags;
@@ -45,6 +47,9 @@ public class CronetLibraryLoader {
     // Block calling native methods until this ConditionVariable opens to indicate loadLibrary()
     // is completed and native methods have been registered.
     private static final ConditionVariable sWaitForLibLoad = new ConditionVariable();
+
+    private static final ConditionVariable sHttpFlagsLoaded = new ConditionVariable();
+    private static ResolvedFlags sHttpFlags;
 
     @VisibleForTesting
     public static final String LOG_FLAG_NAME = "Cronet_log_me";
@@ -82,10 +87,31 @@ public class CronetLibraryLoader {
                 }
                 Log.i(TAG, "Cronet version: %s, arch: %s", implVersion,
                         System.getProperty("os.arch"));
+                setNativeLoggingLevel();
                 sLibraryLoaded = true;
                 sWaitForLibLoad.open();
             }
         }
+    }
+
+    private static void setNativeLoggingLevel() {
+        // The constants used here should be kept in sync with logging::LogMessage::~LogMessage().
+        final String nativeLogTag = "chromium";
+        int loggingLevel;
+        // TODO: this way of enabling VLOG is a hack - it doesn't make a ton of sense because
+        // logging::LogMessage() will still log VLOG() at the Android INFO log level, not DEBUG or
+        // VERBOSE; also this doesn't make it possible to use advanced filters like --vmodule. See
+        // https://crbug.com/1488393 for a proposed alternative.
+        if (Log.isLoggable(nativeLogTag, Log.VERBOSE)) {
+            loggingLevel = -2; // VLOG(2)
+        } else if (Log.isLoggable(nativeLogTag, Log.DEBUG)) {
+            loggingLevel = -1; // VLOG(1)
+        } else {
+            // Use the default log level, which logs everything except VLOG(). Skip the
+            // setMinLogLevel() call to avoid paying for an unnecessary JNI transition.
+            return;
+        }
+        CronetLibraryLoaderJni.get().setMinLogLevel(loggingLevel);
     }
 
     /**
@@ -108,15 +134,15 @@ public class CronetLibraryLoader {
 
         // Load HTTP flags. This is a potentially expensive call, so we do this in parallel with
         // library loading in the hope of minimizing impact on Cronet initialization latency.
+        assert sHttpFlags == null;
         Context applicationContext = ContextUtils.getApplicationContext();
         Flags flags = HttpFlagsLoader.load(applicationContext);
-        if (flags != null) {
-            ResolvedFlags resolvedFlags =
-                    ResolvedFlags.resolve(flags, applicationContext.getPackageName());
-            ResolvedFlags.Value logMe = resolvedFlags.flags().get(LOG_FLAG_NAME);
-            if (logMe != null) {
-                Log.i(TAG, "HTTP flags log line: %s", logMe.getStringValue());
-            }
+        sHttpFlags = ResolvedFlags.resolve(flags != null ? flags : Flags.newBuilder().build(),
+                applicationContext.getPackageName(), ImplVersion.getCronetVersion());
+        sHttpFlagsLoaded.open();
+        ResolvedFlags.Value logMe = sHttpFlags.flags().get(LOG_FLAG_NAME);
+        if (logMe != null) {
+            Log.i(TAG, "HTTP flags log line: %s", logMe.getStringValue());
         }
 
         NetworkChangeNotifier.init();
@@ -151,6 +177,23 @@ public class CronetLibraryLoader {
         } else {
             new Handler(sInitThread.getLooper()).post(r);
         }
+    }
+
+    /**
+     * Called by native Cronet library early initialization code to obtain the values of
+     * native base::Feature overrides that will be applied for the entire lifetime of the Cronet
+     * native library.
+     *
+     * <p>Note that this call sits in the critical path of native library initialization, as
+     * practically no Chromium native code can run until base::Feature values have settled.
+     *
+     * @return The base::Feature overrides as a binary serialized {@link
+     * org.chromium.net.httpflags.BaseFeatureOverrides} proto.
+     */
+    @CalledByNative
+    private static byte[] getBaseFeatureOverrides() {
+        sHttpFlagsLoaded.block();
+        return BaseFeature.getOverrides(sHttpFlags).toByteArray();
     }
 
     /**
@@ -207,5 +250,7 @@ public class CronetLibraryLoader {
         void cronetInitOnInitThread();
 
         String getCronetVersion();
+
+        void setMinLogLevel(int loggingLevel);
     }
 }

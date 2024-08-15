@@ -15,7 +15,6 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
-#include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/common/omnibox_features.h"
@@ -291,11 +290,16 @@ bool HUPSearchDatabase();
 
 // Returns true if the OmniboxActionsUISimplification feature is enabled.
 bool IsActionsUISimplificationEnabled();
+// Indicates whether to include changes that affect the NTP realbox.
+extern const base::FeatureParam<bool> kActionsUISimplificationIncludeRealbox;
 // Indicates whether to delete extra matches produced by splitting
 // actions out to become independent suggestions. Note, this will only
 // apply if `IsActionsUISimplificationEnabled` returns true and the
 // total number of matches exceeds the limit (i.e. there are extra matches).
 extern const base::FeatureParam<bool> kActionsUISimplificationTrimExtra;
+
+// Returns true if the OmniboxKeywordModeRefresh feature is enabled.
+bool IsKeywordModeRefreshEnabled();
 
 // Returns true if the fuzzy URL suggestions feature is enabled.
 bool IsFuzzyUrlSuggestionsEnabled();
@@ -351,6 +355,8 @@ extern const base::FeatureParam<bool> kSquareSuggestIconEntities;
 // takes up half of the space. Should be (0, 1). No effect if
 // `kSquareSuggestIconEntities` is false or this is 1.
 extern const base::FeatureParam<double> kSquareSuggestIconEntitiesScale;
+// Gray rounded rect background for weather icons.
+extern const base::FeatureParam<bool> kSquareSuggestIconWeather;
 
 // Omnibox UI simplification - uniform row heights.
 // Returns true if the feature to enable uniform row height is enabled.
@@ -480,16 +486,6 @@ extern const char kOmniboxUIUnelideURLOnHoverThresholdMsParam[];
 
 // `FeatureParam`s
 
-// Autocomplete stability and related features.
-// Limit how frequently `AutocompleteController::UpdateResult()` will be
-// invoked. See the comments at `AutocompleteController::update_debouncer_`.
-extern const base::FeatureParam<bool>
-    kAutocompleteStabilityUpdateResultDebounceFromLastRun;
-// See `kAutocompleteStabilityUpdateResultDebounceFromLastRun`. No debouncing
-// if set to 0.
-extern const base::FeatureParam<int>
-    kAutocompleteStabilityUpdateResultDebounceDelay;
-
 // Local history zero-prefix (aka zero-suggest) and prefix suggestions.
 
 // Determines the maximum number of entries stored by the in-memory ZPS cache.
@@ -570,6 +566,12 @@ extern const base::FeatureParam<double> kDomainSuggestionsScoreFactor;
 // traditional and the alternate scoring algorithms.
 extern const base::FeatureParam<bool> kDomainSuggestionsAlternativeScoring;
 
+extern const base::FeatureParam<omnibox::CompanyEntityIconAdjustmentGroup>
+    kCompanyEntityIconAdjustmentGroup;
+
+extern const base::FeatureParam<bool>
+    kCompanyEntityIconAdjustmentCounterfactual;
+
 // ---------------------------------------------------------
 // ML Relevance Scoring ->
 
@@ -582,6 +584,7 @@ extern const base::FeatureParam<bool> kDomainSuggestionsAlternativeScoring;
 struct MLConfig {
   MLConfig();
   MLConfig(const MLConfig&);
+  MLConfig& operator=(const MLConfig& other);
 
   // If true, logs Omnibox URL scoring signals to OmniboxEventProto.
   // Equivalent to omnibox::kLogUrlScoringSignals.
@@ -590,6 +593,10 @@ struct MLConfig {
   // If true, enables scoring signal annotators for populating additional
   // Omnibox URL scoring signals for logging or ML scoring.
   bool enable_scoring_signals_annotators{false};
+
+  // If true, document suggestions from the shortcut provider will include
+  // shortcut signals.
+  bool shortcut_document_signals{false};
 
   // If true, runs the ML scoring model to assign new relevance scores to the
   // URL suggestions and reranks them.
@@ -715,8 +722,22 @@ constexpr base::FeatureParam<int> kInspireMeAdditionalRelatedQueries(
 constexpr base::FeatureParam<int> kInspireMeAdditionalTrendingQueries(
     &omnibox::kInspireMe,
     "AdditionalTrendingQueries",
-    10);
+    0);
 
+constexpr base::FeatureParam<int> kInspireMePsuggestQueries(
+    &omnibox::kInspireMe,
+    "PersonalizedSuggestQueries",
+    20);
+
+constexpr base::FeatureParam<int> kQueryTilesCacheMaxAge(
+    &omnibox::kQueryTilesInZPSOnNTP,
+    "QueryTilesMaxCacheAgeHours",
+    8);
+
+constexpr base::FeatureParam<bool> kQueryTilesShowAboveTrends(
+    &omnibox::kQueryTilesInZPSOnNTP,
+    "QueryTilesShowAboveTrends",
+    true);
 // <- Inspire Me
 // ---------------------------------------------------------
 // Actions In Suggest ->

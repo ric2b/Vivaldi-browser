@@ -6,7 +6,7 @@
  * @fileoverview Utility functions for settings metrics
  */
 
-import {assert} from 'chrome://resources/js/assert_ts.js';
+import {assert} from 'chrome://resources/js/assert.js';
 
 import {Setting} from './mojom-webui/setting.mojom-webui.js';
 import {SettingChangeValue} from './mojom-webui/user_action_recorder.mojom-webui.js';
@@ -66,6 +66,10 @@ const PREF_TO_SETTING_MAP: Record<string, SettingAndType> = {
   // os_privacy_page/os_privacy_page.js
   'cros.device.peripheral_data_access_enabled': {
     setting: Setting.kPeripheralDataAccessProtection,
+    type: chrome.settingsPrivate.PrefType.BOOLEAN,
+  },
+  'cros.reven.enable_hw_data_usage': {
+    setting: Setting.kRevenEnableHwDataUsage,
     type: chrome.settingsPrivate.PrefType.BOOLEAN,
   },
 };

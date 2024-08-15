@@ -36,6 +36,7 @@
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/omnibox/clipboard_utils.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -253,9 +254,6 @@ void OmniboxViewViews::Init() {
 }
 
 void OmniboxViewViews::SaveStateToTab(content::WebContents* tab) {
-  if (base::FeatureList::IsEnabled(omnibox::kDiscardTemporaryInputOnTabSwitch))
-    return;
-
   DCHECK(tab);
 
   // We don't want to keep the IME status, so force quit the current
@@ -276,13 +274,6 @@ void OmniboxViewViews::SaveStateToTab(content::WebContents* tab) {
 }
 
 void OmniboxViewViews::OnTabChanged(content::WebContents* web_contents) {
-  if (base::FeatureList::IsEnabled(
-          omnibox::kDiscardTemporaryInputOnTabSwitch)) {
-    model()->RestoreState(nullptr);
-    ClearEditHistory();
-    return;
-  }
-
   const OmniboxState* state = static_cast<OmniboxState*>(
       web_contents->GetUserData(&OmniboxState::kKey));
   model()->RestoreState(state ? &state->model_state : nullptr);
@@ -310,7 +301,6 @@ void OmniboxViewViews::OnTabChanged(content::WebContents* web_contents) {
 }
 
 void OmniboxViewViews::ResetTabState(content::WebContents* web_contents) {
-  if (!base::FeatureList::IsEnabled(omnibox::kDiscardTemporaryInputOnTabSwitch))
     web_contents->SetUserData(OmniboxState::kKey, nullptr);
 }
 
@@ -490,9 +480,14 @@ gfx::Size OmniboxViewViews::GetMinimumSize() const {
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   // TODO(crbug.com/1338087): The minimum size of Lacros toolbar is set too wide
   // to use split view in tablet mode. Temporally making the minimum size of
-  // omnibox smaller for Lacros to align the behavior with Ash.
+  // omnibox smaller for Lacros to align the behavior with Ash. Responsive
+  // Toolbar is supposed to fix this. Remove the temporal solution when
+  // Responsive Toolbar is launched.
   const int kMinCharacters =
-      chromeos::TabletState::Get()->InTabletMode() ? 8 : 20;
+      chromeos::TabletState::Get()->InTabletMode() &&
+              !base::FeatureList::IsEnabled(features::kResponsiveToolbar)
+          ? 8
+          : 20;
 #else
   const int kMinCharacters = 20;
 #endif
@@ -635,6 +630,10 @@ void OmniboxViewViews::OnThemeChanged() {
 
   set_placeholder_text_color(GetColorProvider()->GetColor(
       gm3_text_color_enabled ? kColorOmniboxText : kColorOmniboxTextDimmed));
+  SetSelectionBackgroundColor(
+      GetColorProvider()->GetColor(kColorOmniboxSelectionBackground));
+  SetSelectionTextColor(
+      GetColorProvider()->GetColor(kColorOmniboxSelectionForeground));
 
   EmphasizeURLComponents();
 }

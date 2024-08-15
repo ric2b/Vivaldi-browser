@@ -457,7 +457,7 @@ protocol::Response InspectorEmulationAgent::setVirtualTimePolicy(
   // This needs to happen before we apply virtual time.
   base::Time initial_time =
       initial_virtual_time.has_value()
-          ? base::Time::FromDoubleT(initial_virtual_time.value())
+          ? base::Time::FromSecondsSinceUnixEpoch(initial_virtual_time.value())
           : base::Time();
   virtual_time_base_ticks_ =
       virtual_time_controller_.EnableVirtualTime(initial_time);
@@ -549,6 +549,11 @@ protocol::Response InspectorEmulationAgent::setNavigatorOverrides(
 void InspectorEmulationAgent::VirtualTimeBudgetExpired() {
   TRACE_EVENT_NESTABLE_ASYNC_END0("renderer.scheduler", "VirtualTimeBudget",
                                   TRACE_ID_LOCAL(this));
+  // Disregard the event if the agent is disabled. Another agent may take care
+  // of pausing the time in case of an in-process frame swap.
+  if (!enabled_) {
+    return;
+  }
   virtual_time_controller_.SetVirtualTimePolicy(
       VirtualTimeController::VirtualTimePolicy::kPause);
   virtual_time_policy_.Set(protocol::Emulation::VirtualTimePolicyEnum::Pause);

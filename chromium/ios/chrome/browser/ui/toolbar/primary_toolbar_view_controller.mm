@@ -11,15 +11,18 @@
 #import "base/metrics/field_trial_params.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
+#import "ios/chrome/browser/ntp/home/features.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/dynamic_type_util.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_animator.h"
 #import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
+#import "ios/chrome/browser/ui/toolbar/adaptive_toolbar_view_controller+subclassing.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_factory.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_configuration.h"
@@ -100,6 +103,26 @@ using vivaldi::IsVivaldiRunning;
   [super setLocationBarViewController:locationBarViewController];
 
   self.view.separator.hidden = !self.hasOmnibox;
+  [self updateBackgroundColor];
+}
+
+- (void)updateBackgroundColor {
+  if (base::FeatureList::IsEnabled(kDynamicThemeColor) ||
+      base::FeatureList::IsEnabled(kDynamicBackgroundColor)) {
+    [super updateBackgroundColor];
+    return;
+  }
+  UIColor* backgroundColor =
+      self.buttonFactory.toolbarConfiguration.backgroundColor;
+  if (base::FeatureList::IsEnabled(kThemeColorInTopToolbar) &&
+      !self.hasOmnibox) {
+    if (self.pageThemeColor) {
+      backgroundColor = self.pageThemeColor;
+    } else if (self.underPageBackgroundColor) {
+      backgroundColor = self.underPageBackgroundColor;
+    }
+  }
+  self.view.backgroundColor = backgroundColor;
 }
 
 #pragma mark - NewTabPageControllerDelegate
@@ -245,11 +268,14 @@ using vivaldi::IsVivaldiRunning;
   self.view.trailingStackView.alpha = alphaValue;
 
   if (IsVivaldiRunning()) {
+    self.view.backgroundColor = [UIColor colorNamed:vNTPBackgroundColor];
     self.view.locationBarContainer.layer.cornerRadius =
       vNTPSearchBarCornerRadius;
     self.view.locationBarContainer.backgroundColor =
-      [[UIColor colorNamed:vSearchbarBackgroundColor]
-        colorWithAlphaComponent:alphaValue];
+      [[UIColor colorNamed:
+        (self.buttonFactory.style == ToolbarStyle::kIncognito) ?
+          vPrivateNTPBackgroundColor: vSearchbarBackgroundColor]
+            colorWithAlphaComponent: alphaValue];
   } // End Vivaldi
 
   self.view.locationBarBottomConstraint.constant =
@@ -305,6 +331,26 @@ using vivaldi::IsVivaldiRunning;
 
 }
 
+- (void)setToolbarFaded:(BOOL)faded {
+  self.view.alpha = faded ? 0 : 1;
+}
+
+- (void)setLocationBarHeightToMatchFakeOmnibox {
+  if (!IsSplitToolbarMode(self)) {
+    return;
+  }
+  [self setLocationBarContainerHeight:content_suggestions::
+                                          PinnedFakeOmniboxHeight()];
+  self.view.matchNTPHeight = YES;
+}
+
+- (void)setLocationBarHeightExpanded {
+  [self setLocationBarContainerHeight:LocationBarHeight(
+                                          self.traitCollection
+                                              .preferredContentSizeCategory)];
+  self.view.matchNTPHeight = NO;
+}
+
 #pragma mark - Private
 
 - (CGFloat)clampedFontSizeMultiplier {
@@ -334,6 +380,13 @@ using vivaldi::IsVivaldiRunning;
   [NSLayoutConstraint
       deactivateConstraints:self.view.contractedNoMarginConstraints];
   [NSLayoutConstraint deactivateConstraints:self.view.expandedConstraints];
+}
+
+// Sets the height of the location bar container.
+- (void)setLocationBarContainerHeight:(CGFloat)height {
+  PrimaryToolbarView* view = self.view;
+  view.locationBarContainerHeight.constant = height;
+  view.locationBarContainer.layer.cornerRadius = height / 2;
 }
 
 #pragma mark: - Vivaldi

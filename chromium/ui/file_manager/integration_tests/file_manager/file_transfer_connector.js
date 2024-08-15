@@ -2,10 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {addEntries, ENTRIES, EntryType, getCaller, pending, repeatUntil, RootPath, sendTestMessage, TestEntryInfo} from '../test_util.js';
+import {addEntries, ENTRIES, EntryType, getCaller, RootPath, sendTestMessage, TestEntryInfo} from '../test_util.js';
 import {testcase} from '../testcase.js';
 
-import {navigateWithDirectoryTree, openNewWindow, remoteCall} from './background.js';
+import {openNewWindow, remoteCall} from './background.js';
+import {DirectoryTreePageObject} from './page_objects/directory_tree.js';
 
 /**
  * Info for the source or destination of a transfer.
@@ -490,11 +491,12 @@ async function verifyDirectoryRecursively(
       {ignoreLastModifiedTime: true});
 
   // 2. For each subdirectory: enter subdirectory and call recursion.
+  const directoryTree = await DirectoryTreePageObject.create(appId, remoteCall);
   for (const entry of currentEntries.filter(
            entry => entry.type === EntryType.DIRECTORY)) {
     currentSubDirectory.push(entry.nameText);
-    await navigateWithDirectoryTree(
-        appId, rootDirectory + '/' + currentSubDirectory.join('/'));
+    await directoryTree.navigateToPath(
+        rootDirectory + '/' + currentSubDirectory.join('/'));
     await verifyDirectoryRecursively(
         appId, expectedEntries, rootDirectory, currentSubDirectory);
     currentSubDirectory.pop();
@@ -503,7 +505,7 @@ async function verifyDirectoryRecursively(
   // 3. After the recursion ends, navigate back to the root directory.
   if (currentSubDirectory.length == 0) {
     // Go back to the root directory.
-    await navigateWithDirectoryTree(appId, rootDirectory);
+    await directoryTree.navigateToPath(rootDirectory);
   }
 }
 
@@ -617,7 +619,8 @@ async function transferBetweenVolumes(
       transferInfo, entryTestSet, [ENTRIES.hello]);
 
   // Select the source folder.
-  await navigateWithDirectoryTree(appId, transferInfo.source.breadcrumbsPath);
+  const directoryTree = await DirectoryTreePageObject.create(appId, remoteCall);
+  await directoryTree.navigateToPath(transferInfo.source.breadcrumbsPath);
 
   if (transferInfo.source.volumeName === 'android_files') {
     await showAllPlayFiles(appId);
@@ -644,8 +647,7 @@ async function transferBetweenVolumes(
       'execCommand', appId, [transferCommand]));
 
   // Select the destination folder.
-  await navigateWithDirectoryTree(
-      appId, transferInfo.destination.breadcrumbsPath);
+  await directoryTree.navigateToPath(transferInfo.destination.breadcrumbsPath);
 
   // Wait for the initially expected files to appear in the file list.
   // This is before the actual copy!
@@ -701,6 +703,12 @@ async function verifyAfterPasteBlocking(
   const expectedNumberOfWarnedFilesByConnectors = await sendTestMessage(
       {name: 'getExpectedNumberOfWarnedFilesByConnectors'});
 
+  const bypassRequireJustification =
+      await sendTestMessage({name: 'doesBypassRequireJustification'}) ===
+      'true';
+
+  const directoryTree = await DirectoryTreePageObject.create(appId, remoteCall);
+
   if (usesNewFileTransferConnectorUI &&
       expectedNumberOfWarnedFilesByConnectors > 0) {
     // Check that the warning appears in the feedback panel.
@@ -722,11 +730,13 @@ async function verifyAfterPasteBlocking(
         expect_proceed_warning_reports: true,
       });
 
-      // Proceed the warning (single file warning) / open the warning dialog
-      // (multiple file warning).
+      // Proceed the warning (single file warning without user justification
+      // required) / open the warning dialog (multiple file warning or user
+      // justification required).
       await verifyPanelButtonsAndClick(appId, 'cancel', 'primary');
 
-      if (expectedNumberOfWarnedFilesByConnectors > 1) {
+      if (expectedNumberOfWarnedFilesByConnectors > 1 ||
+          bypassRequireJustification) {
         await sendTestMessage({
           name: 'verifyFileTransferWarningDialogAndProceed',
           app_id: appId,
@@ -752,8 +762,7 @@ async function verifyAfterPasteBlocking(
           appId, expectedEntries, transferInfo.destination.breadcrumbsPath);
 
       // All files should still exist at the destination.
-      await navigateWithDirectoryTree(
-          appId, transferInfo.source.breadcrumbsPath);
+      await directoryTree.navigateToPath(transferInfo.source.breadcrumbsPath);
       const expectedSourceEntries = entryTestSet;
       // Wait for the expected files to appear in the file list.
       await verifyDirectoryRecursively(
@@ -775,7 +784,7 @@ async function verifyAfterPasteBlocking(
       appId, expectedEntries, transferInfo.destination.breadcrumbsPath);
 
   // Verify contents of the source directory.
-  await navigateWithDirectoryTree(appId, transferInfo.source.breadcrumbsPath);
+  await directoryTree.navigateToPath(transferInfo.source.breadcrumbsPath);
   let expectedSourceEntries = entryTestSet;
   if (transferInfo.isMove) {
     // For a move, paths that include "allowed" should not be present at the
@@ -834,7 +843,8 @@ async function verifyAfterPasteReportOnly(appId, transferInfo, entryTestSet) {
       appId, expectedEntries, transferInfo.destination.breadcrumbsPath);
 
   // Verify contents of the source directory.
-  await navigateWithDirectoryTree(appId, transferInfo.source.breadcrumbsPath);
+  const directoryTree = await DirectoryTreePageObject.create(appId, remoteCall);
+  await directoryTree.navigateToPath(transferInfo.source.breadcrumbsPath);
   let expectedSourceEntries = entryTestSet;
   if (transferInfo.isMove) {
     // For a move, the source directory should be empty.
@@ -1085,6 +1095,20 @@ testcase.transferConnectorFromUsbToDownloadsFlatWarnProceedNewUX = () => {
       SINGLE_FILE_WARN_MESSAGE,
   );
 };
+testcase
+    .transferConnectorFromUsbToDownloadsFlatWarnProceedWithJustificationNewUX =
+    () => {
+      return transferBetweenVolumes(
+          new TransferInfo({
+            source: TRANSFER_LOCATIONS.usb,
+            destination: TRANSFER_LOCATIONS.downloads,
+            proceedOnWarning: true,
+          }),
+          CONNECTOR_ENTRIES_FLAT_WARNED,
+          NEW_COPY_FAIL_MESSAGE,
+          SINGLE_FILE_WARN_MESSAGE,
+      );
+    };
 testcase.transferConnectorFromUsbToDownloadsDeepWarnProceedNewUX = () => {
   return transferBetweenVolumes(
       new TransferInfo({
@@ -1097,6 +1121,20 @@ testcase.transferConnectorFromUsbToDownloadsDeepWarnProceedNewUX = () => {
       TWO_FILES_WARN_MESSAGE,
   );
 };
+testcase
+    .transferConnectorFromUsbToDownloadsDeepWarnProceedWithJustificationNewUX =
+    () => {
+      return transferBetweenVolumes(
+          new TransferInfo({
+            source: TRANSFER_LOCATIONS.usb,
+            destination: TRANSFER_LOCATIONS.downloads,
+            proceedOnWarning: true,
+          }),
+          CONNECTOR_ENTRIES_DEEP_WARNED,
+          TWO_FILES_COPY_FAIL_MESSAGE,
+          TWO_FILES_WARN_MESSAGE,
+      );
+    };
 testcase.transferConnectorFromUsbToDownloadsFlatWarnCancelNewUX = () => {
   return transferBetweenVolumes(
       new TransferInfo({

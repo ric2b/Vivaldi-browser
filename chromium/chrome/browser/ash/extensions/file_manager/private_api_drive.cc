@@ -51,7 +51,7 @@
 #include "chrome/common/extensions/api/file_manager_private.h"
 #include "chrome/common/extensions/api/file_manager_private_internal.h"
 #include "chrome/common/extensions/extension_constants.h"
-#include "chromeos/ash/components/drivefs/drivefs_pin_manager.h"
+#include "chromeos/ash/components/drivefs/drivefs_pinning_manager.h"
 #include "chromeos/ash/components/drivefs/drivefs_util.h"
 #include "chromeos/ash/components/drivefs/mojom/drivefs.mojom.h"
 #include "chromeos/ash/components/network/network_handler.h"
@@ -86,7 +86,7 @@ using ash::file_system_provider::util::FileSystemURLParser;
 using content::BrowserThread;
 using drive::DriveIntegrationService;
 using drive::util::GetIntegrationServiceByProfile;
-using drivefs::pinning::PinManager;
+using drivefs::pinning::PinningManager;
 using extensions::api::file_manager_private::EntryProperties;
 using extensions::api::file_manager_private::EntryPropertyName;
 using file_manager::util::EntryDefinition;
@@ -197,7 +197,8 @@ class SingleEntryPropertiesGetterForFileSystemProvider {
     if (names_.find(
             api::file_manager_private::ENTRY_PROPERTY_NAME_MODIFICATIONTIME) !=
         names_.end()) {
-      properties_->modification_time = metadata->modification_time->ToJsTime();
+      properties_->modification_time =
+          metadata->modification_time->InMillisecondsFSinceUnixEpoch();
     }
 
     if (names_.find(
@@ -319,7 +320,7 @@ class SingleEntryPropertiesGetterForDocumentsProvider {
     properties_->can_add_children = metadata.dir_supports_create;
     if (!metadata.last_modified.is_null()) {
       properties_->modification_time =
-          metadata.last_modified.ToJsTimeIgnoringNull();
+          metadata.last_modified.InMillisecondsFSinceUnixEpochIgnoringNull();
     }
     properties_->size = metadata.size;
     CompleteGetEntryProperties(base::File::FILE_OK);
@@ -634,8 +635,8 @@ ExtensionFunction::ResponseAction FileManagerPrivateSearchDriveFunction::Run() {
   auto query = drivefs::mojom::QueryParameters::New();
   query->text_content = params->search_params.query;
   if (params->search_params.modified_timestamp.has_value()) {
-    query->modified_time =
-        base::Time::FromJsTime(*params->search_params.modified_timestamp);
+    query->modified_time = base::Time::FromMillisecondsSinceUnixEpoch(
+        *params->search_params.modified_timestamp);
     query->modified_time_operator =
         drivefs::mojom::QueryParameters::DateComparisonOperator::kGreaterThan;
   }
@@ -722,8 +723,8 @@ FileManagerPrivateSearchDriveMetadataFunction::Run() {
         drivefs::mojom::QueryParameters::QuerySource::kLocalOnly;
   }
   if (params->search_params.modified_timestamp.has_value()) {
-    query->modified_time =
-        base::Time::FromJsTime(*params->search_params.modified_timestamp);
+    query->modified_time = base::Time::FromMillisecondsSinceUnixEpoch(
+        *params->search_params.modified_timestamp);
     query->modified_time_operator =
         drivefs::mojom::QueryParameters::DateComparisonOperator::kGreaterThan;
   }
@@ -909,7 +910,7 @@ FileManagerPrivateGetBulkPinProgressFunction::Run() {
     return RespondNow(Error("Drive not available"));
   }
 
-  PinManager* const p = service->GetPinManager();
+  PinningManager* const p = service->GetPinningManager();
   if (!p) {
     return RespondNow(Error("Pin Manager not available"));
   }
@@ -937,7 +938,7 @@ FileManagerPrivateCalculateBulkPinRequiredSpaceFunction::Run() {
     return RespondNow(Error("Drive not available"));
   }
 
-  PinManager* const p = service->GetPinManager();
+  PinningManager* const p = service->GetPinningManager();
   if (!p) {
     return RespondNow(Error("Pin Manager not available"));
   }

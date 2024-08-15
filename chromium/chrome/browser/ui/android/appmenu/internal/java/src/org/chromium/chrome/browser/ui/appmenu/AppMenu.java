@@ -307,19 +307,28 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
         anchorView.getLocationOnScreen(mTempLocation);
         int anchorViewOffset = Math.min(Math.abs(mTempLocation[1] - visibleDisplayFrame.top),
                 Math.abs(mTempLocation[1] - visibleDisplayFrame.bottom));
-        int popupHeight = setMenuHeight(menuItemIds, heightList, visibleDisplayFrame, sizingPadding,
-                footerHeight, headerHeight, anchorView, groupDividerResourceId, anchorViewOffset);
-        int[] popupPosition = getPopupPosition(mTempLocation, mIsByPermanentButton,
-                mNegativeSoftwareVerticalOffset, mNegativeVerticalOffsetNotTopAnchored,
-                mCurrentScreenRotation, visibleDisplayFrame, sizingPadding, anchorView, popupWidth,
-                popupHeight, anchorView.getRootView().getLayoutDirection());
+        setMenuHeight(
+                menuItemIds,
+                heightList,
+                visibleDisplayFrame,
+                sizingPadding,
+                footerHeight,
+                headerHeight,
+                anchorView,
+                groupDividerResourceId,
+                anchorViewOffset);
+        int[] popupPosition =
+                getPopupPosition(
+                        mTempLocation,
+                        mIsByPermanentButton,
+                        mNegativeSoftwareVerticalOffset,
+                        mCurrentScreenRotation,
+                        visibleDisplayFrame,
+                        sizingPadding,
+                        anchorView,
+                        popupWidth,
+                        anchorView.getRootView().getLayoutDirection());
         mPopup.setContentView(contentView);
-
-        // Vivaldi - Adjust the app menu height especially for bottom address bar
-        if (!BuildConfig.IS_VIVALDI)
-        if (popupHeight + popupPosition[1] > visibleDisplayFrame.height() - anchorViewOffset) {
-            mPopup.setHeight(visibleDisplayFrame.height() - anchorViewOffset);
-        }
 
         // Vivaldi - Offset the menu list to keep the vivaldi icon visible
         if (!isInOverviewMode) {
@@ -342,8 +351,8 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
             if (isToolbarAtBottom) {
                 if (isTabStackToolbarVisible) popupHeightOffset += tabStripHeight;
                 // Adjust the popup height as per the available screen space
-                if (popupHeight + popupHeightOffset + sizingPadding.bottom > screenHeight)
-                    mPopup.setHeight(popupHeight - popupHeightOffset);
+                if (mPopup.getHeight() + popupHeightOffset + sizingPadding.bottom > screenHeight)
+                    mPopup.setHeight(mPopup.getHeight() - popupHeightOffset);
 
                 // Adjust the Y-position of the popup
                 popupPosition[1] +=
@@ -358,8 +367,8 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
                 popupPosition[1] += tabStripHeight;
                 if (isTablet) popupPosition[1] += sizingPadding.top;
                 // Adjust the popup height as per the available screen space
-                if (popupHeight + popupPosition[1] > screenHeight)
-                    mPopup.setHeight(popupHeight - popupHeightOffset);
+                if (mPopup.getHeight() + popupPosition[1] > screenHeight)
+                    mPopup.setHeight(mPopup.getHeight() - popupHeightOffset);
             }
         }
 
@@ -409,10 +418,16 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
     }
 
     @VisibleForTesting
-    static int[] getPopupPosition(int[] tempLocation, boolean isByPermanentButton,
-            int negativeSoftwareVerticalOffset, int negativeVerticalOffsetNotTopAnchored,
-            int screenRotation, Rect appRect, Rect padding, View anchorView, int popupWidth,
-            int popupHeight, int viewLayoutDirection) {
+    static int[] getPopupPosition(
+            int[] tempLocation,
+            boolean isByPermanentButton,
+            int negativeSoftwareVerticalOffset,
+            int screenRotation,
+            Rect appRect,
+            Rect padding,
+            View anchorView,
+            int popupWidth,
+            int viewLayoutDirection) {
         anchorView.getLocationInWindow(tempLocation);
         int anchorViewX = tempLocation[0];
         int anchorViewY = tempLocation[1];
@@ -593,9 +608,16 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
         if (mAdapter != null) mAdapter.notifyDataSetChanged();
     }
 
-    private int setMenuHeight(List<Integer> menuItemIds, List<Integer> heightList,
-            Rect appDimensions, Rect padding, int footerHeight, int headerHeight, View anchorView,
-            @IdRes int groupDividerResourceId, int anchorViewOffset) {
+    private void setMenuHeight(
+            List<Integer> menuItemIds,
+            List<Integer> heightList,
+            Rect appDimensions,
+            Rect padding,
+            int footerHeight,
+            int headerHeight,
+            View anchorView,
+            @IdRes int groupDividerResourceId,
+            int anchorViewOffset) {
         int anchorViewImpactHeight = mIsByPermanentButton ? anchorView.getHeight() : 0;
 
         int availableScreenSpace = appDimensions.height() - anchorViewOffset - padding.bottom
@@ -618,7 +640,6 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
                 menuItemIds, heightList, groupDividerResourceId, availableScreenSpace);
         menuHeight += footerHeight + headerHeight + padding.top + padding.bottom;
         mPopup.setHeight(menuHeight);
-        return menuHeight;
     }
 
     @VisibleForTesting

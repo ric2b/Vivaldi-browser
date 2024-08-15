@@ -158,6 +158,50 @@ class AppListViewPixelRTLTest
     base::RunLoop().RunUntilIdle();
   }
 
+  std::vector<SearchResult::TextItem> BuildKeyboardShortcutTextVector() {
+    std::vector<SearchResult::TextItem> keyboard_shortcut_text_vector;
+    SearchResult::TextItem shortcut_text_item_1(
+        ash::SearchResultTextItemType::kIconifiedText);
+    shortcut_text_item_1.SetText(u"ctrl");
+    shortcut_text_item_1.SetTextTags({});
+    keyboard_shortcut_text_vector.push_back(shortcut_text_item_1);
+
+    SearchResult::TextItem shortcut_text_item_2(
+        ash::SearchResultTextItemType::kString);
+    shortcut_text_item_2.SetText(u" + ");
+    shortcut_text_item_2.SetTextTags({});
+    keyboard_shortcut_text_vector.push_back(shortcut_text_item_2);
+
+    SearchResult::TextItem shortcut_text_item_3(
+        ash::SearchResultTextItemType::kIconCode);
+    shortcut_text_item_3.SetIconCode(
+        SearchResultTextItem::IconCode::kKeyboardShortcutSearch);
+    keyboard_shortcut_text_vector.push_back(shortcut_text_item_3);
+
+    SearchResult::TextItem shortcut_text_item_4(
+        ash::SearchResultTextItemType::kIconCode);
+    shortcut_text_item_4.SetIconCode(
+        SearchResultTextItem::IconCode::kKeyboardShortcutLeft);
+    keyboard_shortcut_text_vector.push_back(shortcut_text_item_4);
+
+    return keyboard_shortcut_text_vector;
+  }
+
+  void SetUpKeyboardShortcutResult(SearchModel::SearchResults* results) {
+    std::unique_ptr<TestSearchResult> result =
+        std::make_unique<TestSearchResult>();
+    result->set_display_type(ash::SearchResultDisplayType::kList);
+    result->SetAccessibleName(u"Copy and Paste");
+    result->SetTitle(u"Copy and Paste");
+    result->SetDetails(u"Shortcuts");
+    result->set_best_match(true);
+    result->SetKeyboardShortcutTextVector(BuildKeyboardShortcutTextVector());
+    results->Add(std::move(result));
+
+    // Adding results will schedule Update().
+    base::RunLoop().RunUntilIdle();
+  }
+
   bool JellyEnabled() const { return std::get<0>(GetParam()); }
 
   bool IsRtl() const { return std::get<1>(GetParam()); }
@@ -187,8 +231,7 @@ TEST_P(AppListViewPixelRTLTest, AnswerCardSearchResult) {
 
   UseFixedPlaceholderTextAndHideCursor(test_helper->GetSearchBoxView());
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
-      "bubble_launcher_answer_card_search_results",
-      /*revision_number=*/JellyEnabled() ? 7 : 5,
+      "bubble_launcher_answer_card_search_results", 12,
       GetAppListTestHelper()->GetBubbleView(),
       GetPrimaryShelf()->navigation_widget()));
 }
@@ -210,10 +253,30 @@ TEST_P(AppListViewPixelRTLTest, URLSearchResult) {
 
   UseFixedPlaceholderTextAndHideCursor(test_helper->GetSearchBoxView());
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
-      "bubble_launcher_url_search_results",
-      /*revision_number=*/JellyEnabled() ? 7 : 5,
+      "bubble_launcher_url_search_results", 11,
       GetAppListTestHelper()->GetBubbleView(),
       GetPrimaryShelf()->navigation_widget()));
+}
+
+// Verifies keyboard shortcut results under the clamshell mode.
+TEST_P(AppListViewPixelRTLTest, KeyboardShortcutSearchResult) {
+  ShowAppList();
+
+  // Press a key to start a search.
+  PressAndReleaseKey(ui::VKEY_Y);
+  // Populate answer card result.
+  auto* test_helper = GetAppListTestHelper();
+  SearchModel::SearchResults* results = test_helper->GetSearchResults();
+  SetUpKeyboardShortcutResult(results);
+  test_helper->GetBubbleAppListSearchView()
+      ->OnSearchResultContainerResultsChanged();
+  // OnSearchResultContainerResultsChanged will schedule show animations().
+  base::RunLoop().RunUntilIdle();
+
+  UseFixedPlaceholderTextAndHideCursor(test_helper->GetSearchBoxView());
+  EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
+      "bubble_launcher_ks_search_results", /*revision_number=*/4,
+      GetAppListTestHelper()->GetBubbleView()));
 }
 
 // Verifies the app list view under the clamshell mode.
@@ -225,9 +288,7 @@ TEST_P(AppListViewPixelRTLTest, Basics) {
   UseFixedPlaceholderTextAndHideCursor(
       GetAppListTestHelper()->GetSearchBoxView());
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
-      "bubble_launcher_basics",
-      /*revision_number=*/JellyEnabled() ? 7 : 5,
-      GetAppListTestHelper()->GetBubbleView(),
+      "bubble_launcher_basics", 11, GetAppListTestHelper()->GetBubbleView(),
       GetPrimaryShelf()->navigation_widget()));
 }
 
@@ -248,8 +309,7 @@ TEST_P(AppListViewPixelRTLTest, GradientZone) {
                                 /*position=*/20);
 
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
-      "bubble_launcher_gradient_zone",
-      /*revision_number=*/JellyEnabled() ? 7 : 5,
+      "bubble_launcher_gradient_zone", 11,
       GetAppListTestHelper()->GetBubbleView(),
       GetPrimaryShelf()->navigation_widget()));
 }
@@ -361,8 +421,7 @@ INSTANTIATE_TEST_SUITE_P(RTL,
 // Verifies the default layout for tablet mode launcher.
 TEST_P(AppListViewTabletPixelTest, Basic) {
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
-      "tablet_launcher_basics",
-      /*revision_number=*/IsJellyEnabled() ? 6 : 5,
+      "tablet_launcher_basics", 13,
       GetAppListTestHelper()->GetAppsContainerView()));
 }
 
@@ -383,8 +442,7 @@ TEST_P(AppListViewTabletPixelTest, TopGradientZone) {
   generator->MoveTouchBy(0, -40);
 
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
-      "tablet_launcher_top_gradient_zone",
-      /*revision_number=*/IsJellyEnabled() ? 5 : 4,
+      "tablet_launcher_top_gradient_zone", 11,
       GetAppListTestHelper()->GetAppsContainerView()));
 }
 
@@ -405,8 +463,7 @@ TEST_P(AppListViewTabletPixelTest, BottomGradientZone) {
   generator->MoveTouchBy(0, -90);
 
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
-      "tablet_launcher_bottom_gradient_zone",
-      /*revision_number=*/IsJellyEnabled() ? 6 : 5,
+      "tablet_launcher_bottom_gradient_zone", 13,
       GetAppListTestHelper()->GetAppsContainerView()));
 }
 
@@ -416,8 +473,7 @@ TEST_P(AppListViewTabletPixelTest, SearchBoxViewActive) {
   search_box_view->SetSearchBoxActive(true, ui::EventType::ET_UNKNOWN);
 
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
-      "search_box_view_active",
-      /*revision_number=*/IsJellyEnabled() ? 3 : 2, search_box_view));
+      "search_box_view_active", 7, search_box_view));
 }
 
 class AppListViewAssistantZeroStateTest
@@ -464,7 +520,7 @@ TEST_P(AppListViewAssistantZeroStateTest, Basic) {
 
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
       "app_list_view_assistant_zero_state",
-      /*revision_number=*/JellyEnabled(GetParam()) ? 4 : 3,
+      /*revision_number=*/JellyEnabled(GetParam()) ? 5 : 4,
       page_view()->GetViewByID(AssistantViewID::kZeroStateView)));
 }
 

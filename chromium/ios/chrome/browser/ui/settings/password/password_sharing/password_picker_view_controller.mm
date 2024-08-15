@@ -7,8 +7,12 @@
 #import "base/strings/sys_string_conversions.h"
 #import "components/password_manager/core/browser/password_ui_utils.h"
 #import "components/password_manager/core/browser/ui/credential_ui_entry.h"
-#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
-#import "ios/chrome/browser/ui/settings/cells/settings_image_detail_text_item.h"
+#import "ios/chrome/browser/net/crurl.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_url_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/table_view_favicon_data_source.h"
+#import "ios/chrome/browser/ui/settings/password/password_sharing/password_picker_view_controller_presentation_delegate.h"
+#import "ios/chrome/browser/ui/settings/password/password_sharing/password_sharing_constants.h"
+#import "ios/chrome/common/ui/favicon/favicon_view.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
@@ -21,9 +25,6 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
 typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeCredential = kItemTypeEnumZero,
 };
-
-// Size of the accessory view symbol.
-const CGFloat kAccessorySymbolSize = 22;
 
 }  // namespace
 
@@ -44,6 +45,8 @@ const CGFloat kAccessorySymbolSize = 22;
       initWithBarButtonSystemItem:UIBarButtonSystemItemCancel
                            target:self
                            action:@selector(cancelButtonTapped)];
+  self.navigationItem.leftBarButtonItem.accessibilityIdentifier =
+      kPasswordPickerCancelButtonId;
   self.navigationItem.title =
       l10n_util::GetNSString(IDS_IOS_PASSWORD_SHARING_TITLE);
   UIBarButtonItem* nextButton = [[UIBarButtonItem alloc]
@@ -52,10 +55,9 @@ const CGFloat kAccessorySymbolSize = 22;
               style:UIBarButtonItemStylePlain
              target:self
              action:@selector(nextButtonTapped)];
-  nextButton.enabled = NO;
   self.navigationItem.rightBarButtonItem = nextButton;
-
-  self.tableView.allowsMultipleSelection = YES;
+  self.navigationItem.rightBarButtonItem.accessibilityIdentifier =
+      kPasswordPickerNextButtonId;
 
   [self loadModel];
 }
@@ -71,20 +73,28 @@ const CGFloat kAccessorySymbolSize = 22;
   }
 }
 
+- (void)viewDidAppear:(BOOL)animated {
+  [super viewDidAppear:animated];
+
+  // Select first row by default.
+  NSIndexPath* indexPath = [NSIndexPath indexPathForRow:0 inSection:0];
+  [self.tableView selectRowAtIndexPath:indexPath
+                              animated:NO
+                        scrollPosition:UITableViewScrollPositionNone];
+}
+
 #pragma mark - UITableViewDelegate
 
 - (void)tableView:(UITableView*)tableView
     didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
-  [tableView cellForRowAtIndexPath:indexPath].accessoryView =
-      [[UIImageView alloc] initWithImage:[self checkmarkCircleIcon]];
-  [self setNextButtonStatus];
+  [tableView cellForRowAtIndexPath:indexPath].accessoryType =
+      UITableViewCellAccessoryCheckmark;
 }
 
 - (void)tableView:(UITableView*)tableView
     didDeselectRowAtIndexPath:(NSIndexPath*)indexPath {
-  [tableView cellForRowAtIndexPath:indexPath].accessoryView =
-      [[UIImageView alloc] initWithImage:[self circleIcon]];
-  [self setNextButtonStatus];
+  [tableView cellForRowAtIndexPath:indexPath].accessoryType =
+      UITableViewCellAccessoryNone;
 }
 
 #pragma mark - UITableViewDataSource
@@ -106,9 +116,22 @@ const CGFloat kAccessorySymbolSize = 22;
   cell.userInteractionEnabled = YES;
   cell.textLabel.numberOfLines = 1;
   cell.detailTextLabel.numberOfLines = 1;
-  cell.accessoryView = [[UIImageView alloc]
-      initWithImage:cell.isSelected ? [self checkmarkCircleIcon]
-                                    : [self circleIcon]];
+  if (indexPath.row == tableView.indexPathForSelectedRow.row) {
+    cell.accessoryType = UITableViewCellAccessoryCheckmark;
+  } else {
+    cell.accessoryType = UITableViewCellAccessoryNone;
+  }
+
+  TableViewItem* item = [self.tableViewModel itemAtIndexPath:indexPath];
+  TableViewURLItem* URLItem =
+      base::apple::ObjCCastStrict<TableViewURLItem>(item);
+  TableViewURLCell* URLCell =
+      base::apple::ObjCCastStrict<TableViewURLCell>(cell);
+  [self.imageDataSource
+      faviconForPageURL:URLItem.URL
+             completion:^(FaviconAttributes* attributes) {
+               [URLCell.faviconView configureWithAttributes:attributes];
+             }];
 
   return cell;
 }
@@ -125,42 +148,26 @@ const CGFloat kAccessorySymbolSize = 22;
 
 #pragma mark - Items
 
-- (SettingsImageDetailTextItem*)credentialItem:
+- (TableViewURLItem*)credentialItem:
     (const password_manager::CredentialUIEntry&)credential {
-  SettingsImageDetailTextItem* item =
-      [[SettingsImageDetailTextItem alloc] initWithType:ItemTypeCredential];
-  item.text = base::SysUTF16ToNSString(credential.username);
-  // TODO(crbug.com/1463882): Double check which origin should be displayed. For
-  // now first is returned.
-  item.detailText = base::SysUTF8ToNSString(
-      password_manager::GetShownOrigin(credential.facets[0]));
-  // TODO(crbug.com/1463882): Add favicon.
+  TableViewURLItem* item =
+      [[TableViewURLItem alloc] initWithType:ItemTypeCredential];
+  item.title = base::SysUTF16ToNSString(credential.username);
+  item.URL = [[CrURL alloc] initWithGURL:GURL(credential.GetURL())];
   return item;
 }
 
 #pragma mark - Private
 
-- (UIImage*)checkmarkCircleIcon {
-  return DefaultSymbolWithPointSize(kCheckmarkCircleFillSymbol,
-                                    kAccessorySymbolSize);
-}
-
-- (UIImage*)circleIcon {
-  return DefaultSymbolWithPointSize(kCircleSymbol, kAccessorySymbolSize);
-}
-
 - (void)cancelButtonTapped {
-  // TODO(crbug.com/1463882): Handle cancel tap.
+  [self.delegate passwordPickerWasDismissed:self];
 }
 
 - (void)nextButtonTapped {
-  // TODO(crbug.com/1463882): Handle next tap.
-}
-
-// Enables next button if any row is selected or disables it otherwise.
-- (void)setNextButtonStatus {
-  self.navigationItem.rightBarButtonItem.enabled =
-      self.tableView.indexPathsForSelectedRows.count > 0;
+  [self.delegate
+        passwordPickerClosed:self
+      withSelectedCredential:_credentials[self.tableView.indexPathForSelectedRow
+                                              .row]];
 }
 
 @end

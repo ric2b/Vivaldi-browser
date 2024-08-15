@@ -8,9 +8,7 @@ config("features") {
   defines = [
     "VIVALDI_BUILD",
     "CHROMIUM_BUILD",
-    "VIVALDI_RELEASE=$release_kind",
     "WIDEVINE_CDM_VERSION_STRING=\"1.0.123.456\"",
-    "VIVALDI_RELEASE_KIND=$VIVALDI_RELEASE_KIND",
   ]
   if (system_proprietary_codecs) {
     defines += [ "USE_SYSTEM_PROPRIETARY_CODECS" ]
@@ -27,9 +25,6 @@ config("features") {
       defines += [ "VIVALDI_WIN_COMPILE_CACHE" ]
     }
     ldflags = [ "notelemetry.obj" ]
-  }
-  if (is_final_build) {
-    defines += [ "VIVALDI_FINAL_BUILD" ]
   }
   if (is_vivaldi_automotive) {
     defines += [ "OEM_AUTOMOTIVE_BUILD" ]
@@ -57,12 +52,6 @@ config("features") {
   }
 }
 
-config("linux_386_linking") {
-  if (is_linux && current_cpu == "x86") {
-    ldflags = [ "-z", "notext", ]
-  }
-}
-
 config("extra_cfi_flags") {
   cflags = []
   if (is_cfi && current_toolchain == default_toolchain) {
@@ -71,5 +60,16 @@ config("extra_cfi_flags") {
     cflags += [
       "-fsanitize-blacklist=$extra_cfi_blacklist_path",
     ]
+  }
+}
+
+config("release_kind") {
+  defines = [
+    "VIVALDI_RELEASE=$release_kind",
+    "VIVALDI_RELEASE_KIND=$VIVALDI_RELEASE_KIND",
+  ]
+
+  if (is_final_build) {
+    defines += [ "VIVALDI_FINAL_BUILD" ]
   }
 }

@@ -7,6 +7,7 @@
 
 module blink.mojom;
 
+import "services/network/public/mojom/schemeful_site.mojom";
 import "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
 import "url/mojom/url.mojom";
@@ -39,6 +40,17 @@ enum DeprecatedFencedFrameMode {
 // frame-specific privacy policies.
 enum Opaque {
   kOpaque
+};
+
+// Unlike event-level reporting through reportEvent(), automatic beacons only
+// support a few specified types. Once the event type string is validated in
+// setReportEventDataForAutomaticBeacons(), they are converted into an enum
+// and used as the key in the automatic beacon info mapping stored in the
+// browser.
+enum AutomaticBeaconType {
+  kDeprecatedTopNavigation,
+  kTopNavigationStart,
+  kTopNavigationCommit
 };
 
 union PotentiallyOpaqueURL {
@@ -82,7 +94,7 @@ union PotentiallyOpaqueURNConfigVector {
 };
 
 struct SharedStorageBudgetMetadata {
-  url.mojom.Origin origin;
+  network.mojom.SchemefulSite site;
   double budget_to_charge;
   bool top_navigated;
 };

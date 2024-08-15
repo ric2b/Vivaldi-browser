@@ -24,14 +24,28 @@ const char kDefaultSearchProviderGUID[] = "default_search_provider.guid";
 const char kSyncedDefaultSearchProviderGUID[] =
     "default_search_provider.synced_guid";
 
-// Windows epoch timestamp in seconds of when the user chose a search engine in
+// Epoch timestamp in seconds of when the user chose a search engine in
 // the choice screen.
 const char kDefaultSearchProviderChoiceScreenCompletionTimestamp[] =
     "default_search_provider.choice_screen_completion_timestamp";
 
+// Random number to use as a profile-constant seed for the random shuffling of
+// the choice screen elements.
+const char kDefaultSearchProviderChoiceScreenRandomShuffleSeed[] =
+    "default_search_provider.choice_screen_random_shuffle_seed";
+
 // Whether a search context menu item is allowed.
 const char kDefaultSearchProviderContextMenuAccessAllowed[] =
     "default_search_provider.context_menu_access_allowed";
+
+// Whether the prepopulated data from which the keywords were loaded is the
+// extended list that is not limited to just 5 engines.
+// This pref helps versioning the keyword data in an orthogonal way from the
+// prepopulated data version numbers, as this is dependent on runtime feature
+// state.
+// TODO(b/304947278): Deprecate when the SearchEngineChoice feature launches.
+const char kDefaultSearchProviderKeywordsUseExtendedList[] =
+    "default_search_provider.keywords_use_extended_list";
 
 // Whether having a default search provider is enabled.
 const char kDefaultSearchProviderEnabled[] =
@@ -44,5 +58,10 @@ const char kSearchProviderOverrides[] = "search_provider_overrides";
 // The format version for the dictionary above.
 const char kSearchProviderOverridesVersion[] =
     "search_provider_overrides_version";
+
+// Path to the profile selected to show the search engine choice prompt.
+// NOTE: Unlike most of the other preferences here, this one is stored in the
+// local state, not the profile prefs.
+const char kSearchEnginesChoiceProfile[] = "search_engines.choice_profile";
 
 }  // namespace prefs

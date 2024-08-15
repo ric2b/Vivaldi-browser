@@ -6,8 +6,8 @@
 #define ASH_GAME_DASHBOARD_GAME_DASHBOARD_TOOLBAR_VIEW_H_
 
 #include "ash/ash_export.h"
+#include "ash/public/cpp/arc_game_controls_flag.h"
 #include "base/memory/raw_ptr.h"
-#include "ui/aura/window_observer.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/layout/box_layout_view.h"
 
@@ -20,8 +20,7 @@ class ToolbarDragHandler;
 // GameDashboardToolbarView is the movable toolbar that's attached to the game
 // window. It contains various quick action tiles for users to access without
 // having to open the entire main menu view.
-class ASH_EXPORT GameDashboardToolbarView : public views::BoxLayoutView,
-                                            public aura::WindowObserver {
+class ASH_EXPORT GameDashboardToolbarView : public views::BoxLayoutView {
  public:
   METADATA_HEADER(GameDashboardToolbarView);
 
@@ -45,6 +44,10 @@ class ASH_EXPORT GameDashboardToolbarView : public views::BoxLayoutView,
 
   // Handles completion of the toolbar movement.
   void EndDraggingToolbar(const gfx::Vector2d& offset);
+
+  // Updates this view's widget visibility. If it is visible, updates
+  // game_controls_button_'s state, and the tooltip text according to flags.
+  void UpdateViewForGameControls(ArcGameControlsFlag flags);
 
   // views::View:
   bool OnKeyPressed(const ui::KeyEvent& event) override;
@@ -82,11 +85,6 @@ class ASH_EXPORT GameDashboardToolbarView : public views::BoxLayoutView,
   // true, then the button will change to a stop button, otherwise it will show
   // the default UI.
   void UpdateRecordGameButton(bool is_recording_game_window);
-
-  // aura::WindowObserver:
-  void OnWindowPropertyChanged(aura::Window* window,
-                               const void* key,
-                               intptr_t old) override;
 
   // The topmost `IconButton` in the toolbar's collection, which stays visible
   // in both the expanded and collapsed toolbar states.

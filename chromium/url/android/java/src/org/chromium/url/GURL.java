@@ -11,11 +11,12 @@ import androidx.annotation.Nullable;
 
 import com.google.errorprone.annotations.DoNotMock;
 
+import org.jni_zero.CalledByNative;
+import org.jni_zero.JNINamespace;
+import org.jni_zero.NativeMethods;
+
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.annotations.JNINamespace;
-import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.PostTask;
@@ -135,8 +136,6 @@ public class GURL {
     @CalledByNative
     private void init(String spec, boolean isValid, Parsed parsed) {
         mSpec = spec;
-        // Ensure that the spec only contains US-ASCII or the parsed indices will be wrong.
-        assert mSpec.matches("\\A\\p{ASCII}*\\z");
         mIsValid = isValid;
         mParsed = parsed;
     }
@@ -265,6 +264,36 @@ public class GURL {
      */
     public boolean domainIs(String domain) {
         return getNatives().domainIs(mSpec, mIsValid, mParsed.toNativeParsed(), domain);
+    }
+
+    /**
+     * Returns a copy of the URL with components replaced. See native GURL::ReplaceComponents().
+     *
+     * <p>Rules for replacement: 1. If a `clear*` boolean param is true, the component will be
+     * removed from the result. 2. Otherwise if the corresponding string param is non-null, its
+     * value will be used to replace the component. 3. If the string is null and the `clear*`
+     * boolean is false, the component will not be modified.
+     *
+     * @param username Username replacement.
+     * @param clearUsername True if the result should not contain a username.
+     * @param password Password replacement.
+     * @param clearPassword True if the result should not contain a password.
+     * @return Copy of the URL with replacements applied.
+     */
+    public GURL replaceComponents(
+            String username, boolean clearUsername, String password, boolean clearPassword) {
+        GURL result = new GURL();
+        getNatives()
+                .replaceComponents(
+                        mSpec,
+                        mIsValid,
+                        mParsed.toNativeParsed(),
+                        username,
+                        clearUsername,
+                        password,
+                        clearPassword,
+                        result);
+        return result;
     }
 
     @Override
@@ -405,5 +434,19 @@ public class GURL {
          * Reconstructs the native GURL for this Java GURL, returning its native pointer.
          */
         long createNative(String spec, boolean isValid, long nativeParsed);
+
+        /**
+         * Reconstructs the native GURL for this Java GURL and initializes |result| with the result
+         * of ReplaceComponents.
+         */
+        void replaceComponents(
+                String spec,
+                boolean isValid,
+                long nativeParsed,
+                String username,
+                boolean clearUsername,
+                String password,
+                boolean clearPassword,
+                GURL result);
     }
 }

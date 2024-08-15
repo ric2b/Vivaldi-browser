@@ -10,9 +10,13 @@ base: core18
 assumes:
   - snapd2.43 # for 'snapctl is-connected', used in chrome.launcher
 
+architectures:
+  - build-on: [amd64]
+    run-on: [@@ARCHITECTURE@@]
+
 apps:
   @@SNAPNAME@@:
-    command: bin/desktop-launch "$SNAP/bin/chrome.launcher"
+    command: bin/desktop-launch "$SNAP/bin/vivaldi.launcher"
     desktop: bin/@@SNAPNAME@@.desktop
     environment:
       DISABLE_WAYLAND: 1
@@ -90,17 +94,17 @@ parts:
 
       # Launcher script
       mkdir -p $SNAPCRAFT_PART_INSTALL/bin
-      cp $SNAPCRAFT_PART_SRC/chrome.launcher $SNAPCRAFT_PART_INSTALL/bin/
+      cp $SNAPCRAFT_PART_SRC/vivaldi.launcher $SNAPCRAFT_PART_INSTALL/bin/
 
       # @@SNAPNAME@@ build artifacts (installed by stage_install_common)
-      cp -R $SNAPCRAFT_PART_SRC/chrome/* $SNAPCRAFT_PART_INSTALL/
+      cp -R $SNAPCRAFT_PART_SRC/vivaldi/* $SNAPCRAFT_PART_INSTALL/
 
       # Custom desktop file
       mkdir -p $SNAPCRAFT_PART_INSTALL/bin
       sed \
           -e "s:Exec=/usr/bin/:Exec=@@SNAPNAME@@:g" \
           -e "s:Icon=@@PACKAGE@@:Icon=@@INSTALLDIR@@/product_logo_256.png:" \
-          $SNAPCRAFT_PART_SRC/chrome/usr/share/applications/@@PACKAGE@@.desktop \
+          $SNAPCRAFT_PART_SRC/vivaldi/usr/share/applications/@@PACKAGE@@.desktop \
           > $SNAPCRAFT_PART_INSTALL/bin/@@SNAPNAME@@.desktop
     prime:
       - -etc/gss

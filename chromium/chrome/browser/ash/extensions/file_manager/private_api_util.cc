@@ -34,7 +34,7 @@
 #include "chrome/browser/ash/guest_os/public/types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/api/file_manager_private.h"
-#include "chromeos/ash/components/drivefs/drivefs_pin_manager.h"
+#include "chromeos/ash/components/drivefs/drivefs_pinning_manager.h"
 #include "chromeos/ash/components/drivefs/drivefs_util.h"
 #include "chromeos/ash/components/drivefs/mojom/drivefs.mojom.h"
 #include "chromeos/ash/components/drivefs/sync_status_tracker.h"
@@ -140,22 +140,20 @@ void GetSelectedFileInfoInternal(
         }
       }
     } else {
-      // Hosted docs can only accessed by navigating to their URLs. Get the
-      // metadata for the file from DriveFS and populate the |url| field in the
-      // SelectedFileInfo.
-      if (drive::util::HasHostedDocumentExtension(file_path)) {
-        auto* integration_service =
-            drive::util::GetIntegrationServiceByProfile(profile);
-        base::FilePath drive_mount_relative_path;
-        if (integration_service && integration_service->GetDriveFsInterface() &&
-            integration_service->GetRelativeDrivePath(
-                file_path, &drive_mount_relative_path)) {
-          integration_service->GetDriveFsInterface()->GetMetadata(
-              drive_mount_relative_path,
-              base::BindOnce(&ContinueGetSelectedFileInfoWithDriveFsMetadata,
-                             profile, std::move(params)));
-          return;
-        }
+      // Hosted docs and encrypted files can only accessed by navigating
+      // to their URLs. Get the metadata for the file from DriveFS and
+      // if needed populate the |url| field in the SelectedFileInfo.
+      auto* integration_service =
+          drive::util::GetIntegrationServiceByProfile(profile);
+      base::FilePath drive_mount_relative_path;
+      if (integration_service && integration_service->GetDriveFsInterface() &&
+          integration_service->GetRelativeDrivePath(
+              file_path, &drive_mount_relative_path)) {
+        integration_service->GetDriveFsInterface()->GetMetadata(
+            drive_mount_relative_path,
+            base::BindOnce(&ContinueGetSelectedFileInfoWithDriveFsMetadata,
+                           profile, std::move(params)));
+        return;
       }
       params->selected_files.emplace_back(file_path, file_path);
     }
@@ -204,7 +202,9 @@ void ContinueGetSelectedFileInfoWithDriveFsMetadata(
   const int index = params->selected_files.size();
   const auto& path = params->file_paths[index];
   params->selected_files.emplace_back(path, path);
-  if (metadata && drivefs::IsHosted(metadata->type) &&
+  if (metadata &&
+      (drivefs::IsHosted(metadata->type) ||
+       drive::util::IsEncryptedMimeType(metadata->content_mime_type)) &&
       !metadata->alternate_url.empty()) {
     params->selected_files.back().url.emplace(
         std::move(metadata->alternate_url));
@@ -283,7 +283,7 @@ bool IsBulkPinningEnabledForProfile(Profile* profile) {
       drive::prefs::kDriveFsBulkPinningEnabled);
 }
 
-drivefs::pinning::PinManager* GetPinManager(Profile* profile) {
+drivefs::pinning::PinningManager* GetPinningManager(Profile* profile) {
   if (!profile) {
     return nullptr;
   }
@@ -293,7 +293,7 @@ drivefs::pinning::PinManager* GetPinManager(Profile* profile) {
     return nullptr;
   }
 
-  return integration_service->GetPinManager();
+  return integration_service->GetPinningManager();
 }
 
 bool IsPathUnderMyDrive(const base::FilePath& relative_path) {
@@ -416,7 +416,7 @@ void SingleEntryPropertiesGetterForDriveFs::OnGetFileInfo(
       metadata->available_offline || *properties_->hosted;
   properties_->pinned = metadata->pinned;
 
-  if (drive::util::IsDriveFsBulkPinningEnabled(running_profile_)) {
+  if (drive::util::IsDriveFsBulkPinningAvailable(running_profile_)) {
     properties_->available_offline =
         (drivefs::IsHosted(metadata->type) &&
          !drive::util::IsPinnableGDocMimeType(metadata->content_mime_type))
@@ -427,19 +427,19 @@ void SingleEntryPropertiesGetterForDriveFs::OnGetFileInfo(
 
     if (IsBulkPinningEnabledForProfile(running_profile_) &&
         IsPathUnderMyDrive(relative_path_)) {
-      drivefs::pinning::PinManager* const pin_manager =
-          GetPinManager(running_profile_);
+      drivefs::pinning::PinningManager* const pinning_manager =
+          GetPinningManager(running_profile_);
 
       const auto stable_id =
-          drivefs::pinning::PinManager::Id(metadata->stable_id);
+          drivefs::pinning::PinningManager::Id(metadata->stable_id);
       if (properties_->sync_status ==
               file_manager_private::SYNC_STATUS_NOT_FOUND &&
-          pin_manager->IsTrackedAndUnpinned(stable_id)) {
-        // The `PinManager` maintains a list of 200 items that it pins, if the
-        // item is not within these 200 items it will eventually be pinned, but
-        // does not enter into a queued state just yet. This ensures the queued
-        // state is reflected for items that will be pinned but haven't called
-        // `SetPinned` yet.
+          pinning_manager->IsTrackedAndUnpinned(stable_id)) {
+        // The `PinningManager` maintains a list of 200 items that it pins, if
+        // the item is not within these 200 items it will eventually be pinned,
+        // but does not enter into a queued state just yet. This ensures the
+        // queued state is reflected for items that will be pinned but haven't
+        // called `SetPinned` yet.
         properties_->sync_status = file_manager_private::SYNC_STATUS_QUEUED;
       }
 
@@ -455,11 +455,12 @@ void SingleEntryPropertiesGetterForDriveFs::OnGetFileInfo(
   properties_->starred = metadata->starred;
 
   if (metadata->modification_time != base::Time()) {
-    properties_->modification_time = metadata->modification_time.ToJsTime();
+    properties_->modification_time =
+        metadata->modification_time.InMillisecondsFSinceUnixEpoch();
   }
   if (metadata->last_viewed_by_me_time != base::Time()) {
     properties_->modification_by_me_time =
-        metadata->last_viewed_by_me_time.ToJsTime();
+        metadata->last_viewed_by_me_time.InMillisecondsFSinceUnixEpoch();
   }
   if (!metadata->content_mime_type.empty()) {
     properties_->content_mime_type = metadata->content_mime_type;
@@ -802,6 +803,7 @@ fmp::BulkPinProgress BulkPinProgressToJs(
   result.remaining_seconds = !progress.remaining_time.is_inf()
                                  ? progress.remaining_time.InSecondsF()
                                  : 0;
+  result.should_pin = progress.should_pin;
   result.emptied_queue = progress.emptied_queue;
   return result;
 }

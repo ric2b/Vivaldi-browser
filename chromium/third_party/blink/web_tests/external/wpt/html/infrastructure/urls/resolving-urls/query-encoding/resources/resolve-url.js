@@ -199,7 +199,9 @@ onload = function() {
     subsetTestByKey('loading', async_test, function() {
       var elm = document.createElement(tag);
       var video_ext = '';
-      if (elm.canPlayType('video/ogg; codecs="theora,flac"')) {
+      if (elm.canPlayType('video/webm; codecs="vp9,opus"')) {
+        video_ext = 'webm';
+      } else if (elm.canPlayType('video/ogg; codecs="theora,flac"')) {
         video_ext = 'ogv';
       } else if (elm.canPlayType('video/mp4; codecs="avc1.42E01E,mp4a.40.2"')) {
         video_ext = 'mp4';
@@ -499,7 +501,7 @@ onload = function() {
     var xhr = new XMLHttpRequest();
     xhr.open('GET', input_url_html);
     xhr.onload = this.step_func_done(function() {
-      assert_equals(xhr.response, expected_utf8);
+      assert_equals(xhr.response, expected_current);
     });
     xhr.send();
   }, 'XMLHttpRequest#open()');

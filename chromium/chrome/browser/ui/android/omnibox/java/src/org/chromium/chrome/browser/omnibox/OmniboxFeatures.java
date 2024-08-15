@@ -16,10 +16,7 @@ import org.chromium.chrome.browser.flags.MutableFlagWithSafeDefault;
 import org.chromium.components.browser_ui.util.ConversionUtils;
 import org.chromium.ui.base.DeviceFormFactor;
 
-/**
- * This is the place where we define these:
- *   List of Omnibox features and parameters.
- */
+/** This is the place where we define these: List of Omnibox features and parameters. */
 public class OmniboxFeatures {
     // Threshold for low RAM devices. We won't be showing suggestion images
     // on devices that have less RAM than this to avoid bloat and reduce user-visible
@@ -32,34 +29,43 @@ public class OmniboxFeatures {
     private static Boolean sIsLowMemoryDevice;
 
     public static final BooleanCachedFieldTrialParameter ENABLE_MODERNIZE_VISUAL_UPDATE_ON_TABLET =
-            new BooleanCachedFieldTrialParameter(ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE,
-                    "enable_modernize_visual_update_on_tablet", false);
+            new BooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE,
+                    "enable_modernize_visual_update_on_tablet",
+                    false);
 
     public static final BooleanCachedFieldTrialParameter
-            MODERNIZE_VISUAL_UPDATE_ACTIVE_COLOR_ON_OMNIBOX = new BooleanCachedFieldTrialParameter(
-                    ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE,
-                    "modernize_visual_update_active_color_on_omnibox", false);
+            MODERNIZE_VISUAL_UPDATE_ACTIVE_COLOR_ON_OMNIBOX =
+                    new BooleanCachedFieldTrialParameter(
+                            ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE,
+                            "modernize_visual_update_active_color_on_omnibox",
+                            true);
 
     public static final BooleanCachedFieldTrialParameter
-            MODERNIZE_VISUAL_UPDATE_SMALL_BOTTOM_MARGIN = new BooleanCachedFieldTrialParameter(
-                    ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE,
-                    "modernize_visual_update_small_bottom_margin", false);
+            MODERNIZE_VISUAL_UPDATE_SMALL_BOTTOM_MARGIN =
+                    new BooleanCachedFieldTrialParameter(
+                            ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE,
+                            "modernize_visual_update_small_bottom_margin",
+                            false);
 
     public static final BooleanCachedFieldTrialParameter MODERNIZE_VISUAL_UPDATE_SMALLER_MARGINS =
-            new BooleanCachedFieldTrialParameter(ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE,
-                    "modernize_visual_update_smaller_margins", false);
+            new BooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE,
+                    "modernize_visual_update_smaller_margins",
+                    false);
 
     public static final BooleanCachedFieldTrialParameter MODERNIZE_VISUAL_UPDATE_SMALLEST_MARGINS =
-            new BooleanCachedFieldTrialParameter(ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE,
-                    "modernize_visual_update_smallest_margins", false);
+            new BooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE,
+                    "modernize_visual_update_smallest_margins",
+                    true);
 
     public static final BooleanCachedFieldTrialParameter
-            MODERNIZE_VISUAL_UPDATE_MERGE_CLIPBOARD_ON_NTP = new BooleanCachedFieldTrialParameter(
-                    ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE,
-                    "modernize_visual_update_merge_clipboard_on_ntp", false);
-    private static final MutableFlagWithSafeDefault sShouldAdaptToNarrowTabletWindows =
-            new MutableFlagWithSafeDefault(
-                    ChromeFeatureList.OMNIBOX_ADAPT_NARROW_TABLET_WINDOWS, false);
+            MODERNIZE_VISUAL_UPDATE_MERGE_CLIPBOARD_ON_NTP =
+                    new BooleanCachedFieldTrialParameter(
+                            ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE,
+                            "modernize_visual_update_merge_clipboard_on_ntp",
+                            true);
 
     private static final MutableFlagWithSafeDefault sJourneysActionChipFlag =
             new MutableFlagWithSafeDefault(
@@ -70,11 +76,10 @@ public class OmniboxFeatures {
 
     private static final MutableFlagWithSafeDefault sCacheSuggestionResources =
             new MutableFlagWithSafeDefault(
-                    ChromeFeatureList.OMNIBOX_CACHE_SUGGESTION_RESOURCES, false);
+                    ChromeFeatureList.OMNIBOX_CACHE_SUGGESTION_RESOURCES, true);
 
     private static final MutableFlagWithSafeDefault sWarmRecycledViewPoolFlag =
-            new MutableFlagWithSafeDefault(
-                    ChromeFeatureList.OMNIBOX_WARM_RECYCLED_VIEW_POOL, false);
+            new MutableFlagWithSafeDefault(ChromeFeatureList.OMNIBOX_WARM_RECYCLED_VIEW_POOL, true);
 
     private static final MutableFlagWithSafeDefault sNoopEditUrlSuggestionClicks =
             new MutableFlagWithSafeDefault(
@@ -115,24 +120,14 @@ public class OmniboxFeatures {
     }
 
     /**
-     * Returns whether the omnibox dropdown should be switched to a phone-like appearance when the
-     * window width is <600dp.
-     */
-    public static boolean shouldAdaptToNarrowTabletWindows() {
-        return sShouldAdaptToNarrowTabletWindows.isEnabled();
-    }
-
-    /**
      * @return Whether to show an active color for Omnibox which has a different background color
-     *         than toolbar.
+     *     than toolbar.
      */
     public static boolean shouldShowActiveColorOnOmnibox() {
         return MODERNIZE_VISUAL_UPDATE_ACTIVE_COLOR_ON_OMNIBOX.getValue();
     }
 
-    /**
-     * Returns whether the margin between groups should be "small" in the visual update.
-     */
+    /** Returns whether the margin between groups should be "small" in the visual update. */
     public static boolean shouldShowSmallBottomMargin() {
         return MODERNIZE_VISUAL_UPDATE_SMALL_BOTTOM_MARGIN.getValue();
     }
@@ -169,9 +164,7 @@ public class OmniboxFeatures {
         return ENABLE_MODERNIZE_VISUAL_UPDATE_ON_TABLET.getValue();
     }
 
-    /**
-     * Returns whether the toolbar and status bar color should be matched.
-     */
+    /** Returns whether the toolbar and status bar color should be matched. */
     public static boolean shouldMatchToolbarAndStatusBarColor() {
         return ChromeFeatureList.sOmniboxMatchToolbarAndStatusBarColor.isEnabled();
     }
@@ -206,9 +199,10 @@ public class OmniboxFeatures {
      */
     public static boolean isLowMemoryDevice() {
         if (sIsLowMemoryDevice == null) {
-            sIsLowMemoryDevice = (SysUtils.amountOfPhysicalMemoryKB() < LOW_MEMORY_THRESHOLD_KB
-                    && !CommandLine.getInstance().hasSwitch(
-                            BaseSwitches.DISABLE_LOW_END_DEVICE_MODE));
+            sIsLowMemoryDevice =
+                    (SysUtils.amountOfPhysicalMemoryKB() < LOW_MEMORY_THRESHOLD_KB
+                            && !CommandLine.getInstance()
+                                    .hasSwitch(BaseSwitches.DISABLE_LOW_END_DEVICE_MODE));
         }
         return sIsLowMemoryDevice;
     }
@@ -251,12 +245,11 @@ public class OmniboxFeatures {
         }
         return ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
                 ChromeFeatureList.OMNIBOX_TOUCH_DOWN_TRIGGER_FOR_PREFETCH,
-                "max_prefetches_per_omnibox_session", DEFAULT_MAX_PREFETCHES_PER_OMNIBOX_SESSION);
+                "max_prefetches_per_omnibox_session",
+                DEFAULT_MAX_PREFETCHES_PER_OMNIBOX_SESSION);
     }
 
-    /**
-     * Returns whether the visible url in the url bar should be truncated.
-     */
+    /** Returns whether the visible url in the url bar should be truncated. */
     public static boolean shouldTruncateVisibleUrl() {
         return sVisibleUrlTruncationFlag.isEnabled();
     }
@@ -264,7 +257,7 @@ public class OmniboxFeatures {
     /**
      * @param context The activity context.
      * @return Whether to calculate the visible hint. We always calculate the visible hint, except
-     * on tablets that have sNoVisibleHintForTablets enabled.
+     *     on tablets that have sNoVisibleHintForTablets enabled.
      */
     public static boolean shouldCalculateVisibleHint(Context context) {
         return !(isTablet(context) && sNoVisibleHintForTablets.isEnabled());

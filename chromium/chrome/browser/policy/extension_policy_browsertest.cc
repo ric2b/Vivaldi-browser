@@ -11,7 +11,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "base/strings/stringprintf.h"
+#include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/gtest_tags.h"
@@ -322,8 +322,9 @@ class ExtensionPolicyTest : public ExtensionPolicyTestBase {
     // Setting the forcelist extension should install extension with ExtensionId
     // equal to id.
     base::Value::List forcelist;
-    forcelist.Append(base::StringPrintf(update_url.is_empty() ? "%s" : "%s;%s",
-                                        id.c_str(), update_url.spec().c_str()));
+    forcelist.Append(update_url.is_empty()
+                         ? id
+                         : base::StrCat({id, ";", update_url.spec()}));
     policies->Set(key::kExtensionInstallForcelist, POLICY_LEVEL_MANDATORY,
                   POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
                   base::Value(std::move(forcelist)), nullptr);
@@ -2266,7 +2267,7 @@ IN_PROC_BROWSER_TEST_F(WebAppInstallForceListPolicyTest, StartUpInstallation) {
       web_app::WebAppProvider::GetForTest(browser()->profile())
           ->registrar_unsafe();
   web_app::WebAppTestInstallObserver install_observer(browser()->profile());
-  absl::optional<web_app::AppId> app_id =
+  absl::optional<webapps::AppId> app_id =
       registrar.FindAppWithUrlInScope(policy_app_url_);
   if (!app_id)
     app_id = install_observer.BeginListeningAndWait();
@@ -2298,7 +2299,7 @@ IN_PROC_BROWSER_TEST_F(
       web_app::WebAppProvider::GetForTest(browser()->profile())
           ->registrar_unsafe();
   web_app::WebAppTestInstallObserver install_observer(browser()->profile());
-  absl::optional<web_app::AppId> app_id =
+  absl::optional<webapps::AppId> app_id =
       registrar.FindAppWithUrlInScope(policy_app_url_);
   if (!app_id)
     app_id = install_observer.BeginListeningAndWait();
@@ -2330,7 +2331,7 @@ IN_PROC_BROWSER_TEST_F(WebAppInstallForceListPolicySAATest,
       web_app::WebAppProvider::GetForTest(browser()->profile())
           ->registrar_unsafe();
   web_app::WebAppTestInstallObserver install_observer(browser()->profile());
-  absl::optional<web_app::AppId> app_id =
+  absl::optional<webapps::AppId> app_id =
       registrar.FindAppWithUrlInScope(policy_app_url_);
   if (!app_id)
     app_id = install_observer.BeginListeningAndWait();
@@ -2359,7 +2360,7 @@ IN_PROC_BROWSER_TEST_F(WebAppInstallForceListPolicyWithAppFallbackNameSAATest,
       web_app::WebAppProvider::GetForTest(browser()->profile())
           ->registrar_unsafe();
   web_app::WebAppTestInstallObserver install_observer(browser()->profile());
-  absl::optional<web_app::AppId> app_id =
+  absl::optional<webapps::AppId> app_id =
       registrar.FindAppWithUrlInScope(policy_app_url_);
   if (!app_id)
     app_id = install_observer.BeginListeningAndWait();
@@ -2393,7 +2394,7 @@ IN_PROC_BROWSER_TEST_F(
           ->registrar_unsafe();
   web_app::WebAppTestInstallWithOsHooksObserver install_observer(
       browser()->profile());
-  absl::optional<web_app::AppId> app_id =
+  absl::optional<webapps::AppId> app_id =
       registrar.FindAppWithUrlInScope(policy_app_url_);
   if (!app_id)
     app_id = install_observer.BeginListeningAndWait();

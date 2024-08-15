@@ -45,10 +45,12 @@
 #include "extensions/browser/pref_names.h"
 #include "extensions/common/api/types.h"
 #include "extensions/common/constants.h"
+#include "extensions/common/extension.h"
 #include "extensions/common/extension_features.h"
 #include "extensions/common/extension_id.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_handlers/app_display_info.h"
+#include "extensions/common/mojom/manifest.mojom-shared.h"
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/permissions_info.h"
 #include "extensions/common/url_pattern.h"
@@ -567,6 +569,9 @@ void ExtensionPrefs::UpdateExtensionPrefInternal(
   DCHECK(crx_file::id_util::IdIsValid(extension_id));
   ScopedExtensionPrefUpdate update(prefs_, extension_id);
   update->Set(pref.name, std::move(data_value));
+  for (auto& observer : observer_list_) {
+    observer.OnExtensionPrefsUpdated(extension_id);
+  }
 }
 
 void ExtensionPrefs::UpdateExtensionPref(
@@ -582,6 +587,9 @@ void ExtensionPrefs::UpdateExtensionPref(
     update->Set(key, *std::move(data_value));
   } else {
     update->Remove(key);
+  }
+  for (auto& observer : observer_list_) {
+    observer.OnExtensionPrefsUpdated(extension_id);
   }
 }
 
@@ -1482,6 +1490,16 @@ absl::optional<ExtensionInfo> ExtensionPrefs::GetInstalledInfoHelper(
     // Just a warning for now.
   }
 
+  // Extensions with login screen context can only be policy extensions.
+  // However, the manifest location in the pref store could get corrupted
+  // (crbug.com/1466188). Thus, we don't construct the extension info for these
+  // cases.
+  int flags = GetCreationFlags(extension_id);
+  if (!Manifest::IsPolicyLocation(location) &&
+      flags & Extension::FOR_LOGIN_SCREEN) {
+    return absl::nullopt;
+  }
+
   const std::string* path = extension.FindString(kPrefPath);
   if (!path) {
     return absl::nullopt;
@@ -2254,6 +2272,7 @@ void ExtensionPrefs::RegisterProfilePrefs(
   registry->RegisterBooleanPref(pref_names::kBlockExternalExtensions, false);
   registry->RegisterIntegerPref(pref_names::kExtensionUnpublishedAvailability,
                                 0);
+  registry->RegisterListPref(pref_names::kExtensionInstallTypeBlocklist);
 }
 
 template <class ExtensionIdContainer>

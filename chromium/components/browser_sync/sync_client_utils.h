@@ -12,10 +12,6 @@
 #include "base/functional/callback.h"
 #include "components/sync/base/model_type.h"
 
-namespace bookmarks {
-class BookmarkModel;
-}  // namespace bookmarks
-
 namespace password_manager {
 class PasswordStoreInterface;
 }  // namespace password_manager
@@ -24,7 +20,9 @@ namespace reading_list {
 class DualReadingListModel;
 }  // namespace reading_list
 
-class ReadingListModel;
+namespace sync_bookmarks {
+class BookmarkSyncService;
+}  // namespace sync_bookmarks
 
 namespace syncer {
 struct LocalDataDescription;
@@ -34,12 +32,16 @@ namespace browser_sync {
 
 // Helper class to query information about existing local data (like count,
 // domains etc.) for requested data types.
+// TODO(crbug.com/1489660): Look into reducing code duplicacy between
+// LocalDataQueryHelper and LocalDataMigrationHelper.
 class LocalDataQueryHelper {
  public:
-  explicit LocalDataQueryHelper(
+  LocalDataQueryHelper(
       password_manager::PasswordStoreInterface* profile_password_store,
-      bookmarks::BookmarkModel* local_bookmark_model,
-      ReadingListModel* local_reading_list_model);
+      password_manager::PasswordStoreInterface* account_password_store,
+      sync_bookmarks::BookmarkSyncService* local_bookmark_sync_service,
+      sync_bookmarks::BookmarkSyncService* account_bookmark_sync_service,
+      reading_list::DualReadingListModel* dual_reading_list_model);
   ~LocalDataQueryHelper();
 
   // Queries the count and description/preview of existing local data for
@@ -64,10 +66,12 @@ class LocalDataQueryHelper {
 
   // For PASSWORDS.
   raw_ptr<password_manager::PasswordStoreInterface> profile_password_store_;
+  raw_ptr<password_manager::PasswordStoreInterface> account_password_store_;
   // For BOOKMARKS.
-  raw_ptr<bookmarks::BookmarkModel> local_bookmark_model_;
+  raw_ptr<sync_bookmarks::BookmarkSyncService> local_bookmark_sync_service_;
+  raw_ptr<sync_bookmarks::BookmarkSyncService> account_bookmark_sync_service_;
   // For READING_LIST.
-  raw_ptr<ReadingListModel> local_reading_list_model_;
+  raw_ptr<reading_list::DualReadingListModel> dual_reading_list_model_;
 };
 
 // Helper class to move all local data to account for the requested data types.
@@ -76,8 +80,8 @@ class LocalDataMigrationHelper {
   LocalDataMigrationHelper(
       password_manager::PasswordStoreInterface* profile_password_store,
       password_manager::PasswordStoreInterface* account_password_store,
-      bookmarks::BookmarkModel* local_bookmark_model,
-      bookmarks::BookmarkModel* account_bookmark_model,
+      sync_bookmarks::BookmarkSyncService* local_bookmark_sync_service,
+      sync_bookmarks::BookmarkSyncService* account_bookmark_sync_service,
       reading_list::DualReadingListModel* dual_reading_list_model);
   ~LocalDataMigrationHelper();
 
@@ -99,8 +103,8 @@ class LocalDataMigrationHelper {
   raw_ptr<password_manager::PasswordStoreInterface> profile_password_store_;
   raw_ptr<password_manager::PasswordStoreInterface> account_password_store_;
   // For BOOKMARKS.
-  raw_ptr<bookmarks::BookmarkModel> local_bookmark_model_;
-  raw_ptr<bookmarks::BookmarkModel> account_bookmark_model_;
+  raw_ptr<sync_bookmarks::BookmarkSyncService> local_bookmark_sync_service_;
+  raw_ptr<sync_bookmarks::BookmarkSyncService> account_bookmark_sync_service_;
   // For READING_LIST.
   raw_ptr<reading_list::DualReadingListModel> dual_reading_list_model_;
 };

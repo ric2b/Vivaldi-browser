@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/containers/cxx20_erase.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/root_window_controller.h"
 #include "ash/scoped_animation_disabler.h"
@@ -33,7 +34,6 @@
 #include "base/containers/contains.h"
 #include "base/memory/raw_ptr.h"
 #include "chromeos/ui/base/window_properties.h"
-#include "chromeos/ui/wm/features.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
@@ -212,10 +212,8 @@ void TabletModeWindowManager::Init() {
   accounts_since_entering_tablet_.insert(
       Shell::Get()->session_controller()->GetActiveAccountId());
   event_handler_ = std::make_unique<TabletModeToggleFullscreenEventHandler>();
-  if (chromeos::wm::features::IsWindowLayoutMenuEnabled()) {
-    tablet_mode_multitask_menu_controller_ =
-        std::make_unique<TabletModeMultitaskMenuController>();
-  }
+  tablet_mode_multitask_menu_controller_ =
+      std::make_unique<TabletModeMultitaskMenuController>();
 }
 
 void TabletModeWindowManager::Shutdown() {
@@ -549,12 +547,10 @@ TabletModeWindowManager::GetCarryOverWindowsInSplitView(
   // IsCarryOverCandidateForSplitView() to be carried over to splitscreen.
   MruWindowTracker::WindowList mru_windows =
       Shell::Get()->mru_window_tracker()->BuildWindowForCycleList(kActiveDesk);
-  mru_windows.erase(std::remove_if(mru_windows.begin(), mru_windows.end(),
-                                   [](aura::Window* window) {
-                                     return window->GetProperty(
-                                         chromeos::kIsShowingInOverviewKey);
-                                   }),
-                    mru_windows.end());
+  base::EraseIf(mru_windows, [](aura::Window* window) {
+        return window->GetProperty(
+                chromeos::kIsShowingInOverviewKey);
+    });
   aura::Window* root_window = Shell::GetPrimaryRootWindow();
   if (IsCarryOverCandidateForSplitView(mru_windows, 0u, root_window)) {
     if (GetWindowStateType(mru_windows[0], clamshell_to_tablet) ==

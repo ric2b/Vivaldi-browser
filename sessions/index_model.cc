@@ -253,6 +253,7 @@ bool Index_Model::Swap(Index_Node* node_a, Index_Node* node_b) {
 bool Index_Model::Remove(Index_Node* node) {
   int64_t id = node->id();
   Index_Node* parent = node->parent();
+  bool was_container = parent->is_container();
   int index = parent->GetIndexOf(node).value();
   parent->Remove(index);
 
@@ -267,6 +268,14 @@ bool Index_Model::Remove(Index_Node* node) {
   if (loaded_) {
     for (auto& observer : observers_)
       observer.IndexModelNodeRemoved(this, id);
+    // The container state depends on the number of children. If none are
+    // left we want to notify the parent has changes as well. Failing to do so
+    // can be seen as a wrongly shown child indicator in the UI when updating
+    // autosave data.
+    if (was_container && !parent->is_container()) {
+      for (auto& observer : observers_)
+        observer.IndexModelNodeChanged(this, parent);
+    }
   }
 
   return true;

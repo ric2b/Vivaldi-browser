@@ -129,10 +129,6 @@ IN_PROC_BROWSER_TEST_F(FileManagerJsTest, FilesDisplayPanel) {
   RunTestURL("foreground/elements/files_xf_elements_unittest.js");
 }
 
-IN_PROC_BROWSER_TEST_F(FileManagerJsTest, FilesPasswordDialog) {
-  RunTestURL("foreground/elements/files_password_dialog_unittest.js");
-}
-
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, FilesToast) {
   RunTestURL("foreground/elements/files_toast_unittest.js");
 }
@@ -283,6 +279,10 @@ IN_PROC_BROWSER_TEST_F(FileManagerJsTest, ThumbnailModel) {
   RunTestURL("foreground/js/metadata/thumbnail_model_unittest.js");
 }
 
+IN_PROC_BROWSER_TEST_F(FileManagerJsTest, TranslationsTest) {
+  RunTestURL("common/js/translations_unittest.js");
+}
+
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, UtilTest) {
   RunTestURL("common/js/util_unittest.js");
 }
@@ -323,51 +323,55 @@ IN_PROC_BROWSER_TEST_F(FileManagerJsTest, BaseStore) {
   RunTestURL("lib/base_store_unittest.js");
 }
 
+IN_PROC_BROWSER_TEST_F(FileManagerJsTest, Selector) {
+  RunTestURL("lib/selector_unittest.js");
+}
+
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, DucksAllEntries) {
   RunTestURL("state/ducks/all_entries_unittest.js");
 }
 
-IN_PROC_BROWSER_TEST_F(FileManagerJsTest, ReducerAndroidApps) {
+IN_PROC_BROWSER_TEST_F(FileManagerJsTest, DucksAndroidApps) {
   RunTestURL("state/ducks/android_apps_unittest.js");
 }
 
-IN_PROC_BROWSER_TEST_F(FileManagerJsTest, ReducerDevice) {
+IN_PROC_BROWSER_TEST_F(FileManagerJsTest, DucksDevice) {
   RunTestURL("state/ducks/device_unittest.js");
 }
 
-IN_PROC_BROWSER_TEST_F(FileManagerJsTest, ReducerDrive) {
+IN_PROC_BROWSER_TEST_F(FileManagerJsTest, DucksDrive) {
   RunTestURL("state/ducks/drive_unittest.js");
 }
 
-IN_PROC_BROWSER_TEST_F(FileManagerJsTest, ReducerFolderShortcuts) {
+IN_PROC_BROWSER_TEST_F(FileManagerJsTest, DucksFolderShortcuts) {
   RunTestURL("state/ducks/folder_shortcuts_unittest.js");
 }
 
-IN_PROC_BROWSER_TEST_F(FileManagerJsTest, ReducerCurrentDirectory) {
+IN_PROC_BROWSER_TEST_F(FileManagerJsTest, DucksCurrentDirectory) {
   RunTestURL("state/ducks/current_directory_unittest.js");
 }
 
-IN_PROC_BROWSER_TEST_F(FileManagerJsTest, ReducerNavigation) {
+IN_PROC_BROWSER_TEST_F(FileManagerJsTest, DucksNavigation) {
   RunTestURL("state/ducks/navigation_unittest.js");
 }
 
-IN_PROC_BROWSER_TEST_F(FileManagerJsTest, ReducerSearch) {
+IN_PROC_BROWSER_TEST_F(FileManagerJsTest, DucksSearch) {
   RunTestURL("state/ducks/search_unittest.js");
 }
 
-IN_PROC_BROWSER_TEST_F(FileManagerJsTest, ReducerUiEntries) {
+IN_PROC_BROWSER_TEST_F(FileManagerJsTest, DucksUiEntries) {
   RunTestURL("state/ducks/ui_entries_unittest.js");
 }
 
-IN_PROC_BROWSER_TEST_F(FileManagerJsTest, ReducerVolumes) {
+IN_PROC_BROWSER_TEST_F(FileManagerJsTest, DucksVolumes) {
   RunTestURL("state/ducks/volumes_unittest.js");
 }
 
-IN_PROC_BROWSER_TEST_F(FileManagerJsTest, ReducerBulkPinning) {
+IN_PROC_BROWSER_TEST_F(FileManagerJsTest, DucksBulkPinning) {
   RunTestURL("state/ducks/bulk_pinning_unittest.js");
 }
 
-IN_PROC_BROWSER_TEST_F(FileManagerJsTest, ReducerPreferences) {
+IN_PROC_BROWSER_TEST_F(FileManagerJsTest, DucksPreferences) {
   RunTestURL("state/ducks/preferences_unittest.js");
 }
 
@@ -397,6 +401,10 @@ IN_PROC_BROWSER_TEST_F(FileManagerJsTest, XfDlpRestrictionDetailsDialog) {
 
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, XfNudge) {
   RunTestURL("widgets/xf_nudge_unittest.js");
+}
+
+IN_PROC_BROWSER_TEST_F(FileManagerJsTest, XfPasswordDialog) {
+  RunTestURL("widgets/xf_password_dialog_unittest.js");
 }
 
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, XfSelect) {

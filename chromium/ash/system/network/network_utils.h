@@ -30,7 +30,8 @@ enum class DetailedViewSection {
   kMobileSection = 1,
   kEthernetSection = 2,
   kDetailedSection = 3,
-  kMaxValue = kDetailedSection
+  kTetherHostsSection = 4,
+  kMaxValue = kTetherHostsSection
 };
 
 enum NetworkDetailedViewListType { LIST_TYPE_NETWORK, LIST_TYPE_VPN };
@@ -43,8 +44,7 @@ ASH_EXPORT void RecordNetworkTypeToggled(
     chromeos::network_config::mojom::NetworkType network_type,
     bool new_state);
 
-// Returns the add esim button (`kQsRevamp` disabled) or add esim entry
-// (`kQsRevamp` enabled) tooltip message id.
+// Returns the add esim entry tooltip message id.
 ASH_EXPORT int GetAddESimTooltipMessageId();
 
 // Returns the subtext to display for a connected network in a portal state.

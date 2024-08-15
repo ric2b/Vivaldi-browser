@@ -100,6 +100,8 @@ void MediaFoundationRendererClient::Initialize(MediaResource* media_resource,
   // Frame Server mode. This behavior must match the logic in
   // MediaFoundationRenderer::Initialize.
   rendering_strategy_ = kMediaFoundationClearRenderingStrategyParam.Get();
+  LogRenderingStrategy();
+
   rendering_mode_ =
       rendering_strategy_ ==
               MediaFoundationClearRenderingStrategy::kDirectComposition
@@ -377,6 +379,11 @@ void MediaFoundationRendererClient::OnFrameAvailable(
   scoped_refptr<VideoFrame> frame = VideoFrame::WrapVideoFrame(
       texture_pool_video_frame, texture_pool_video_frame->format(),
       gfx::Rect(size), size);
+  if (!frame) {
+    MEDIA_LOG(WARNING, media_log_)
+        << "OnFrameAvailable failed to wrap a VideoFrame";
+    return;
+  }
   frame->metadata().wants_promotion_hint = true;
   frame->metadata().allow_overlay = true;
   frame->AddDestructionObserver(base::BindPostTask(
@@ -686,6 +693,27 @@ void MediaFoundationRendererClient::OnPaintComplete(
     const base::UnguessableToken& token) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
   renderer_extension_->NotifyFrameReleased(token);
+}
+
+void MediaFoundationRendererClient::LogRenderingStrategy() {
+  std::string strategy;
+  switch (rendering_strategy_) {
+    case MediaFoundationClearRenderingStrategy::kDirectComposition:
+      strategy = "Direct Composition";
+      break;
+    case MediaFoundationClearRenderingStrategy::kFrameServer:
+      strategy = "Frame Server";
+      break;
+    case MediaFoundationClearRenderingStrategy::kDynamic:
+      strategy = "Dynamic";
+      break;
+    default:
+      strategy = "Unknown";
+      break;
+  }
+
+  MEDIA_LOG(INFO, media_log_)
+      << "MediaFoundationRenderingStrategy: " << strategy;
 }
 
 }  // namespace media

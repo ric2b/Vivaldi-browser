@@ -32,6 +32,8 @@ void RegisterNearbySharedStrings(content::WebUIDataSource* data_source) {
       {"nearbyShareContactVisibilityAll", IDS_NEARBY_VISIBLITY_ALL_CONTACTS},
       {"nearbyShareContactVisibilityAllDescription",
        IDS_NEARBY_VISIBLITY_ALL_CONTACTS_DESCRIPTION},
+      {"nearbyShareAllContactsToggle",
+       IDS_NEARBY_VISIBILITY_ALL_CONTACTS_TOGGLE},
       {"nearbyShareContactVisiblityContactsButton",
        IDS_NEARBY_VISIBILITY_CONTACTS_BUTTON},
       {"nearbyShareContactVisibilityDownloadFailed",
@@ -141,9 +143,8 @@ void RegisterNearbySharedStrings(content::WebUIDataSource* data_source) {
   data_source->AddLocalizedStrings(kLocalizedStrings);
 
   data_source->AddString("nearbyShareLearnMoreLink",
-                         base::ASCIIToUTF16(chrome::kNearbyShareLearnMoreURL));
+                         chrome::kNearbyShareLearnMoreURL);
 
-  data_source->AddString(
-      "nearbyShareManageContactsUrl",
-      base::ASCIIToUTF16(chrome::kNearbyShareManageContactsURL));
+  data_source->AddString("nearbyShareManageContactsUrl",
+                         chrome::kNearbyShareManageContactsURL);
 }

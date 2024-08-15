@@ -78,6 +78,7 @@
 #include "third_party/skia/include/gpu/GrBackendSemaphore.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
 #include "third_party/skia/include/gpu/GrDirectContext.h"
+#include "third_party/skia/include/gpu/GrTypes.h"
 #include "third_party/skia/include/gpu/GrYUVABackendTextures.h"
 #include "third_party/skia/include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "third_party/skia/include/gpu/graphite/Context.h"
@@ -98,6 +99,11 @@
 #if BUILDFLAG(IS_WIN)
 #include "gpu/command_buffer/service/shared_image/d3d_image_backing_factory.h"
 #endif  // BUILDFLAG(IS_WIN)
+
+#if BUILDFLAG(SKIA_USE_DAWN)
+#include <dawn/webgpu_cpp.h>
+#include "gpu/command_buffer/service/dawn_context_provider.h"
+#endif  // BUILDFLAG(USE_DAWN)
 
 // Local versions of the SET_GL_ERROR macros
 #define LOCAL_SET_GL_ERROR(error, function_name, msg) \
@@ -451,6 +457,7 @@ class RasterDecoderImpl final : public RasterDecoder,
     return feature_info();
   }
   Capabilities GetCapabilities() override;
+  GLCapabilities GetGLCapabilities() override;
   const gles2::ContextState* GetContextState() override;
 
   // TODO(penghuang): Remove unused context state related methods.
@@ -583,7 +590,6 @@ class RasterDecoderImpl final : public RasterDecoder,
     }
     return shared_context_state_->context_state();
   }
-  gl::GLApi* api() const { return api_; }
   GrDirectContext* gr_context() const {
     return shared_context_state_->gr_context();
   }
@@ -624,8 +630,10 @@ class RasterDecoderImpl final : public RasterDecoder,
     if (!flush_workaround_disabled_for_test_) {
       TRACE_EVENT0("gpu", "RasterDecoderImpl::FlushToWorkAroundMacCrashes");
       if (gr_context())
-        gr_context()->flushAndSubmit();
-      api()->glFlushFn();
+        gr_context()->flushAndSubmit(GrSyncCpu::kNo);
+
+      gl::GLApi* const api = gl::g_current_gl_context;
+      api->glFlushFn();
 
       // Flushes can be expensive, yield to allow interruption after each flush.
       ExitCommandProcessingEarly();
@@ -720,7 +728,11 @@ class RasterDecoderImpl final : public RasterDecoder,
                                         GLuint v_stride,
                                         const volatile GLbyte* mailbox);
 
-  void DoConvertYUVAMailboxesToRGBINTERNAL(GLenum yuv_color_space,
+  void DoConvertYUVAMailboxesToRGBINTERNAL(GLint src_x,
+                                           GLint src_y,
+                                           GLsizei width,
+                                           GLsizei height,
+                                           GLenum yuv_color_space,
                                            GLenum plane_config,
                                            GLenum subsampling,
                                            const volatile GLbyte* mailboxes);
@@ -739,6 +751,7 @@ class RasterDecoderImpl final : public RasterDecoder,
                              MsaaMode msaa_mode,
                              GLboolean can_use_lcd_text,
                              GLboolean visible,
+                             GLfloat hdr_headroom,
                              const volatile GLbyte* key);
   void DoRasterCHROMIUM(GLuint raster_shm_id,
                         GLuint raster_shm_offset,
@@ -844,7 +857,7 @@ class RasterDecoderImpl final : public RasterDecoder,
       // representation does not set semaphores, and we are not enabling DrDC
       // with Graphite.
       CHECK(gr_context());
-      gr_context()->submit(sync_cpu);
+      gr_context()->submit(sync_cpu ? GrSyncCpu::kYes : GrSyncCpu::kNo);
     }
   }
 
@@ -949,6 +962,7 @@ class RasterDecoderImpl final : public RasterDecoder,
       scoped_shared_image_raster_write_;
 
   raw_ptr<SkSurface> sk_surface_ = nullptr;
+  float sk_surface_hdr_headroom_ = 1.f;
   std::unique_ptr<SharedImageProviderImpl> paint_op_shared_image_provider_;
 
   sk_sp<SkSurface> sk_surface_for_testing_;
@@ -972,8 +986,6 @@ class RasterDecoderImpl final : public RasterDecoder,
   const bool is_raw_draw_enabled_;
 
   const bool is_drdc_enabled_;
-
-  raw_ptr<gl::GLApi, AcrossTasksDanglingUntriaged> api_ = nullptr;
 
   base::WeakPtrFactory<DecoderContext> weak_ptr_factory_{this};
 };
@@ -1109,8 +1121,6 @@ ContextResult RasterDecoderImpl::Initialize(
   TRACE_EVENT0("gpu", "RasterDecoderImpl::Initialize");
   DCHECK(shared_context_state_->IsCurrent(nullptr));
 
-  api_ = gl::g_current_gl_context;
-
   set_initialized();
 
   if (!offscreen) {
@@ -1198,8 +1208,6 @@ bool RasterDecoderImpl::MakeCurrent() {
     return false;
   }
 
-  DCHECK_EQ(api(), gl::g_current_gl_context);
-
   // Rebind textures if the service ids may have changed.
   RestoreAllExternalTextureBindingsIfNeeded();
 
@@ -1233,31 +1241,39 @@ Capabilities RasterDecoderImpl::GetCapabilities() {
   caps.texture_format_bgra8888 =
       feature_info()->feature_flags().ext_texture_format_bgra8888;
   caps.texture_rg = feature_info()->feature_flags().ext_texture_rg;
-  caps.supports_scanout_shared_images =
-      SharedImageManager::SupportsScanoutImages();
-  caps.supports_luminance_shared_images =
-      !feature_info()->gl_version_info().is_angle_metal;
-  caps.disable_r8_shared_images =
-      feature_info()->workarounds().r8_egl_images_broken;
   caps.max_texture_size = shared_context_state_->GetMaxTextureSize();
   caps.using_vulkan_context =
       shared_context_state_->GrContextIsVulkan() ? true : false;
+
+  caps.max_copy_texture_chromium_size =
+      feature_info()->workarounds().max_copy_texture_chromium_size;
+  caps.texture_format_etc1_npot =
+      feature_info()->feature_flags().oes_compressed_etc1_rgb8_texture &&
+      !feature_info()->workarounds().etc1_power_of_two_only;
+  caps.image_ycbcr_420v =
+      feature_info()->feature_flags().chromium_image_ycbcr_420v;
+  caps.image_ycbcr_420v_disabled_for_video_frames =
+      gpu_preferences_.disable_biplanar_gpu_memory_buffers_for_video_frames;
+  caps.image_ar30 = feature_info()->feature_flags().chromium_image_ar30;
+  caps.image_ab30 = feature_info()->feature_flags().chromium_image_ab30;
+  caps.image_ycbcr_p010 =
+      feature_info()->feature_flags().chromium_image_ycbcr_p010;
+  caps.render_buffer_format_bgra8888 =
+      feature_info()->feature_flags().ext_render_buffer_format_bgra8888;
+  // Vulkan currently doesn't support single-component cross-thread shared
+  // images.
+  caps.disable_one_component_textures =
+      disable_legacy_mailbox_ && features::IsUsingVulkan();
+  caps.angle_rgbx_internal_format =
+      feature_info()->feature_flags().angle_rgbx_internal_format;
+  caps.chromium_gpu_fence = feature_info()->feature_flags().chromium_gpu_fence;
+  caps.mesa_framebuffer_flip_y =
+      feature_info()->feature_flags().mesa_framebuffer_flip_y;
 
   if (feature_info()->workarounds().webgl_or_caps_max_texture_size) {
     caps.max_texture_size =
         std::min(caps.max_texture_size,
                  feature_info()->workarounds().webgl_or_caps_max_texture_size);
-    caps.max_cube_map_texture_size =
-        std::min(caps.max_cube_map_texture_size,
-                 feature_info()->workarounds().webgl_or_caps_max_texture_size);
-  }
-  if (feature_info()->workarounds().max_3d_array_texture_size) {
-    caps.max_3d_texture_size =
-        std::min(caps.max_3d_texture_size,
-                 feature_info()->workarounds().max_3d_array_texture_size);
-    caps.max_array_texture_layers =
-        std::min(caps.max_array_texture_layers,
-                 feature_info()->workarounds().max_3d_array_texture_size);
   }
   caps.sync_query = feature_info()->feature_flags().chromium_sync_query;
   caps.msaa_is_slow = gles2::MSAAIsSlow(feature_info()->workarounds());
@@ -1280,16 +1296,31 @@ Capabilities RasterDecoderImpl::GetCapabilities() {
     caps.texture_half_float_linear =
         feature_info()->feature_flags().enable_texture_half_float_linear;
   }
-#if BUILDFLAG(IS_WIN)
-  caps.shared_image_d3d =
-      D3DImageBackingFactory::IsD3DSharedImageSupported(gpu_preferences_);
-  caps.shared_image_swap_chain = D3DImageBackingFactory::IsSwapChainSupported();
-#endif  // BUILDFLAG(IS_WIN)
   caps.disable_legacy_mailbox = disable_legacy_mailbox_;
-  // TODO(crbug.com/1450879): Support YUV rendering and readback for Graphite.
-  caps.supports_yuv_rgb_conversion = !graphite_context();
-  caps.supports_yuv_readback = !graphite_context();
+
+  if (graphite_context()) {
+    bool supports_multiplanar_rendering = false;
+#if BUILDFLAG(SKIA_USE_DAWN)
+    auto* dawn_context_provider =
+        shared_context_state_->dawn_context_provider();
+    if (dawn_context_provider &&
+        dawn_context_provider->SupportsFeature(
+            wgpu::FeatureName::MultiPlanarRenderTargets)) {
+      supports_multiplanar_rendering = true;
+    }
+#endif
+    caps.supports_yuv_rgb_conversion = supports_multiplanar_rendering;
+    caps.supports_yuv_readback = supports_multiplanar_rendering;
+  } else {
+    caps.supports_yuv_rgb_conversion = true;
+    caps.supports_yuv_readback = true;
+  }
+
   return caps;
+}
+
+GLCapabilities RasterDecoderImpl::GetGLCapabilities() {
+  return GLCapabilities();
 }
 
 const gles2::ContextState* RasterDecoderImpl::GetContextState() {
@@ -1558,8 +1589,9 @@ error::Error RasterDecoderImpl::DoCommandsImpl(unsigned int num_commands,
 
         if (DebugImpl && shared_context_state_->GrContextIsGL() && debug() &&
             !WasContextLost()) {
+          gl::GLApi* const api = gl::g_current_gl_context;
           GLenum error;
-          while ((error = api()->glGetErrorFn()) != GL_NO_ERROR) {
+          while ((error = api->glGetErrorFn()) != GL_NO_ERROR) {
             LOG(ERROR) << "[" << logger_.GetLogPrefix() << "] "
                        << "GL ERROR: " << gles2::GLES2Util::GetStringEnum(error)
                        << " : " << GetCommandName(command);
@@ -1872,7 +1904,7 @@ error::Error RasterDecoderImpl::HandleQueryCounterEXT(
 
 void RasterDecoderImpl::DoFinish() {
   if (gr_context()) {
-    gr_context()->flushAndSubmit(/*syncCpu=*/true);
+    gr_context()->flushAndSubmit(GrSyncCpu::kYes);
   } else if (graphite_context()) {
     GraphiteFlushAndSubmit(skgpu::graphite::SyncToCpu::kYes);
   }
@@ -1881,7 +1913,7 @@ void RasterDecoderImpl::DoFinish() {
 
 void RasterDecoderImpl::DoFlush() {
   if (gr_context()) {
-    gr_context()->flushAndSubmit(/*syncCpu=*/false);
+    gr_context()->flushAndSubmit(GrSyncCpu::kNo);
   } else if (graphite_context()) {
     GraphiteFlushAndSubmit();
   }
@@ -2773,6 +2805,10 @@ void RasterDecoderImpl::DoReadbackYUVImagePixelsINTERNAL(
 }
 
 void RasterDecoderImpl::DoConvertYUVAMailboxesToRGBINTERNAL(
+    GLint src_x,
+    GLint src_y,
+    GLsizei width,
+    GLsizei height,
     GLenum planes_yuv_color_space,
     GLenum plane_config,
     GLenum subsampling,
@@ -2780,7 +2816,8 @@ void RasterDecoderImpl::DoConvertYUVAMailboxesToRGBINTERNAL(
   CopySharedImageHelper helper(&shared_image_representation_factory_,
                                shared_context_state_.get());
   auto result = helper.ConvertYUVAMailboxesToRGB(
-      planes_yuv_color_space, plane_config, subsampling, bytes_in);
+      src_x, src_y, width, height, planes_yuv_color_space, plane_config,
+      subsampling, bytes_in);
   if (!result.has_value()) {
     LOCAL_SET_GL_ERROR(result.error().gl_error,
                        result.error().function_name.c_str(),
@@ -2883,6 +2920,7 @@ void RasterDecoderImpl::DoBeginRasterCHROMIUM(GLfloat r,
                                               MsaaMode msaa_mode,
                                               GLboolean can_use_lcd_text,
                                               GLboolean visible,
+                                              GLfloat hdr_headroom,
                                               const volatile GLbyte* key) {
   // Workaround for https://crbug.com/906453: Flush before BeginRaster (the
   // commands between BeginRaster and EndRaster will not flush).
@@ -3016,6 +3054,7 @@ void RasterDecoderImpl::DoBeginRasterCHROMIUM(GLfloat r,
   }
 
   sk_surface_ = scoped_shared_image_write_->surface();
+  sk_surface_hdr_headroom_ = hdr_headroom;
 
   if (!begin_semaphores.empty()) {
     bool result =
@@ -3119,6 +3158,7 @@ void RasterDecoderImpl::DoRasterCHROMIUM(GLuint raster_shm_id,
       paint_op_shared_image_provider_.get());
   options.crash_dump_on_failure =
       !gpu_preferences_.disable_oopr_debug_crash_dump;
+  options.hdr_headroom = sk_surface_hdr_headroom_;
 
   if (scoped_shared_image_raster_write_) {
     auto* paint_op_buffer =

@@ -19,6 +19,7 @@
 #include "base/feature_list.h"
 #include "base/rand_util.h"
 #include "base/ranges/algorithm.h"
+#include "base/strings/string_util.h"
 #include "base/types/cxx23_to_underlying.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/field_types.h"
@@ -27,6 +28,7 @@
 #include "components/autofill/core/browser/webdata/autofill_table.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_l10n_util.h"
+#include "components/autofill/core/common/autofill_util.h"
 
 namespace autofill {
 
@@ -72,71 +74,6 @@ ServerFieldType GetStoredTypeOf(ServerFieldType type) {
   return it->second;
 }
 
-// Returns true if `a` and `b` differ by Levenshtein distance of at most `k`.
-// Edits, inserts and removes each count as one step.
-// Runs in O(|a| * k) time and O(k) memory.
-bool IsWithinLevenshteinDistance(std::u16string_view a,
-                                 std::u16string_view b,
-                                 size_t k) {
-  // If the string's lengths differ by more than `k`, so does their
-  // Levenshtein distance.
-  if (a.size() + k < b.size() || a.size() > b.size() + k) {
-    return false;
-  }
-  // The classical Levenshtein distance DP defines dp[i][j] as the edit distance
-  // of a[:i] and b[:j]. To make this more efficient, one can define dp[i][d] as
-  // the edit-distance of a[:i] and b[:i + d]. Intuitively, d represents the
-  // delta between j and i in the former dp. Since the edit-distance is
-  // restricted by `k`, abs(d) can be bounded by `k`.
-  // Since dp[i][d] only depends on values from dp[i-1], it is not necessary to
-  // store the entire 2D table. Instead, this code just stores the d-dimension,
-  // which represents "the edit-distance with the current prefix of the string,
-  // for a given delta d".
-  // Since d is between `-k` and `k`, the implementation shifts the d-index by
-  // `k`, bringing it in range [0, `2*k`]
-
-  // The algorithm only cares if the Levenshtein distance is at most `k`. Thus,
-  // any unreachable states and states in which the edit-distance is certainly
-  // larger than `k` can be set to any value larger than `k`, without affecting
-  // the result.
-  const size_t kInfinity = k + 1;
-  std::vector<size_t> dp(2 * k + 1, kInfinity);
-  // Initially, `dp[d]` represents the Levenshtein distance of the empty prefix
-  // of `a` and the j = d - k characters of `b`. Their edit distance is j, since
-  // j removals are required. States with negative d are not reachable, since
-  // that corresponds to a negative index into `b`.
-  std::iota(dp.begin() + k, dp.end(), 0);
-  for (size_t i = 0; i < a.size(); i++) {
-    // Right now, `dp` represents the Levenshtein distance when considering the
-    // first `i` characters (up to index `i-1`) of `a`. After the next loop,
-    // `dp` will represent the Levenshtein distance when considering the first
-    // `i+1` characters.
-    for (size_t d = 0; d <= 2 * k; d++) {
-      if (i + d < k || i + d >= b.size() + k) {
-        // `j = i + d - k` is out of range of `b`.
-        dp[d] = kInfinity;
-        continue;
-      }
-      const size_t j = i + d - k;
-      // If `a[i] == `b[j]` the Levenshtein distance for `d` remained the same.
-      if (a[i] != b[j]) {
-        // (i, j) -> (i-1, j-1), `d` stays the same.
-        const size_t replace = dp[d];
-        // (i, j) -> (i-1, j), `d` increases by 1.
-        // If the distance between `i` and `j` becomes larger than `k`, their
-        // edit distance is at least `k + 1`. Same in the `insert` case.
-        const size_t remove = d != 2 * k ? dp[d + 1] : kInfinity;
-        // (i, j) -> (i, j-1), `d` decreases by 1. Since `i` stays the same,
-        // this is intentionally using the dp value updated in the previous
-        // iteration.
-        const size_t insert = d != 0 ? dp[d - 1] : kInfinity;
-        dp[d] = 1 + std::min({replace, remove, insert});
-      }
-    }
-  }
-  return dp[b.size() + k - a.size()] <= k;
-}
-
 // Computes the `ObservationType` if a field of the given `type` was autofilled
 // with the `profile`, but the autofilled value was edited to `edited_value`
 // after filling.
@@ -150,9 +87,10 @@ ObservationType GetObservationTypeForEditedField(
     return ObservationType::kEditedValueCleared;
   }
 
-  if (IsWithinLevenshteinDistance(
-          profile.GetInfo(type, app_locale), edited_value,
-          ProfileTokenQuality::kMaximumLevenshteinDistance)) {
+  if (LevenshteinDistance(base::ToLowerASCII(profile.GetInfo(type, app_locale)),
+                          base::ToLowerASCII(edited_value),
+                          ProfileTokenQuality::kMaximumLevenshteinDistance) <=
+      ProfileTokenQuality::kMaximumLevenshteinDistance) {
     return ObservationType::kEditedToSimilarValue;
   }
 
@@ -202,6 +140,26 @@ ProfileTokenQuality::ProfileTokenQuality(const ProfileTokenQuality& other) =
     default;
 
 ProfileTokenQuality::~ProfileTokenQuality() = default;
+
+bool ProfileTokenQuality::operator==(const ProfileTokenQuality& other) const {
+  if (profile_->guid() != other.profile_->guid() ||
+      observations_.size() != other.observations_.size()) {
+    return false;
+  }
+  // Element-wise comparison between `observations_` and `other.observations_`.
+  // base::circular_deque<> intentionally doesn't define a comparison operator.
+  using map_entry_t =
+      std::pair<ServerFieldType, base::circular_deque<Observation>>;
+  return base::ranges::equal(observations_, other.observations_,
+                             [](const map_entry_t& a, const map_entry_t& b) {
+                               return a.first == b.first &&
+                                      base::ranges::equal(a.second, b.second);
+                             });
+}
+
+bool ProfileTokenQuality::operator!=(const ProfileTokenQuality& other) const {
+  return !operator==(other);
+}
 
 // static
 bool ProfileTokenQuality::IsStoredType(ServerFieldType type) {
@@ -271,8 +229,7 @@ void ProfileTokenQuality::SaveObservationsForFilledFormForAllSubmittedProfiles(
         pdm.GetProfileByGUID(*field->autofill_source_profile_guid());
     if (profile && profile->token_quality().AddObservationsForFilledForm(
                        form_structure, form_data, pdm)) {
-      // TODO(crbug.com/1453650): Update `*profile` in the database, once
-      // `AutofillTable` supports storing token quality.
+      pdm.UpdateProfile(*profile);
     }
   }
 }
@@ -298,14 +255,6 @@ ProfileTokenQuality::GetObservationTypesForFieldType(
     }
   }
   return types;
-}
-
-// static
-bool ProfileTokenQuality::IsWithinLevenshteinDistanceForTesting(
-    std::u16string_view a,
-    std::u16string_view b,
-    size_t k) {
-  return IsWithinLevenshteinDistance(a, b, k);
 }
 
 void ProfileTokenQuality::AddObservation(ServerFieldType type,
@@ -409,6 +358,30 @@ void ProfileTokenQuality::CopyObservationsForStoredType(
 void ProfileTokenQuality::ResetObservationsForStoredType(ServerFieldType type) {
   CHECK(IsStoredType(type));
   observations_.erase(type);
+}
+
+void ProfileTokenQuality::ResetObservationsForDifferingTokens(
+    const AutofillProfile& other) {
+  if (!base::FeatureList::IsEnabled(
+          features::kAutofillTrackProfileTokenQuality)) {
+    return;
+  }
+  for (ServerFieldType type :
+       AutofillTable::GetStoredTypesForAutofillProfile()) {
+    if (profile_->GetRawInfo(type) != other.GetRawInfo(type)) {
+      ResetObservationsForStoredType(type);
+    }
+  }
+}
+
+bool ProfileTokenQuality::Observation::operator==(
+    const ProfileTokenQuality::Observation& other) const {
+  return type == other.type && form_hash == other.form_hash;
+}
+
+bool ProfileTokenQuality::Observation::operator!=(
+    const ProfileTokenQuality::Observation& other) const {
+  return !operator==(other);
 }
 
 ProfileTokenQuality::FormSignatureHash

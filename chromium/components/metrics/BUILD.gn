@@ -9,6 +9,7 @@ import("//testing/test.gni")
 
 if (is_android) {
   import("//build/config/android/rules.gni")
+  import("//third_party/jni_zero/jni_zero.gni")
 }
 
 # Dependency for histogram manager users: cronet and ios/webview
@@ -71,8 +72,8 @@ if (!is_cronet_build && is_android) {
     ]
     deps = [
       "//base:base_java",
-      "//base:jni_java",
       "//third_party/androidx:androidx_annotation_annotation_java",
+      "//third_party/jni_zero:jni_zero_java",
     ]
   }
 }
@@ -217,6 +218,7 @@ if (!is_cronet_build || is_ios) {
       ":library_support",
       "//base",
       "//base:base_static",
+      "//base:i18n",
       "//build:branding_buildflags",
       "//build:chromeos_buildflags",
       "//components/flags_ui:switches",
@@ -231,20 +233,17 @@ if (!is_cronet_build || is_ios) {
       "//url",
     ]
 
-    if (is_chromeos_ash) {
-      deps += [
-        ":serialization",
-        "//components/metrics/structured:neutrino_logging",
-      ]
-    }
-
     if (is_android) {
       sources += [
         "android_metrics_provider.cc",
         "android_metrics_provider.h",
         "drive_metrics_provider_android.cc",
+        "gms_metrics_provider.cc",
+        "gms_metrics_provider.h",
       ]
       deps += [ ":jni_headers" ]
+    } else {
+      deps += [ "//components/keep_alive_registry" ]
     }
 
     if (is_ios) {
@@ -606,7 +605,10 @@ if (!is_cronet_build) {
     }
 
     if (is_android) {
-      sources += [ "android_metrics_provider_unittest.cc" ]
+      sources += [
+        "android_metrics_provider_unittest.cc",
+        "gms_metrics_provider_unittest.cc",
+      ]
     }
 
     if (use_blink) {

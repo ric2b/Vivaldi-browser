@@ -8,15 +8,15 @@
 #include <climits>
 
 #include "third_party/blink/renderer/core/layout/geometry/logical_rect.h"
-#include "third_party/blink/renderer/core/layout/ng/table/ng_table_fragment_data.h"
+#include "third_party/blink/renderer/core/layout/table/table_fragment_data.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 
 namespace blink {
 
 class NGBoxFragmentBuilder;
-class NGTableBorders;
+class TableBorders;
 struct FrameSetLayoutData;
-struct NGMathMLPaintInfo;
+struct MathMLPaintInfo;
 
 // This class manages rare data of NGPhysicalBoxFragment.
 // Only NGPhysicalBoxFragment should use this class.
@@ -36,8 +36,8 @@ class PhysicalFragmentRareData
  public:
   explicit PhysicalFragmentRareData(wtf_size_t num_fields);
   PhysicalFragmentRareData(const PhysicalRect* layout_overflow,
-                           const NGPhysicalBoxStrut* borders,
-                           const NGPhysicalBoxStrut* padding,
+                           const PhysicalBoxStrut* borders,
+                           const PhysicalBoxStrut* padding,
                            absl::optional<PhysicalRect> inflow_bounds,
                            NGBoxFragmentBuilder& builder,
                            wtf_size_t num_fields);
@@ -80,20 +80,20 @@ class PhysicalFragmentRareData
   struct RareField {
     union {
       PhysicalRect layout_overflow;
-      NGPhysicalBoxStrut borders;
-      NGPhysicalBoxStrut padding;
+      PhysicalBoxStrut borders;
+      PhysicalBoxStrut padding;
       PhysicalRect inflow_bounds;
       std::unique_ptr<const FrameSetLayoutData> frame_set_layout_data;
-      std::unique_ptr<const NGMathMLPaintInfo> mathml_paint_info;
+      std::unique_ptr<const MathMLPaintInfo> mathml_paint_info;
       LogicalRect table_grid_rect;
-      scoped_refptr<const NGTableBorders> table_collapsed_borders;
-      std::unique_ptr<NGTableFragmentData::CollapsedBordersGeometry>
+      scoped_refptr<const TableBorders> table_collapsed_borders;
+      std::unique_ptr<TableFragmentData::CollapsedBordersGeometry>
           table_collapsed_borders_geometry;
       wtf_size_t table_cell_column_index;
       wtf_size_t table_section_start_row_index;
       Vector<LayoutUnit> table_section_row_offsets;
       AtomicString page_name;
-      NGPhysicalBoxStrut margins;
+      PhysicalBoxStrut margins;
     };
     const FieldId type;
 
@@ -157,8 +157,8 @@ class PhysicalFragmentRareData
   RareBitFieldType bit_field_;
   // A garbage-collected field is not stored in the Vector in order to avoid
   // troublesome conditional tracing.
-  Member<const NGTableBorders> table_collapsed_borders_;
-  Member<const NGTableFragmentData::ColumnGeometries> table_column_geometries_;
+  Member<const TableBorders> table_collapsed_borders_;
+  Member<const TableFragmentData::ColumnGeometries> table_column_geometries_;
 };
 
 }  // namespace blink

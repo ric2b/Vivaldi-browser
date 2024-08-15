@@ -41,9 +41,9 @@
 #include "url/url_util.h"
 
 #if !BUILDFLAG(IS_ANDROID)
-#include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
+#include "components/webapps/common/web_app_id.h"
 #endif
 
 namespace site_engagement {
@@ -106,7 +106,7 @@ enum CrossedReason {
 void RecordIgnore(base::Value::Dict& dict) {
   int times_ignored = dict.FindInt(kNumTimesIgnoredName).value_or(0);
   dict.Set(kNumTimesIgnoredName, ++times_ignored);
-  dict.Set(kTimeLastIgnored, base::Time::Now().ToDoubleT());
+  dict.Set(kTimeLastIgnored, base::Time::Now().InSecondsFSinceUnixEpoch());
 }
 
 // If we should suppress the item with the given dictionary ignored record.
@@ -114,7 +114,8 @@ bool ShouldSuppressItem(base::Value::Dict& dict) {
   absl::optional<double> last_ignored_time = dict.FindDouble(kTimeLastIgnored);
   if (last_ignored_time) {
     base::TimeDelta diff =
-        base::Time::Now() - base::Time::FromDoubleT(*last_ignored_time);
+        base::Time::Now() -
+        base::Time::FromSecondsSinceUnixEpoch(*last_ignored_time);
     if (diff >= base::Days(kSuppressionExpirationTimeDays)) {
       dict.Set(kNumTimesIgnoredName, 0);
       dict.Remove(kTimeLastIgnored);
@@ -301,8 +302,7 @@ void PopulateInfoMapWithBookmarks(
       BookmarkModelFactory::GetForBrowserContextIfExists(profile);
   if (!model)
     return;
-  std::vector<UrlAndTitle> untrimmed_bookmarks;
-  model->GetBookmarks(&untrimmed_bookmarks);
+  std::vector<UrlAndTitle> untrimmed_bookmarks = model->GetUniqueUrls();
 
   // Process the bookmarks and optionally trim them if we have too many.
   std::vector<UrlAndTitle> result_bookmarks;

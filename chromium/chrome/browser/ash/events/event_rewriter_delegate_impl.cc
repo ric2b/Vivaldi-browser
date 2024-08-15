@@ -124,13 +124,28 @@ bool EventRewriterDelegateImpl::TopRowKeysAreFunctionKeys(int device_id) const {
 
   const mojom::KeyboardSettings* settings =
       input_device_settings_controller_->GetKeyboardSettings(device_id);
-  // TODO(dpad): Add metric for when settings are not able to be found.
-  return settings && settings->top_row_are_fkeys;
+  if (settings) {
+    return settings->top_row_are_fkeys;
+  }
+
+  if (ash::features::IsPeripheralCustomizationEnabled()) {
+    // If it is a mouse or graphics tablet, do not rewrite function keys.
+    return input_device_settings_controller_->GetMouseSettings(device_id) ||
+           input_device_settings_controller_->GetGraphicsTabletSettings(
+               device_id);
+  }
+
+  return false;
 }
 
 bool EventRewriterDelegateImpl::IsExtensionCommandRegistered(
     ui::KeyboardCode key_code,
     int flags) const {
+  if (extension_commands_override_for_testing_.has_value()) {
+    return extension_commands_override_for_testing_->count({key_code, flags}) >
+           0;
+  }
+
   // Some keyboard events for ChromeOS get rewritten, such as:
   // Search+Shift+Left gets converted to Shift+Home (BeginDocument).
   // This doesn't make sense if the user has assigned that shortcut
@@ -171,8 +186,18 @@ bool EventRewriterDelegateImpl::RewriteMetaTopRowKeyComboEvents(
 
   const mojom::KeyboardSettings* settings =
       input_device_settings_controller_->GetKeyboardSettings(device_id);
-  // TODO(dpad): Add metric for when settings are not able to be found.
-  return !(settings && settings->suppress_meta_fkey_rewrites);
+  if (settings) {
+    return !settings->suppress_meta_fkey_rewrites;
+  }
+
+  if (ash::features::IsPeripheralCustomizationEnabled()) {
+    // If it is a mouse or graphics tablet, do not rewrite function keys.
+    return !(input_device_settings_controller_->GetMouseSettings(device_id) ||
+             input_device_settings_controller_->GetGraphicsTabletSettings(
+                 device_id));
+  }
+
+  return true;
 }
 
 void EventRewriterDelegateImpl::SuppressMetaTopRowKeyComboRewrites(
@@ -301,6 +326,26 @@ void EventRewriterDelegateImpl::NotifySixPackRewriteBlockedBySetting(
   input_device_settings_notification_controller_
       ->NotifySixPackRewriteBlockedBySetting(key_code, blocked_modifier,
                                              active_modifier, device_id);
+}
+
+absl::optional<ui::mojom::ExtendedFkeysModifier>
+EventRewriterDelegateImpl::GetExtendedFkeySetting(int device_id,
+                                                  ui::KeyboardCode key_code) {
+  CHECK(key_code == ui::KeyboardCode::VKEY_F11 ||
+        key_code == ui::KeyboardCode::VKEY_F12);
+
+  const mojom::KeyboardSettings* settings =
+      input_device_settings_controller_->GetKeyboardSettings(device_id);
+
+  if (!settings) {
+    return absl::nullopt;
+  }
+
+  CHECK(settings->f11.has_value() && settings->f12.has_value());
+  if (key_code == ui::KeyboardCode::VKEY_F11) {
+    return settings->f11;
+  }
+  return settings->f12;
 }
 
 }  // namespace ash

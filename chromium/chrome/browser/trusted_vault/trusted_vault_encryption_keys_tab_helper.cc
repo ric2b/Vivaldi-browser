@@ -11,6 +11,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/ranges/algorithm.h"
 #include "build/buildflag.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/google_accounts_private_api_util.h"
@@ -105,8 +106,10 @@ class EncryptionKeyApi
       return;
     }
 
-    trusted_vault_service_->GetTrustedVaultClient()->AddTrustedRecoveryMethod(
-        gaia_id, public_key, method_type_hint, std::move(callback));
+    trusted_vault_service_
+        ->GetTrustedVaultClient(trusted_vault::SecurityDomainId::kChromeSync)
+        ->AddTrustedRecoveryMethod(gaia_id, public_key, method_type_hint,
+                                   std::move(callback));
   }
 
  private:
@@ -129,7 +132,8 @@ class EncryptionKeyApi
       const std::vector<chrome::mojom::TrustedVaultKeyPtr>& keys) {
     CHECK(!keys.empty());
     switch (security_domain) {
-      case trusted_vault::SecurityDomainId::kChromeSync: {
+      case trusted_vault::SecurityDomainId::kChromeSync:
+      case trusted_vault::SecurityDomainId::kPasskeys: {
         base::UmaHistogramBoolean(
             "Sync.TrustedVaultJavascriptSetEncryptionKeysIsIncognito",
             trusted_vault_service_ == nullptr);
@@ -138,14 +142,19 @@ class EncryptionKeyApi
         if (!trusted_vault_service_) {
           return;
         }
-        std::vector<std::vector<uint8_t>> keys_as_bytes(keys.size());
-        std::transform(keys.begin(), keys.end(), keys_as_bytes.begin(),
-                       [](const chrome::mojom::TrustedVaultKeyPtr& key) {
-                         return key->bytes;
-                       });
+        std::vector<std::vector<uint8_t>> keys_as_bytes;
+        keys_as_bytes.reserve(keys.size());
+        base::ranges::transform(keys, std::back_inserter(keys_as_bytes),
+                                &chrome::mojom::TrustedVaultKey::bytes);
         const int32_t version = keys.back()->version;
-        trusted_vault_service_->GetTrustedVaultClient()->StoreKeys(
-            gaia_id, keys_as_bytes, version);
+        trusted_vault::TrustedVaultClient* trusted_vault_client =
+            trusted_vault_service_->GetTrustedVaultClient(security_domain);
+        if (!trusted_vault_client) {
+          DLOG(ERROR) << "No TrustedVaultClient for security domain "
+                      << static_cast<int>(security_domain);
+          return;
+        }
+        trusted_vault_client->StoreKeys(gaia_id, keys_as_bytes, version);
       }
     }
   }

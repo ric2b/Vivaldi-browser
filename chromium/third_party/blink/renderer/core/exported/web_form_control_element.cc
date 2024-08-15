@@ -48,9 +48,9 @@
 #include "third_party/blink/renderer/platform/keyboard_codes.h"
 #include "ui/events/keycodes/dom/dom_key.h"
 
-#include "base/memory/scoped_refptr.h"
-
 namespace blink {
+
+using mojom::blink::FormControlType;
 
 bool WebFormControlElement::IsEnabled() const {
   return !ConstUnwrap<HTMLFormControlElement>()->IsDisabledFormControl();
@@ -64,28 +64,17 @@ WebString WebFormControlElement::FormControlName() const {
   return ConstUnwrap<HTMLFormControlElement>()->GetName();
 }
 
-WebString WebFormControlElement::FormControlType() const {
-  return ConstUnwrap<HTMLFormControlElement>()->type();
+FormControlType WebFormControlElement::FormControlType() const {
+  return ConstUnwrap<HTMLFormControlElement>()->FormControlType();
 }
 
-WebString WebFormControlElement::FormControlTypeForAutofill() const {
+FormControlType WebFormControlElement::FormControlTypeForAutofill() const {
   if (auto* input = ::blink::DynamicTo<HTMLInputElement>(*private_)) {
-    if (input->IsTextField() && input->HasBeenPasswordField())
-      return input_type_names::kPassword;
+    if (input->IsTextField() && input->HasBeenPasswordField()) {
+      return FormControlType::kInputPassword;
+    }
   }
-
-  auto* form_control = ConstUnwrap<HTMLFormControlElement>();
-  const AtomicString& type = form_control->type();
-  if (form_control->HasTagName(html_names::kButtonTag) &&
-      type == "selectlist") {
-    CHECK(RuntimeEnabledFeatures::HTMLSelectListElementEnabled());
-    // <selectlist>'s type() will return "selectlist". In order to prevent
-    // autofill from thinking that <button type=selectlist> is actually a
-    // <selectlist>, let's just say that <button type=selectlist> is just a
-    // "button".
-    return "button";
-  }
-  return type;
+  return FormControlType();
 }
 
 WebAutofillState WebFormControlElement::GetAutofillState() const {
@@ -94,6 +83,10 @@ WebAutofillState WebFormControlElement::GetAutofillState() const {
 
 bool WebFormControlElement::IsAutofilled() const {
   return ConstUnwrap<HTMLFormControlElement>()->IsAutofilled();
+}
+
+bool WebFormControlElement::IsPreviewed() const {
+  return ConstUnwrap<HTMLFormControlElement>()->IsPreviewed();
 }
 
 bool WebFormControlElement::UserHasEditedTheField() const {
@@ -309,14 +302,21 @@ WebString WebFormControlElement::EditingValue() const {
   return WebString();
 }
 
-void WebFormControlElement::SetSelectionRange(int start, int end) {
+int WebFormControlElement::MaxLength() const {
+  if (auto* text_control = ::blink::DynamicTo<TextControlElement>(*private_)) {
+    return text_control->maxLength();
+  }
+  return -1;
+}
+
+void WebFormControlElement::SetSelectionRange(unsigned start, unsigned end) {
   if (auto* input = ::blink::DynamicTo<HTMLInputElement>(*private_))
     input->SetSelectionRange(start, end);
   if (auto* textarea = ::blink::DynamicTo<HTMLTextAreaElement>(*private_))
     textarea->SetSelectionRange(start, end);
 }
 
-int WebFormControlElement::SelectionStart() const {
+unsigned WebFormControlElement::SelectionStart() const {
   if (auto* input = ::blink::DynamicTo<HTMLInputElement>(*private_))
     return input->selectionStart();
   if (auto* textarea = ::blink::DynamicTo<HTMLTextAreaElement>(*private_))
@@ -324,7 +324,7 @@ int WebFormControlElement::SelectionStart() const {
   return 0;
 }
 
-int WebFormControlElement::SelectionEnd() const {
+unsigned WebFormControlElement::SelectionEnd() const {
   if (auto* input = ::blink::DynamicTo<HTMLInputElement>(*private_))
     return input->selectionEnd();
   if (auto* textarea = ::blink::DynamicTo<HTMLTextAreaElement>(*private_))

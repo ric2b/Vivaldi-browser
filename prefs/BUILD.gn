@@ -47,32 +47,22 @@ static_library("prefs_files_generated") {
 
 static_library("prefs") {
   sources = [
-    "vivaldi_browser_prefs.h",
-    "vivaldi_browser_prefs.cc",
+    "vivaldi_prefs_definitions.h",
+    "vivaldi_prefs_definitions.cc",
+    "vivaldi_local_state_prefs.h",
+    "vivaldi_local_state_prefs.cc",
   ]
-  if (is_android) {
-    sources += [
-      "vivaldi_browser_prefs_android.cc",
-    ]
-  }
-  if (is_linux) {
-    sources += [
-      "vivaldi_browser_prefs_linux.cc",
-    ]
-  }
   if (is_mac) {
     sources += [
-      "vivaldi_browser_prefs_mac.mm",
+      "vivaldi_prefs_definitions_mac.mm",
     ]
-  }
-  if (is_ios) {
+  } else if (is_win) {
     sources += [
-      "vivaldi_browser_prefs_ios.mm",
+      "vivaldi_prefs_definitions_win.cc",
     ]
-  }
-  if (is_win) {
+  } else {
     sources += [
-      "vivaldi_browser_prefs_win.cc",
+      "vivaldi_prefs_definitions_common.cc",
     ]
   }
   public_deps = [
@@ -83,6 +73,7 @@ static_library("prefs") {
     "//components/pref_registry",
     "//components/prefs",
     "//components/version_info",
+    "//components/search_engines",
     "//skia",
     ":prefs_strings",
   ]

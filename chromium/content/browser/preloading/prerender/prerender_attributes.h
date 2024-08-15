@@ -26,6 +26,7 @@ struct CONTENT_EXPORT PrerenderAttributes {
       const GURL& prerendering_url,
       PrerenderTriggerType trigger_type,
       const std::string& embedder_histogram_suffix,
+      absl::optional<blink::mojom::SpeculationTargetHint> target_hint,
       Referrer referrer,
       absl::optional<blink::mojom::SpeculationEagerness> eagerness,
       absl::optional<url::Origin> initiator_origin,
@@ -37,6 +38,8 @@ struct CONTENT_EXPORT PrerenderAttributes {
       ui::PageTransition transition_type,
       absl::optional<base::RepeatingCallback<bool(const GURL&)>>
           url_match_predicate,
+      absl::optional<base::RepeatingCallback<void(NavigationHandle&)>>
+          prerender_navigation_handle_callback,
       // TODO(crbug/1384419): use pattern other than default parameter.
       const absl::optional<base::UnguessableToken>&
           initiator_devtools_navigation_token = absl::nullopt);
@@ -57,6 +60,10 @@ struct CONTENT_EXPORT PrerenderAttributes {
   // to content/. Only used for metrics.
   std::string embedder_histogram_suffix;
 
+  // Records the target hint of the corresponding speculation rule.
+  // This is absl::nullopt when prerendering is initiated by browser.
+  absl::optional<blink::mojom::SpeculationTargetHint> target_hint;
+
   Referrer referrer;
 
   // Records the eagerness of the corresponding speculation rule.
@@ -69,7 +76,7 @@ struct CONTENT_EXPORT PrerenderAttributes {
 
   // This is ChildProcessHost::kInvalidUniqueID when prerendering is initiated
   // by the browser.
-  int initiator_process_id;
+  int initiator_process_id = ChildProcessHost::kInvalidUniqueID;
 
   // This hosts a primary page that is initiating this prerender attempt.
   base::WeakPtr<WebContents> initiator_web_contents;
@@ -79,11 +86,11 @@ struct CONTENT_EXPORT PrerenderAttributes {
 
   // This is RenderFrameHost::kNoFrameTreeNodeId when prerendering is initiated
   // by the browser.
-  int initiator_frame_tree_node_id;
+  int initiator_frame_tree_node_id = RenderFrameHost::kNoFrameTreeNodeId;
 
   // This is ukm::kInvalidSourceId when prerendering is initiated by the
   // browser.
-  ukm::SourceId initiator_ukm_id;
+  ukm::SourceId initiator_ukm_id = ukm::kInvalidSourceId;
 
   ui::PageTransition transition_type;
 
@@ -98,6 +105,9 @@ struct CONTENT_EXPORT PrerenderAttributes {
   // same-origin.
   absl::optional<base::RepeatingCallback<bool(const GURL&)>>
       url_match_predicate;
+
+  absl::optional<base::RepeatingCallback<void(NavigationHandle&)>>
+      prerender_navigation_handle_callback;
 
   // This is absl::nullopt when prerendering is initiated by the browser.
   absl::optional<base::UnguessableToken> initiator_devtools_navigation_token;

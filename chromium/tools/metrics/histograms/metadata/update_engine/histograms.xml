@@ -438,7 +438,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.EnterpriseRollback.Failure"
-    enum="UpdateEngineChromeOsVersionPrefix" expires_after="2023-11-30">
+    enum="UpdateEngineChromeOsVersionPrefix" expires_after="2024-03-10">
   <owner>mpolzer@google.com</owner>
   <owner>crisguerrero@chromium.org</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
@@ -472,6 +472,18 @@ chromium-metrics-reviews@google.com.
     This is reported after a rollback image has been successfully installed.
 
     This metric is specific to ChromeOS.
+  </summary>
+</histogram>
+
+<histogram name="UpdateEngine.EnterpriseUpdateInvalidatedResult"
+    enum="BooleanSuccess" expires_after="2024-05-01">
+  <owner>artyomchen@google.com</owner>
+  <owner>chromeos-commercial-remote-management@google.com</owner>
+  <summary>
+    This metric is reported every time the updates are invalidated due to the
+    enterprise policy. Reports whether the update was able to be invalidated.
+
+    This metric is specific to Chrome OS.
   </summary>
 </histogram>
 
@@ -556,7 +568,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.Rollback.Result" enum="BooleanSuccess"
-    expires_after="2024-01-01">
+    expires_after="2024-03-31">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>

@@ -62,7 +62,8 @@ enum class PageLoadTrackerPageType {
   kPrimaryPage = 0,
   kPrerenderPage = 1,
   kFencedFramesPage = 2,
-  kMaxValue = kFencedFramesPage,
+  kPreviewPrimaryPage = 3,  // Primary page in the preview mode
+  kMaxValue = kPreviewPrimaryPage,
 };
 
 extern const char kErrorEvents[];
@@ -225,8 +226,7 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client,
   // PageLoadMetricsUpdateDispatcher::Client implementation:
   bool IsPageMainFrame(content::RenderFrameHost* rfh) const override;
   void OnTimingChanged() override;
-  void OnPageInputTimingChanged(uint64_t num_interactions,
-                                uint64_t num_input_events) override;
+  void OnPageInputTimingChanged(uint64_t num_interactions) override;
   void OnSubFrameTimingChanged(content::RenderFrameHost* rfh,
                                const mojom::PageLoadTiming& timing) override;
   void OnSubFrameInputTimingChanged(
@@ -306,6 +306,9 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client,
   ukm::SourceId GetUkmSourceIdForSoftNavigation() const override;
   ukm::SourceId GetPreviousUkmSourceIdForSoftNavigation() const override;
   bool IsFirstNavigationInWebContents() const override;
+  bool IsOriginVisit() const override;
+  bool IsTerminalVisit() const override;
+  int64_t GetNavigationId() const override;
 
   void Redirect(content::NavigationHandle* navigation_handle);
   void WillProcessNavigationResponse(
@@ -347,15 +350,20 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client,
   void FrameSizeChanged(content::RenderFrameHost* render_frame_host,
                         const gfx::Size& frame_size);
 
-  void OnCookiesRead(const GURL& url,
-                     const GURL& first_party_url,
-                     const net::CookieList& cookie_list,
-                     bool blocked_by_policy);
+  void OnCookiesRead(
+      const GURL& url,
+      const GURL& first_party_url,
+      bool blocked_by_policy,
+      bool is_ad_tagged,
+      const net::CookieSettingOverrides& cookie_setting_overrides);
 
-  void OnCookieChange(const GURL& url,
-                      const GURL& first_party_url,
-                      const net::CanonicalCookie& cookie,
-                      bool blocked_by_policy);
+  void OnCookieChange(
+      const GURL& url,
+      const GURL& first_party_url,
+      const net::CanonicalCookie& cookie,
+      bool blocked_by_policy,
+      bool is_ad_tagged,
+      const net::CookieSettingOverrides& cookie_setting_overrides);
 
   void OnStorageAccessed(const GURL& url,
                          const GURL& first_party_url,
@@ -452,10 +460,13 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client,
                          subresource_load_metrics,
                      mojom::SoftNavigationMetricsPtr soft_navigation_metrics);
 
-  // Set RenderFrameHost for the main frame of the page this tracker instance is
-  // bound. This is called on moving the tracker to the active / inactive
+  // Sets RenderFrameHost for the main frame of the page this tracker instance
+  // is bound. This is called on moving the tracker to the active / inactive
   // tracker list after the provisional load is committed.
   void SetPageMainFrame(content::RenderFrameHost* rfh);
+
+  // Records the fact link navigation from the tracking page happens.
+  void RecordLinkNavigation();
 
   // Gets a bound ukm::SourceId without any check for testing.
   ukm::SourceId GetPageUkmSourceIdForTesting() const { return source_id_; }
@@ -494,6 +505,8 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client,
   // stop tracking a navigation if it doesn't meet the criteria for tracking
   // metrics in DidFinishNavigation.
   bool did_stop_tracking_;
+
+  int64_t navigation_id_;
 
   // The navigation start in TimeTicks, not the wall time reported by Blink.
   const base::TimeTicks navigation_start_;
@@ -575,6 +588,8 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client,
       page_main_frame_;
 
   const bool is_first_navigation_in_web_contents_;
+  const bool is_origin_visit_;
+  bool is_terminal_visit_ = true;
 
   page_load_metrics::LargestContentfulPaintHandler
       largest_contentful_paint_handler_;

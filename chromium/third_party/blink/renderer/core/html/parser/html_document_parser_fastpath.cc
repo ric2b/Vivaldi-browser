@@ -31,13 +31,16 @@
 #include "third_party/blink/renderer/core/html/html_olist_element.h"
 #include "third_party/blink/renderer/core/html/html_paragraph_element.h"
 #include "third_party/blink/renderer/core/html/html_span_element.h"
+#include "third_party/blink/renderer/core/html/html_template_element.h"
 #include "third_party/blink/renderer/core/html/html_ulist_element.h"
 #include "third_party/blink/renderer/core/html/parser/atomic_html_token.h"
 #include "third_party/blink/renderer/core/html/parser/html_construction_site.h"
 #include "third_party/blink/renderer/core/html/parser/html_entity_parser.h"
+#include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/svg/svg_element.h"
 #include "third_party/blink/renderer/core/svg_names.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/text/segmented_string.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string_encoding.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_uchar.h"
@@ -649,7 +652,10 @@ class HTMLFastPathParser {
     Span result;
     SkipWhitespace();
     const Char* start = pos_;
-    if (Char quote_char = GetNext(); quote_char == '"' || quote_char == '\'') {
+    // clang-format off
+    if (Char quote_char = GetNext();
+        quote_char == '"' || quote_char == '\'') {
+      // clang-format on
       start = ++pos_;
       while (pos_ != end_) {
         uint16_t c = GetNext();
@@ -664,6 +670,11 @@ class HTMLFastPathParser {
           return {Span{}, ScanEscapedAttrValue()};
         } else if (c == kDoubleQuote || c == kSingleQuote) {
           break;
+        } else if (UNLIKELY(c == '\0')) {
+          // \0 is generally mapped to \uFFFD (but there are exceptions).
+          // Fallback to normal path as this generally does not happen often.
+          return Fail(HtmlFastPathResult::kFailedParsingQuotedAttributeValue,
+                      std::pair{Span{}, USpan{}});
         } else {
           ++pos_;
         }
@@ -952,11 +963,15 @@ class HTMLFastPathParser {
           return Fail(HtmlFastPathResult::kFailedParsingAttributes);
         }
       }
-      if (attr_name.size() >= 2 && attr_name[0] == 'o' && attr_name[1] == 'n') {
+      if (attr_name.size() > 2 && attr_name[0] == 'o' && attr_name[1] == 'n') {
         // These attributes likely contain script that may be executed at random
         // points, which could cause problems if parsing via the fast path
         // fails. For example, an image's onload event.
         return Fail(HtmlFastPathResult::kFailedOnAttribute);
+      }
+      if (attr_name.size() == 2 && attr_name[0] == 'i' && attr_name[1] == 's') {
+        // This is for the "is" attribute case.
+        return Fail(HtmlFastPathResult::kFailedParsingAttributes);
       }
       if (GetNext() != '=') {
         SkipWhitespace();
@@ -968,11 +983,8 @@ class HTMLFastPathParser {
         SkipWhitespace();
       }
       Attribute attribute = ProcessAttribute(attr_name, attr_value);
-      attribute_buffer_.push_back(attribute);
-      if (attribute.GetName() == html_names::kIsAttr) {
-        return Fail(HtmlFastPathResult::kFailedParsingAttributes);
-      }
       attribute_names_.push_back(attribute.LocalName().Impl());
+      attribute_buffer_.push_back(std::move(attribute));
     }
     std::sort(attribute_names_.begin(), attribute_names_.end());
     if (std::adjacent_find(attribute_names_.begin(), attribute_names_.end()) !=
@@ -1147,7 +1159,7 @@ class HTMLFastPathParser {
 };
 
 void LogFastPathResult(HtmlFastPathResult result) {
-  base::UmaHistogramEnumeration("Blink.HTMLFastPathParser.ParseResult", result);
+  UMA_HISTOGRAM_ENUMERATION("Blink.HTMLFastPathParser.ParseResult", result);
   if (result != HtmlFastPathResult::kSucceeded) {
     VLOG(2) << "innerHTML fast-path parser failed, "
             << static_cast<int>(result);
@@ -1182,10 +1194,18 @@ bool CanUseFastPath(Document& document,
   // See HTMLConstructionSite::InitFragmentParsing() and
   // HTMLConstructionSite::CreateElement() for the corresponding code on the
   // slow-path.
-  if (!context_element.GetDocument().IsTemplateDocument() &&
-      Traversal<HTMLFormElement>::FirstAncestorOrSelf(context_element) !=
-          nullptr) {
+  auto* template_element = DynamicTo<HTMLTemplateElement>(context_element);
+  if (!template_element && Traversal<HTMLFormElement>::FirstAncestorOrSelf(
+                               context_element) != nullptr) {
     LogFastPathResult(HtmlFastPathResult::kFailedInForm);
+    return false;
+  }
+
+  // TODO(crbug.com/1453291) For now, declarative DOM Parts are not supported by
+  // the fast path parser.
+  if (RuntimeEnabledFeatures::DOMPartsAPIEnabled() && template_element &&
+      template_element->hasAttribute(html_names::kParsepartsAttr)) {
+    LogFastPathResult(HtmlFastPathResult::kFailedUnsupportedContextTag);
     return false;
   }
   return true;
@@ -1375,17 +1395,14 @@ bool TryParsingHTMLFragmentImpl(const base::span<const Char>& source,
   LogFastPathResult(parser.parse_result());
   number_of_bytes_parsed = parser.NumberOfBytesParsed();
   // The time needed to parse is typically < 1ms (even at the 99%).
-  if (base::TimeTicks::IsHighResolution()) {
-    if (success) {
-      base::UmaHistogramCustomMicrosecondsTimes(
-          "Blink.HTMLFastPathParser.SuccessfulParseTime2",
-          parse_timer.Elapsed(), base::Microseconds(1), base::Milliseconds(10),
-          100);
-    } else {
-      base::UmaHistogramCustomMicrosecondsTimes(
-          "Blink.HTMLFastPathParser.AbortedParseTime2", parse_timer.Elapsed(),
-          base::Microseconds(1), base::Milliseconds(10), 100);
-    }
+  if (success) {
+    UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
+        "Blink.HTMLFastPathParser.SuccessfulParseTime2", parse_timer.Elapsed(),
+        base::Microseconds(1), base::Milliseconds(10), 100);
+  } else {
+    UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
+        "Blink.HTMLFastPathParser.AbortedParseTime2", parse_timer.Elapsed(),
+        base::Microseconds(1), base::Milliseconds(10), 100);
   }
   if (failed_because_unsupported_tag) {
     *failed_because_unsupported_tag =
@@ -1406,10 +1423,13 @@ bool TryParsingHTMLFragmentImpl(const base::span<const Char>& source,
           kUnsupportedContextTagTypeMaskNames);
     }
   }
-  base::UmaHistogramCounts10M(
-      success ? "Blink.HTMLFastPathParser.SuccessfulParseSize"
-              : "Blink.HTMLFastPathParser.AbortedParseSize",
-      number_of_bytes_parsed);
+  if (success) {
+    UMA_HISTOGRAM_COUNTS_10M("Blink.HTMLFastPathParser.SuccessfulParseSize",
+                             number_of_bytes_parsed);
+  } else {
+    UMA_HISTOGRAM_COUNTS_10M("Blink.HTMLFastPathParser.AbortedParseSize",
+                             number_of_bytes_parsed);
+  }
   return success;
 }
 

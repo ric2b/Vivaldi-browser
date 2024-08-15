@@ -51,7 +51,6 @@ void CompanionTabHelper::ShowCompanionSidePanelForImage(
     const std::vector<uint8_t>& thumbnail_data,
     const gfx::Size& original_size,
     const gfx::Size& downscaled_size,
-    const std::string& image_extension,
     const std::string& content_type) {
   CHECK(delegate_);
 
@@ -189,12 +188,9 @@ void CompanionTabHelper::StartRegionSearch(
     bool use_fullscreen_capture,
     lens::AmbientSearchEntryPoint entry_point) {
 #if BUILDFLAG(ENABLE_LENS_DESKTOP_GOOGLE_BRANDED_FEATURES)
-  // TODO(shaktisahu): Pass a UI entry point for accurate metrics.
-  Browser* browser = companion::GetBrowserForWebContents(web_contents);
-  CHECK(browser);
   if (!lens_region_search_controller_) {
     lens_region_search_controller_ =
-        std::make_unique<lens::LensRegionSearchController>(browser);
+        std::make_unique<lens::LensRegionSearchController>();
   }
   lens_region_search_controller_->Start(web_contents, use_fullscreen_capture,
                                         /*is_google_default_search_provider=*/

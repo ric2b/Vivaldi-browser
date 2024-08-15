@@ -3,10 +3,10 @@
 #ifndef EXTENSIONS_API_NOTES_NOTES_API_H_
 #define EXTENSIONS_API_NOTES_NOTES_API_H_
 
+#include "components/notes/notes_model_observer.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_function.h"
-#include "notes/notes_model_observer.h"
 
 namespace extensions {
 

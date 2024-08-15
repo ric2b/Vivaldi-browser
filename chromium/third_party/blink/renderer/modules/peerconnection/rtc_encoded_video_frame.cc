@@ -122,7 +122,7 @@ DOMArrayBuffer* RTCEncodedVideoFrame::data() const {
   if (!frame_data_) {
     frame_data_ = delegate_->CreateDataBuffer();
   }
-  return frame_data_;
+  return frame_data_.Get();
 }
 
 RTCEncodedVideoFrameMetadata* RTCEncodedVideoFrame::getMetadata() const {
@@ -257,20 +257,6 @@ String RTCEncodedVideoFrame::toString() const {
   sb.Append(type());
   sb.Append("}");
   return sb.ToString();
-}
-
-RTCEncodedVideoFrame* RTCEncodedVideoFrame::clone(
-    ExceptionState& exception_state) const {
-  std::unique_ptr<webrtc::TransformableVideoFrameInterface> new_webrtc_frame =
-      delegate_->CloneWebRtcFrame();
-  if (new_webrtc_frame == nullptr) {
-    exception_state.ThrowDOMException(
-        DOMExceptionCode::kInvalidStateError,
-        "Frames neutered by sending cannot be cloned.");
-    return nullptr;
-  }
-  return MakeGarbageCollected<RTCEncodedVideoFrame>(
-      std::move(new_webrtc_frame));
 }
 
 void RTCEncodedVideoFrame::SyncDelegate() const {

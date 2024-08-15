@@ -4,11 +4,11 @@
 
 #import "base/apple/foundation_util.h"
 #import "components/sync/base/user_selectable_type.h"
+#import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_detail_text_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_cell.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_button_item.h"
-#import "ios/chrome/browser/ui/settings/utils/settings_utils.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/ui/settings/sync/cells/vivaldi_table_view_sync_status_item.h"
 #import "ios/ui/settings/sync/vivaldi_sync_settings_constants.h"
@@ -285,8 +285,9 @@
 }
 
 - (void)encryptionInfoButtonPressed {
-  BlockToOpenURL(self, self.applicationCommandsHandler)(GURL(
-      l10n_util::GetStringUTF8(IDS_VIVALDI_IOS_ENCRYPTION_INFO_URL)));
+  OpenNewTabCommand* command = [OpenNewTabCommand commandWithURLFromChrome:
+      GURL(l10n_util::GetStringUTF8(IDS_VIVALDI_IOS_ENCRYPTION_INFO_URL))];
+  [self.applicationCommandsHandler closeSettingsUIAndOpenURL:command];
 }
 
 - (void)logOutButtonPressed:(UIButton*)sender {

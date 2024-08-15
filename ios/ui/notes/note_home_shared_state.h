@@ -7,8 +7,8 @@
 
 #import <set>
 
+#import "components/notes/notes_model.h"
 #import "ios/chrome/browser/shared/ui/list_model/list_model.h"
-#import "notes/notes_model.h"
 
 @protocol NoteTableCellTitleEditing;
 @class NoteHomeSharedState;

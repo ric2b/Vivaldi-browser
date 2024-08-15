@@ -604,7 +604,7 @@ public class StartSurfaceTestUtils {
      */
     public static void clickTabInCarousel(int position) {
         onViewWaiting(allOf(withParent(withId(R.id.tab_switcher_module_container)),
-                              withId(R.id.tab_list_view)))
+                              withId(R.id.tab_list_recycler_view)))
                 .perform(RecyclerViewActions.actionOnItemAtPosition(position, click()));
     }
 
@@ -700,11 +700,11 @@ public class StartSurfaceTestUtils {
     }
 
     /**
-     * Gets the "tab_list_view" from the carousel tab switcher module on Start surface.
+     * Gets the "tab_list_recycler_view" from the carousel tab switcher module on Start surface.
      */
     static View getCarouselTabSwitcherTabListView(ChromeTabbedActivity cta) {
         return cta.findViewById(R.id.tab_switcher_module_container)
-                .findViewById(R.id.tab_list_view);
+                .findViewById(R.id.tab_list_recycler_view);
     }
 
     /**
@@ -730,13 +730,17 @@ public class StartSurfaceTestUtils {
      * @param encrypted for Incognito mode
      */
     private static void saveTabState(int tabId, boolean encrypted) {
-        File file = TabStateFileManager.getTabStateFile(
-                TabStateDirectory.getOrCreateTabbedModeStateDirectory(), tabId, encrypted);
+        File file =
+                TabStateFileManager.getTabStateFile(
+                        TabStateDirectory.getOrCreateTabbedModeStateDirectory(),
+                        tabId,
+                        encrypted,
+                        /* isFlatBuffer= */ false);
         writeFile(file, M26_GOOGLE_COM.encodedTabState);
 
-        TabState tabState = TabStateFileManager.restoreTabState(file, false);
+        TabState tabState = TabStateFileManager.restoreTabStateInternal(file, false);
         tabState.rootId = PseudoTab.fromTabId(tabId).getRootId();
-        TabStateFileManager.saveState(file, tabState, encrypted);
+        TabStateFileManager.saveStateInternal(file, tabState, encrypted);
     }
 
     private static void writeFile(File file, String data) {

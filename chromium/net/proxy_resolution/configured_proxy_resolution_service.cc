@@ -917,24 +917,19 @@ int ConfiguredProxyResolutionService::ResolveProxy(
   // and password), and local data (i.e. reference fragment) which does not need
   // to be disclosed to the resolver.
   GURL url = SanitizeUrl(raw_url);
-  GURL top_frame_url =
-      network_anonymization_key.GetTopFrameSite().has_value() &&
-              network_anonymization_key.GetTopFrameSite()->GetURL().is_valid()
-          ? SanitizeUrl(network_anonymization_key.GetTopFrameSite()->GetURL())
-          : GURL();
 
   // Check if the request can be completed right away. (This is the case when
   // using a direct connection for example).
   int rv = TryToCompleteSynchronously(url, result);
   if (rv != ERR_IO_PENDING) {
-    rv = DidFinishResolvingProxy(url, top_frame_url, method, result, rv,
-                                 net_log);
+    rv = DidFinishResolvingProxy(url, network_anonymization_key, method, result,
+                                 rv, net_log);
     return rv;
   }
 
   auto req = std::make_unique<ConfiguredProxyResolutionRequest>(
-      this, url, top_frame_url, method, network_anonymization_key, result,
-      std::move(callback), net_log);
+      this, url, method, network_anonymization_key, result, std::move(callback),
+      net_log);
 
   if (current_state_ == STATE_READY) {
     // Start the resolve request.
@@ -1137,10 +1132,13 @@ void ConfiguredProxyResolutionService::ReportSuccess(const ProxyInfo& result) {
     if (existing == proxy_retry_info_.end()) {
       proxy_retry_info_[iter.first] = iter.second;
       if (proxy_delegate_) {
+        // TODO(crbug.com/1491092): Provide the full chain when that is
+        // available from retry info, and never provide a direct chain.
         const ProxyServer& bad_proxy =
             ProxyUriToProxyServer(iter.first, ProxyServer::SCHEME_HTTP);
         const ProxyRetryInfo& proxy_retry_info = iter.second;
-        proxy_delegate_->OnFallback(bad_proxy, proxy_retry_info.net_error);
+        proxy_delegate_->OnFallbackServerOnly(bad_proxy,
+                                              proxy_retry_info.net_error);
       }
     } else if (existing->second.bad_until < iter.second.bad_until) {
       existing->second.bad_until = iter.second.bad_until;
@@ -1166,7 +1164,7 @@ void ConfiguredProxyResolutionService::RemovePendingRequest(
 
 int ConfiguredProxyResolutionService::DidFinishResolvingProxy(
     const GURL& url,
-    const GURL& top_frame_url,
+    const NetworkAnonymizationKey& network_anonymization_key,
     const std::string& method,
     ProxyInfo* result,
     int result_code,
@@ -1178,7 +1176,7 @@ int ConfiguredProxyResolutionService::DidFinishResolvingProxy(
     // Allow the proxy delegate to interpose on the resolution decision,
     // possibly modifying the ProxyInfo.
     if (proxy_delegate_)
-      proxy_delegate_->OnResolveProxy(url, top_frame_url, method,
+      proxy_delegate_->OnResolveProxy(url, network_anonymization_key, method,
                                       proxy_retry_info_, result);
 
     net_log.AddEvent(
@@ -1188,7 +1186,7 @@ int ConfiguredProxyResolutionService::DidFinishResolvingProxy(
     // This check is done to only log the NetLog event when necessary, it's
     // not a performance optimization.
     if (!proxy_retry_info_.empty()) {
-      result->DeprioritizeBadProxies(proxy_retry_info_);
+      result->DeprioritizeBadProxyChains(proxy_retry_info_);
       net_log.AddEvent(
           NetLogEventType::PROXY_RESOLUTION_SERVICE_DEPRIORITIZED_BAD_PROXIES,
           [&] { return NetLogFinishedResolvingProxyParams(result); });
@@ -1213,7 +1211,7 @@ int ConfiguredProxyResolutionService::DidFinishResolvingProxy(
       // Allow the proxy delegate to interpose on the resolution decision,
       // possibly modifying the ProxyInfo.
       if (proxy_delegate_)
-        proxy_delegate_->OnResolveProxy(url, top_frame_url, method,
+        proxy_delegate_->OnResolveProxy(url, network_anonymization_key, method,
                                         proxy_retry_info_, result);
     } else {
       result_code = ERR_MANDATORY_PROXY_CONFIGURATION_FAILED;

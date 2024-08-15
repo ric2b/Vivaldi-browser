@@ -14,7 +14,6 @@ import org.chromium.base.Log;
 import org.chromium.base.StreamUtil;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModelFilterProvider;
@@ -39,6 +38,9 @@ import java.util.Map;
 import java.util.Set;
 
 import javax.annotation.concurrent.GuardedBy;
+
+// Vivaldi
+import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 
 /**
  * Representation of a Tab-like card in the Grid Tab Switcher.
@@ -198,7 +200,7 @@ public class PseudoTab {
      */
     public int getRootId() {
         if (mTab != null && mTab.get() != null && mTab.get().isInitialized()) {
-            return CriticalPersistedTabData.from(mTab.get()).getRootId();
+            return mTab.get().getRootId();
         }
         assert mTabId != null;
         return TabAttributeCache.getRootId(mTabId);
@@ -209,7 +211,7 @@ public class PseudoTab {
      */
     public long getTimestampMillis() {
         if (mTab != null && mTab.get() != null && mTab.get().isInitialized()) {
-            return CriticalPersistedTabData.from(mTab.get()).getTimestampMillis();
+            return mTab.get().getTimestampMillis();
         }
         assert mTabId != null;
         return TabAttributeCache.getTimestampMillis(mTabId);
@@ -292,6 +294,8 @@ public class PseudoTab {
 
     private static @Nullable List<Tab> getRelatedTabList(
             @NonNull TabModelSelector tabModelSelector, int tabId) {
+        // Vivaldi: This is needed when turning off tab stacks.
+        if (!TabUiFeatureUtilities.isTabGroupsAndroidEnabled()) return null;
         if (!tabModelSelector.isTabStateInitialized()) {
             if (!ChromeFeatureList.sInstantStart.isEnabled()) throw new IllegalStateException();
             return null;

@@ -190,8 +190,9 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
      * Should be called when the user's sign in state changes.
      */
     public void onSignInStateChange() {
+        int visibility = mManager.getRemoveItemButtonVisibility();
         for (HistoryItemView itemView : mItemViews) {
-            itemView.onSignInStateChange();
+            itemView.setRemoveButtonVisiblity(visibility);
         }
         startLoadingItems();
         updateClearBrowsingDataButtonVisibility();
@@ -205,8 +206,13 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
         if (mClearBrowsingDataButton != null) {
             mClearBrowsingDataButton.setEnabled(!active);
         }
+
+        int visibility = mManager.getRemoveItemButtonVisibility();
+        if (active) {
+            assert visibility != View.VISIBLE : "Removal is not allowed when selection is active";
+        }
         for (HistoryItemView item : mItemViews) {
-            item.setRemoveButtonVisible(!active);
+            item.setRemoveButtonVisiblity(visibility);
         }
     }
 
@@ -216,8 +222,8 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
                 R.layout.history_item_view, parent, false);
         ViewHolder viewHolder = mManager.getHistoryItemViewHolder(v);
         HistoryItemView itemView = (HistoryItemView) viewHolder.itemView;
-        itemView.setRemoveButtonVisible(mManager.shouldShowRemoveItemButton());
         itemView.setFaviconHelper(mFaviconHelper);
+        itemView.setRemoveButtonVisiblity(mManager.getRemoveItemButtonVisibility());
         mItemViews.add(itemView);
         return viewHolder;
     }

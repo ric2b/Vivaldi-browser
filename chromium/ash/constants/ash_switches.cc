@@ -69,6 +69,9 @@ const char kArcAvailability[] = "arc-availability";
 // Signals the availability of the ARC instance on this device.
 const char kArcAvailable[] = "arc-available";
 
+// Switch that blocks KeyMint. When KeyMint is blocked, Keymaster is enabled.
+const char kArcBlockKeyMint[] = "arc-block-keymint";
+
 // Flag that forces ARC data be cleaned on each start.
 const char kArcDataCleanupOnStart[] = "arc-data-cleanup-on-start";
 
@@ -121,9 +124,6 @@ const char kArcUseDevCaches[] = "arc-use-dev-caches";
 
 // Flag that indicates ARC images are formatted with EROFS (go/arcvm-erofs).
 const char kArcErofs[] = "arc-erofs";
-
-// If set, forces ARC apk cache to be enabled for testing.
-const char kArcForceEnableApkCache[] = "arc-force-enable-apk-cache";
 
 // If set, forces post boot dexopt to run immediately without device idle
 // requirement.
@@ -246,6 +246,10 @@ const char kAshForceEnableStylusTools[] = "force-enable-stylus-tools";
 // Forces the status area to allow collapse/expand regardless of the current
 // state.
 const char kAshForceStatusAreaCollapsible[] = "force-status-area-collapsible";
+
+// Path for which to load growth campaigns file for testing (instead of
+// downloading from Omaha).
+const char kGrowthCampaignsPath[] = "growth-campaigns-path";
 
 // Hides notifications that are irrelevant to Chrome OS device factory testing,
 // such as battery level updates.
@@ -397,6 +401,9 @@ const char kDisableGaiaServices[] = "disable-gaia-services";
 // Disables HID-detection OOBE screen.
 const char kDisableHIDDetectionOnOOBEForTesting[] =
     "disable-hid-detection-on-oobe";
+
+// Skip multidevice setup screen during tast tests.
+const char kSkipMultideviceScreenForTesting[] = "skip-multidevice-screen";
 
 // Disables the Lacros keep alive for testing.
 const char kDisableLacrosKeepAliveForTesting[] = "disable-lacros-keep-alive";
@@ -823,6 +830,9 @@ const char kBrowserDataMigrationForUser[] = "browser-data-migration-for-user";
 const char kBrowserDataBackwardMigrationForUser[] =
     "browser-data-backward-migration-for-user";
 
+// Supply secret key for Coral feature.
+const char kCoralFeatureKey[] = "coral-feature-key";
+
 // Tells Chrome to forcefully trigger backward data migration.
 extern const char kForceBrowserDataBackwardMigration[] =
     "force-browser-data-backward-migration";
@@ -891,9 +901,6 @@ const char kOobeTimezoneOverrideForTests[] = "oobe-timezone-override-for-tests";
 const char kOobeTriggerSyncTimeoutForTests[] =
     "oobe-trigger-sync-timeout-for-tests";
 
-// Supply secret key for Orca feature
-const char kOrcaKey[] = "orca-key";
-
 // Controls how often the HiddenNetworkHandler class checks for wrongly hidden
 // networks. The interval should be provided in seconds, should follow the
 // format "--hidden-network-migration-interval=#", and should be >= 1.
@@ -937,8 +944,8 @@ const char kQsShowLocaleTile[] = "qs-show-locale-tile";
 // "/usr/share/chromeos-assets/regulatory_labels/".
 const char kRegulatoryLabelDir[] = "regulatory-label-dir";
 
-// Testing timeout for reboot command. Useful for tast tests.
-const char kRemoteRebootCommandTimeoutInSecondsForTesting[] =
+// Testing delay for reboot command. Useful for tast tests.
+const char kRemoteRebootCommandDelayInSecondsForTesting[] =
     "remote-reboot-command-timeout-in-seconds-for-testing";
 
 // Indicates that reven UI strings and features should be shown.
@@ -1007,6 +1014,12 @@ const char kSuppressMessageCenterPopups[] = "suppress-message-center-popups";
 
 // Specifies directory for the Telemetry System Web Extension.
 const char kTelemetryExtensionDirectory[] = "telemetry-extension-dir";
+
+// TODO(b/299642185): Remove this flag by the end of 2023.
+// ChromeOS does not support empty passwords for users, but some legacy test
+// setups might use empty password for users.
+const char kTemporaryAllowEmptyPasswordsInTests[] =
+    "allow-empty-passwords-in-tests";
 
 // Enables testing for encryption migration UI.
 const char kTestEncryptionMigrationUI[] = "test-encryption-migration-ui";
@@ -1081,6 +1094,15 @@ const char kCameraEffectsSupportedByHardware[] =
 const char kPreventKioskAutolaunchForTesting[] =
     "prevent-kiosk-autolaunch-for-testing";
 
+// Allows the Ash shelf to apply the default pin layout without waiting for Sync
+// to download data from the server (which many tests can't achieve).
+const char kAllowDefaultShelfPinLayoutIgnoringSync[] =
+    "ash-allow-default-shelf-pin-layout-ignoring-sync";
+
+// On devices that support refresh rate throttling, force the throttling
+// behavior to be active regardless of system state.
+const char kForceRefreshRateThrottle[] = "force-refresh-rate-throttle";
+
 bool IsAuthSessionCryptohomeEnabled() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       kCryptohomeUseAuthSession);
@@ -1123,6 +1145,11 @@ bool IsTabletFormFactor() {
       kEnableTabletFormFactor);
 }
 
+bool ShouldMultideviceScreenBeSkippedForTesting() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      kSkipMultideviceScreenForTesting);
+}
+
 bool IsGaiaServicesDisabled() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       kDisableGaiaServices);
@@ -1155,6 +1182,11 @@ bool ShouldScaleOobe() {
 bool IsAueReachedForUpdateRequiredForTest() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       kUpdateRequiredAueForTest);
+}
+
+bool AreEmptyPasswordsAllowedForForTesting() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      kTemporaryAllowEmptyPasswordsInTests);
 }
 
 bool IsOOBEChromeVoxHintTimerDisabledForTesting() {
@@ -1233,6 +1265,11 @@ bool IsCameraEffectsSupportedByHardware() {
 bool UseFakeCrasAudioClientForDBus() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       kUseFakeCrasAudioClientForDBus);
+}
+
+bool ShouldAllowDefaultShelfPinLayoutIgnoringSync() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      kAllowDefaultShelfPinLayoutIgnoringSync);
 }
 
 }  // namespace switches

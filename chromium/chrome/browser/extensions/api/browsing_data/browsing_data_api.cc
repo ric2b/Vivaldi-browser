@@ -37,56 +37,11 @@ using browsing_data::BrowsingDataType;
 using browsing_data::ClearBrowsingDataTab;
 using content::BrowserThread;
 
-namespace extension_browsing_data_api_constants {
-// Parameter name keys.
-const char kDataRemovalPermittedKey[] = "dataRemovalPermitted";
-const char kDataToRemoveKey[] = "dataToRemove";
-const char kOptionsKey[] = "options";
-
-// Type keys.
-const char kCacheKey[] = "cache";
-const char kCookiesKey[] = "cookies";
-const char kDownloadsKey[] = "downloads";
-const char kFileSystemsKey[] = "fileSystems";
-const char kFormDataKey[] = "formData";
-const char kHistoryKey[] = "history";
-const char kIndexedDBKey[] = "indexedDB";
-const char kLocalStorageKey[] = "localStorage";
-const char kPasswordsKey[] = "passwords";
-const char kPluginDataKeyDeprecated[] = "pluginData";
-const char kServiceWorkersKey[] = "serviceWorkers";
-const char kCacheStorageKey[] = "cacheStorage";
-const char kWebSQLKey[] = "webSQL";
+namespace {
 
 // Vivaldi addition:
 const char kSiteUsageDataKey[] = "siteUsageData";
 const char kSiteSettingsDataKey[] = "siteSettings";
-
-// Option keys.
-const char kExtensionsKey[] = "extension";
-const char kOriginTypesKey[] = "originTypes";
-const char kProtectedWebKey[] = "protectedWeb";
-const char kSinceKey[] = "since";
-const char kOriginsKey[] = "origins";
-const char kExcludeOriginsKey[] = "excludeOrigins";
-const char kUnprotectedWebKey[] = "unprotectedWeb";
-
-// Errors!
-// The placeholder will be filled by the name of the affected data type (e.g.,
-// "history").
-const char kBadDataTypeDetails[] = "Invalid value for data type '%s'.";
-const char kDeleteProhibitedError[] =
-    "Browsing history and downloads are not "
-    "permitted to be removed.";
-const char kNonFilterableError[] =
-    "At least one data type doesn't support filtering by origin.";
-const char kIncompatibleFilterError[] =
-    "Don't set both 'origins' and 'excludeOrigins' at the same time.";
-const char kInvalidOriginError[] = "'%s' is not a valid origin.";
-
-}  // namespace extension_browsing_data_api_constants
-
-namespace {
 
 const int64_t kFilterableDataTypes =
     chrome_browsing_data_remover::DATA_TYPE_SITE_DATA |
@@ -126,11 +81,9 @@ uint64_t MaskForKey(const char* key) {
     return content::BrowsingDataRemover::DATA_TYPE_WEB_SQL;
 
   // Vivaldi addition:
-  if (strcmp(key, extension_browsing_data_api_constants::kSiteUsageDataKey) ==
-      0)
+  if (strcmp(key, kSiteUsageDataKey) == 0)
     return chrome_browsing_data_remover::DATA_TYPE_SITE_USAGE_DATA;
-  if (strcmp(key,
-             extension_browsing_data_api_constants::kSiteSettingsDataKey) == 0)
+  if (strcmp(key,kSiteSettingsDataKey) == 0)
     return chrome_browsing_data_remover::DATA_TYPE_CONTENT_SETTINGS;
 
   return 0ULL;
@@ -193,7 +146,7 @@ ExtensionFunction::ResponseAction BrowsingDataSettingsFunction::Run() {
   double since = 0;
   if (period != browsing_data::TimePeriod::ALL_TIME) {
     base::Time time = browsing_data::CalculateBeginDeleteTime(period);
-    since = time.ToJsTime();
+    since = time.InMillisecondsFSinceUnixEpoch();
   }
 
   base::Value::Dict options;
@@ -307,7 +260,7 @@ ExtensionFunction::ResponseAction BrowsingDataRemoverFunction::Run() {
   // base::Time takes a double that represents seconds since epoch. JavaScript
   // gives developers milliseconds, so do a quick conversion before populating
   // the object.
-  remove_since_ = base::Time::FromJsTime(ms_since_epoch);
+  remove_since_ = base::Time::FromMillisecondsSinceUnixEpoch(ms_since_epoch);
 
   EXTENSION_FUNCTION_VALIDATE(GetRemovalMask(&removal_mask_));
 

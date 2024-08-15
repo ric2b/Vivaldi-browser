@@ -40,7 +40,6 @@
 #include "chrome/browser/apps/app_service/app_icon/app_icon_factory.h"
 #include "chrome/browser/apps/app_service/app_icon/app_icon_util.h"
 #include "chrome/browser/apps/app_service/app_icon/dip_px_util.h"
-#include "chrome/browser/apps/app_service/app_icon/icon_effects.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/publishers/arc_apps.h"
@@ -85,6 +84,7 @@
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/app_update.h"
 #include "components/services/app_service/public/cpp/features.h"
+#include "components/services/app_service/public/cpp/icon_effects.h"
 #include "components/services/app_service/public/cpp/icon_types.h"
 #include "components/services/app_service/public/cpp/intent.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
@@ -147,7 +147,7 @@ class FakeAppIconLoaderDelegate : public AppIconLoaderDelegate {
 
     const std::vector<ui::ResourceScaleFactor>& scale_factors =
         ui::GetSupportedResourceScaleFactors();
-    for (auto& scale_factor : scale_factors) {
+    for (const auto scale_factor : scale_factors) {
       const float scale = ui::GetScaleForResourceScaleFactor(scale_factor);
       if (!image.HasRepresentation(scale))
         return false;
@@ -172,7 +172,7 @@ class FakeAppIconLoaderDelegate : public AppIconLoaderDelegate {
 
     const std::vector<ui::ResourceScaleFactor>& scale_factors =
         ui::GetSupportedResourceScaleFactors();
-    for (auto& scale_factor : scale_factors) {
+    for (const auto scale_factor : scale_factors) {
       // Force the icon to be loaded.
       image_.GetRepresentation(
           ui::GetScaleForResourceScaleFactor(scale_factor));
@@ -318,12 +318,6 @@ ArcAppIconDescriptor GetAppListIconDescriptor(
       scale_factor);
 }
 
-ArcAppIconDescriptor GetAppListIconDescriptor(
-    int dip_size,
-    ui::ResourceScaleFactor scale_factor) {
-  return ArcAppIconDescriptor(dip_size, scale_factor);
-}
-
 bool IsIconCreated(Profile* profile,
                    ArcAppListPrefs* prefs,
                    const std::string& app_id,
@@ -376,7 +370,7 @@ void VerifyIcon(const gfx::ImageSkia& src, const gfx::ImageSkia& dst) {
       ui::GetSupportedResourceScaleFactors();
   ASSERT_EQ(2U, scale_factors.size());
 
-  for (auto& scale_factor : scale_factors) {
+  for (const auto scale_factor : scale_factors) {
     const float scale = ui::GetScaleForResourceScaleFactor(scale_factor);
     ASSERT_TRUE(src.HasRepresentation(scale));
     ASSERT_TRUE(dst.HasRepresentation(scale));
@@ -519,8 +513,8 @@ class ArcAppModelBuilderTest : public extensions::ExtensionServiceTestBase,
   ArcState GetArcState() const { return GetParam(); }
 
   ChromeShelfController* CreateShelfController() {
-    shelf_controller_ = std::make_unique<ChromeShelfController>(
-        profile_.get(), model_.get(), /*shelf_item_factory=*/nullptr);
+    shelf_controller_ =
+        std::make_unique<ChromeShelfController>(profile_.get(), model_.get());
     shelf_controller_->SetProfileForTest(profile_.get());
     shelf_controller_->SetShelfControllerHelperForTest(
         std::make_unique<ShelfControllerHelper>(profile_.get()));
@@ -665,6 +659,8 @@ class ArcAppModelBuilderTest : public extensions::ExtensionServiceTestBase,
       EXPECT_EQ(package->sync, package_info->should_sync);
       EXPECT_EQ(package->vpn_provider, package_info->vpn_provider);
       EXPECT_EQ(package->preinstalled, package_info->preinstalled);
+      EXPECT_EQ(package->game_controls_opt_out,
+                package_info->game_controls_opt_out);
       EXPECT_EQ(package->permission_states, package_info->permissions);
       EXPECT_EQ(package->web_app_info.is_null(),
                 package_info->web_app_info.is_null());
@@ -682,6 +678,15 @@ class ArcAppModelBuilderTest : public extensions::ExtensionServiceTestBase,
                   package_info->web_app_info->is_web_only_twa);
         EXPECT_EQ(package->web_app_info->certificate_sha256_fingerprint,
                   package_info->web_app_info->certificate_sha256_fingerprint);
+      }
+      EXPECT_EQ(package->locale_info.is_null(),
+                package_info->locale_info.is_null());
+      if (!package->locale_info.is_null() &&
+          !package_info->locale_info.is_null()) {
+        EXPECT_EQ(package->locale_info->supported_locales,
+                  package_info->locale_info->supported_locales);
+        EXPECT_EQ(package->locale_info->selected_locale,
+                  package_info->locale_info->selected_locale);
       }
     }
   }
@@ -745,7 +750,7 @@ class ArcAppModelBuilderTest : public extensions::ExtensionServiceTestBase,
 
     const std::vector<ui::ResourceScaleFactor>& scale_factors =
         ui::GetSupportedResourceScaleFactors();
-    for (auto& scale_factor : scale_factors) {
+    for (const auto scale_factor : scale_factors) {
       const float scale = ui::GetScaleForResourceScaleFactor(scale_factor);
       EXPECT_TRUE(image.HasRepresentation(scale));
       const gfx::ImageSkiaRep& representation = image.GetRepresentation(scale);
@@ -943,12 +948,10 @@ class ArcAppModelIconTest : public ArcAppModelBuilderRecreate,
   void SetUp() override {
     ArcAppModelBuilderRecreate::SetUp();
 
-    std::vector<ui::ResourceScaleFactor> supported_scale_factors;
-    supported_scale_factors.push_back(ui::k100Percent);
-    supported_scale_factors.push_back(ui::k200Percent);
     scoped_supported_scale_factors_ =
         std::make_unique<ui::test::ScopedSetSupportedResourceScaleFactors>(
-            supported_scale_factors);
+            std::vector<ui::ResourceScaleFactor>{ui::k100Percent,
+                                                 ui::k200Percent});
   }
 
   void TearDown() override {
@@ -1127,7 +1130,7 @@ class ArcAppModelIconTest : public ArcAppModelBuilderRecreate,
       icon_loader.FetchImage(app_id);
 
       // Wait AppServiceAppItem to generate the bad icon image files.
-      for (auto& scale_factor : scale_factors) {
+      for (const auto scale_factor : scale_factors) {
         // Force the icon to be loaded.
         WaitForIconCreation(
             profile(), ArcAppListPrefs::Get(profile()), app_id,
@@ -1136,7 +1139,7 @@ class ArcAppModelIconTest : public ArcAppModelBuilderRecreate,
       }
 
       // Wait AppServiceAppIconLoader to generate the bad icon image files.
-      for (auto& scale_factor : scale_factors) {
+      for (const auto scale_factor : scale_factors) {
         // Force the icon to be loaded.
         WaitForIconCreation(profile(), ArcAppListPrefs::Get(profile()), app_id,
                             extension_misc::EXTENSION_ICON_MEDIUM,
@@ -1233,7 +1236,7 @@ class ArcDefaultAppTest : public ArcAppModelBuilderRecreate {
                     gfx::ImageSkia& output_image_skia) {
     int size_in_dip =
         ash::SharedAppListConfig::instance().default_grid_icon_dimension();
-    for (auto scale_factor : ui::GetSupportedResourceScaleFactors()) {
+    for (const auto scale_factor : ui::GetSupportedResourceScaleFactors()) {
       base::FilePath file_path = file_paths[scale_factor];
       ASSERT_TRUE(base::PathExists(file_path));
 
@@ -1277,7 +1280,7 @@ class ArcDefaultAppTest : public ArcAppModelBuilderRecreate {
     std::map<int, base::FilePath> foreground_paths;
     std::map<int, base::FilePath> background_paths;
     std::map<float, int> scale_to_size;
-    for (auto scale_factor : ui::GetSupportedResourceScaleFactors()) {
+    for (const auto scale_factor : ui::GetSupportedResourceScaleFactors()) {
       foreground_paths[scale_factor] =
           base_path.Append("arc_default_apps")
               .Append("test_app1")
@@ -1305,7 +1308,7 @@ class ArcDefaultAppTest : public ArcAppModelBuilderRecreate {
                                                           foreground),
         apps::LoadMaskImage(scale_to_size));
 
-    for (auto& scale_factor : ui::GetSupportedResourceScaleFactors()) {
+    for (const auto scale_factor : ui::GetSupportedResourceScaleFactors()) {
       // Force the icon to be loaded.
       output_image_skia.GetRepresentation(
           ui::GetScaleForResourceScaleFactor(scale_factor));
@@ -1421,6 +1424,7 @@ TEST_P(ArcAppModelBuilderTest, ArcPackagePref) {
   package->last_backup_android_id = 2;
   package->last_backup_time = 2;
   package->preinstalled = true;
+  package->game_controls_opt_out = true;
   AddPackage(package);
   ValidateHavePackages(fake_packages());
 
@@ -1777,7 +1781,7 @@ TEST_P(ArcAppModelBuilderTest, RequestIcons) {
   std::set<int> expected_dimensions;
   const std::vector<ui::ResourceScaleFactor>& scale_factors =
       ui::GetSupportedResourceScaleFactors();
-  for (auto& scale_factor : scale_factors) {
+  for (const auto scale_factor : scale_factors) {
     expected_dimensions.insert(
         GetAppListIconDimensionForScaleFactor(scale_factor));
     for (auto& app : fake_apps()) {
@@ -1844,7 +1848,7 @@ TEST_P(ArcAppModelBuilderTest, RequestShortcutIcons) {
 
   const std::vector<ui::ResourceScaleFactor>& scale_factors =
       ui::GetSupportedResourceScaleFactors();
-  for (auto& scale_factor : scale_factors) {
+  for (const auto scale_factor : scale_factors) {
     expected_dimensions.insert(
         GetAppListIconDimensionForScaleFactor(scale_factor));
     EXPECT_TRUE(IsIconCreated(
@@ -1874,7 +1878,7 @@ TEST_P(ArcAppModelBuilderTest, RequestShortcutIcons) {
   EXPECT_EQ(shortcut_dimensions, expected_dimensions);
 
   // Validate all icon files are installed.
-  for (auto& scale_factor : scale_factors) {
+  for (const auto scale_factor : scale_factors) {
     EXPECT_TRUE(IsIconCreated(
         profile(), prefs, ArcAppTest::GetAppId(shortcut),
         ash::SharedAppListConfig::instance().default_grid_icon_dimension(),
@@ -1901,7 +1905,7 @@ TEST_P(ArcAppModelBuilderTest, ForceCacheIcons) {
   // Number of requests per size in pixels.
   std::map<int, int> requests_expectation;
   const std::vector<int> expected_dip_sizes({16, 32, 48, 64});
-  for (auto scale_factor : ui::GetSupportedResourceScaleFactors()) {
+  for (const auto scale_factor : ui::GetSupportedResourceScaleFactors()) {
     for (int dip_size : expected_dip_sizes) {
       const int size_in_pixels =
           ArcAppIconDescriptor(dip_size, scale_factor).GetSizeInPixels();
@@ -2171,6 +2175,10 @@ TEST_P(ArcAppModelBuilderTest, AppLifeCycleEventsOnPackageListRefresh) {
                             &arc::mojom::ArcPackageInfo::package_name,
                             fake_packages()[3]->package_name)))
       .Times(1);
+  EXPECT_CALL(observer, OnPackageInstalled(testing::Field(
+                            &arc::mojom::ArcPackageInfo::package_name,
+                            fake_packages()[4]->package_name)))
+      .Times(1);
   app_instance()->SendRefreshPackageList(
       ArcAppTest::ClonePackages(fake_packages()));
 
@@ -2187,6 +2195,9 @@ TEST_P(ArcAppModelBuilderTest, AppLifeCycleEventsOnPackageListRefresh) {
       .Times(1);
   EXPECT_CALL(observer,
               OnPackageRemoved(fake_packages()[3]->package_name, false))
+      .Times(1);
+  EXPECT_CALL(observer,
+              OnPackageRemoved(fake_packages()[4]->package_name, false))
       .Times(1);
 
   std::vector<arc::mojom::ArcPackageInfoPtr> packages;
@@ -2757,7 +2768,7 @@ TEST_P(ArcAppModelBuilderTest, IconLoaderWithBadIcon) {
   const std::vector<ui::ResourceScaleFactor>& scale_factors =
       ui::GetSupportedResourceScaleFactors();
   AppServiceAppItem* app_item = FindArcItem(app_id);
-  for (auto& scale_factor : scale_factors) {
+  for (const auto scale_factor : scale_factors) {
     // Force the icon to be loaded.
     app_item->icon().GetRepresentation(
         ui::GetScaleForResourceScaleFactor(scale_factor));

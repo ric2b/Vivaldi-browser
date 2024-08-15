@@ -22,10 +22,12 @@ class SyncUserSettingsMock : public SyncUserSettings {
   SyncUserSettingsMock();
   ~SyncUserSettingsMock() override;
   MOCK_METHOD(bool, IsInitialSyncFeatureSetupComplete, (), (const override));
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   MOCK_METHOD(void,
               SetInitialSyncFeatureSetupComplete,
               (SyncFirstSetupCompleteSource),
               (override));
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
   MOCK_METHOD(bool, IsSyncEverythingEnabled, (), (const override));
   MOCK_METHOD(UserSelectableTypeSet, GetSelectedTypes, (), (const override));
   MOCK_METHOD(bool,
@@ -57,6 +59,7 @@ class SyncUserSettingsMock : public SyncUserSettings {
               (const override));
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+  MOCK_METHOD(bool, IsSyncFeatureDisabledViaDashboard, (), (const override));
   MOCK_METHOD(bool, IsSyncAllOsTypesEnabled, (), (const override));
   MOCK_METHOD(UserSelectableOsTypeSet,
               GetSelectedOsTypes,

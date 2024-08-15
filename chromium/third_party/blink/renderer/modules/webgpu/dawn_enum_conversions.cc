@@ -10,7 +10,6 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_blend_operation.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_buffer_binding_type.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_compare_function.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_compute_pass_timestamp_location.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_cull_mode.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_error_filter.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_feature_name.h"
@@ -19,10 +18,8 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_index_format.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_load_op.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_mipmap_filter_mode.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_pipeline_statistic_name.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_primitive_topology.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_query_type.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_render_pass_timestamp_location.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_sampler_binding_type.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_stencil_operation.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_storage_texture_access.h"
@@ -112,8 +109,6 @@ WGPUQueryType AsDawnEnum(const V8GPUQueryType& webgpu_enum) {
   switch (webgpu_enum.AsEnum()) {
     case V8GPUQueryType::Enum::kOcclusion:
       return WGPUQueryType_Occlusion;
-    case V8GPUQueryType::Enum::kPipelineStatistics:
-      return WGPUQueryType_PipelineStatistics;
     case V8GPUQueryType::Enum::kTimestamp:
       return WGPUQueryType_Timestamp;
   }
@@ -125,28 +120,11 @@ const char* FromDawnEnum(WGPUQueryType dawn_enum) {
       return "occlusion";
     case WGPUQueryType_Timestamp:
       return "timestamp";
-    case WGPUQueryType_PipelineStatistics:
-      return "pipeline-statistics";
     case WGPUQueryType_Force32:
+    default:
       NOTREACHED();
   }
   return "";
-}
-
-WGPUPipelineStatisticName AsDawnEnum(
-    const V8GPUPipelineStatisticName& webgpu_enum) {
-  switch (webgpu_enum.AsEnum()) {
-    case V8GPUPipelineStatisticName::Enum::kVertexShaderInvocations:
-      return WGPUPipelineStatisticName_VertexShaderInvocations;
-    case V8GPUPipelineStatisticName::Enum::kClipperInvocations:
-      return WGPUPipelineStatisticName_ClipperInvocations;
-    case V8GPUPipelineStatisticName::Enum::kClipperPrimitivesOut:
-      return WGPUPipelineStatisticName_ClipperPrimitivesOut;
-    case V8GPUPipelineStatisticName::Enum::kFragmentShaderInvocations:
-      return WGPUPipelineStatisticName_FragmentShaderInvocations;
-    case V8GPUPipelineStatisticName::Enum::kComputeShaderInvocations:
-      return WGPUPipelineStatisticName_ComputeShaderInvocations;
-  }
 }
 
 WGPUTextureFormat AsDawnEnum(const V8GPUTextureFormat& webgpu_enum) {
@@ -208,6 +186,8 @@ WGPUTextureFormat AsDawnEnum(const V8GPUTextureFormat& webgpu_enum) {
       // Packed 32 bit formats
     case V8GPUTextureFormat::Enum::kRgb9E5Ufloat:
       return WGPUTextureFormat_RGB9E5Ufloat;
+    case V8GPUTextureFormat::Enum::kRgb10A2Uint:
+      return WGPUTextureFormat_RGB10A2Uint;
     case V8GPUTextureFormat::Enum::kRgb10A2Unorm:
       return WGPUTextureFormat_RGB10A2Unorm;
     case V8GPUTextureFormat::Enum::kRg11B10Ufloat:
@@ -420,6 +400,8 @@ const char* FromDawnEnum(WGPUTextureFormat dawn_enum) {
     // Packed 32 bit formats
     case WGPUTextureFormat_RGB9E5Ufloat:
       return "rgb9e5ufloat";
+    case WGPUTextureFormat_RGB10A2Uint:
+      return "rgb10a2uint";
     case WGPUTextureFormat_RGB10A2Unorm:
       return "rgb10a2unorm";
     case WGPUTextureFormat_RG11B10Ufloat:
@@ -670,8 +652,6 @@ WGPUIndexFormat AsDawnEnum(const V8GPUIndexFormat& webgpu_enum) {
 
 WGPUFeatureName AsDawnEnum(const V8GPUFeatureName& webgpu_enum) {
   switch (webgpu_enum.AsEnum()) {
-    case V8GPUFeatureName::Enum::kPipelineStatisticsQuery:
-      return WGPUFeatureName_PipelineStatisticsQuery;
     case V8GPUFeatureName::Enum::kTextureCompressionBc:
       return WGPUFeatureName_TextureCompressionBC;
     case V8GPUFeatureName::Enum::kTextureCompressionEtc2:
@@ -680,8 +660,9 @@ WGPUFeatureName AsDawnEnum(const V8GPUFeatureName& webgpu_enum) {
       return WGPUFeatureName_TextureCompressionASTC;
     case V8GPUFeatureName::Enum::kTimestampQuery:
       return WGPUFeatureName_TimestampQuery;
-    case V8GPUFeatureName::Enum::kTimestampQueryInsidePasses:
-      return WGPUFeatureName_TimestampQueryInsidePasses;
+    case V8GPUFeatureName::Enum::
+        kChromiumExperimentalTimestampQueryInsidePasses:
+      return WGPUFeatureName_ChromiumExperimentalTimestampQueryInsidePasses;
     case V8GPUFeatureName::Enum::kDepthClipControl:
       return WGPUFeatureName_DepthClipControl;
     case V8GPUFeatureName::Enum::kDepth32FloatStencil8:
@@ -840,6 +821,8 @@ WGPUVertexFormat AsDawnEnum(const V8GPUVertexFormat& webgpu_enum) {
       return WGPUVertexFormat_Sint32x3;
     case V8GPUVertexFormat::Enum::kSint32X4:
       return WGPUVertexFormat_Sint32x4;
+    case V8GPUVertexFormat::Enum::kUnorm1010102:
+      return WGPUVertexFormat_Unorm10_10_10_2;
   }
 }
 
@@ -914,26 +897,6 @@ WGPUErrorFilter AsDawnEnum(const V8GPUErrorFilter& webgpu_enum) {
   }
 }
 
-WGPUComputePassTimestampLocation AsDawnEnum(
-    const V8GPUComputePassTimestampLocation& webgpu_enum) {
-  switch (webgpu_enum.AsEnum()) {
-    case V8GPUComputePassTimestampLocation::Enum::kBeginning:
-      return WGPUComputePassTimestampLocation_Beginning;
-    case V8GPUComputePassTimestampLocation::Enum::kEnd:
-      return WGPUComputePassTimestampLocation_End;
-  }
-}
-
-WGPURenderPassTimestampLocation AsDawnEnum(
-    const V8GPURenderPassTimestampLocation& webgpu_enum) {
-  switch (webgpu_enum.AsEnum()) {
-    case V8GPURenderPassTimestampLocation::Enum::kBeginning:
-      return WGPURenderPassTimestampLocation_Beginning;
-    case V8GPURenderPassTimestampLocation::Enum::kEnd:
-      return WGPURenderPassTimestampLocation_End;
-  }
-}
-
 const char* FromDawnEnum(WGPUBufferMapState dawn_enum) {
   switch (dawn_enum) {
     case WGPUBufferMapState_Unmapped:
@@ -943,6 +906,50 @@ const char* FromDawnEnum(WGPUBufferMapState dawn_enum) {
     case WGPUBufferMapState_Mapped:
       return "mapped";
     case WGPUBufferMapState_Force32:
+      NOTREACHED();
+  }
+  return "";
+}
+
+const char* FromDawnEnum(WGPUBackendType dawn_enum) {
+  switch (dawn_enum) {
+    case WGPUBackendType_Undefined:
+      return "";
+    case WGPUBackendType_Null:
+      return "null";
+    case WGPUBackendType_WebGPU:
+      return "WebGPU";
+    case WGPUBackendType_D3D11:
+      return "D3D11";
+    case WGPUBackendType_D3D12:
+      return "D3D12";
+    case WGPUBackendType_Metal:
+      return "metal";
+    case WGPUBackendType_Vulkan:
+      return "vulkan";
+    case WGPUBackendType_OpenGL:
+      return "openGL";
+    case WGPUBackendType_OpenGLES:
+      return "openGLES";
+    case WGPUBackendType_Force32:
+    default:
+      NOTREACHED();
+  }
+  return "";
+}
+
+const char* FromDawnEnum(WGPUAdapterType dawn_enum) {
+  switch (dawn_enum) {
+    case WGPUAdapterType_DiscreteGPU:
+      return "discrete GPU";
+    case WGPUAdapterType_IntegratedGPU:
+      return "integrated GPU";
+    case WGPUAdapterType_CPU:
+      return "CPU";
+    case WGPUAdapterType_Unknown:
+      return "unknown";
+    case WGPUAdapterType_Force32:
+    default:
       NOTREACHED();
   }
   return "";

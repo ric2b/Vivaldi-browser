@@ -7,6 +7,7 @@
 #include "android_webview/browser/metrics/aw_metrics_service_client.h"
 #include "android_webview/common/aw_features.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/task_environment.h"
 #include "components/embedder_support/android/metrics/android_metrics_service_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/metrics_proto/chrome_user_metrics_extension.pb.h"
@@ -45,7 +46,10 @@ class TestClient : public AwMetricsServiceClient {
   InstallerPackageType installer_type_;
 };
 
-class AwServerSideAllowlistMetricsProviderTest : public testing::Test {};
+class AwServerSideAllowlistMetricsProviderTest : public testing::Test {
+ private:
+  base::test::SingleThreadTaskEnvironment task_environment_;
+};
 
 }  // namespace
 
@@ -80,12 +84,11 @@ TEST_F(
   scoped_list.InitAndDisableFeature(
       android_webview::features::kWebViewAppsPackageNamesServerSideAllowlist);
   test_provider.ProvideSystemProfileMetrics(uma_proto.mutable_system_profile());
-  EXPECT_TRUE(uma_proto.mutable_system_profile()
-                  ->has_app_package_name_allowlist_filter());
+  EXPECT_FALSE(uma_proto.mutable_system_profile()
+                   ->has_app_package_name_allowlist_filter());
   EXPECT_TRUE(
       uma_proto.mutable_system_profile()->app_package_name_allowlist_filter() ==
-      metrics::SystemProfileProto::
-          NO_SERVER_SIDE_FILTER_REQUIRED_DUE_TO_CLIENT_FILTERING);
+      metrics::SystemProfileProto::SERVER_SIDE_FILTER_UNSPECIFIED);
 }
 
 TEST_F(AwServerSideAllowlistMetricsProviderTest,

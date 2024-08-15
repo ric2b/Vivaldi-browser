@@ -18,10 +18,11 @@ class EventsProto;
 
 // TestStructuredMetricsProvider is a wrapper of StructuredMetricsProvider to
 // be used for testing.
-
 class TestStructuredMetricsProvider : public Recorder::RecorderImpl {
  public:
   TestStructuredMetricsProvider();
+  explicit TestStructuredMetricsProvider(
+      std::unique_ptr<StructuredMetricsRecorder> recorder);
   ~TestStructuredMetricsProvider() override;
   TestStructuredMetricsProvider(const TestStructuredMetricsProvider&) = delete;
   TestStructuredMetricsProvider& operator=(
@@ -59,7 +60,6 @@ class TestStructuredMetricsProvider : public Recorder::RecorderImpl {
   void OnProfileAdded(const base::FilePath& profile_path) override;
   void OnEventRecord(const Event& event) override;
   void OnReportingStateChanged(bool enabled) override;
-  absl::optional<int> LastKeyRotation(uint64_t project_name_hash) override;
 
   std::unique_ptr<MetricsProvider> system_profile_provider_;
 

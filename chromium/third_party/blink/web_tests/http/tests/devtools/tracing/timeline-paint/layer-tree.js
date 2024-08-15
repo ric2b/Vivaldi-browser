@@ -6,9 +6,10 @@ import {TestRunner} from 'test_runner';
 import {PerformanceTestRunner} from 'performance_test_runner';
 import {LayersTestRunner} from 'layers_test_runner';
 
+import * as Timeline from 'devtools/panels/timeline/timeline.js';
+
 (async function() {
   TestRunner.addResult(`Tests that LayerTreeModel successfully imports layers from a trace.\n`);
-  await TestRunner.loadLegacyModule('timeline');
   await TestRunner.showPanel('timeline');
   await TestRunner.loadHTML(`
       <div id="a" style="width: 200px; height: 200px" class="layer">
@@ -34,7 +35,7 @@ import {LayersTestRunner} from 'layers_test_runner';
       }
   `);
 
-  UI.panels.timeline._captureLayersAndPicturesSetting.set(true);
+  Timeline.TimelinePanel.TimelinePanel.instance()._captureLayersAndPicturesSetting.set(true);
 
   await PerformanceTestRunner.invokeAsyncWithTimeline('doActions');
   const frames = PerformanceTestRunner.timelineFrameModel().frames();

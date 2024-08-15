@@ -12,6 +12,7 @@
 
 #include "base/callback_list.h"
 #include "base/containers/flat_map.h"
+#include "base/containers/lru_cache.h"
 #include "base/containers/span.h"
 #include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
@@ -24,6 +25,7 @@
 #include "components/autofill/core/common/signatures.h"
 #include "components/autofill/core/common/unique_ids.h"
 #include "components/password_manager/core/browser/credential_cache.h"
+#include "components/password_manager/core/browser/features/password_features.h"
 #include "components/password_manager/core/browser/form_parsing/password_field_prediction.h"
 #include "components/password_manager/core/browser/form_submission_observer.h"
 #include "components/password_manager/core/browser/leak_detection/leak_detection_check_factory.h"
@@ -31,6 +33,7 @@
 #include "components/password_manager/core/browser/password_manager_interface.h"
 #include "components/password_manager/core/browser/password_manager_metrics_recorder.h"
 #include "components/password_manager/core/browser/possible_username_data.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 
 class PrefRegistrySimple;
 
@@ -95,6 +98,12 @@ class PasswordManager : public PasswordManagerInterface {
       PasswordManagerDriver* driver,
       const autofill::FormData& form,
       const std::u16string& generated_password) override;
+  void ProcessAutofillPredictions(
+      PasswordManagerDriver* driver,
+      const autofill::FormData& form,
+      const base::flat_map<autofill::FieldGlobalId,
+                           autofill::AutofillType::ServerPrediction>&
+          field_predictions) override;
 
   PasswordManagerClient* GetClient() override;
 #if BUILDFLAG(IS_IOS)
@@ -163,13 +172,6 @@ class PasswordManager : public PasswordManagerInterface {
   // Automatic password generation already waits for that signal.
   bool HaveFormManagersReceivedData(const PasswordManagerDriver* driver);
 
-  void ProcessAutofillPredictions(
-      PasswordManagerDriver* driver,
-      base::span<const autofill::FormData* const> forms,
-      const base::flat_map<autofill::FieldGlobalId,
-                           autofill::AutofillType::ServerPrediction>&
-          field_predictions);
-
   // Causes all |pending_login_managers_| to query the password store again.
   // Results in updating the fill information on the page.
   void UpdateFormManagers();
@@ -177,6 +179,13 @@ class PasswordManager : public PasswordManagerInterface {
   // Cleans the state by removing all the PasswordFormManager instances and
   // visible forms.
   void DropFormManagers();
+
+  // Returns the best matches from the manager which manages |form_id|. |driver|
+  // is needed to determine the match. Returns nullptr when no matched manager
+  // is found.
+  const std::vector<const PasswordForm*>* GetBestMatches(
+      PasswordManagerDriver* driver,
+      autofill::FormRendererId form_id);
 
   // Returns true if password element is detected on the current page.
   bool IsPasswordFieldDetectedOnPage() const;
@@ -198,6 +207,13 @@ class PasswordManager : public PasswordManagerInterface {
 
   void set_leak_factory(std::unique_ptr<LeakDetectionCheckFactory> factory) {
     leak_delegate_.set_leak_factory(std::move(factory));
+  }
+
+  std::vector<std::pair<PossibleUsernameFieldIdentifier, PossibleUsernameData>>
+  possible_usernames() {
+    return std::vector<
+        std::pair<PossibleUsernameFieldIdentifier, PossibleUsernameData>>(
+        possible_usernames_.begin(), possible_usernames_.end());
   }
 #endif  // defined(UNIT_TEST)
 
@@ -314,9 +330,9 @@ class PasswordManager : public PasswordManagerInterface {
       int driver_id);
 
   //  If |possible_username_.form_predictions| is missing, this functions tries
-  //  to find predictions for the form which contains |possible_username_| in
+  //  to find predictions for the forms which contains |possible_usernames_| in
   //  |predictions_|.
-  void TryToFindPredictionsToPossibleUsernameData();
+  void TryToFindPredictionsToPossibleUsernames();
 
   // Handles a request to show manual fallback for password saving, i.e. the
   // omnibox icon with the anchored hidden prompt. todo
@@ -393,7 +409,14 @@ class PasswordManager : public PasswordManagerInterface {
   // Helper for making the requests on leak detection.
   LeakDetectionDelegate leak_delegate_;
 
-  absl::optional<PossibleUsernameData> possible_username_;
+  // Fields that can be considered for username in case of Username First Flow.
+  base::LRUCache<PossibleUsernameFieldIdentifier, PossibleUsernameData>
+      possible_usernames_ =
+          base::LRUCache<PossibleUsernameFieldIdentifier, PossibleUsernameData>(
+              base::FeatureList::IsEnabled(
+                  features::kUsernameFirstFlowStoreSeveralValues)
+                  ? features::kMaxSingleUsernameFieldsToStore.Get()
+                  : 1);
 };
 
 }  // namespace password_manager

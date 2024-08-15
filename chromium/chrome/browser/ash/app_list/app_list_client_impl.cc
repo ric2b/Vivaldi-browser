@@ -55,6 +55,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/webui/chrome_web_ui_controller_factory.h"
 #include "chromeos/ash/components/scalable_iph/scalable_iph.h"
+#include "chromeos/crosapi/cpp/gurl_os_handler_utils.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/feature_engagement/public/tracker.h"
 #include "components/session_manager/core/session_manager.h"
@@ -72,8 +73,6 @@ constexpr base::TimeDelta kTimeMetricsMin = base::Seconds(1);
 constexpr base::TimeDelta kTimeMetricsMax = base::Days(7);
 constexpr int kTimeMetricsBucketCount = 100;
 
-constexpr char kSearchBoxIphUrlPlaceholder[] = "https://www.google.com/";
-
 bool IsTabletMode() {
   return ash::TabletMode::IsInTabletMode();
 }
@@ -82,16 +81,6 @@ bool IsTabletMode() {
 bool IsSessionActive() {
   return session_manager::SessionManager::Get()->session_state() ==
          session_manager::SessionState::ACTIVE;
-}
-
-bool CanBeHandledAsSystemUrl(const GURL& sanitized_url,
-                             ui::PageTransition transition) {
-  if (!PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_TYPED) &&
-      !PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_GENERATED)) {
-    return false;
-  }
-  return ChromeWebUIControllerFactory::GetInstance()->CanHandleUrl(
-      sanitized_url);
 }
 
 // IDs passed to ActivateItem are always of the form "<app id>". But app search
@@ -211,6 +200,11 @@ void AppListClientImpl::OnAppListControllerDestroyed() {
   if (current_model_updater_) {
     current_model_updater_->SetActive(false);
   }
+}
+
+std::vector<ash::AppListSearchControlCategory>
+AppListClientImpl::GetToggleableCategories() const {
+  return search_controller_->GetToggleableCategories();
 }
 
 void AppListClientImpl::StartSearch(const std::u16string& trimmed_query) {
@@ -684,10 +678,21 @@ void AppListClientImpl::OpenURL(Profile* profile,
                                 ui::PageTransition transition,
                                 WindowOpenDisposition disposition) {
   if (crosapi::browser_util::IsLacrosEnabled()) {
-    // Send the url to the current primary browser.
-    ash::NewWindowDelegate::GetPrimary()->OpenUrl(
-        url, ash::NewWindowDelegate::OpenUrlFrom::kUserInteraction,
-        ConvertDisposition(disposition));
+    // Handle os:// URLs directly, without involving Lacros.
+    // See comment in OmniboxLacrosProvider::StartWithoutSearchProvider.
+    if (crosapi::gurl_os_handler_utils::HasOsScheme(url)) {
+      const GURL ash_url =
+          crosapi::gurl_os_handler_utils::GetAshUrlFromLacrosUrl(url);
+      if (ChromeWebUIControllerFactory::GetInstance()->CanHandleUrl(ash_url)) {
+        crosapi::UrlHandlerAsh().OpenUrl(ash_url);
+      } else {
+        LOG(WARNING) << "URL not supported: " << url << " (" << ash_url << ")";
+      }
+    } else {
+      ash::NewWindowDelegate::GetPrimary()->OpenUrl(
+          url, ash::NewWindowDelegate::OpenUrlFrom::kUserInteraction,
+          ConvertDisposition(disposition));
+    }
   } else {
     NavigateParams params(profile, url, transition);
     params.disposition = disposition;
@@ -729,12 +734,6 @@ AppListClientImpl::CreateLauncherSearchIphSession() {
       tracker, feature_engagement::kIPHLauncherSearchHelpUiFeature);
 }
 
-void AppListClientImpl::OpenSearchBoxIphUrl() {
-  OpenURL(profile_, GURL(kSearchBoxIphUrlPlaceholder),
-          ui::PageTransition::PAGE_TRANSITION_LINK,
-          WindowOpenDisposition::NEW_FOREGROUND_TAB);
-}
-
 void AppListClientImpl::LoadIcon(int profile_id, const std::string& app_id) {
   auto* requested_model_updater = profile_model_mappings_[profile_id];
   if (requested_model_updater != current_model_updater_ ||
@@ -753,11 +752,6 @@ ash::AppListSortOrder AppListClientImpl::GetPermanentSortingOrder() const {
 
   return app_list::AppListSyncableServiceFactory::GetForProfile(profile_)
       ->GetPermanentSortingOrder();
-}
-
-void AppListClientImpl::CommitTemporarySortOrder() {
-  DCHECK(current_model_updater_);
-  current_model_updater_->CommitTemporarySortOrder();
 }
 
 void AppListClientImpl::RecordViewShown() {

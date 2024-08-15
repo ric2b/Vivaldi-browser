@@ -6,7 +6,6 @@
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_PAYMENTS_CREDIT_CARD_ACCESS_MANAGER_H_
 
 #include <memory>
-#include <set>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -14,7 +13,6 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
-#include "base/task/cancelable_task_tracker.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_client.h"
@@ -23,6 +21,7 @@
 #include "components/autofill/core/browser/metrics/form_events/credit_card_form_event_logger.h"
 #include "components/autofill/core/browser/payments/credit_card_cvc_authenticator.h"
 #include "components/autofill/core/browser/payments/credit_card_otp_authenticator.h"
+#include "components/autofill/core/browser/payments/credit_card_risk_based_authenticator.h"
 #include "components/autofill/core/browser/payments/mandatory_reauth_manager.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
 #include "components/autofill/core/browser/payments/wait_for_signal_or_timeout.h"
@@ -88,11 +87,13 @@ struct CachedServerCardInfo {
 
 // Manages logic for accessing credit cards either stored locally or stored
 // with Google Payments. Owned by BrowserAutofillManager.
-class CreditCardAccessManager : public CreditCardCvcAuthenticator::Requester,
+class CreditCardAccessManager
+    : public CreditCardCvcAuthenticator::Requester,
 #if !BUILDFLAG(IS_IOS)
-                                public CreditCardFidoAuthenticator::Requester,
+      public CreditCardFidoAuthenticator::Requester,
 #endif
-                                public CreditCardOtpAuthenticator::Requester {
+      public CreditCardOtpAuthenticator::Requester,
+      public CreditCardRiskBasedAuthenticator::Requester {
  public:
   class Accessor {
    public:
@@ -131,6 +132,10 @@ class CreditCardAccessManager : public CreditCardCvcAuthenticator::Requester,
   // Calls |accessor->OnCreditCardFetched()| once credit card is fetched.
   virtual void FetchCreditCard(const CreditCard* card,
                                base::WeakPtr<Accessor> accessor);
+
+  // Checks whether we should offer risk-based authentication for masked server
+  // card retrieval.
+  bool IsMaskedServerCardRiskBasedAuthAvailable() const;
 
   // If |opt_in| = true, opts the user into using FIDO authentication for card
   // unmasking. Otherwise, opts the user out. If |creation_options| is set,
@@ -171,6 +176,15 @@ class CreditCardAccessManager : public CreditCardCvcAuthenticator::Requester,
       const CreditCardOtpAuthenticator::OtpAuthenticationResponse& response)
       override;
 
+  // CreditCardRiskBasedAuthenticator::Requester:
+  void OnRiskBasedAuthenticationResponseReceived(
+      const CreditCardRiskBasedAuthenticator::RiskBasedAuthenticationResponse&
+          response) override;
+  void OnVirtualCardRiskBasedAuthenticationResponseReceived(
+      AutofillClient::PaymentsRpcResult result,
+      payments::PaymentsClient::UnmaskResponseDetails& response_details)
+      override;
+
   void SetUnmaskDetailsRequestInProgressForTesting(
       bool unmask_details_request_in_progress) {
     unmask_details_request_in_progress_ = unmask_details_request_in_progress;
@@ -181,10 +195,8 @@ class CreditCardAccessManager : public CreditCardCvcAuthenticator::Requester,
     return ShouldOfferFidoOptInDialog(response);
   }
 
-  void OnVirtualCardUnmaskResponseReceivedForTesting(
-      AutofillClient::PaymentsRpcResult result,
-      payments::PaymentsClient::UnmaskResponseDetails& response_details) {
-    OnVirtualCardUnmaskResponseReceived(result, response_details);
+  void OnRiskBasedAuthenticationCancelledForTesting() {
+    OnRiskBasedAuthenticationCancelled();
   }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -351,15 +363,6 @@ class CreditCardAccessManager : public CreditCardCvcAuthenticator::Requester,
   // Helper function to fetch local or full server cards.
   void FetchLocalOrFullServerCard();
 
-  // Callback function invoked when risk data is fetched.
-  void OnDidGetUnmaskRiskData(const std::string& risk_data);
-
-  // Callback function invoked when an unmask response for a virtual card has
-  // been received.
-  void OnVirtualCardUnmaskResponseReceived(
-      AutofillClient::PaymentsRpcResult result,
-      payments::PaymentsClient::UnmaskResponseDetails& response_details);
-
   // Invoked when CreditCardAccessManager stops waiting for UnmaskDetails to
   // return. If OnDidGetUnmaskDetails() has been invoked,
   // |get_unmask_details_returned| should be set to true.
@@ -373,6 +376,10 @@ class CreditCardAccessManager : public CreditCardCvcAuthenticator::Requester,
   // Callback function invoked when the user has cancelled the virtual card
   // unmasking.
   void OnVirtualCardUnmaskCancelled();
+
+  // Callback function invoked when the user has cancelled the risk-based card
+  // authentication.
+  void OnRiskBasedAuthenticationCancelled();
 
   // Reset all the member variables of |this| and restore initial states.
   void Reset();

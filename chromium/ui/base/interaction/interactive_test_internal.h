@@ -14,6 +14,7 @@
 #include "base/containers/contains.h"
 #include "base/functional/callback_helpers.h"
 #include "base/functional/invoke.h"
+#include "base/gtest_prod_util.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
@@ -34,6 +35,7 @@
 namespace ui::test {
 
 class InteractiveTestApi;
+class InteractiveTestTest;
 
 namespace internal {
 
@@ -107,11 +109,17 @@ class InteractiveTestPrivate {
   TrackedElement* GetPivotElement(ElementContext context) const;
 
   // Adds `state_observer` and associates it with an element with identifier
-  // `id` and context `context`.
+  // `id` and context `context`. Must be unique in its context.
+  // Returns true on success.
   template <typename Observer, typename V = Observer::ValueType>
-  void AddStateObserver(ElementIdentifier id,
+  bool AddStateObserver(ElementIdentifier id,
                         ElementContext context,
                         std::unique_ptr<Observer> state_observer);
+
+  // Removes `StateObserver` with identifier `id` in `context`; if the context
+  // is null, assumes there is exactly one matching observer in some context.
+  // Returns true on success.
+  bool RemoveStateObserver(ElementIdentifier id, ElementContext context);
 
   // Call this method during test SetUp(), or SetUpOnMainThread() for browser
   // tests.
@@ -140,6 +148,7 @@ class InteractiveTestPrivate {
   static MultiStep PostTask(const base::StringPiece& description, T&& task);
 
  private:
+  friend class ui::test::InteractiveTestTest;
   friend class ui::test::InteractiveTestApi;
 
   // Prepare for a sequence to start.
@@ -217,6 +226,7 @@ class StateObserverElementT : public StateObserverElement {
     table.emplace(std::make_pair(id, context), this);
     observer_->SetStateObserverStateChangedCallback(base::BindRepeating(
         &StateObserverElementT::OnStateChanged, base::Unretained(this)));
+    OnStateChanged(current_value_);
   }
   ~StateObserverElementT() override {
     CHECK(GetLookupTable().erase(std::make_pair(identifier(), context())));
@@ -287,7 +297,7 @@ class StateObserverElementT : public StateObserverElement {
 // details of the step in the usual way.
 template <typename T, typename V = std::remove_cvref_t<T>>
 bool MatchAndExplain(const base::StringPiece& test_name,
-                     testing::Matcher<V>& matcher,
+                     const testing::Matcher<V>& matcher,
                      const T& value) {
   if (matcher.Matches(value))
     return true;
@@ -300,13 +310,22 @@ bool MatchAndExplain(const base::StringPiece& test_name,
 }
 
 template <typename Observer, typename V>
-void InteractiveTestPrivate::AddStateObserver(
+bool InteractiveTestPrivate::AddStateObserver(
     ElementIdentifier id,
     ElementContext context,
     std::unique_ptr<Observer> state_observer) {
+  CHECK(id);
+  CHECK(context);
+  for (const auto& existing : state_observer_elements_) {
+    if (existing->identifier() == id && existing->context() == context) {
+      LOG(ERROR) << "AddStateObserver: Duplicate observer added for " << id;
+      return false;
+    }
+  }
   state_observer_elements_.emplace_back(
       std::make_unique<StateObserverElementT<V>>(id, context,
                                                  std::move(state_observer)));
+  return true;
 }
 
 // static
@@ -448,6 +467,19 @@ struct MaybeBindTypeHelper<decltype(base::DoNothing())> {
   using ReturnType = void;
 };
 
+// Optionally converts `function` to something that is compatible with a
+// base::RepeatingCallback, or returns it as-is if it's already a callback.
+template <typename F>
+base::RepeatingCallback<typename MaybeBindTypeHelper<F>::Signature>
+MaybeBindRepeating(F&& function) {
+  if constexpr (IsCallableValue<F> && std::is_empty_v<F> &&
+                std::is_copy_constructible_v<std::remove_cvref_t<F>>) {
+    return base::BindRepeating(std::forward<F>(function));
+  } else {
+    return MaybeBindHelper<F>::MaybeBind(std::forward<F>(function));
+  }
+}
+
 template <typename T>
 struct ArgsExtractor;
 
@@ -541,7 +573,12 @@ struct MatcherTypeHelper<const char*> {
 };
 
 template <>
-struct MatcherTypeHelper<const char[]> {
+struct MatcherTypeHelper<char[]> {
+  using ActualType = std::string;
+};
+
+template <size_t N>
+struct MatcherTypeHelper<char[N]> {
   using ActualType = std::string;
 };
 
@@ -551,12 +588,28 @@ struct MatcherTypeHelper<const char16_t*> {
 };
 
 template <>
-struct MatcherTypeHelper<const char16_t[]> {
+struct MatcherTypeHelper<char16_t[]> {
   using ActualType = std::u16string;
 };
 
+template <size_t N>
+struct MatcherTypeHelper<char16_t[N]> {
+  using ActualType = std::u16string;
+};
+
+// Gets the appropriate matchable type for `T`. This affects string-like types
+// (e.g. `const char*`) as the corresponding `Matcher` should match a
+// `std::string` or `std::u16string`.
 template <typename T>
 using MatcherTypeFor = MatcherTypeHelper<std::remove_cvref_t<T>>::ActualType;
+
+// Determines if `T` is a valid type to be used in a matcher. This precludes
+// string-like types (const char*, constexpr char16_t[], etc.) in favor of
+// `std::string` and `std::u16string`.
+template <typename T>
+constexpr bool IsValidMatcherType = std::is_same_v<T, MatcherTypeFor<T>>;
+template <typename T>
+using RequireValidMatcherType = std::enable_if_t<IsValidMatcherType<T>>;
 
 template <typename T>
 class IsMatcherHelper {

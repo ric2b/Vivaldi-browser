@@ -126,9 +126,7 @@ class FederatedAuthRequestImplLogoutTest
   ~FederatedAuthRequestImplLogoutTest() override = default;
 
   void SetUp() override {
-    feature_list_.InitAndEnableFeatureWithParameters(
-        features::kFedCm,
-        {{features::kFedCmIdpSignoutFieldTrialParamName, "true"}});
+    feature_list_.InitAndEnableFeature(features::kFedCmLogoutRps);
 
     RenderViewHostImplTestHarness::SetUp();
     test_api_permission_delegate_ =
@@ -166,6 +164,11 @@ class FederatedAuthRequestImplLogoutTest
         base::TimeDelta());
   }
 
+  void TearDown() override {
+    federated_auth_request_impl_ = nullptr;
+    RenderViewHostImplTestHarness::TearDown();
+  }
+
   LogoutRpsStatus PerformLogoutRequest(
       std::vector<LogoutRpsRequestPtr> logout_requests) {
     LogoutRpsRequestCallbackHelper logout_helper;
@@ -179,8 +182,7 @@ class FederatedAuthRequestImplLogoutTest
   base::test::ScopedFeatureList feature_list_;
 
   mojo::Remote<blink::mojom::FederatedAuthRequest> request_remote_;
-  raw_ptr<FederatedAuthRequestImpl, DanglingUntriaged>
-      federated_auth_request_impl_;
+  raw_ptr<FederatedAuthRequestImpl> federated_auth_request_impl_;
 
   std::unique_ptr<TestLogoutIdpNetworkRequestManager> network_request_manager_;
 

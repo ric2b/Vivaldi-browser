@@ -597,7 +597,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             menu.findItem(R.id.get_image_descriptions_id).setVisible(true);
 
             int titleId = R.string.menu_stop_image_descriptions;
-            Profile profile = Profile.getLastUsedRegularProfile();
+            Profile profile = currentTab.getProfile();
             // If image descriptions are not enabled, then we want the menu item to be "Get".
             if (!ImageDescriptionsController.getInstance().imageDescriptionsEnabled(profile)) {
                 titleId = R.string.menu_get_image_descriptions;
@@ -1253,15 +1253,21 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
      */
     protected void updatePriceTrackingMenuItemRow(@NonNull MenuItem startPriceTrackingMenuItem,
             @NonNull MenuItem stopPriceTrackingMenuItem, @Nullable Tab currentTab) {
-        ShoppingService service =
-                ShoppingServiceFactory.getForProfile(Profile.getLastUsedRegularProfile());
+        if (currentTab == null || currentTab.getWebContents() == null) {
+            startPriceTrackingMenuItem.setVisible(false);
+            stopPriceTrackingMenuItem.setVisible(false);
+            return;
+        }
+
+        Profile profile = currentTab.getProfile();
+        ShoppingService service = ShoppingServiceFactory.getForProfile(profile);
         ShoppingService.ProductInfo info = null;
-        if (service != null && currentTab != null) {
+        if (service != null) {
             info = service.getAvailableProductInfoForUrl(currentTab.getUrl());
         }
 
         // If price tracking isn't enabled or the page isn't eligible, then hide both items.
-        if (!ShoppingFeatures.isShoppingListEligible()
+        if (!ShoppingFeatures.isShoppingListEligible(profile)
                 || !PowerBookmarkUtils.isPriceTrackingEligible(currentTab)
                 || !mBookmarkModelSupplier.hasValue()) {
             startPriceTrackingMenuItem.setVisible(false);

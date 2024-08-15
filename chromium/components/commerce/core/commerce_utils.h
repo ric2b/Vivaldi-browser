@@ -6,18 +6,17 @@
 #define COMPONENTS_COMMERCE_CORE_COMMERCE_UTILS_H_
 
 #include "base/feature_list.h"
+#include "components/commerce/core/commerce_types.h"
 
 class GURL;
 
 namespace commerce {
-
-// Feature flag for Discounts on navigation. This is supposed to be included in
-// the commerce_feature_list file, but because of crbug.com/1155712 we have to
-// move this feature flag here instead.
-BASE_DECLARE_FEATURE(kShowDiscountOnNavigation);
-
 // Returns whether the `url` contains the discount utm tags.
 bool UrlContainsDiscountUtmTag(const GURL& url);
+
+// Gets test data for the parcel tracking APIs if the |kParcelTrackingTestData|
+// flag is enabled.
+ParcelTrackingStatus GetParcelTrackingStatusTestData();
 
 }  // namespace commerce
 

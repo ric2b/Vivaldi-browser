@@ -47,7 +47,7 @@ class MockLocationObserver {
 double g_fake_time_now_secs = 1;
 
 base::Time GetTimeNowForTest() {
-  return base::Time::FromDoubleT(g_fake_time_now_secs);
+  return base::Time::FromSecondsSinceUnixEpoch(g_fake_time_now_secs);
 }
 
 void AdvanceTimeNow(const base::TimeDelta& delta) {
@@ -90,7 +90,9 @@ class TestingLocationArbitrator : public LocationArbitrator {
                            std::move(url_loader_factory),
                            std::string() /* api_key */,
                            std::make_unique<FakePositionCache>(),
-                           /*internals_updated_closure=*/base::DoNothing()),
+                           /*internals_updated_closure=*/base::DoNothing(),
+                           /*network_request_callback=*/base::DoNothing(),
+                           /*network_response_callback=*/base::DoNothing()),
         should_use_system_location_provider_(
             should_use_system_location_provider) {
     SetUpdateCallback(callback);

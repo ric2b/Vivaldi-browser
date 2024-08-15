@@ -4,6 +4,8 @@
 
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_update_discovery_task.h"
 
+#include <ostream>
+
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
@@ -22,9 +24,9 @@
 #include "chrome/browser/web_applications/isolated_web_apps/update_manifest/update_manifest_fetcher.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
-#include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
+#include "components/webapps/common/web_app_id.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/net_errors.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -301,7 +303,7 @@ void IsolatedWebAppUpdateDiscoveryTask::OnWebBundleDownloaded(
   }
 
   command_scheduler_->PrepareAndStoreIsolatedWebAppUpdate(
-      WebApp::IsolationData::PendingUpdateInfo(
+      IsolatedWebAppUpdatePrepareAndStoreCommand::UpdateInfo(
           InstalledBundle({.path = download_path}), expected_version),
       url_info_,
       /*optional_keep_alive=*/nullptr,
@@ -311,9 +313,10 @@ void IsolatedWebAppUpdateDiscoveryTask::OnWebBundleDownloaded(
 }
 
 void IsolatedWebAppUpdateDiscoveryTask::OnUpdateDryRunDone(
-    base::expected<void, IsolatedWebAppUpdatePrepareAndStoreCommandError>
-        result) {
+    IsolatedWebAppUpdatePrepareAndStoreCommandResult result) {
   if (result.has_value()) {
+    debug_log_.Set("prepare_and_store_command_update_version",
+                   result->update_version.GetString());
     SucceedWith(Success::kUpdateFoundAndSavedInDatabase);
   } else {
     debug_log_.Set("prepare_and_store_command_error", result.error().message);

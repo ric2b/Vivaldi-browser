@@ -104,6 +104,7 @@ void PowerTrayView::UpdateLabelOrImageViewColor(bool active) {
   const SkColor icon_fg_color = GetColorProvider()->GetColor(
       active ? cros_tokens::kCrosSysSystemOnPrimaryContainer
              : cros_tokens::kCrosSysOnSurface);
+
   PowerStatus::BatteryImageInfo info =
       PowerStatus::Get()->GenerateBatteryImageInfo(icon_fg_color);
 

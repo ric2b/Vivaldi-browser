@@ -10,6 +10,8 @@
 #include <string_view>
 
 #include "base/json/json_reader.h"
+#include "base/ranges/algorithm.h"
+#include "base/strings/string_util.h"
 #include "third_party/abseil-cpp/absl/strings/ascii.h"
 
 namespace reporting {
@@ -92,57 +94,52 @@ std::string NoAttachEncryptionSettingsMatcher::Name() const {
   return "no-attach-encryption-settings-matcher";
 }
 
-bool AttachConfigurationFileMatcher::MatchAndExplain(
+bool ConfigurationFileVersionMatcher::MatchAndExplain(
     const base::Value::Dict& arg,
     MatchResultListener* listener) const {
-  const auto attach_configuration_file =
-      arg.FindBool("attachConfigurationFile");
-  if (!attach_configuration_file) {
-    *listener << "No key named \"attachConfigurationFile\" in the argument or "
-                 "the value is not of bool type.";
-    return false;
-  }
-  if (!attach_configuration_file.value()) {
-    *listener << "The value of \"attachConfigurationFile\" is false.";
+  auto* attach_configuration_file = arg.Find("configurationFileVersion");
+  if (!attach_configuration_file->GetIfInt().has_value()) {
+    *listener << "No key named \"configurationFileVersion\" in the argument or "
+                 "the value is not of int type.";
     return false;
   }
   return true;
 }
 
-void AttachConfigurationFileMatcher::DescribeTo(std::ostream* os) const {
-  *os << "has a valid attachConfigurationFile field.";
+void ConfigurationFileVersionMatcher::DescribeTo(std::ostream* os) const {
+  *os << "has a valid configurationFileVersion field.";
 }
 
-void AttachConfigurationFileMatcher::DescribeNegationTo(
+void ConfigurationFileVersionMatcher::DescribeNegationTo(
     std::ostream* os) const {
-  *os << "has an invalid attachConfigurationFile field.";
+  *os << "has an invalid configurationFileVersion field.";
 }
 
-std::string AttachConfigurationFileMatcher::Name() const {
-  return "attach-configuration-file-matcher";
+std::string ConfigurationFileVersionMatcher::Name() const {
+  return "configuration-file-version-matcher";
 }
 
-bool NoAttachConfigurationFileMatcher::MatchAndExplain(
+bool NoConfigurationFileVersionMatcher::MatchAndExplain(
     const base::Value::Dict& arg,
     MatchResultListener* listener) const {
-  if (arg.Find("attachConfigurationFile") != nullptr) {
-    *listener << "Found \"attachConfigurationFile\" in the argument.";
+  if (arg.Find("configurationFileVersion") != nullptr) {
+    *listener << "Found \"configurationFileVersion\" in the argument.";
     return false;
   }
   return true;
 }
 
-void NoAttachConfigurationFileMatcher::DescribeTo(std::ostream* os) const {
-  *os << "expectedly has no attachConfigurationFile field.";
+void NoConfigurationFileVersionMatcher::DescribeTo(std::ostream* os) const {
+  *os << "expectedly has no configurationFileVersion field.";
 }
 
-void NoAttachConfigurationFileMatcher::DescribeNegationTo(
+void NoConfigurationFileVersionMatcher::DescribeNegationTo(
     std::ostream* os) const {
-  *os << "unexpectedly has an attachConfigurationFile field.";
+  *os << "unexpectedly has an configurationFileVersion field.";
 }
 
-std::string NoAttachConfigurationFileMatcher::Name() const {
-  return "no-attach-configuration-file-matcher";
+std::string NoConfigurationFileVersionMatcher::Name() const {
+  return "no-configuration-file-version-matcher";
 }
 
 bool SourceMatcher::MatchAndExplain(const base::Value::Dict& arg,
@@ -231,8 +228,7 @@ bool RequestIdMatcher::MatchAndExplain(const base::Value::Dict& arg,
     *listener << "Request ID is empty.";
     return false;
   }
-  if (request_id->find_first_not_of("0123456789abcdefABCDEF") !=
-      std::string::npos) {
+  if (!base::ranges::all_of(*request_id, base::IsHexDigit<char>)) {
     *listener << "Request ID is not a hexadecimal number.";
     return false;
   }

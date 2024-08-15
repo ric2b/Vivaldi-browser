@@ -17,7 +17,6 @@ import {ALL_PANEL_MENU_NODE_DATA} from '../../common/panel_menu_data.js';
 import {QueueMode} from '../../common/tts_types.js';
 import {ChromeVox} from '../chromevox.js';
 import {ChromeVoxRange, ChromeVoxRangeObserver} from '../chromevox_range.js';
-import {ChromeVoxState} from '../chromevox_state.js';
 import {Output} from '../output/output.js';
 import {OutputCustomEvent} from '../output/output_types.js';
 
@@ -35,6 +34,8 @@ export class PanelBackground {
   constructor() {
     /** @private {ISearch} */
     this.iSearch_;
+    /** @private {!Promise} */
+    this.menusLoaded_ = Promise.resolve();
     /** @private {AutomationNode} */
     this.savedNode_;
     /** @private {Promise} */
@@ -100,6 +101,15 @@ export class PanelBackground {
         () => PanelBackground.instance.waitForPanelCollapse_());
   }
 
+  /**
+   * Waits for menus that have already started loading to finish.
+   * If menus have not started loading, resolves immediately.
+   * @return {!Promise}
+   */
+  static waitForMenusLoaded() {
+    return PanelBackground.instance?.menusLoaded_ ?? Promise.resolve();
+  }
+
   /** @private */
   clearSavedNode_() {
     this.savedNode_ = null;
@@ -114,12 +124,15 @@ export class PanelBackground {
     if (!this.savedNode_) {
       return;
     }
+    const promises = [];
     for (const data of ALL_PANEL_MENU_NODE_DATA) {
       const isActivatedMenu = opt_activateMenuTitleId === data.titleId;
       const menuBackground =
           new PanelNodeMenuBackground(data, this.savedNode_, isActivatedMenu);
       menuBackground.populate();
+      promises.push(menuBackground.waitForFinish());
     }
+    this.menusLoaded_ = Promise.all(promises);
   }
 
   /**
@@ -231,7 +244,7 @@ export class PanelBackground {
     if (!node) {
       return;
     }
-    ChromeVoxState.instance.navigateToRange(CursorRange.fromNode(node));
+    ChromeVoxRange.navigateTo(CursorRange.fromNode(node));
   }
 
   /** @override */

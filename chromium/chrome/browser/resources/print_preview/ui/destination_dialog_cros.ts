@@ -24,10 +24,10 @@ import './destination_list_item_cros.js';
 import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import {ListPropertyUpdateMixin} from 'chrome://resources/cr_elements/list_property_update_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
-import {assert} from 'chrome://resources/js/assert_ts.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
-import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement, timeOut} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {Destination, GooglePromotedDestinationId} from '../data/destination.js';
 import {DestinationStore, DestinationStoreEventType} from '../data/destination_store.js';
@@ -54,6 +54,8 @@ export interface PrintPreviewDestinationDialogCrosElement {
     searchBox: PrintPreviewSearchBoxElement,
   };
 }
+
+export const DESTINATION_DIALOG_CROS_LOADING_TIMER_IN_MS = 2000;
 
 const PrintPreviewDestinationDialogCrosElementBase =
     ListPropertyUpdateMixin(WebUiListenerMixin(PolymerElement));
@@ -132,8 +134,7 @@ export class PrintPreviewDestinationDialogCrosElement extends
         type: Boolean,
         computed:
             'computeIsShowingPrinterSetupAssistance(destinations_.length, ' +
-            'isPrintPreviewSetupAssistanceEnabled_)',
-        reflectToAttribute: true,
+            'isPrintPreviewSetupAssistanceEnabled_, showThrobber_)',
       },
 
       showManagePrintersButton: {
@@ -156,6 +157,16 @@ export class PrintPreviewDestinationDialogCrosElement extends
         value: PrinterSetupInfoMetricsSource.DESTINATION_DIALOG_CROS,
         readOnly: true,
       },
+
+      showThrobber_: {
+        type: Boolean,
+        computed: 'computeShowThrobber_(' +
+            'minLoadingTimeElapsed_, loadingAnyDestinations_)',
+        observer: PrintPreviewDestinationDialogCrosElement.prototype
+                      .showThrobberChanged_,
+      },
+
+      minLoadingTimeElapsed_: Boolean,
     };
   }
 
@@ -178,6 +189,9 @@ export class PrintPreviewDestinationDialogCrosElement extends
   private initialized_: boolean = false;
   private printServerStore_: PrintServerStore|null = null;
   private showManagePrinters: boolean = false;
+  private showThrobber_: boolean = true;
+  private timerDelay_: number = 0;
+  private minLoadingTimeElapsed_: boolean = false;
 
   override disconnectedCallback() {
     super.disconnectedCallback();
@@ -234,6 +248,10 @@ export class PrintPreviewDestinationDialogCrosElement extends
         this.destinationStore,
         DestinationStoreEventType.DESTINATION_SEARCH_DONE,
         this.updateDestinations_.bind(this));
+    this.tracker_.add(
+        this.destinationStore,
+        DestinationStoreEventType.DESTINATION_PRINTER_STATUS_UPDATE,
+        this.onPrinterStatusUpdate_.bind(this));
     this.initialized_ = true;
     if (this.printServerStore_) {
       this.printServerStore_.setDestinationStore(this.destinationStore);
@@ -265,10 +283,12 @@ export class PrintPreviewDestinationDialogCrosElement extends
     if (this.searchQuery_) {
       this.$.searchBox.setValue('');
     }
+    this.clearThrobberTimer_();
   }
 
   private onCancelButtonClick_() {
     this.$.dialog.cancel();
+    this.clearThrobberTimer_();
   }
 
   /**
@@ -343,6 +363,14 @@ export class PrintPreviewDestinationDialogCrosElement extends
       this.updateDestinations_();
     }
     this.loadingDestinations_ = loading;
+
+    // Display throbber for a minimum period of time while destinations are
+    // still loading to avoid empty state UI flashing.
+    if (!this.minLoadingTimeElapsed_) {
+      this.timerDelay_ = timeOut.run(() => {
+        this.minLoadingTimeElapsed_ = true;
+      }, DESTINATION_DIALOG_CROS_LOADING_TIMER_IN_MS);
+    }
   }
 
   /** @return Whether the dialog is open. */
@@ -397,6 +425,10 @@ export class PrintPreviewDestinationDialogCrosElement extends
       return false;
     }
 
+    if (this.showThrobber_) {
+      return false;
+    }
+
     return !this.destinations_.some(
         (destination: Destination): boolean =>
             destination.id !== GooglePromotedDestinationId.SAVE_AS_PDF);
@@ -404,6 +436,51 @@ export class PrintPreviewDestinationDialogCrosElement extends
 
   private computeShowManagePrintersButton(): boolean {
     return this.showManagePrinters && !this.isShowingPrinterSetupAssistance;
+  }
+
+  // Returns true if the search-box and destination-list should be shown.
+  private getShowDestinations_(): boolean {
+    if (!this.isPrintPreviewSetupAssistanceEnabled_) {
+      return true;
+    }
+
+    if (this.showThrobber_) {
+      return false;
+    }
+
+    return !this.isShowingPrinterSetupAssistance;
+  }
+
+  private computeShowThrobber_(): boolean {
+    return !this.minLoadingTimeElapsed_ || this.loadingAnyDestinations_;
+  }
+
+  private showThrobberChanged_(): void {
+    if (!this.showThrobber_ && !this.isShowingPrinterSetupAssistance) {
+      // Workaround to force the iron-list in print-preview-destination-list to
+      // render all destinations and resize to fill dialog body.
+      window.dispatchEvent(new CustomEvent('resize'));
+      // Ensure search-box gets focus once throbber is hidden.
+      this.$.searchBox.focus();
+    }
+  }
+
+  // Clear throbber timer if it has not completed yet. Used to ensure throbber
+  // is shown again if dialog is closed or canceled before throbber is hidden.
+  private clearThrobberTimer_(): void {
+    if (!this.minLoadingTimeElapsed_) {
+      timeOut.cancel(this.timerDelay_);
+    }
+  }
+
+  // Trigger updates to the printer status icons and text for dialog
+  // destinations.
+  private onPrinterStatusUpdate_(e: CustomEvent<string>): void {
+    const destinationKey = e.detail;
+    const destinationList =
+        this.shadowRoot!.querySelector('print-preview-destination-list');
+    assert(destinationList);
+    destinationList.updatePrinterStatusIcon(destinationKey);
   }
 }
 

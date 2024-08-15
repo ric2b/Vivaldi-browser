@@ -108,38 +108,37 @@ extensions::mojom::HostID GenerateHostIDFromEmbedder(
 }
 
 // Creates content script files when parsing InjectionItems of "js" or "css"
-// proterties, and stores them in the |result|.
+// proterties, and stores them in the `contents`.
 void ParseScriptFiles(const GURL& owner_base_url,
                       const extensions::Extension* extension,
                       const InjectionItems& items,
-                      UserScript::FileList* list) {
-  DCHECK(list->empty());
-  list->reserve((items.files ? items.files->size() : 0) + (items.code ? 1 : 0));
+                      UserScript::ContentList* contents) {
+  DCHECK(contents->empty());
+  contents->reserve((items.files ? items.files->size() : 0) +
+                    (items.code ? 1 : 0));
   // files:
   if (items.files) {
     for (const std::string& relative : *items.files) {
       GURL url = owner_base_url.Resolve(relative);
       if (extension) {
         ExtensionResource resource = extension->GetResource(relative);
-
-        list->push_back(std::make_unique<extensions::UserScript::File>(
+        contents->push_back(UserScript::Content::CreateFile(
             resource.extension_root(), resource.relative_path(), url));
       } else {
-        list->push_back(std::make_unique<extensions::UserScript::File>(
+        contents->push_back(UserScript::Content::CreateFile(
             base::FilePath(), base::FilePath(), url));
       }
     }
   }
+
   // code:
   if (items.code) {
     GURL url = owner_base_url.Resolve(base::StringPrintf(
         "%s%s", kGeneratedScriptFilePrefix,
         base::Uuid::GenerateRandomV4().AsLowercaseString().c_str()));
-    std::unique_ptr<extensions::UserScript::File> file(
-        new extensions::UserScript::File(base::FilePath(), base::FilePath(),
-                                         url));
-    file->set_content(*items.code);
-    list->push_back(std::move(file));
+    auto content = UserScript::Content::CreateInlineCode(url);
+    content->set_content(*items.code);
+    contents->push_back(std::move(content));
   }
 }
 
@@ -1147,14 +1146,7 @@ ExtensionFunction::ResponseAction WebViewInternalClearDataFunction::Run() {
 
   // If |ms_since_epoch| isn't set, default it to 0.
   double ms_since_epoch = options.GetDict().FindDouble(kSinceKey).value_or(0);
-
-  // base::Time takes a double that represents seconds since epoch. JavaScript
-  // gives developers milliseconds, so do a quick conversion before populating
-  // the object. Also, Time::FromDoubleT converts double time 0 to empty Time
-  // object. So we need to do special handling here.
-  remove_since_ = (ms_since_epoch == 0)
-                      ? base::Time::UnixEpoch()
-                      : base::Time::FromDoubleT(ms_since_epoch / 1000.0);
+  remove_since_ = base::Time::FromMillisecondsSinceUnixEpoch(ms_since_epoch);
 
   remove_mask_ = GetRemovalMask();
   if (bad_message_)

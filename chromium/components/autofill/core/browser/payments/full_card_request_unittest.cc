@@ -30,6 +30,7 @@
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/origin.h"
 
 namespace autofill {
 namespace payments {
@@ -99,6 +100,31 @@ class MockPersonalDataManager : public TestPersonalDataManager {
 // The test fixture for full card request.
 class FullCardRequestTest : public testing::Test {
  public:
+  struct FullCardRequestOptions {
+    FullCardRequestOptions& with_credit_card(CreditCard cc) {
+      credit_card = cc;
+      return *this;
+    }
+
+    FullCardRequestOptions& with_unmask_card_reason(
+        AutofillClient::UnmaskCardReason ucr) {
+      unmask_card_reason = ucr;
+      return *this;
+    }
+
+    FullCardRequestOptions& with_merchant_domain_for_footprints(
+        url::Origin mdff) {
+      merchant_domain_for_footprints = mdff;
+      return *this;
+    }
+
+    CreditCard credit_card;
+    AutofillClient::UnmaskCardReason unmask_card_reason =
+        AutofillClient::UnmaskCardReason::kAutofill;
+    url::Origin merchant_domain_for_footprints =
+        url::Origin::Create(GURL("https://example.com/"));
+  };
+
   FullCardRequestTest()
       : test_shared_loader_factory_(
             base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
@@ -134,6 +160,8 @@ class FullCardRequestTest : public testing::Test {
 
   MockUIDelegate* ui_delegate() { return &ui_delegate_; }
 
+  TestAutofillClient* autofill_client() { return &autofill_client_; }
+
   void OnDidGetRealPan(AutofillClient::PaymentsRpcResult result,
                        const std::string& real_pan,
                        bool is_virtual_card = false) {
@@ -154,6 +182,13 @@ class FullCardRequestTest : public testing::Test {
                              : AutofillClient::PaymentsRpcCardType::kServerCard;
     request_->OnDidGetRealPan(result,
                               response.with_real_pan(real_pan).with_dcvv(dcvv));
+  }
+
+  void MakeGetFullCardRequest(FullCardRequestOptions options) {
+    request()->GetFullCard(options.credit_card, options.unmask_card_reason,
+                           result_delegate()->AsWeakPtr(),
+                           ui_delegate()->AsWeakPtr(),
+                           options.merchant_domain_for_footprints);
   }
 
  private:
@@ -206,10 +241,8 @@ TEST_F(FullCardRequestTest, GetFullCardPanAndCvcForMaskedServerCardViaCvc) {
   EXPECT_CALL(*ui_delegate(), OnUnmaskVerificationResult(
                                   AutofillClient::PaymentsRpcResult::kSuccess));
 
-  request()->GetFullCard(
-      CreditCard(CreditCard::RecordType::kMaskedServerCard, "server_id"),
-      AutofillClient::UnmaskCardReason::kAutofill,
-      result_delegate()->AsWeakPtr(), ui_delegate()->AsWeakPtr());
+  MakeGetFullCardRequest(FullCardRequestOptions().with_credit_card(
+      CreditCard(CreditCard::RecordType::kMaskedServerCard, "server_id")));
   CardUnmaskDelegate::UserProvidedUnmaskDetails details;
   details.cvc = u"123";
   card_unmask_delegate()->OnUnmaskPromptAccepted(details);
@@ -228,10 +261,8 @@ TEST_F(FullCardRequestTest, GetFullCardPanAndDcvvForMaskedServerCardViaDcvv) {
   EXPECT_CALL(*ui_delegate(), OnUnmaskVerificationResult(
                                   AutofillClient::PaymentsRpcResult::kSuccess));
 
-  request()->GetFullCard(
-      CreditCard(CreditCard::RecordType::kMaskedServerCard, "server_id"),
-      AutofillClient::UnmaskCardReason::kAutofill,
-      result_delegate()->AsWeakPtr(), ui_delegate()->AsWeakPtr());
+  MakeGetFullCardRequest(FullCardRequestOptions().with_credit_card(
+      CreditCard(CreditCard::RecordType::kMaskedServerCard, "server_id")));
   CardUnmaskDelegate::UserProvidedUnmaskDetails details;
   details.cvc = u"123";
   card_unmask_delegate()->OnUnmaskPromptAccepted(details);
@@ -251,7 +282,15 @@ TEST_F(FullCardRequestTest, GetFullCardPanAndCvcForMaskedServerCardViaFido) {
   request()->GetFullCardViaFIDO(
       CreditCard(CreditCard::RecordType::kMaskedServerCard, "server_id"),
       AutofillClient::UnmaskCardReason::kAutofill,
-      result_delegate()->AsWeakPtr(), base::Value::Dict());
+      result_delegate()->AsWeakPtr(), base::Value::Dict(),
+      url::Origin::Create(GURL("https://example.com")),
+      GURL("https://example.com"));
+  payments::PaymentsClient::UnmaskRequestDetails* request_details =
+      request()->GetUnmaskRequestDetailsForTesting();
+  EXPECT_EQ(request_details->last_committed_primary_main_frame_origin->spec(),
+            GURL("https://example.com/").spec());
+  EXPECT_EQ(request_details->merchant_domain_for_footprints->Serialize(),
+            "https://example.com");
   OnDidGetRealPan(AutofillClient::PaymentsRpcResult::kSuccess, "4111");
 }
 
@@ -268,9 +307,7 @@ TEST_F(FullCardRequestTest, GetFullCardPanAndCvcForLocalCard) {
 
   CreditCard card;
   test::SetCreditCardInfo(&card, nullptr, "4111", "12", "2050", "1");
-  request()->GetFullCard(card, AutofillClient::UnmaskCardReason::kAutofill,
-                         result_delegate()->AsWeakPtr(),
-                         ui_delegate()->AsWeakPtr());
+  MakeGetFullCardRequest(FullCardRequestOptions().with_credit_card(card));
   CardUnmaskDelegate::UserProvidedUnmaskDetails details;
   details.cvc = u"123";
   card_unmask_delegate()->OnUnmaskPromptAccepted(details);
@@ -292,9 +329,8 @@ TEST_F(FullCardRequestTest, GetFullCardPanAndCvcForFullServerCard) {
                               "server_id");
   test::SetCreditCardInfo(&full_server_card, nullptr, "4111", "12", "2050",
                           "1");
-  request()->GetFullCard(
-      full_server_card, AutofillClient::UnmaskCardReason::kAutofill,
-      result_delegate()->AsWeakPtr(), ui_delegate()->AsWeakPtr());
+  MakeGetFullCardRequest(
+      FullCardRequestOptions().with_credit_card(full_server_card));
   CardUnmaskDelegate::UserProvidedUnmaskDetails details;
   details.cvc = u"123";
   card_unmask_delegate()->OnUnmaskPromptAccepted(details);
@@ -322,9 +358,8 @@ TEST_F(FullCardRequestTest, GetFullCardPanAndCvcForExpiredFullServerCard) {
   test::SetCreditCardInfo(&full_server_card, nullptr, "4111", "12",
                           base::StringPrintf("%d", today.year - 1).c_str(),
                           "1");
-  request()->GetFullCard(
-      full_server_card, AutofillClient::UnmaskCardReason::kAutofill,
-      result_delegate()->AsWeakPtr(), ui_delegate()->AsWeakPtr());
+  MakeGetFullCardRequest(
+      FullCardRequestOptions().with_credit_card(full_server_card));
   CardUnmaskDelegate::UserProvidedUnmaskDetails details;
   details.cvc = u"123";
   details.exp_year = u"2051";
@@ -354,9 +389,8 @@ TEST_F(FullCardRequestTest, GetFullCardPanAndCvcForExpiredMaskedServerCard) {
   test::SetCreditCardInfo(&full_server_card, nullptr, "4111", "12",
                           base::StringPrintf("%d", today.year - 1).c_str(),
                           "1");
-  request()->GetFullCard(
-      full_server_card, AutofillClient::UnmaskCardReason::kAutofill,
-      result_delegate()->AsWeakPtr(), ui_delegate()->AsWeakPtr());
+  MakeGetFullCardRequest(
+      FullCardRequestOptions().with_credit_card(full_server_card));
   CardUnmaskDelegate::UserProvidedUnmaskDetails details;
   details.cvc = u"123";
   details.exp_year = u"2051";
@@ -393,7 +427,8 @@ TEST_F(FullCardRequestTest,
   request()->GetFullVirtualCardViaCVC(
       card, AutofillClient::UnmaskCardReason::kAutofill,
       result_delegate()->AsWeakPtr(), ui_delegate()->AsWeakPtr(),
-      GURL("https://example.com/"), "test_context_token", challenge_option);
+      GURL("https://example.com/"), "test_context_token", challenge_option,
+      url::Origin::Create(GURL("https://example.com")));
   ASSERT_TRUE(request()->GetShouldUnmaskCardForTesting());
   payments::PaymentsClient::UnmaskRequestDetails* request_details =
       request()->GetUnmaskRequestDetailsForTesting();
@@ -404,6 +439,8 @@ TEST_F(FullCardRequestTest,
   EXPECT_EQ(request_details->context_token, "test_context_token");
   EXPECT_EQ(request_details->last_committed_primary_main_frame_origin->spec(),
             GURL("https://example.com/").spec());
+  EXPECT_EQ(request_details->merchant_domain_for_footprints->Serialize(),
+            "https://example.com");
 
   CardUnmaskDelegate::UserProvidedUnmaskDetails details;
   details.cvc = u"123";
@@ -422,6 +459,26 @@ TEST_F(FullCardRequestTest,
   card_unmask_delegate()->OnUnmaskPromptClosed();
 }
 
+TEST_F(FullCardRequestTest,
+       DoesNotIncludeMerchantDomainForFootprintsWhenOffTheRecord) {
+  autofill_client()->set_is_off_the_record(true);
+
+  MakeGetFullCardRequest(
+      FullCardRequestOptions()
+          .with_credit_card(CreditCard(
+              CreditCard::RecordType::kMaskedServerCard, "server_id"))
+          .with_merchant_domain_for_footprints(
+              url::Origin::Create(GURL("http://example.com"))));
+  payments::PaymentsClient::UnmaskRequestDetails* request_details =
+      request()->GetUnmaskRequestDetailsForTesting();
+  ASSERT_EQ(request_details->merchant_domain_for_footprints, absl::nullopt);
+
+  CardUnmaskDelegate::UserProvidedUnmaskDetails details;
+  details.cvc = u"123";
+  card_unmask_delegate()->OnUnmaskPromptAccepted(details);
+  OnDidGetRealPan(AutofillClient::PaymentsRpcResult::kSuccess, "4111");
+}
+
 // Only one request at a time should be allowed.
 TEST_F(FullCardRequestTest, OneRequestAtATime) {
   EXPECT_CALL(
@@ -431,14 +488,18 @@ TEST_F(FullCardRequestTest, OneRequestAtATime) {
   EXPECT_CALL(*ui_delegate(), ShowUnmaskPrompt(_, _, _));
   EXPECT_CALL(*ui_delegate(), OnUnmaskVerificationResult(_)).Times(0);
 
-  request()->GetFullCard(
-      CreditCard(CreditCard::RecordType::kMaskedServerCard, "server_id_1"),
-      AutofillClient::UnmaskCardReason::kAutofill,
-      result_delegate()->AsWeakPtr(), ui_delegate()->AsWeakPtr());
-  request()->GetFullCard(
-      CreditCard(CreditCard::RecordType::kMaskedServerCard, "server_id_2"),
-      AutofillClient::UnmaskCardReason::kPaymentRequest,
-      result_delegate()->AsWeakPtr(), ui_delegate()->AsWeakPtr());
+  MakeGetFullCardRequest(
+      FullCardRequestOptions()
+          .with_credit_card(CreditCard(
+              CreditCard::RecordType::kMaskedServerCard, "server_id_1"))
+          .with_unmask_card_reason(
+              AutofillClient::UnmaskCardReason::kAutofill));
+  MakeGetFullCardRequest(
+      FullCardRequestOptions()
+          .with_credit_card(CreditCard(
+              CreditCard::RecordType::kMaskedServerCard, "server_id_2"))
+          .with_unmask_card_reason(
+              AutofillClient::UnmaskCardReason::kPaymentRequest));
 }
 
 // After the first request completes, it's OK to start the second request.
@@ -457,17 +518,13 @@ TEST_F(FullCardRequestTest, SecondRequestOkAfterFirstFinished) {
 
   CreditCard card;
   test::SetCreditCardInfo(&card, nullptr, "4111", "12", "2050", "1");
-  request()->GetFullCard(card, AutofillClient::UnmaskCardReason::kAutofill,
-                         result_delegate()->AsWeakPtr(),
-                         ui_delegate()->AsWeakPtr());
+  MakeGetFullCardRequest(FullCardRequestOptions().with_credit_card(card));
   CardUnmaskDelegate::UserProvidedUnmaskDetails details;
   details.cvc = u"123";
   card_unmask_delegate()->OnUnmaskPromptAccepted(details);
   card_unmask_delegate()->OnUnmaskPromptClosed();
 
-  request()->GetFullCard(card, AutofillClient::UnmaskCardReason::kAutofill,
-                         result_delegate()->AsWeakPtr(),
-                         ui_delegate()->AsWeakPtr());
+  MakeGetFullCardRequest(FullCardRequestOptions().with_credit_card(card));
   card_unmask_delegate()->OnUnmaskPromptAccepted(details);
   card_unmask_delegate()->OnUnmaskPromptClosed();
 }
@@ -482,10 +539,8 @@ TEST_F(FullCardRequestTest, ClosePromptWithoutUserInput) {
   EXPECT_CALL(*ui_delegate(), ShowUnmaskPrompt(_, _, _));
   EXPECT_CALL(*ui_delegate(), OnUnmaskVerificationResult(_)).Times(0);
 
-  request()->GetFullCard(
-      CreditCard(CreditCard::RecordType::kMaskedServerCard, "server_id"),
-      AutofillClient::UnmaskCardReason::kAutofill,
-      result_delegate()->AsWeakPtr(), ui_delegate()->AsWeakPtr());
+  MakeGetFullCardRequest(FullCardRequestOptions().with_credit_card(
+      CreditCard(CreditCard::RecordType::kMaskedServerCard, "server_id")));
   card_unmask_delegate()->OnUnmaskPromptClosed();
 }
 
@@ -501,10 +556,8 @@ TEST_F(FullCardRequestTest, PermanentFailure) {
               OnUnmaskVerificationResult(
                   AutofillClient::PaymentsRpcResult::kPermanentFailure));
 
-  request()->GetFullCard(
-      CreditCard(CreditCard::RecordType::kMaskedServerCard, "server_id"),
-      AutofillClient::UnmaskCardReason::kAutofill,
-      result_delegate()->AsWeakPtr(), ui_delegate()->AsWeakPtr());
+  MakeGetFullCardRequest(FullCardRequestOptions().with_credit_card(
+      CreditCard(CreditCard::RecordType::kMaskedServerCard, "server_id")));
   CardUnmaskDelegate::UserProvidedUnmaskDetails details;
   details.cvc = u"123";
   card_unmask_delegate()->OnUnmaskPromptAccepted(details);
@@ -534,7 +587,8 @@ TEST_F(FullCardRequestTest, VcnRetrievalTemporaryFailure) {
       result_delegate()->AsWeakPtr(), ui_delegate()->AsWeakPtr(),
       GURL("https://example.com/"), "test_context_token",
       test::GetCardUnmaskChallengeOptions(
-          {CardUnmaskChallengeOptionType::kCvc})[0]);
+          {CardUnmaskChallengeOptionType::kCvc})[0],
+      url::Origin::Create(GURL("https://example.com")));
   CardUnmaskDelegate::UserProvidedUnmaskDetails details;
   details.cvc = u"123";
   card_unmask_delegate()->OnUnmaskPromptAccepted(details);
@@ -566,7 +620,8 @@ TEST_F(FullCardRequestTest, VcnRetrievalPermanentFailure) {
       result_delegate()->AsWeakPtr(), ui_delegate()->AsWeakPtr(),
       GURL("https://example.com/"), "test_context_token",
       test::GetCardUnmaskChallengeOptions(
-          {CardUnmaskChallengeOptionType::kCvc})[0]);
+          {CardUnmaskChallengeOptionType::kCvc})[0],
+      url::Origin::Create(GURL("https://example.com")));
   CardUnmaskDelegate::UserProvidedUnmaskDetails details;
   details.cvc = u"123";
   card_unmask_delegate()->OnUnmaskPromptAccepted(details);
@@ -588,10 +643,8 @@ TEST_F(FullCardRequestTest, NetworkError) {
               OnUnmaskVerificationResult(
                   AutofillClient::PaymentsRpcResult::kNetworkError));
 
-  request()->GetFullCard(
-      CreditCard(CreditCard::RecordType::kMaskedServerCard, "server_id"),
-      AutofillClient::UnmaskCardReason::kAutofill,
-      result_delegate()->AsWeakPtr(), ui_delegate()->AsWeakPtr());
+  MakeGetFullCardRequest(FullCardRequestOptions().with_credit_card(
+      CreditCard(CreditCard::RecordType::kMaskedServerCard, "server_id")));
   CardUnmaskDelegate::UserProvidedUnmaskDetails details;
   details.cvc = u"123";
   card_unmask_delegate()->OnUnmaskPromptAccepted(details);
@@ -623,9 +676,7 @@ TEST_F(FullCardRequestTest, TryAgainFailureGiveUp) {
       card.SetExpirationMonth(01);
       card.SetExpirationYear(2016);
     }
-    request()->GetFullCard(card, AutofillClient::UnmaskCardReason::kAutofill,
-                           result_delegate()->AsWeakPtr(),
-                           ui_delegate()->AsWeakPtr());
+    MakeGetFullCardRequest(FullCardRequestOptions().with_credit_card(card));
     CardUnmaskDelegate::UserProvidedUnmaskDetails details;
     details.cvc = u"123";
     card_unmask_delegate()->OnUnmaskPromptAccepted(details);
@@ -667,9 +718,7 @@ TEST_F(FullCardRequestTest, ServerCardTryAgainFailure) {
       card.SetExpirationMonth(01);
       card.SetExpirationYear(2016);
     }
-    request()->GetFullCard(card, AutofillClient::UnmaskCardReason::kAutofill,
-                           result_delegate()->AsWeakPtr(),
-                           ui_delegate()->AsWeakPtr());
+    MakeGetFullCardRequest(FullCardRequestOptions().with_credit_card(card));
     CardUnmaskDelegate::UserProvidedUnmaskDetails details;
     details.cvc = u"789";
     card_unmask_delegate()->OnUnmaskPromptAccepted(details);
@@ -699,7 +748,8 @@ TEST_F(FullCardRequestTest, VirtualCardTryAgainFailure) {
   request()->GetFullVirtualCardViaCVC(
       test::GetVirtualCard(), AutofillClient::UnmaskCardReason::kAutofill,
       result_delegate()->AsWeakPtr(), ui_delegate()->AsWeakPtr(),
-      GURL("https://example.com/"), "test_context_token", challenge_option);
+      GURL("https://example.com/"), "test_context_token", challenge_option,
+      url::Origin::Create(GURL("https://example.com")));
   CardUnmaskDelegate::UserProvidedUnmaskDetails user_provided_details;
   user_provided_details.cvc = u"321";
   card_unmask_delegate()->OnUnmaskPromptAccepted(user_provided_details);
@@ -723,6 +773,10 @@ TEST_F(FullCardRequestTest, VirtualCardTryAgainFailure) {
                 ->GetUnmaskRequestDetailsForTesting()
                 ->last_committed_primary_main_frame_origin->spec(),
             "https://example.com/");
+  EXPECT_EQ(request()
+                ->GetUnmaskRequestDetailsForTesting()
+                ->merchant_domain_for_footprints->Serialize(),
+            "https://example.com");
   histogram_tester.ExpectUniqueSample(
       "Autofill.CvcAuth.VirtualCard.RetryableError",
       autofill_metrics::CvcAuthEvent::kTemporaryErrorCvcMismatch, 1);
@@ -740,10 +794,8 @@ TEST_F(FullCardRequestTest, UpdateExpDateForMaskedServerCard) {
   EXPECT_CALL(*ui_delegate(), OnUnmaskVerificationResult(
                                   AutofillClient::PaymentsRpcResult::kSuccess));
 
-  request()->GetFullCard(
-      CreditCard(CreditCard::RecordType::kMaskedServerCard, "server_id"),
-      AutofillClient::UnmaskCardReason::kAutofill,
-      result_delegate()->AsWeakPtr(), ui_delegate()->AsWeakPtr());
+  MakeGetFullCardRequest(FullCardRequestOptions().with_credit_card(
+      CreditCard(CreditCard::RecordType::kMaskedServerCard, "server_id")));
   CardUnmaskDelegate::UserProvidedUnmaskDetails details;
   details.cvc = u"123";
   details.exp_month = u"12";
@@ -769,9 +821,8 @@ TEST_F(FullCardRequestTest, UpdateExpDateForFullServerCard) {
                               "server_id");
   test::SetCreditCardInfo(&full_server_card, nullptr, "4111", "10", "2000",
                           "1");
-  request()->GetFullCard(
-      full_server_card, AutofillClient::UnmaskCardReason::kAutofill,
-      result_delegate()->AsWeakPtr(), ui_delegate()->AsWeakPtr());
+  MakeGetFullCardRequest(
+      FullCardRequestOptions().with_credit_card(full_server_card));
   CardUnmaskDelegate::UserProvidedUnmaskDetails details;
   details.cvc = u"123";
   details.exp_month = u"12";
@@ -802,9 +853,7 @@ TEST_F(FullCardRequestTest, UpdateExpDateForLocalCard) {
   test::SetCreditCardInfo(&card, nullptr, "4111", "10",
                           base::StringPrintf("%d", today.year - 1).c_str(),
                           "1");
-  request()->GetFullCard(card, AutofillClient::UnmaskCardReason::kAutofill,
-                         result_delegate()->AsWeakPtr(),
-                         ui_delegate()->AsWeakPtr());
+  MakeGetFullCardRequest(FullCardRequestOptions().with_credit_card(card));
   CardUnmaskDelegate::UserProvidedUnmaskDetails details;
   details.cvc = u"123";
   details.exp_month = u"12";
@@ -824,10 +873,12 @@ TEST_F(FullCardRequestTest, UnmaskForPaymentRequest) {
   EXPECT_CALL(*ui_delegate(), OnUnmaskVerificationResult(
                                   AutofillClient::PaymentsRpcResult::kSuccess));
 
-  request()->GetFullCard(
-      CreditCard(CreditCard::RecordType::kMaskedServerCard, "server_id"),
-      AutofillClient::UnmaskCardReason::kPaymentRequest,
-      result_delegate()->AsWeakPtr(), ui_delegate()->AsWeakPtr());
+  MakeGetFullCardRequest(
+      FullCardRequestOptions()
+          .with_credit_card(CreditCard(
+              CreditCard::RecordType::kMaskedServerCard, "server_id"))
+          .with_unmask_card_reason(
+              AutofillClient::UnmaskCardReason::kPaymentRequest));
   CardUnmaskDelegate::UserProvidedUnmaskDetails details;
   details.cvc = u"123";
   card_unmask_delegate()->OnUnmaskPromptAccepted(details);
@@ -879,9 +930,7 @@ TEST_P(FullCardRequestCardMetadataTest, MetadataSignal) {
     card.set_card_art_url(GURL("https://www.example.com"));
   }
 
-  request()->GetFullCard(card, AutofillClient::UnmaskCardReason::kAutofill,
-                         result_delegate()->AsWeakPtr(),
-                         ui_delegate()->AsWeakPtr());
+  MakeGetFullCardRequest(FullCardRequestOptions().with_credit_card(card));
 
   EXPECT_TRUE(request()->GetShouldUnmaskCardForTesting());
   std::vector<ClientBehaviorConstants> signals =

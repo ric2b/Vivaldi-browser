@@ -20,12 +20,8 @@ class CONTENT_EXPORT BrowserPluginGuestDelegate {
  public:
   virtual ~BrowserPluginGuestDelegate() = default;
 
-  // NOTE(andre@vivaldi.com) : We had to make sure the webcontents is added to
-  // a tabstrip to get extension-events from the beginning of life.
-  // |disposition| is ours.
   virtual std::unique_ptr<WebContents> CreateNewGuestWindow(
-      const WebContents::CreateParams& create_params,
-      int disposition);
+      const WebContents::CreateParams& create_params);
 
   // Returns the WebContents that currently owns this guest.
   virtual WebContents* GetOwnerWebContents();

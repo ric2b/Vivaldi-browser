@@ -71,14 +71,6 @@ AutofillBubbleBase* TestAutofillBubbleHandler::ShowUpdateAddressProfileBubble(
   return update_address_profile_bubble_view_.get();
 }
 
-AutofillBubbleBase* TestAutofillBubbleHandler::ShowEditAddressProfileDialog(
-    content::WebContents* contents,
-    EditAddressProfileDialogController* controller) {
-  if (!edit_address_profile_bubble_view_)
-    edit_address_profile_bubble_view_ = std::make_unique<TestAutofillBubble>();
-  return edit_address_profile_bubble_view_.get();
-}
-
 AutofillBubbleBase*
 TestAutofillBubbleHandler::ShowVirtualCardManualFallbackBubble(
     content::WebContents* web_contents,
@@ -111,7 +103,5 @@ AutofillBubbleBase* TestAutofillBubbleHandler::ShowMandatoryReauthBubble(
   }
   return mandatory_reauth_bubble_view_.get();
 }
-
-void TestAutofillBubbleHandler::OnPasswordSaved() {}
 
 }  // namespace autofill

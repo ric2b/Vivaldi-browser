@@ -52,14 +52,14 @@ source_set("browser") {
     "//skia",
     "//third_party/icu",
     "//third_party/libaddressinput",
-    "//vivaldi/notes:browser",
+    "//vivaldi/components/notes:browser",
     "//vivaldi/prefs:prefs_files_generator",
   ]
   public_deps = [
     "//components/sync/protocol",
   ]
   allow_circular_includes_from = [
-    "//vivaldi/notes:browser",
+    "//vivaldi/components/notes:browser",
   ]
 
   if (is_android) {

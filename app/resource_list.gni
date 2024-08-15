@@ -32,7 +32,7 @@ CHROMIUM_VIVALDI_RESOURCE_LIST = [
     },
   ],
   [
-    "//components/strings:components_chromium_strings",
+    "//components/strings:components_branded_strings",
     "//vivaldi/app/resources/components/vivaldi_components.grd",
     {
       translation_dir_setting = "strings"
@@ -74,7 +74,7 @@ if(!is_ios) {
       },
     ],
     [
-      "//chrome/app:chromium_strings",
+      "//chrome/app:branded_strings",
       "//vivaldi/app/resources/strings/vivaldi_strings.grd",
       {
         merge_extra_grit_defines = ["-D", "vivaldi_chromium_file=false"]
@@ -231,7 +231,7 @@ ANDROID_VIVALDI_RESOURCE_LIST = [
 
 IOS_VIVALDI_RESOURCE_LIST = [
   [
-    "//ios/chrome/app/strings:ios_chromium_strings",
+    "//ios/chrome/app/strings:ios_branded_strings",
     "//vivaldi/app/resources/ios_branding_strings/vivaldi_ios_branding_strings.grd",
     {
       translation_dir_setting = "resources"
@@ -255,7 +255,7 @@ IOS_VIVALDI_RESOURCE_LIST = [
     },
   ],
   [
-    "//ios/chrome/search_widget_extension/strings:ios_search_widget_extension_chromium_strings",
+    "//ios/chrome/search_widget_extension/strings:ios_search_widget_extension_branded_strings",
     "//vivaldi/app/resources/ios_search_extension_google_chrome_strings/vivaldi_ios_search_widget_extension_google_chrome_strings.grd",
     {
       translation_dir_setting = "resources"
@@ -263,17 +263,6 @@ IOS_VIVALDI_RESOURCE_LIST = [
       source = "ios_search_widget_extension_google_chrome_strings.grd"
       vivaldi_translation_dir_setting = "strings"
       vivaldi_file_prefix="vivaldi_ios_search_widget_extension_google_chrome_strings_"
-    },
-  ],
-  [
-    "//ios/chrome/search_widget_extension/strings:ios_search_widget_extension_strings",
-    "//vivaldi/app/resources/ios_search_extension_strings/vivaldi_ios_search_widget_extension_strings.grd",
-    {
-      translation_dir_setting = "resources"
-      pak_file_prefix="ios_search_widget_extension_strings_"
-      source = "ios_search_widget_extension_strings.grd"
-      vivaldi_translation_dir_setting = "strings"
-      vivaldi_file_prefix="vivaldi_ios_search_widget_extension_strings_"
     },
   ],
   [
@@ -288,7 +277,7 @@ IOS_VIVALDI_RESOURCE_LIST = [
     },
   ],
   [
-    "//ios/chrome/content_widget_extension/strings:ios_content_widget_extension_chromium_strings",
+    "//ios/chrome/content_widget_extension/strings:ios_content_widget_extension_branded_strings",
     "//vivaldi/app/resources/ios_content_extension_strings/vivaldi_ios_content_widget_extension_strings.grd",
     {
       translation_dir_setting = "resources"
@@ -318,6 +307,17 @@ IOS_VIVALDI_RESOURCE_LIST = [
       source = "ios_credential_provider_extension_strings.grd"
       vivaldi_translation_dir_setting = "strings"
       vivaldi_file_prefix="vivaldi_ios_credential_provider_extension_strings_"
+    },
+  ],
+  [
+    "//ios/chrome/open_extension/strings:strings",
+    "//vivaldi/app/resources/ios_open_extension_google_chrome_strings/vivaldi_ios_open_extension_google_chrome_strings.grd",
+    {
+      translation_dir_setting = "resources"
+      pak_file_prefix="ios_open_extension_google_chrome_strings_"
+      source = "ios_open_extension_google_chrome_strings.grd"
+      vivaldi_translation_dir_setting = "strings"
+      vivaldi_file_prefix="vivaldi_ios_open_extension_google_chrome_strings_"
     },
   ],
 ]

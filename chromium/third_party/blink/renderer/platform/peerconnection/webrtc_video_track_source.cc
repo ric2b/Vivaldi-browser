@@ -152,8 +152,7 @@ void WebRtcVideoTrackSource::SendFeedback() {
 }
 
 void WebRtcVideoTrackSource::OnFrameCaptured(
-    scoped_refptr<media::VideoFrame> frame,
-    std::vector<scoped_refptr<media::VideoFrame>> scaled_frames) {
+    scoped_refptr<media::VideoFrame> frame) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   TRACE_EVENT0("media", "WebRtcVideoSource::OnFrameCaptured");
   if (!CanConvertToWebRtcVideoFrameBuffer(frame.get())) {
@@ -265,7 +264,7 @@ void WebRtcVideoTrackSource::OnFrameCaptured(
   // The soft-applied cropping will be taken into account by the remainder
   // of the pipeline.
   if (video_frame->natural_size() == video_frame->visible_rect().size()) {
-    DeliverFrame(std::move(video_frame), std::move(scaled_frames),
+    DeliverFrame(std::move(video_frame),
                  base::OptionalToPtr(accumulated_update_rect_),
                  translated_camera_time_us, capture_time_identifier);
     return;
@@ -277,7 +276,7 @@ void WebRtcVideoTrackSource::OnFrameCaptured(
         video_frame->natural_size());
   }
 
-  DeliverFrame(std::move(video_frame), std::move(scaled_frames),
+  DeliverFrame(std::move(video_frame),
                base::OptionalToPtr(accumulated_update_rect_),
                translated_camera_time_us, capture_time_identifier);
 }
@@ -303,7 +302,6 @@ WebRtcVideoTrackSource::ComputeAdaptationParams(int width,
 
 void WebRtcVideoTrackSource::DeliverFrame(
     scoped_refptr<media::VideoFrame> frame,
-    std::vector<scoped_refptr<media::VideoFrame>> scaled_frames,
     gfx::Rect* update_rect,
     int64_t timestamp_us,
     absl::optional<webrtc::Timestamp> capture_time_identifier) {
@@ -324,8 +322,8 @@ void WebRtcVideoTrackSource::DeliverFrame(
   }
 
   rtc::scoped_refptr<webrtc::VideoFrameBuffer> frame_adapter(
-      new rtc::RefCountedObject<WebRtcVideoFrameAdapter>(
-          frame, std::move(scaled_frames), adapter_resources_));
+      new rtc::RefCountedObject<WebRtcVideoFrameAdapter>(frame,
+                                                         adapter_resources_));
 
   webrtc::VideoFrame::Builder frame_builder =
       webrtc::VideoFrame::Builder()
@@ -338,13 +336,26 @@ void WebRtcVideoTrackSource::DeliverFrame(
         update_rect->x(), update_rect->y(), update_rect->width(),
         update_rect->height()});
   }
-  if (base::FeatureList::IsEnabled(media::kWebRTCColorAccuracy)) {
+
+  if (ShouldSetColorSpace(frame->ColorSpace())) {
     frame_builder.set_color_space(GfxToWebRtcColorSpace(frame->ColorSpace()));
   }
   OnFrame(frame_builder.build());
 
   // Clear accumulated_update_rect_.
   accumulated_update_rect_ = gfx::Rect();
+}
+
+bool WebRtcVideoTrackSource::ShouldSetColorSpace(
+    const gfx::ColorSpace& color_space) {
+  if (!base::FeatureList::IsEnabled(media::kWebRTCColorAccuracy)) {
+    return false;
+  }
+
+  // The remote end will assume REC709 if not instructed otherwise, so there's
+  // no need to pass this information on the wire.
+  return color_space.IsValid() &&
+         color_space != gfx::ColorSpace::CreateREC709();
 }
 
 }  // namespace blink

@@ -5,7 +5,8 @@
 import {addEntries, ENTRIES, getCaller, pending, repeatUntil, sendBrowserTestCommand, sendTestMessage, TestEntryInfo} from '../test_util.js';
 import {testcase} from '../testcase.js';
 
-import {navigateWithDirectoryTree, openAndWaitForClosingDialog, openEntryChoosingWindow, pollForChosenEntry, remoteCall} from './background.js';
+import {openAndWaitForClosingDialog, openEntryChoosingWindow, pollForChosenEntry, remoteCall} from './background.js';
+import {DirectoryTreePageObject} from './page_objects/directory_tree.js';
 import {BASIC_LOCAL_ENTRY_SET} from './test_data.js';
 
 /**
@@ -502,6 +503,17 @@ testcase.openFileDialogDriveHostedDoc = async () => {
 };
 
 /**
+ * Tests opening a hosted doc in the browser, ensuring it correctly navigates to
+ * the doc's URL.
+ */
+testcase.openFileDialogDriveEncryptedFile = async () => {
+  chrome.test.assertEq(
+      await openFileDialogClickOkButton(
+          'drive', ENTRIES.testCSEFile.nameText, true),
+      'https://file_alternate_link/test-encrypted.txt');
+};
+
+/**
  * Tests that selecting a hosted doc from a dialog requiring a real file is
  * disabled.
  */
@@ -555,7 +567,8 @@ testcase.openMultiFileDialogDriveOfficeFile = async () => {
   // Wait for initial load to finish.
   await remoteCall.waitFor('isFileManagerLoaded', appId, true);
 
-  await navigateWithDirectoryTree(appId, '/My Drive');
+  const directoryTree = await DirectoryTreePageObject.create(appId, remoteCall);
+  await directoryTree.navigateToPath('/My Drive');
 
   // Sort the file names so we can compare the array directly with the entries
   // returned from pollForChosenEntry() without worrying about order.
@@ -914,7 +927,8 @@ testcase.openFileDialogFileListShowContextMenu = async () => {
       appId, expectedRows, {ignoreLastModifiedTime: true});
 
   // Navigate to Downloads folder.
-  await navigateWithDirectoryTree(appId, '/My files/Downloads');
+  const directoryTree = await DirectoryTreePageObject.create(appId, remoteCall);
+  await directoryTree.navigateToPath('/My files/Downloads');
 
   // Right-click "photos" folder to show context menu.
   await remoteCall.waitAndRightClick(appId, '#file-list [file-name="photos"]');
@@ -996,7 +1010,7 @@ testcase.openMultiFileDialogSelectAllEnabled = async () => {
  */
 testcase.openFileDialogGuestOs = async () => {
   // Register a fake GuestOs guest.
-  const _ = await sendTestMessage({
+  await sendTestMessage({
     name: 'registerMountableGuest',
     displayName: 'Bluejohn',
     canMount: true,
@@ -1012,12 +1026,11 @@ testcase.openFileDialogGuestOs = async () => {
   await remoteCall.waitFor('isFileManagerLoaded', appId, true);
 
   // Click the Guest OS placeholder.
-  await remoteCall.waitAndClickElement(
-      appId, `#directory-tree [root-type-icon="bruschetta"]`);
+  const directoryTree = await DirectoryTreePageObject.create(appId, remoteCall);
+  await directoryTree.selectPlaceholderItemByType('bruschetta');
 
   // Wait for the actual volume to appear.
-  await remoteCall.waitForElement(
-      appId, '#directory-tree [volume-type-icon=bruschetta]');
+  await directoryTree.waitForItemByType('bruschetta');
 };
 
 /**
@@ -1028,7 +1041,7 @@ testcase.openFileDialogGuestOs = async () => {
  */
 testcase.saveFileDialogGuestOs = async () => {
   // Register a fake GuestOs guest.
-  const _ = await sendTestMessage({
+  await sendTestMessage({
     name: 'registerMountableGuest',
     displayName: 'Bluejohn',
     canMount: true,
@@ -1044,10 +1057,9 @@ testcase.saveFileDialogGuestOs = async () => {
   await remoteCall.waitFor('isFileManagerLoaded', appId, true);
 
   // Click the Guest OS placeholder.
-  await remoteCall.waitAndClickElement(
-      appId, `#directory-tree [root-type-icon="bruschetta"]`);
+  const directoryTree = await DirectoryTreePageObject.create(appId, remoteCall);
+  await directoryTree.selectPlaceholderItemByType('bruschetta');
 
   // Wait for the actual volume to appear.
-  await remoteCall.waitForElement(
-      appId, '#directory-tree [volume-type-icon=bruschetta]');
+  await directoryTree.waitForItemByType('bruschetta');
 };

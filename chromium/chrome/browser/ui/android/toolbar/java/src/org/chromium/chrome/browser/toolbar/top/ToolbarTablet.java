@@ -16,12 +16,14 @@ import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LevelListDrawable;
 import android.util.AttributeSet;
+import android.util.TypedValue;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.ViewGroup;
 import android.view.ViewStub;
 import android.view.accessibility.AccessibilityEvent;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 
 import androidx.annotation.ColorInt;
@@ -38,12 +40,10 @@ import org.chromium.chrome.browser.omnibox.LocationBar;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
 import org.chromium.chrome.browser.omnibox.NewTabPageDelegate;
 import org.chromium.chrome.browser.omnibox.UrlBarData;
-import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.toolbar.ButtonData;
 import org.chromium.chrome.browser.toolbar.ButtonData.ButtonSpec;
-import org.chromium.chrome.browser.toolbar.HomeButton;
 import org.chromium.chrome.browser.toolbar.KeyboardNavigationListener;
 import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.chrome.browser.toolbar.TabCountProvider;
@@ -67,7 +67,7 @@ import java.util.function.BooleanSupplier;
 import org.chromium.build.BuildConfig;
 
 import org.chromium.components.embedder_support.util.UrlUtilities;
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.ui.widget.ChromeImageButton;
 
 import org.chromium.url.GURL;
@@ -94,7 +94,7 @@ public class ToolbarTablet
 
     private static final int HOME_BUTTON_POSITION_FOR_TAB_STRIP_REDESIGN = 3;
 
-    private HomeButton mHomeButton;
+    private ImageButton mHomeButton;
     private ImageButton mBackButton;
     private ImageButton mForwardButton;
     private ImageButton mReloadButton;
@@ -421,10 +421,16 @@ public class ToolbarTablet
     private void displayNavigationPopup(boolean isForward, View anchorView) {
         Tab tab = getToolbarDataProvider().getTab();
         if (tab == null || tab.getWebContents() == null) return;
-        mNavigationPopup = new NavigationPopup(Profile.fromWebContents(tab.getWebContents()),
-                getContext(), tab.getWebContents().getNavigationController(),
-                isForward ? NavigationPopup.Type.TABLET_FORWARD : NavigationPopup.Type.TABLET_BACK,
-                getToolbarDataProvider()::getTab, mHistoryDelegate);
+        mNavigationPopup =
+                new NavigationPopup(
+                        tab.getProfile(),
+                        getContext(),
+                        tab.getWebContents().getNavigationController(),
+                        isForward
+                                ? NavigationPopup.Type.TABLET_FORWARD
+                                : NavigationPopup.Type.TABLET_BACK,
+                        getToolbarDataProvider()::getTab,
+                        mHistoryDelegate);
         mNavigationPopup.show(anchorView);
     }
 
@@ -748,10 +754,23 @@ public class ToolbarTablet
 
         ButtonSpec buttonSpec = buttonData.getButtonSpec();
 
-        // Set hover state tooltip text for mic and share button on tablets.
+        // Set hover highlight for profile, voice search, share and new tab button on tablets. Set
+        // box hover highlight for the rest of button variants.
+        if (buttonData.getButtonSpec().getShouldShowHoverHighlight()) {
+            mOptionalButton.setBackgroundResource(R.drawable.toolbar_button_ripple);
+        } else {
+            TypedValue themeRes = new TypedValue();
+            getContext().getTheme().resolveAttribute(
+                    R.attr.selectableItemBackground, themeRes, true);
+            mOptionalButton.setBackgroundResource(themeRes.resourceId);
+        }
+
+        // Set hover tooltip text for voice search, share and new tab button on tablets.
         if (buttonSpec.getHoverTooltipTextId() != ButtonSpec.INVALID_TOOLTIP_TEXT_ID) {
             super.setTooltipText(
                     mOptionalButton, getContext().getString(buttonSpec.getHoverTooltipTextId()));
+        } else {
+            super.setTooltipText(mOptionalButton, null);
         }
 
         mOptionalButtonUsesTint = buttonSpec.getSupportsTinting();
@@ -792,7 +811,7 @@ public class ToolbarTablet
     }
 
     @Override
-    public HomeButton getHomeButton() {
+    public ImageView getHomeButton() {
         return mHomeButton;
     }
 
@@ -964,7 +983,7 @@ public class ToolbarTablet
     @Override
     public void onBottomToolbarVisibilityChanged(boolean isVisible, int orientation) {
         int visible = VISIBLE;
-        if (!SharedPreferencesManager.getInstance().readBoolean("homepage", true)) visible = GONE;
+        if (!ChromeSharedPreferences.getInstance().readBoolean("homepage", true)) visible = GONE;
         mHomeButton.setVisibility(visible);
     }
 }

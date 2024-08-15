@@ -12,6 +12,7 @@
 #include "ash/system/network/network_list_mobile_header_view.h"
 #include "ash/system/network/network_list_network_header_view.h"
 #include "ash/system/network/network_list_network_item_view.h"
+#include "ash/system/network/network_list_tether_hosts_header_view.h"
 #include "ash/system/network/network_list_view_controller.h"
 #include "ash/system/network/network_list_wifi_header_view.h"
 #include "ash/system/network/tray_network_state_observer.h"
@@ -27,7 +28,6 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-#include "ui/views/controls/separator.h"
 
 namespace views {
 class ImageView;
@@ -68,14 +68,14 @@ class ASH_EXPORT NetworkListViewControllerImpl
   enum class NetworkListViewControllerViewChildId {
     kConnectionWarning = 11,
     kConnectionWarningLabel = 12,
-    kMobileSeparator = 13,
-    kMobileStatusMessage = 14,
-    kMobileSectionHeader = 15,
-    kWifiSeparator = 16,
-    kWifiSectionHeader = 17,
-    kWifiStatusMessage = 18,
-    kConnectionWarningSystemIcon = 19,
-    kConnectionWarningManagedIcon = 20
+    kMobileStatusMessage = 13,
+    kMobileSectionHeader = 14,
+    kWifiSectionHeader = 15,
+    kWifiStatusMessage = 16,
+    kConnectionWarningSystemIcon = 17,
+    kConnectionWarningManagedIcon = 18,
+    kTetherHostsSectionHeader = 19,
+    kTetherHostsStatusMessage = 20
   };
 
   // Map of network guids and their corresponding list item views.
@@ -113,11 +113,8 @@ class ASH_EXPORT NetworkListViewControllerImpl
   // Returns true if mobile data section should be added to view.
   bool ShouldMobileDataSectionBeShown();
 
-  // Creates if missing and adds a Mobile or Wifi separator to the view.
-  // Also reorders separator view in network list. A reference to the
-  // separator is captured in `*separator_view`.
-  size_t CreateSeparatorIfMissingAndReorder(size_t index,
-                                            views::Separator** separator_view);
+  // Returns true if tether hosts section should be added to view.
+  bool ShouldTetherHostsSectionBeShown();
 
   // Creates the wifi group header for wifi networks. If `is_known` is `true`,
   // it creates the "Known networks" header, which is the `known_header_`. If
@@ -145,6 +142,11 @@ class ASH_EXPORT NetworkListViewControllerImpl
   // If there are no WiFi networks or WiFi is disabled, this method will also
   // add an info message.
   void UpdateWifiSection();
+
+  // Updates the Tether Hosts section. This method creates a new header if one
+  // does not exist. If Bluetooth is disabled or Instant Hotspot is enabled with
+  // no nearby hosts, this method will display an error message.
+  void UpdateTetherHostsSection();
 
   // Updated mobile data toggle states and sets mobile data status message.
   void UpdateMobileToggleAndSetStatusMessage();
@@ -205,7 +207,7 @@ class ASH_EXPORT NetworkListViewControllerImpl
   // if the default network has a proxy configured or if a VPN is active.
   void MaybeShowConnectionWarningManagedIcon(bool using_proxy);
 
-  // For QsRevamp: whether to add eSim entry or not.
+  // Whether to add eSim entry or not.
   bool ShouldAddESimEntry() const;
 
   raw_ptr<TrayNetworkStateModel, ExperimentalAsh> model_;
@@ -226,9 +228,6 @@ class ASH_EXPORT NetworkListViewControllerImpl
   RAW_PTR_EXCLUSION NetworkListMobileHeaderView* mobile_header_view_ = nullptr;
   // This field is not a raw_ptr<> because it was filtered by the rewriter
   // for: #addr-of
-  RAW_PTR_EXCLUSION views::Separator* mobile_separator_view_ = nullptr;
-  // This field is not a raw_ptr<> because it was filtered by the rewriter
-  // for: #addr-of
   RAW_PTR_EXCLUSION TriView* connection_warning_ = nullptr;
 
   // Pointer to the icon displayed next to the connection warning message when
@@ -246,10 +245,15 @@ class ASH_EXPORT NetworkListViewControllerImpl
       wifi_header_view_ = nullptr;
   // This field is not a raw_ptr<> because it was filtered by the rewriter
   // for: #addr-of
-  RAW_PTR_EXCLUSION views::Separator* wifi_separator_view_ = nullptr;
+  RAW_PTR_EXCLUSION TrayInfoLabel* wifi_status_message_ = nullptr;
+
   // This field is not a raw_ptr<> because it was filtered by the rewriter
   // for: #addr-of
-  RAW_PTR_EXCLUSION TrayInfoLabel* wifi_status_message_ = nullptr;
+  RAW_PTR_EXCLUSION TrayInfoLabel* tether_hosts_status_message_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION NetworkListTetherHostsHeaderView*
+      tether_hosts_header_view_ = nullptr;
 
   // Owned by views hierarchy.
   // This field is not a raw_ptr<> because it was filtered by the rewriter
@@ -265,10 +269,12 @@ class ASH_EXPORT NetworkListViewControllerImpl
   // for: #addr-of
   RAW_PTR_EXCLUSION HoverHighlightView* add_esim_entry_ = nullptr;
 
-  bool has_mobile_networks_;
+  bool has_cellular_networks_;
   bool has_wifi_networks_;
+  bool has_tether_networks_;
   bool is_mobile_network_enabled_;
   bool is_wifi_enabled_;
+  bool is_tether_enabled_;
   std::string connected_vpn_guid_;
 
   // Can be nullopt while the managed properties of the network are being

@@ -23,6 +23,8 @@
 #include "base/system/sys_info.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_running_on_chromeos.h"
+#include "base/test/test_future.h"
+#include "base/test/to_vector.h"
 #include "chrome/browser/ash/arc/fileapi/arc_documents_provider_util.h"
 #include "chrome/browser/ash/arc/fileapi/arc_file_system_operation_runner.h"
 #include "chrome/browser/ash/arc/fileapi/arc_media_view_util.h"
@@ -66,6 +68,7 @@
 #include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
 
 using base::FilePath;
+using base::test::TestFuture;
 using storage::FileSystemURL;
 
 namespace file_manager {
@@ -631,22 +634,20 @@ class FileManagerPathUtilConvertUrlTest : public testing::Test {
   ~FileManagerPathUtilConvertUrlTest() override = default;
 
   void SetUp() override {
+    fake_user_manager_.Reset(std::make_unique<ash::FakeChromeUserManager>());
     profile_manager_ = std::make_unique<TestingProfileManager>(
         TestingBrowserProcess::GetGlobal());
     ASSERT_TRUE(profile_manager_->SetUp());
 
     // Set up fake user manager.
-    auto* fake_user_manager = new ash::FakeChromeUserManager();
     const AccountId account_id(
         AccountId::FromUserEmailGaiaId("user@gmail.com", "1111111111"));
     const AccountId account_id_2(
         AccountId::FromUserEmailGaiaId("user2@gmail.com", "2222222222"));
-    fake_user_manager->AddUser(account_id);
-    fake_user_manager->LoginUser(account_id);
-    fake_user_manager->AddUser(account_id_2);
-    fake_user_manager->LoginUser(account_id_2);
-    user_manager_enabler_ = std::make_unique<user_manager::ScopedUserManager>(
-        base::WrapUnique(std::move(fake_user_manager)));
+    fake_user_manager_->AddUser(account_id);
+    fake_user_manager_->LoginUser(account_id);
+    fake_user_manager_->AddUser(account_id_2);
+    fake_user_manager_->LoginUser(account_id_2);
 
     primary_profile_ =
         profile_manager_->CreateTestingProfile(account_id.GetUserEmail());
@@ -714,8 +715,9 @@ class FileManagerPathUtilConvertUrlTest : public testing::Test {
   void TearDown() override {
     arc_service_manager_->arc_bridge_service()->file_system()->CloseInstance(
         &fake_file_system_);
-    user_manager_enabler_.reset();
+    arc_service_manager_->set_browser_context(nullptr);
     profile_manager_.reset();
+    fake_user_manager_.Reset();
 
     storage::ExternalMountPoints::GetSystemInstance()->RevokeAllFileSystems();
 
@@ -728,11 +730,12 @@ class FileManagerPathUtilConvertUrlTest : public testing::Test {
  protected:
   content::BrowserTaskEnvironment task_environment_;
   arc::FakeFileSystemInstance fake_file_system_;
+  user_manager::TypedScopedUserManager<ash::FakeChromeUserManager>
+      fake_user_manager_;
   std::unique_ptr<TestingProfileManager> profile_manager_;
   raw_ptr<TestingProfile, DanglingUntriaged | ExperimentalAsh> primary_profile_;
   raw_ptr<TestingProfile, DanglingUntriaged | ExperimentalAsh>
       secondary_profile_;
-  std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
   std::unique_ptr<arc::ArcServiceManager> arc_service_manager_;
   base::FilePath drive_mount_point_;
   base::FilePath crostini_mount_point_;
@@ -874,141 +877,98 @@ TEST_F(FileManagerPathUtilConvertUrlTest, ConvertPathToArcUrl_ShareCache) {
 
 TEST_F(FileManagerPathUtilConvertUrlTest,
        ConvertToContentUrls_InvalidMountType) {
-  base::RunLoop run_loop;
+  TestFuture<const std::vector<GURL>&, const std::vector<FilePath>&> future;
   ConvertToContentUrls(
       ProfileManager::GetPrimaryUserProfile(),
       std::vector<FileSystemURL>{FileSystemURL::CreateForTest(
           blink::StorageKey(), storage::kFileSystemTypeTest,
           base::FilePath::FromUTF8Unsafe("/media/removable/a/b/c"))},
-      base::BindOnce(
-          [](base::RunLoop* run_loop, const std::vector<GURL>& urls,
-             const std::vector<base::FilePath>& paths_to_share) {
-            run_loop->Quit();
-            ASSERT_EQ(1U, urls.size());
-            EXPECT_EQ(GURL(), urls[0]);
-          },
-          &run_loop));
-  run_loop.Run();
+      future.GetCallback());
+  const auto& urls = future.Get<0>();
+  ASSERT_EQ(1U, urls.size());
+  EXPECT_EQ(GURL(), urls[0]);
 }
 
 TEST_F(FileManagerPathUtilConvertUrlTest, ConvertToContentUrls_Removable) {
-  base::RunLoop run_loop;
+  TestFuture<const std::vector<GURL>&, const std::vector<FilePath>&> future;
   ConvertToContentUrls(
       ProfileManager::GetPrimaryUserProfile(),
       std::vector<FileSystemURL>{CreateExternalURL(
           base::FilePath::FromUTF8Unsafe("/media/removable/a/b/c"))},
-      base::BindOnce(
-          [](base::RunLoop* run_loop, const std::vector<GURL>& urls,
-             const std::vector<base::FilePath>& paths_to_share) {
-            run_loop->Quit();
-            ASSERT_EQ(1U, urls.size());
-            EXPECT_EQ(
-                GURL("content://org.chromium.arc.volumeprovider/0123-abcd/b/c"),
-                urls[0]);
-          },
-          &run_loop));
-  run_loop.Run();
+      future.GetCallback());
+  const auto& urls = future.Get<0>();
+  ASSERT_EQ(1U, urls.size());
+  EXPECT_EQ(GURL("content://org.chromium.arc.volumeprovider/0123-abcd/b/c"),
+            urls[0]);
 }
 
 TEST_F(FileManagerPathUtilConvertUrlTest, ConvertToContentUrls_MyFiles) {
   base::test::ScopedRunningOnChromeOS running_on_chromeos;
   const base::FilePath myfiles = GetMyFilesFolderForProfile(primary_profile_);
-  base::RunLoop run_loop;
-  ConvertToContentUrls(
-      ProfileManager::GetPrimaryUserProfile(),
-      std::vector<FileSystemURL>{
-          CreateExternalURL(myfiles.AppendASCII("a/b/c"))},
-      base::BindOnce(
-          [](base::RunLoop* run_loop, const std::vector<GURL>& urls,
-             const std::vector<base::FilePath>& paths_to_share) {
-            run_loop->Quit();
-            ASSERT_EQ(1U, urls.size());
-            EXPECT_EQ(GURL("content://org.chromium.arc.volumeprovider/"
-                           "0000000000000000000000000000CAFEF00D2019/"
-                           "a/b/c"),
-                      urls[0]);
-          },
-          &run_loop));
-  run_loop.Run();
+  TestFuture<const std::vector<GURL>&, const std::vector<FilePath>&> future;
+  ConvertToContentUrls(ProfileManager::GetPrimaryUserProfile(),
+                       std::vector<FileSystemURL>{
+                           CreateExternalURL(myfiles.AppendASCII("a/b/c"))},
+                       future.GetCallback());
+  const auto& urls = future.Get<0>();
+  ASSERT_EQ(1U, urls.size());
+  EXPECT_EQ(GURL("content://org.chromium.arc.volumeprovider/"
+                 "0000000000000000000000000000CAFEF00D2019/a/b/c"),
+            urls[0]);
 }
 
 TEST_F(FileManagerPathUtilConvertUrlTest,
        ConvertToContentUrls_InvalidRemovable) {
-  base::RunLoop run_loop;
+  TestFuture<const std::vector<GURL>&, const std::vector<FilePath>&> future;
   ConvertToContentUrls(
       ProfileManager::GetPrimaryUserProfile(),
       std::vector<FileSystemURL>{CreateExternalURL(
           base::FilePath::FromUTF8Unsafe("/media/removable_foobar"))},
-      base::BindOnce(
-          [](base::RunLoop* run_loop, const std::vector<GURL>& urls,
-             const std::vector<base::FilePath>& paths_to_share) {
-            run_loop->Quit();
-            ASSERT_EQ(1U, urls.size());
-            EXPECT_EQ(GURL(), urls[0]);
-          },
-          &run_loop));
-  run_loop.Run();
+      future.GetCallback());
+  const auto& urls = future.Get<0>();
+  ASSERT_EQ(1U, urls.size());
+  EXPECT_EQ(GURL(), urls[0]);
 }
 
 TEST_F(FileManagerPathUtilConvertUrlTest, ConvertToContentUrls_Downloads) {
   const base::FilePath downloads =
       GetDownloadsFolderForProfile(primary_profile_);
-  base::RunLoop run_loop;
-  ConvertToContentUrls(
-      ProfileManager::GetPrimaryUserProfile(),
-      std::vector<FileSystemURL>{
-          CreateExternalURL(downloads.AppendASCII("a/b/c"))},
-      base::BindOnce(
-          [](base::RunLoop* run_loop, const std::vector<GURL>& urls,
-             const std::vector<base::FilePath>& paths_to_share) {
-            run_loop->Quit();
-            ASSERT_EQ(1U, urls.size());
-            EXPECT_EQ(GURL("content://org.chromium.arc.volumeprovider/"
-                           "download/a/b/c"),
-                      urls[0]);
-          },
-          &run_loop));
-  run_loop.Run();
+  TestFuture<const std::vector<GURL>&, const std::vector<FilePath>&> future;
+  ConvertToContentUrls(ProfileManager::GetPrimaryUserProfile(),
+                       std::vector<FileSystemURL>{
+                           CreateExternalURL(downloads.AppendASCII("a/b/c"))},
+                       future.GetCallback());
+  const auto& urls = future.Get<0>();
+  ASSERT_EQ(1U, urls.size());
+  EXPECT_EQ(GURL("content://org.chromium.arc.volumeprovider/download/a/b/c"),
+            urls[0]);
 }
 
 TEST_F(FileManagerPathUtilConvertUrlTest,
        ConvertToContentUrls_InvalidDownloads) {
   const base::FilePath downloads =
       GetDownloadsFolderForProfile(secondary_profile_);
-  base::RunLoop run_loop;
-  ConvertToContentUrls(
-      ProfileManager::GetPrimaryUserProfile(),
-      std::vector<FileSystemURL>{
-          CreateExternalURL(downloads.AppendASCII("a/b/c"))},
-      base::BindOnce(
-          [](base::RunLoop* run_loop, const std::vector<GURL>& urls,
-             const std::vector<base::FilePath>& paths_to_share) {
-            run_loop->Quit();
-            ASSERT_EQ(1U, urls.size());
-            EXPECT_EQ(GURL(), urls[0]);
-          },
-          &run_loop));
-  run_loop.Run();
+  TestFuture<const std::vector<GURL>&, const std::vector<FilePath>&> future;
+  ConvertToContentUrls(ProfileManager::GetPrimaryUserProfile(),
+                       std::vector<FileSystemURL>{
+                           CreateExternalURL(downloads.AppendASCII("a/b/c"))},
+                       future.GetCallback());
+  const auto& urls = future.Get<0>();
+  ASSERT_EQ(1U, urls.size());
+  EXPECT_EQ(GURL(), urls[0]);
 }
 
 TEST_F(FileManagerPathUtilConvertUrlTest, ConvertToContentUrls_Special) {
-  base::RunLoop run_loop;
-  ConvertToContentUrls(
-      ProfileManager::GetPrimaryUserProfile(),
-      std::vector<FileSystemURL>{
-          CreateExternalURL(drive_mount_point_.AppendASCII("a/b/c"))},
-      base::BindOnce(
-          [](base::RunLoop* run_loop, const std::vector<GURL>& urls,
-             const std::vector<base::FilePath>& paths_to_share) {
-            run_loop->Quit();
-            ASSERT_EQ(1U, urls.size());
-            EXPECT_EQ(GURL("content://org.chromium.arc.chromecontentprovider/"
-                           "externalfile%3Adrivefs-b1f44746e7144c3caafeacaa8bb5"
-                           "c569%2Fa%2Fb%2Fc"),
-                      urls[0]);
-          },
-          &run_loop));
-  run_loop.Run();
+  TestFuture<const std::vector<GURL>&, const std::vector<FilePath>&> future;
+  ConvertToContentUrls(ProfileManager::GetPrimaryUserProfile(),
+                       std::vector<FileSystemURL>{CreateExternalURL(
+                           drive_mount_point_.AppendASCII("a/b/c"))},
+                       future.GetCallback());
+  const auto& urls = future.Get<0>();
+  ASSERT_EQ(1U, urls.size());
+  EXPECT_EQ(GURL("content://org.chromium.arc.chromecontentprovider/externalfile"
+                 "%3Adrivefs-b1f44746e7144c3caafeacaa8bb5c569%2Fa%2Fb%2Fc"),
+            urls[0]);
 }
 
 TEST_F(FileManagerPathUtilConvertUrlTest,
@@ -1024,7 +984,7 @@ TEST_F(FileManagerPathUtilConvertUrlTest,
   fake_file_system_.AddDocument(arc::FakeFileSystemInstance::Document(
       kAuthority, "photo-id", "dir-id", "photo.jpg", "image/jpeg", 3, 33));
 
-  base::RunLoop run_loop;
+  TestFuture<const std::vector<GURL>&, const std::vector<FilePath>&> future;
   ConvertToContentUrls(
       ProfileManager::GetPrimaryUserProfile(),
       std::vector<FileSystemURL>{FileSystemURL::CreateForTest(
@@ -1033,22 +993,17 @@ TEST_F(FileManagerPathUtilConvertUrlTest,
               "/special/arc-documents-provider/"
               "com.android.providers.media.documents/"
               "images_root/Download/photo.jpg"))},
-      base::BindOnce(
-          [](base::RunLoop* run_loop, const std::vector<GURL>& urls,
-             const std::vector<base::FilePath>& paths_to_share) {
-            run_loop->Quit();
-            ASSERT_EQ(1U, urls.size());
-            EXPECT_EQ(GURL("content://com.android.providers.media.documents/"
-                           "document/photo-id"),
-                      urls[0]);
-          },
-          &run_loop));
-  run_loop.Run();
+      future.GetCallback());
+  const auto& urls = future.Get<0>();
+  ASSERT_EQ(1U, urls.size());
+  EXPECT_EQ(GURL("content://com.android.providers.media.documents/"
+                 "document/photo-id"),
+            urls[0]);
 }
 
 TEST_F(FileManagerPathUtilConvertUrlTest,
        ConvertToContentUrls_ArcDocumentsProviderFileNotFound) {
-  base::RunLoop run_loop;
+  TestFuture<const std::vector<GURL>&, const std::vector<FilePath>&> future;
   ConvertToContentUrls(
       ProfileManager::GetPrimaryUserProfile(),
       std::vector<FileSystemURL>{FileSystemURL::CreateForTest(
@@ -1057,52 +1012,38 @@ TEST_F(FileManagerPathUtilConvertUrlTest,
               "/special/arc-documents-provider/"
               "com.android.providers.media.documents/"
               "images_root/Download/photo.jpg"))},
-      base::BindOnce(
-          [](base::RunLoop* run_loop, const std::vector<GURL>& urls,
-             const std::vector<base::FilePath>& paths_to_share) {
-            run_loop->Quit();
-            ASSERT_EQ(1U, urls.size());
-            EXPECT_EQ(GURL(""), urls[0]);
-          },
-          &run_loop));
-  run_loop.Run();
+      future.GetCallback());
+  const auto& urls = future.Get<0>();
+  ASSERT_EQ(1U, urls.size());
+  EXPECT_EQ(GURL(""), urls[0]);
 }
 
 TEST_F(FileManagerPathUtilConvertUrlTest, ConvertToContentUrls_AndroidFiles) {
-  base::RunLoop run_loop;
+  TestFuture<const std::vector<GURL>&, const std::vector<FilePath>&> future;
   ConvertToContentUrls(
       ProfileManager::GetPrimaryUserProfile(),
       std::vector<FileSystemURL>{
           CreateExternalURL(base::FilePath::FromUTF8Unsafe(
               "/run/arc/sdcard/write/emulated/0/Pictures/a/b.jpg"))},
-      base::BindOnce(
-          [](base::RunLoop* run_loop, const std::vector<GURL>& urls,
-             const std::vector<base::FilePath>& paths_to_share) {
-            run_loop->Quit();
-            ASSERT_EQ(1U, urls.size());
-            EXPECT_EQ(GURL("content://org.chromium.arc.volumeprovider/"
-                           "external_files/Pictures/a/b.jpg"),
-                      urls[0]);
-          },
-          &run_loop));
+      future.GetCallback());
+  const auto& urls = future.Get<0>();
+  ASSERT_EQ(1U, urls.size());
+  EXPECT_EQ(GURL("content://org.chromium.arc.volumeprovider/"
+                 "external_files/Pictures/a/b.jpg"),
+            urls[0]);
 }
 
 TEST_F(FileManagerPathUtilConvertUrlTest,
        ConvertToContentUrls_InvalidAndroidFiles) {
-  base::RunLoop run_loop;
-  ConvertToContentUrls(
-      ProfileManager::GetPrimaryUserProfile(),
-      std::vector<FileSystemURL>{
-          CreateExternalURL(base::FilePath::FromUTF8Unsafe(
-              "/run/arc/sdcard/read/emulated/0/a/b/c"))},
-      base::BindOnce(
-          [](base::RunLoop* run_loop, const std::vector<GURL>& urls,
-             const std::vector<base::FilePath>& paths_to_share) {
-            run_loop->Quit();
-            ASSERT_EQ(1U, urls.size());
-            EXPECT_EQ(GURL(), urls[0]);  // Invalid URL.
-          },
-          &run_loop));
+  TestFuture<const std::vector<GURL>&, const std::vector<FilePath>&> future;
+  ConvertToContentUrls(ProfileManager::GetPrimaryUserProfile(),
+                       std::vector<FileSystemURL>{
+                           CreateExternalURL(base::FilePath::FromUTF8Unsafe(
+                               "/run/arc/sdcard/read/emulated/0/a/b/c"))},
+                       future.GetCallback());
+  const auto& urls = future.Get<0>();
+  ASSERT_EQ(1U, urls.size());
+  EXPECT_EQ(GURL(), urls[0]);  // Invalid URL.
 }
 
 TEST_F(FileManagerPathUtilConvertUrlTest,
@@ -1110,22 +1051,17 @@ TEST_F(FileManagerPathUtilConvertUrlTest,
   auto* command_line = base::CommandLine::ForCurrentProcess();
   command_line->InitFromArgv({"", "--enable-arcvm"});
   EXPECT_TRUE(arc::IsArcVmEnabled());
-  base::RunLoop run_loop;
-  ConvertToContentUrls(
-      ProfileManager::GetPrimaryUserProfile(),
-      std::vector<FileSystemURL>{
-          CreateExternalURL(base::FilePath::FromUTF8Unsafe(
-              "/media/fuse/android_files/Pictures/a/b.jpg"))},
-      base::BindOnce(
-          [](base::RunLoop* run_loop, const std::vector<GURL>& urls,
-             const std::vector<base::FilePath>& paths_to_share) {
-            run_loop->Quit();
-            ASSERT_EQ(1U, urls.size());
-            EXPECT_EQ(GURL("content://org.chromium.arc.volumeprovider/"
-                           "external_files/Pictures/a/b.jpg"),
-                      urls[0]);
-          },
-          &run_loop));
+  TestFuture<const std::vector<GURL>&, const std::vector<FilePath>&> future;
+  ConvertToContentUrls(ProfileManager::GetPrimaryUserProfile(),
+                       std::vector<FileSystemURL>{
+                           CreateExternalURL(base::FilePath::FromUTF8Unsafe(
+                               "/media/fuse/android_files/Pictures/a/b.jpg"))},
+                       future.GetCallback());
+  const auto& urls = future.Get<0>();
+  ASSERT_EQ(1U, urls.size());
+  EXPECT_EQ(GURL("content://org.chromium.arc.volumeprovider/"
+                 "external_files/Pictures/a/b.jpg"),
+            urls[0]);
 }
 
 TEST_F(FileManagerPathUtilConvertUrlTest,
@@ -1133,24 +1069,20 @@ TEST_F(FileManagerPathUtilConvertUrlTest,
   auto* command_line = base::CommandLine::ForCurrentProcess();
   command_line->InitFromArgv({"", "--enable-arcvm"});
   EXPECT_TRUE(arc::IsArcVmEnabled());
-  base::RunLoop run_loop;
+  TestFuture<const std::vector<GURL>&, const std::vector<FilePath>&> future;
   ConvertToContentUrls(
       ProfileManager::GetPrimaryUserProfile(),
       std::vector<FileSystemURL>{
           CreateExternalURL(base::FilePath::FromUTF8Unsafe(
               "/run/arc/sdcard/write/emulated/0/Pictures/a/b.jpg"))},
-      base::BindOnce(
-          [](base::RunLoop* run_loop, const std::vector<GURL>& urls,
-             const std::vector<base::FilePath>& paths_to_share) {
-            run_loop->Quit();
-            ASSERT_EQ(1U, urls.size());
-            EXPECT_EQ(GURL(), urls[0]);  // Invalid URL.
-          },
-          &run_loop));
+      future.GetCallback());
+  const auto& urls = future.Get<0>();
+  ASSERT_EQ(1U, urls.size());
+  EXPECT_EQ(GURL(), urls[0]);  // Invalid URL.
 }
 
 TEST_F(FileManagerPathUtilConvertUrlTest, ConvertToContentUrls_MultipleUrls) {
-  base::RunLoop run_loop;
+  TestFuture<const std::vector<GURL>&, const std::vector<FilePath>&> future;
   ConvertToContentUrls(
       ProfileManager::GetPrimaryUserProfile(),
       std::vector<FileSystemURL>{
@@ -1160,25 +1092,18 @@ TEST_F(FileManagerPathUtilConvertUrlTest, ConvertToContentUrls_MultipleUrls) {
           CreateExternalURL(drive_mount_point_.AppendASCII("a/b/c")),
           CreateExternalURL(base::FilePath::FromUTF8Unsafe(
               "/run/arc/sdcard/write/emulated/0/a/b/c"))},
-      base::BindOnce(
-          [](base::RunLoop* run_loop, const std::vector<GURL>& urls,
-             const std::vector<base::FilePath>& paths_to_share) {
-            run_loop->Quit();
-            ASSERT_EQ(4U, urls.size());
-            EXPECT_EQ(GURL(), urls[0]);  // Invalid URL.
-            EXPECT_EQ(
-                GURL("content://org.chromium.arc.volumeprovider/0123-abcd/b/c"),
-                urls[1]);
-            EXPECT_EQ(GURL("content://org.chromium.arc.chromecontentprovider/"
-                           "externalfile%3Adrivefs-b1f44746e7144c3caafeacaa8bb5"
-                           "c569%2Fa%2Fb%2Fc"),
-                      urls[2]);
-            EXPECT_EQ(GURL("content://org.chromium.arc.volumeprovider/"
-                           "external_files/a/b/c"),
-                      urls[3]);
-          },
-          &run_loop));
-  run_loop.Run();
+      future.GetCallback());
+  const auto& urls = future.Get<0>();
+  ASSERT_EQ(4U, urls.size());
+  EXPECT_EQ(GURL(), urls[0]);  // Invalid URL.
+  EXPECT_EQ(GURL("content://org.chromium.arc.volumeprovider/0123-abcd/b/c"),
+            urls[1]);
+  EXPECT_EQ(GURL("content://org.chromium.arc.chromecontentprovider/externalfile"
+                 "%3Adrivefs-b1f44746e7144c3caafeacaa8bb5c569%2Fa%2Fb%2Fc"),
+            urls[2]);
+  EXPECT_EQ(GURL("content://org.chromium.arc.volumeprovider/"
+                 "external_files/a/b/c"),
+            urls[3]);
 }
 
 TEST_F(FileManagerPathUtilTest, GetDisplayablePathTest) {
@@ -1412,10 +1337,8 @@ TEST_F(FileManagerPathUtilTest, ParseFileSystemSources) {
       "external/fake_aa_mount_name/a/b/c.txt",
       "external/fake_ad_mount_name/d/e/f.txt",
   };
-  std::vector<std::string> file_urls;
-  base::ranges::transform(
-      file_names, std::back_inserter(file_urls),
-      [&file_manager_url](const std::string& name) {
+  std::vector<std::string> file_urls = base::test::ToVector(
+      file_names, [&file_manager_url](const std::string& name) {
         return base::StrCat({url::kFileSystemScheme, ":",
                              file_manager_url.Resolve(name).spec()});
       });

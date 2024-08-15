@@ -16,7 +16,7 @@ import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.chrome.browser.password_manager.ReauthResult;
+import org.chromium.chrome.browser.device_reauth.ReauthResult;
 
 // Vivaldi
 import org.chromium.base.Callback;

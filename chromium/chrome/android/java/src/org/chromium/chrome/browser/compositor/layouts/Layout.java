@@ -359,20 +359,15 @@ public abstract class Layout {
     protected void notifySizeChanged(float width, float height, @Orientation int orientation) {}
 
     /**
-     * Sets the managers needed to for the layout to get information from outside. The managers
-     * are tailored to be called from the GL thread.
-     *
+     * Sets the the {@link TabModelSelector} for the layout.
      * @param modelSelector The {@link TabModelSelector} to be set on the layout.
-     * @param manager       The {@link TabContentManager} to get tab display content.
      */
-    public void setTabModelSelector(TabModelSelector modelSelector, TabContentManager manager) {
+    public void setTabModelSelector(TabModelSelector modelSelector) {
         mTabModelSelector = modelSelector;
-        setTabContentManager(manager);
     }
 
     /**
-     * Sets the manager needed for the layout to get thumbnails.
-     *
+     * Sets the {@link TabContentManager} needed for the layout to get thumbnails.
      * @param manager The {@link TabContentManager} to get tab display content.
      */
     protected void setTabContentManager(TabContentManager manager) {
@@ -406,10 +401,10 @@ public abstract class Layout {
 
     /**
      * To be called when the layout is starting a transition out of the view mode.
-     * @param nextTabId          The id of the next tab.
+     *
+     * @param nextTabId The id of the next tab.
      * @param hintAtTabSelection Whether or not the new tab selection should be broadcast as a hint
-     *                           potentially before this {@link Layout} is done hiding and the
-     *                           selection occurs.
+     *     potentially before this {@link Layout} is done hiding and the selection occurs.
      */
     public void startHiding(int nextTabId, boolean hintAtTabSelection) {
         mUpdateHost.startHiding(nextTabId, hintAtTabSelection);

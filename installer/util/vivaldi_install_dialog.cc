@@ -17,6 +17,7 @@
 #include "base/notreached.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/win/atl.h"
 #include "base/win/embedded_i18n/language_selector.h"
 #include "base/win/registry.h"
@@ -588,8 +589,8 @@ std::wstring VivaldiInstallDialog::GetInnerFrameEULAResource() {
   if (!FindResource(nullptr, inner_frame_resource, RT_HTML))
     return L"";
   // spaces and DOS paths must be url encoded.
-  std::wstring url_path = base::StringPrintf(
-      L"res://%ls/#23/%ls", full_exe_path, inner_frame_resource);
+  std::wstring url_path = base::UTF8ToWide(base::StringPrintf(
+      "res://%ls/#23/%ls", full_exe_path, inner_frame_resource));
 
   // the cast is safe because url_path has limited length
   // (see the definition of full_exe_path and resource).

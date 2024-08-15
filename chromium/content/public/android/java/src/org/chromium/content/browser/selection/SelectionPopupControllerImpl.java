@@ -32,13 +32,14 @@ import androidx.annotation.Nullable;
 import androidx.annotation.Px;
 import androidx.annotation.VisibleForTesting;
 
+import org.jni_zero.CalledByNative;
+import org.jni_zero.JNINamespace;
+import org.jni_zero.NativeMethods;
+
 import org.chromium.base.Log;
 import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.ResettersForTesting;
 import org.chromium.base.UserData;
-import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.annotations.JNINamespace;
-import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.compat.ApiHelperForM;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
@@ -740,20 +741,15 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
             }
 
             SelectionMenuGroup group = allItemGroups.poll();
-            int i = 0;
+            int groupIndex = 0;
             while (group != null) {
-                if (i > 0) {
-                    // Add a divider above the new group.
-                    items.add(mDropdownMenuDelegate.getDivider());
-                }
-
                 // First determine if any item in the group contains an icon. Given
                 // there will always be a small amount of items in the menu it is
                 // okay to run this loop twice. This property will be used later on when
                 // rendering the items to determine title spacing.
                 boolean groupContainsIcon = false;
                 for (SelectionMenuItem item : group.items) {
-                    groupContainsIcon = item.getIcon(mContext) != null;
+                    groupContainsIcon = item.isEnabled && item.getIcon(mContext) != null;
 
                     // Exit early if there is an icon found.
                     if (groupContainsIcon) {
@@ -761,18 +757,39 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
                     }
                 }
 
+                // Add a divider above the new group.
+                final boolean addDivider = groupIndex > 0;
+
+                int itemIndexInGroup = 0;
                 // Populate the items from the group.
                 for (SelectionMenuItem item : group.items) {
+                    if (!item.isEnabled) {
+                        // We will only add items if they are enabled.
+                        continue;
+                    }
+                    if (itemIndexInGroup++ == 0 && addDivider) {
+                        items.add(mDropdownMenuDelegate.getDivider());
+                    }
+
                     CharSequence title = item.getTitle(mContext);
                     CharSequence contentDescription = item.contentDescription;
-                    items.add(mDropdownMenuDelegate.getMenuItem(
-                            title != null ? title.toString() : null,
-                            contentDescription != null ? contentDescription.toString() : null,
-                            group.id, item.id, item.getIcon(mContext), item.isIconTintable,
-                            groupContainsIcon, item.isEnabled, item.clickListener, item.intent));
+                    items.add(
+                            mDropdownMenuDelegate.getMenuItem(
+                                    title != null ? title.toString() : null,
+                                    contentDescription != null
+                                            ? contentDescription.toString()
+                                            : null,
+                                    group.id,
+                                    item.id,
+                                    item.getIcon(mContext),
+                                    item.isIconTintable,
+                                    groupContainsIcon,
+                                    true,
+                                    item.clickListener,
+                                    item.intent));
                 }
                 group = allItemGroups.poll();
-                i++;
+                groupIndex++;
             }
         }
         return items;
@@ -989,7 +1006,8 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
 
     @Override
     public void onCreateActionMode(ActionMode mode, Menu menu) {
-        mode.setTitle(DeviceFormFactor.isWindowOnTablet(mWindowAndroid)
+        mode.setTitle(
+                mWindowAndroid != null && DeviceFormFactor.isWindowOnTablet(mWindowAndroid)
                         ? mContext.getString(R.string.actionbar_textselection_title)
                         : null);
         mode.setSubtitle(null);
@@ -1520,6 +1538,13 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
         if (hasSelection() && !isActionModeValid()
                 && getMenuType() == SelectionMenuType.ACTION_MODE) {
             showActionModeOrClearOnFailure();
+        }
+    }
+
+    @CalledByNative
+    private void childLocalSurfaceIdChanged() {
+        if (mMagnifierAnimator != null) {
+            mMagnifierAnimator.childLocalSurfaceIdChanged();
         }
     }
 

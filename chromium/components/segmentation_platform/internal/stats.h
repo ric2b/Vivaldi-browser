@@ -191,6 +191,10 @@ void RecordSignalDatabaseGetSamplesResult(bool success);
 // database entry count, since each entry can contain multiple samples.
 void RecordSignalDatabaseGetSamplesSampleCount(size_t count);
 
+// Records the result of persisting SegmentInfo changes to disk.
+void RecordSegmentInfoDatabaseUpdateEntriesResult(SegmentId segment_id,
+                                                  bool success);
+
 // Records the number of unique user action and histogram signals that we are
 // currently tracking.
 void RecordSignalsListeningCount(
@@ -304,6 +308,9 @@ enum class TrainingDataCollectionEvent {
   kDelayTriggerSampled = 21,
   kMaxValue = kDelayTriggerSampled,
 };
+
+std::string TrainingDataCollectionEventToErrorMsg(
+    TrainingDataCollectionEvent event);
 
 // Records analytics for training data collection.
 void RecordTrainingDataCollectionEvent(SegmentId segment_id,

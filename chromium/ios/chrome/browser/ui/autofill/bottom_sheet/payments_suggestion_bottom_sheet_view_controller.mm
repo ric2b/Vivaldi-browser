@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/autofill/bottom_sheet/payments_suggestion_bottom_sheet_view_controller.h"
 
+#import "base/metrics/histogram_functions.h"
 #import "build/branding_buildflags.h"
 #import "components/autofill/core/browser/data_model/credit_card.h"
 #import "components/grit/components_scaled_resources.h"
@@ -17,6 +18,7 @@
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/confirmation_alert/confirmation_alert_action_handler.h"
 #import "ios/chrome/common/ui/table_view/table_view_cells_constants.h"
+#import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "url/gurl.h"
@@ -107,6 +109,14 @@ NSString* const kCustomDetentIdentifier = @"customDetent";
   _tableViewIsMinimized = _creditCardData.count > 2;
 
   self.image = [self titleImage];
+  self.imageViewAccessibilityLabel = [NSString
+      stringWithFormat:@"%@. %@",
+                       l10n_util::GetNSString(
+                           self.showGooglePayLogo
+                               ? IDS_IOS_AUTOFILL_WALLET_SERVER_NAME
+                               : IDS_IOS_PRODUCT_NAME),
+                       l10n_util::GetNSString(
+                           IDS_IOS_PAYMENT_BOTTOM_SHEET_SELECT_PAYMENT_METHOD)];
   self.customSpacingBeforeImageIfNoNavigationBar = kSpacingBeforeImage;
   self.customSpacingAfterImage = kSpacingAfterImage;
   self.subtitleTextStyle = UIFontTextStyleFootnote;
@@ -124,7 +134,9 @@ NSString* const kCustomDetentIdentifier = @"customDetent";
   self.primaryActionString =
       l10n_util::GetNSString(IDS_IOS_PAYMENT_BOTTOM_SHEET_CONTINUE);
   self.secondaryActionString =
-      l10n_util::GetNSString(IDS_IOS_PAYMENT_BOTTOM_SHEET_NO_THANKS);
+      l10n_util::GetNSString(IDS_IOS_PAYMENT_BOTTOM_SHEET_USE_KEYBOARD);
+  self.secondaryActionImage =
+      DefaultSymbolWithPointSize(kKeyboardSymbol, kSymbolActionPointSize);
 
   [super viewDidLoad];
 
@@ -252,8 +264,13 @@ NSString* const kCustomDetentIdentifier = @"customDetent";
 #pragma mark - ConfirmationAlertActionHandler
 
 - (void)confirmationAlertPrimaryAction {
-  [self.handler primaryButtonTapped:[_creditCardData[[self selectedRow]]
-                                        backendIdentifier]];
+  NSInteger index = [self selectedRow];
+  [self.handler primaryButtonTapped:[_creditCardData[index] backendIdentifier]];
+
+  if (_creditCardData.count > 1) {
+    base::UmaHistogramCounts100("Autofill.TouchToFill.CreditCard.SelectedIndex",
+                                (int)index);
+  }
 }
 
 - (void)confirmationAlertSecondaryAction {

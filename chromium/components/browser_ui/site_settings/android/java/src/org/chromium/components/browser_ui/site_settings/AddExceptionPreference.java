@@ -107,7 +107,6 @@ public class AddExceptionPreference
     public void onBindViewHolder(PreferenceViewHolder holder) {
         super.onBindViewHolder(holder);
         TextView titleView = (TextView) holder.findViewById(android.R.id.title);
-        titleView.setAllCaps(true);
         titleView.setTextColor(mPrefAccentColor);
     }
 

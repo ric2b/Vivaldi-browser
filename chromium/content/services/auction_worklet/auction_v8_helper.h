@@ -136,7 +136,7 @@ class CONTENT_EXPORT AuctionV8Helper
 
    private:
     friend class AuctionV8Helper;
-    raw_ptr<uint8_t, DanglingUntriaged> buffer_;
+    raw_ptr<uint8_t> buffer_;
     size_t size_;
   };
 
@@ -237,12 +237,11 @@ class CONTENT_EXPORT AuctionV8Helper
   // the corresponding value type and append it to the passed in argument
   // vector. Useful for assembling arguments to a Javascript function. Return
   // false on failure.
-  [[nodiscard]] bool AppendUtf8StringValue(
-      base::StringPiece utf8_string,
-      std::vector<v8::Local<v8::Value>>* args);
+  [[nodiscard]] bool AppendUtf8StringValue(base::StringPiece utf8_string,
+                                           v8::LocalVector<v8::Value>* args);
   [[nodiscard]] bool AppendJsonValue(v8::Local<v8::Context> context,
                                      base::StringPiece utf8_json,
-                                     std::vector<v8::Local<v8::Value>>* args);
+                                     v8::LocalVector<v8::Value>* args);
 
   // Convenience wrapper that adds the specified value into the provided Object.
   [[nodiscard]] bool InsertValue(base::StringPiece key,

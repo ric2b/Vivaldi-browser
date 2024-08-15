@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <memory>
-
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "base/command_line.h"
@@ -303,18 +301,12 @@ IN_PROC_BROWSER_TEST_F(DriveIntegrationServiceBrowserTest,
   }
 }
 
-class DriveMirrorSyncStatusObserver : public DriveIntegrationServiceObserver {
+class DriveMirrorSyncStatusObserver : public DriveIntegrationService::Observer {
  public:
   explicit DriveMirrorSyncStatusObserver(bool expected_status)
       : expected_status_(expected_status) {
     quit_closure_ = run_loop_.QuitClosure();
   }
-
-  DriveMirrorSyncStatusObserver(const DriveMirrorSyncStatusObserver&) = delete;
-  DriveMirrorSyncStatusObserver& operator=(
-      const DriveMirrorSyncStatusObserver&) = delete;
-
-  ~DriveMirrorSyncStatusObserver() override {}
 
   void WaitForStatusChange() { run_loop_.Run(); }
 
@@ -350,19 +342,13 @@ class DriveIntegrationBrowserTestWithMirrorSyncEnabled
   ~DriveIntegrationBrowserTestWithMirrorSyncEnabled() override {}
 
   void ToggleMirrorSync(bool status) {
-    auto observer = std::make_unique<DriveMirrorSyncStatusObserver>(status);
-    auto* drive_service =
-        DriveIntegrationServiceFactory::FindForProfile(browser()->profile());
-    drive_service->AddObserver(observer.get());
-
-    browser()->profile()->GetPrefs()->SetBoolean(
-        prefs::kDriveFsEnableMirrorSync, status);
-    observer->WaitForStatusChange();
-    EXPECT_EQ(browser()->profile()->GetPrefs()->GetBoolean(
-                  prefs::kDriveFsEnableMirrorSync),
-              status);
-
-    drive_service->RemoveObserver(observer.get());
+    DriveMirrorSyncStatusObserver observer(status);
+    Profile* const profile = browser()->profile();
+    observer.Observe(DriveIntegrationServiceFactory::FindForProfile(profile));
+    PrefService* const prefs = profile->GetPrefs();
+    prefs->SetBoolean(prefs::kDriveFsEnableMirrorSync, status);
+    observer.WaitForStatusChange();
+    EXPECT_EQ(prefs->GetBoolean(prefs::kDriveFsEnableMirrorSync), status);
   }
 
   void AddSyncingPath(const base::FilePath& path) {

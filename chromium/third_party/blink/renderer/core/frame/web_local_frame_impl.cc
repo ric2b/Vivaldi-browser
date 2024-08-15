@@ -250,7 +250,6 @@
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_forbidden_scope.h"
 #include "third_party/blink/renderer/platform/bindings/source_location.h"
-#include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
 #include "third_party/blink/renderer/platform/fonts/font_cache.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
@@ -405,14 +404,10 @@ class ChromePrintContext : public PrintContext {
 
       // Draw a line for a page boundary if this isn't the first page.
       if (page_index != pages->front()) {
-        context.Save();
-        context.SetStrokeThickness(1);
-        context.SetStrokeColor(Color(0, 0, 255));
-        context.DrawLine(
-            gfx::Point(0, current_height - 1),
-            gfx::Point(spool_size_in_pixels.width(), current_height - 1),
-            AutoDarkMode::Disabled());
-        context.Restore();
+        const gfx::Rect boundary_line_rect(0, current_height - 1,
+                                           spool_size_in_pixels.width(), 1);
+        context.FillRect(boundary_line_rect, Color(0, 0, 255),
+                         AutoDarkMode::Disabled());
       }
 
       WebPrintPageDescription description =
@@ -1163,10 +1158,9 @@ v8::Local<v8::Object> WebLocalFrameImpl::GlobalProxy() const {
   return MainWorldScriptContext()->Global();
 }
 
-bool WebFrame::ScriptCanAccess(WebFrame* target) {
+bool WebFrame::ScriptCanAccess(v8::Isolate* isolate, WebFrame* target) {
   return BindingSecurity::ShouldAllowAccessTo(
-      CurrentDOMWindow(V8PerIsolateData::MainThreadIsolate()),
-      ToCoreFrame(*target)->DomWindow());
+      CurrentDOMWindow(isolate), ToCoreFrame(*target)->DomWindow());
 }
 
 void WebLocalFrameImpl::StartReload(WebFrameLoadType frame_load_type) {
@@ -1519,7 +1513,8 @@ void WebLocalFrameImpl::SelectRange(const gfx::Point& base_in_viewport,
 void WebLocalFrameImpl::SelectRange(
     const WebRange& web_range,
     HandleVisibilityBehavior handle_visibility_behavior,
-    blink::mojom::SelectionMenuBehavior selection_menu_behavior) {
+    blink::mojom::SelectionMenuBehavior selection_menu_behavior,
+    SelectionSetFocusBehavior selection_set_focus_behavior) {
   TRACE_EVENT0("blink", "WebLocalFrameImpl::selectRange");
 
   // TODO(editing-dev): The use of UpdateStyleAndLayout
@@ -1537,6 +1532,8 @@ void WebLocalFrameImpl::SelectRange(
       (handle_visibility_behavior == kPreserveHandleVisibility &&
        selection.IsHandleVisible());
   using blink::mojom::SelectionMenuBehavior;
+  const bool selection_not_set_focus =
+      selection_set_focus_behavior == kSelectionDoNotSetFocus;
   selection.SetSelection(
       SelectionInDOMTree::Builder()
           .SetBaseAndExtent(range)
@@ -1546,6 +1543,7 @@ void WebLocalFrameImpl::SelectRange(
           .SetShouldShowHandle(show_handles)
           .SetShouldShrinkNextTap(selection_menu_behavior ==
                                   SelectionMenuBehavior::kShow)
+          .SetDoNotSetFocus(selection_not_set_focus)
           .Build());
 
   if (selection_menu_behavior == SelectionMenuBehavior::kShow) {
@@ -1754,6 +1752,13 @@ void WebLocalFrameImpl::ExtendSelectionAndReplace(
 
 void WebLocalFrameImpl::DeleteSurroundingText(int before, int after) {
   TRACE_EVENT0("blink", "WebLocalFrameImpl::deleteSurroundingText");
+
+  if (EditContext* edit_context =
+          GetFrame()->GetInputMethodController().GetActiveEditContext()) {
+    edit_context->DeleteSurroundingText(before, after);
+    return;
+  }
+
   if (WebPlugin* plugin = FocusedPluginIfInputMethodSupported()) {
     plugin->DeleteSurroundingText(before, after);
     return;
@@ -2747,7 +2752,7 @@ blink::mojom::CommitResult WebLocalFrameImpl::CommitSameDocumentNavigation(
       is_client_redirect ? ClientRedirectPolicy::kClientRedirect
                          : ClientRedirectPolicy::kNotClientRedirect,
       has_transient_user_activation, initiator_origin.Get(),
-      /*is_synchronously_committed=*/false,
+      /*is_synchronously_committed=*/false, /*source_element=*/nullptr,
       mojom::blink::TriggeringEventInfo::kNotFromEvent, is_browser_initiated,
       soft_navigation_heuristics_task_id);
 }
@@ -2921,7 +2926,7 @@ void WebLocalFrameImpl::CreateFrameWidgetInternal(
 }
 
 WebFrameWidget* WebLocalFrameImpl::FrameWidget() const {
-  return frame_widget_;
+  return frame_widget_.Get();
 }
 
 void WebLocalFrameImpl::CopyImageAtForTesting(
@@ -3028,6 +3033,21 @@ void WebLocalFrameImpl::UsageCountChromeLoadTimes(const WebString& metric) {
     feature = WebFeature::kChromeLoadTimesConnectionInfo;
   }
   Deprecation::CountDeprecation(GetFrame()->DomWindow(), feature);
+}
+
+void WebLocalFrameImpl::UsageCountChromeCSI(const WebString& metric) {
+  CHECK(GetFrame());
+  WebFeature feature = WebFeature::kChromeCSIUnknown;
+  if (metric == "onloadT") {
+    feature = WebFeature::kChromeCSIOnloadT;
+  } else if (metric == "pageT") {
+    feature = WebFeature::kChromeCSIPageT;
+  } else if (metric == "startE") {
+    feature = WebFeature::kChromeCSIStartE;
+  } else if (metric == "tran") {
+    feature = WebFeature::kChromeCSITran;
+  }
+  GetFrame()->DomWindow()->CountUse(feature);
 }
 
 FrameScheduler* WebLocalFrameImpl::Scheduler() const {
@@ -3140,7 +3160,7 @@ WebDevToolsAgentImpl* WebLocalFrameImpl::DevToolsAgentImpl() {
     return nullptr;
   if (!dev_tools_agent_)
     dev_tools_agent_ = WebDevToolsAgentImpl::CreateForFrame(this);
-  return dev_tools_agent_;
+  return dev_tools_agent_.Get();
 }
 
 void WebLocalFrameImpl::WasHidden() {
@@ -3263,6 +3283,14 @@ void WebLocalFrameImpl::SetLCPPHint(
     lcp_influencer_scripts.insert(KURL(url));
   }
   lcpp->set_lcp_influencer_scripts(std::move(lcp_influencer_scripts));
+
+  Vector<KURL> fetched_fonts;
+  fetched_fonts.reserve(
+      base::checked_cast<wtf_size_t>(hint->fetched_fonts.size()));
+  for (const auto& url : hint->fetched_fonts) {
+    fetched_fonts.emplace_back(url);
+  }
+  lcpp->set_fetched_fonts(std::move(fetched_fonts));
 }
 
 void WebLocalFrameImpl::AddHitTestOnTouchStartCallback(

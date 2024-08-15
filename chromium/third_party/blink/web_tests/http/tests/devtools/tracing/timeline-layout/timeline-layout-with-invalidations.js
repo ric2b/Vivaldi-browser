@@ -6,10 +6,10 @@ import {TestRunner} from 'test_runner';
 import {PerformanceTestRunner} from 'performance_test_runner';
 
 import * as Root from 'devtools/core/root/root.js';
+import * as TimelineModel from 'devtools/models/timeline_model/timeline_model.js';
 
 (async function() {
   TestRunner.addResult(`Tests the Timeline API instrumentation of layout events with invalidations.\n`);
-  await TestRunner.loadLegacyModule('timeline');
   await TestRunner.showPanel('timeline');
   await TestRunner.loadHTML(`
       <!DOCTYPE HTML>

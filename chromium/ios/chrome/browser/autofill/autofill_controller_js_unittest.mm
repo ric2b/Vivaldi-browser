@@ -1596,7 +1596,7 @@ TEST_F(AutofillControllerJsTest, WebFormElementToFormData) {
 TEST_F(AutofillControllerJsTest, WebFormElementToFormDataTooManyFields) {
   NSString* html_fragment = @"<FORM name='Test' action='http://c.com'>";
   // In autofill_controller.js, the maximum number of parsable element is 200
-  // (__gCrWeb.fill.MAX_EXTRACTABLE_FIELDS = 200). Here an HTML page with 201
+  // (MAX_EXTRACTABLE_FIELDS = 200). Here an HTML page with 201
   // elements is generated for testing.
   for (NSUInteger index = 0; index < 201; ++index) {
     html_fragment =
@@ -1785,6 +1785,7 @@ TEST_F(AutofillControllerJsTest, ExtractForms) {
         @"unique_renderer_id" : @"2",
         @"form_control_type" : @"text",
         @"max_length" : GetDefaultMaxLength(),
+        @"placeholder_attribute" : @"",
         @"should_autocomplete" : @true,
         @"is_checkable" : @false,
         @"is_focusable" : @true,
@@ -1800,6 +1801,7 @@ TEST_F(AutofillControllerJsTest, ExtractForms) {
         @"identifier" : @"vehicle1",
         @"unique_renderer_id" : @"3",
         @"form_control_type" : @"checkbox",
+        @"placeholder_attribute" : @"",
         @"should_autocomplete" : @true,
         @"is_checkable" : @true,
         @"is_focusable" : @true,
@@ -1815,6 +1817,7 @@ TEST_F(AutofillControllerJsTest, ExtractForms) {
         @"identifier" : @"vehicle2",
         @"unique_renderer_id" : @"4",
         @"form_control_type" : @"checkbox",
+        @"placeholder_attribute" : @"",
         @"should_autocomplete" : @true,
         @"is_checkable" : @true,
         @"is_focusable" : @true,
@@ -1830,6 +1833,7 @@ TEST_F(AutofillControllerJsTest, ExtractForms) {
         @"identifier" : @"vehicle3",
         @"unique_renderer_id" : @"5",
         @"form_control_type" : @"checkbox",
+        @"placeholder_attribute" : @"",
         @"should_autocomplete" : @true,
         @"is_checkable" : @true,
         @"is_focusable" : @true,
@@ -1845,6 +1849,7 @@ TEST_F(AutofillControllerJsTest, ExtractForms) {
         @"identifier" : @"nameintableth",
         @"unique_renderer_id" : @"6",
         @"form_control_type" : @"text",
+        @"placeholder_attribute" : @"",
         @"max_length" : GetDefaultMaxLength(),
         @"should_autocomplete" : @true,
         @"is_checkable" : @false,
@@ -1861,6 +1866,7 @@ TEST_F(AutofillControllerJsTest, ExtractForms) {
         @"identifier" : @"emailtableth",
         @"unique_renderer_id" : @"7",
         @"form_control_type" : @"email",
+        @"placeholder_attribute" : @"",
         @"max_length" : GetDefaultMaxLength(),
         @"should_autocomplete" : @true,
         @"is_checkable" : @false,
@@ -1877,6 +1883,7 @@ TEST_F(AutofillControllerJsTest, ExtractForms) {
         @"identifier" : @"pwd",
         @"unique_renderer_id" : @"8",
         @"form_control_type" : @"password",
+        @"placeholder_attribute" : @"",
         @"autocomplete_attribute" : @"off",
         @"max_length" : GetDefaultMaxLength(),
         @"should_autocomplete" : @false,
@@ -1894,6 +1901,7 @@ TEST_F(AutofillControllerJsTest, ExtractForms) {
         @"identifier" : @"state",
         @"unique_renderer_id" : @"9",
         @"form_control_type" : @"select-one",
+        @"placeholder_attribute" : @"",
         @"is_focusable" : @1,
         @"option_values" : @[ @"CA", @"TX" ],
         @"option_contents" : @[ @"California", @"Texas" ],
@@ -1996,6 +2004,51 @@ TEST_F(AutofillControllerJsTest, FillActiveFormField) {
                        "__gCrWeb.autofill.fillActiveFormField(data);"
                        "element.value === oldValue",
                       newValue]))
+      << "A non-form element's value should changed.";
+}
+
+TEST_F(AutofillControllerJsTest, FillSpecificFormField) {
+  web::test::LoadHtml(kHTMLForTestingElements, web_state());
+
+  web::WebFrame* main_frame = WaitForMainFrame();
+  ASSERT_TRUE(main_frame);
+
+  uint32_t next_available_id = 1;
+  autofill::FormUtilJavaScriptFeature::GetInstance()
+      ->SetUpForUniqueIDsWithInitialState(main_frame, next_available_id);
+
+  // Wait for `SetUpForUniqueIDsWithInitialState` to complete.
+  ASSERT_TRUE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^bool {
+    return [ExecuteJavaScript(@"document[__gCrWeb.fill.ID_SYMBOL]") intValue] ==
+           static_cast<int>(next_available_id);
+  }));
+
+  // Simulate form parsing to set renderer IDs.
+  ExecuteJavaScript(@"__gCrWeb.autofill.extractForms(0, true)");
+
+  NSString* new_value = @"new value";
+  EXPECT_NSEQ(new_value,
+              ExecuteJavaScript([NSString
+                  stringWithFormat:
+                      @"var element=document.getElementsByName('lastname')[0];"
+                       "var "
+                       "data={\"name\":\"lastname\",\"value\":\"%@\","
+                       "\"identifier\":\"lastname\",\"unique_renderer_id\":3};"
+                       "__gCrWeb.autofill.fillSpecificFormField(data);"
+                       "element.value",
+                      new_value]));
+
+  EXPECT_NSEQ(@YES,
+              ExecuteJavaScript([NSString
+                  stringWithFormat:
+                      @"var element=document.getElementsByName('gl')[0];"
+                       "var oldValue = element.value;"
+                       "var "
+                       "data={\"name\":\"lastname\",\"value\":\"%@\","
+                       "\"identifier\":\"lastname\",\"unique_renderer_id\":3};"
+                       "__gCrWeb.autofill.fillSpecificFormField(data);"
+                       "element.value === oldValue",
+                      new_value]))
       << "A non-form element's value should changed.";
 }
 

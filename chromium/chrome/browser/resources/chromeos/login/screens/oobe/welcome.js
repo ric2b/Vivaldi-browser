@@ -77,6 +77,15 @@ const OobeWelcomeScreenBase = mixinBehaviors(
  * }}
  */
 OobeWelcomeScreenBase.$;
+
+/**
+ * Data that is passed to the screen during onBeforeShow.
+ * @typedef {{
+ *   isDeveloperMode: boolean,
+ * }}
+ */
+let WelcomeScreenData;
+
 /**
  * @polymer
  */
@@ -195,15 +204,6 @@ class OobeWelcomeScreen extends OobeWelcomeScreenBase {
         },
         readOnly: true,
       },
-
-      isChromeVoxHintImprovementsEnabled_: {
-        type: Boolean,
-        value: function() {
-          return (
-              loadTimeData.getBoolean('isChromeVoxHintImprovementsEnabled'));
-        },
-        readOnly: true,
-      },
     };
   }
 
@@ -253,8 +253,7 @@ class OobeWelcomeScreen extends OobeWelcomeScreenBase {
 
   /**
    * Event handler that is invoked just before the screen is shown.
-   * TODO (https://crbug.com/948932): Define this type.
-   * @param {Object} data Screen init payload.
+   * @param {WelcomeScreenData} data Screen init payload.
    */
   onBeforeShow(data) {
     this.debuggingLinkVisible_ =
@@ -854,16 +853,9 @@ class OobeWelcomeScreen extends OobeWelcomeScreenBase {
     }
     this.cleanupChromeVoxHint_();
     // |msgId| depends on both feature enabled status and tablet mode.
-    let msgId;
-    if (this.isChromeVoxHintImprovementsEnabled_) {
-      msgId = this.$.welcomeScreen.isInTabletMode ?
-          'chromeVoxHintAnnouncementTextTabletExpanded' :
-          'chromeVoxHintAnnouncementTextLaptopExpanded';
-    } else {
-      msgId = this.$.welcomeScreen.isInTabletMode ?
-          'chromeVoxHintAnnouncementTextTablet' :
-          'chromeVoxHintAnnouncementTextLaptop';
-    }
+    const msgId = this.$.welcomeScreen.isInTabletMode ?
+        'chromeVoxHintAnnouncementTextTabletExpanded' :
+        'chromeVoxHintAnnouncementTextLaptopExpanded';
 
     const message = this.i18n(msgId);
     chrome.tts.speak(message, options, () => {

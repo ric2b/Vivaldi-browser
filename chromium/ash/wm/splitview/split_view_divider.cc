@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "ash/display/screen_orientation_controller.h"
-#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
 #include "ash/wm/desks/desks_util.h"
@@ -21,7 +20,6 @@
 #include "ash/wm/window_util.h"
 #include "base/auto_reset.h"
 #include "base/check.h"
-#include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/ranges/algorithm.h"
 #include "ui/aura/window_targeter.h"
@@ -66,11 +64,18 @@ SplitViewDivider::SplitViewDivider(SplitViewController* controller)
 }
 
 SplitViewDivider::~SplitViewDivider() {
+  auto* divider_window = divider_widget_->GetNativeWindow();
+  if (auto* transient_parent = wm::GetTransientParent(divider_window)) {
+    wm::RemoveTransientChild(transient_parent, divider_window);
+  }
+
   divider_widget_->Close();
+
   for (auto* window : observed_windows_) {
     window->RemoveObserver(this);
-    ::wm::TransientWindowManager::GetOrCreate(window)->RemoveObserver(this);
+    wm::TransientWindowManager::GetOrCreate(window)->RemoveObserver(this);
   }
+
   dragged_window_ = nullptr;
   observed_windows_.clear();
 }
@@ -255,8 +260,8 @@ void SplitViewDivider::AddObservedWindow(aura::Window* window) {
   CHECK(!base::Contains(observed_windows_, window));
   window->AddObserver(this);
   observed_windows_.push_back(window);
-  ::wm::TransientWindowManager* transient_manager =
-      ::wm::TransientWindowManager::GetOrCreate(window);
+  wm::TransientWindowManager* transient_manager =
+      wm::TransientWindowManager::GetOrCreate(window);
   transient_manager->AddObserver(this);
   for (auto* transient_window : transient_manager->transient_children()) {
     StartObservingTransientChild(transient_window);
@@ -269,8 +274,8 @@ void SplitViewDivider::RemoveObservedWindow(aura::Window* window) {
   if (iter != observed_windows_.end()) {
     window->RemoveObserver(this);
     observed_windows_.erase(iter);
-    ::wm::TransientWindowManager* transient_manager =
-        ::wm::TransientWindowManager::GetOrCreate(window);
+    wm::TransientWindowManager* transient_manager =
+        wm::TransientWindowManager::GetOrCreate(window);
     transient_manager->RemoveObserver(this);
     for (auto* transient_window : transient_manager->transient_children()) {
       StopObservingTransientChild(transient_window);
@@ -309,7 +314,7 @@ void SplitViewDivider::OnWindowBoundsChanged(aura::Window* window,
   // |observed_windows_|.
   aura::Window* transient_parent = nullptr;
   for (auto* observed_window : observed_windows_) {
-    if (::wm::HasTransientAncestor(window, observed_window)) {
+    if (wm::HasTransientAncestor(window, observed_window)) {
       transient_parent = observed_window;
       break;
     }
@@ -324,12 +329,6 @@ void SplitViewDivider::OnWindowBoundsChanged(aura::Window* window,
 }
 
 void SplitViewDivider::OnWindowStackingChanged(aura::Window* window) {
-  // Skip the recursive update.
-  if (pause_update_) {
-    return;
-  }
-
-  base::AutoReset<bool> lock(&pause_update_, true);
   RefreshStackingOrder();
 }
 
@@ -337,6 +336,11 @@ void SplitViewDivider::OnWindowAddedToRootWindow(aura::Window* window) {
   // Stop observing `window` if it no longer belongs to the same root window as
   // of the `controller_`.
   RemoveObservedWindow(window);
+}
+
+void SplitViewDivider::OnWindowVisibilityChanged(aura::Window* window,
+                                                 bool visible) {
+  RefreshStackingOrder();
 }
 
 void SplitViewDivider::OnTransientChildAdded(aura::Window* window,
@@ -386,28 +390,63 @@ void SplitViewDivider::CreateDividerWidget(SplitViewController* controller) {
                                              -kSplitViewDividerExtraInset));
   divider_widget_native_window->SetEventTargeter(std::move(window_targeter));
 
+  // Explicitly `set_parent_controls_lifetime` to false so that the lifetime of
+  // the divider will only be managed by `this`, which avoids UAF on window
+  // destroying.
+  wm::TransientWindowManager::GetOrCreate(divider_widget_native_window)
+      ->set_parent_controls_lifetime(false);
   divider_widget_->Show();
 }
 
 void SplitViewDivider::RefreshStackingOrder() {
+  // Skip the recursive update.
+  if (pause_update_) {
+    return;
+  }
+
+  base::AutoReset<bool> lock(&pause_update_, true);
+
   if (observed_windows_.empty() || !divider_widget_) {
     return;
   }
 
-  aura::Window* top_window = window_util::GetTopMostWindow(observed_windows_);
-  CHECK(top_window);
+  aura::Window::Windows visible_observed_windows;
+  for (auto* window : observed_windows_) {
+    if (window->IsVisible()) {
+      visible_observed_windows.push_back(window);
+    }
+  }
+
   aura::Window* divider_window = divider_widget_->GetNativeWindow();
+  if (visible_observed_windows.empty()) {
+    divider_window->Hide();
+    return;
+  }
+
+  aura::Window* top_window =
+      window_util::GetTopMostWindow(visible_observed_windows);
+  CHECK(top_window);
+  CHECK(top_window->IsVisible());
 
   auto* divider_sibling_window =
       dragged_window_ ? dragged_window_.get() : top_window;
   CHECK(divider_sibling_window);
+
+  // To get `divider_window` prepared to be the transient window of the
+  // `top_window` below, remove `divider_window` as the transient child from its
+  // transient parent if any.
+  auto* transient_parent = wm::GetTransientParent(divider_window);
+  if (transient_parent) {
+    wm::RemoveTransientChild(transient_parent, divider_window);
+  }
+
+  CHECK(!wm::GetTransientParent(divider_window));
 
   // The divider needs to have the same parent of the `divider_sibling_window`
   // otherwise we need to reparent the divider as below.
   if (divider_sibling_window->parent() != divider_window->parent()) {
     views::Widget::ReparentNativeView(divider_window,
                                       divider_sibling_window->parent());
-    CHECK(!wm::GetTransientParent(divider_window));
   }
 
   if (dragged_window_) {
@@ -423,22 +462,32 @@ void SplitViewDivider::RefreshStackingOrder() {
   // Iterate through the siblings of the top window in an increasing z-order
   // which reflects the relative order of siblings.
   for (auto* window : children) {
-    if (!base::Contains(observed_windows_, window)) {
+    if (!base::Contains(visible_observed_windows, window) ||
+        window == top_window) {
       continue;
-    }
-
-    if (window == top_window) {
-      break;
     }
 
     top_window_parent->StackChildAbove(window, top_window);
     top_window_parent->StackChildAbove(top_window, window);
   }
 
+  // Add the `divider_window` as a transient child of the `top_window`. In
+  // this way, on new transient window added, the divider will be stacked above
+  // the `top_window` but under the new transient window which is handled in
+  // `TransientWindowManager::RestackTransientDescendants()`.
+  wm::AddTransientChild(top_window, divider_window);
+
   top_window_parent->StackChildAbove(divider_window, top_window);
+  divider_window->Show();
 }
 
 void SplitViewDivider::StartObservingTransientChild(aura::Window* transient) {
+  // Explicitly check and early return if the `transient` is the divider native
+  // window.
+  if (divider_widget_ && transient == divider_widget_->GetNativeWindow()) {
+    return;
+  }
+
   // For now, we only care about dialog bubbles type transient child. We may
   // observe other types transient child window as well if need arises in the
   // future.

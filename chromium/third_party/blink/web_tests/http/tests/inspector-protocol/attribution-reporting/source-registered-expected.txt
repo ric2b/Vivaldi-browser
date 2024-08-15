@@ -1,6 +1,7 @@
 Test that the Storage.attributionReportingSourceRegistered event is fired.
 {
     registration : {
+        aggregatableReportWindow : 2592000
         aggregationKeys : [
             [0] : {
                 key : d
@@ -17,6 +18,7 @@ Test that the Storage.attributionReportingSourceRegistered event is fired.
             ]
             start : 0
         }
+        expiry : 2592000
         filterData : [
             [0] : {
                 key : a
@@ -30,6 +32,7 @@ Test that the Storage.attributionReportingSourceRegistered event is fired.
         reportingOrigin : https://devtools.test:8443
         sourceOrigin : <string>
         time : <number>
+        triggerDataMatching : modulus
         type : event
     }
     result : success

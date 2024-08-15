@@ -74,6 +74,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { policy::key::kPasswordManagerEnabled,
     password_manager::prefs::kCredentialsEnableService,
     base::Value::Type::BOOLEAN },
+  { policy::key::kPasswordSharingEnabled,
+    password_manager::prefs::kPasswordSharingEnabled,
+    base::Value::Type::BOOLEAN },
   { policy::key::kDefaultPopupsSetting,
     prefs::kManagedDefaultPopupsSetting,
     base::Value::Type::INTEGER },
@@ -127,6 +130,12 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     base::Value::Type::BOOLEAN},
   { policy::key::kLensCameraAssistedSearchEnabled,
     prefs::kLensCameraAssistedSearchPolicyAllowed,
+    base::Value::Type::BOOLEAN },
+  { policy::key::kContextMenuPhotoSharingSettings,
+    prefs::kIosSaveToPhotosContextMenuPolicySettings,
+    base::Value::Type::INTEGER },
+  { policy::key::kParcelTrackingEnabled,
+    prefs::kIosParcelTrackingPolicyEnabled,
     base::Value::Type::BOOLEAN },
 };
 // clang-format on

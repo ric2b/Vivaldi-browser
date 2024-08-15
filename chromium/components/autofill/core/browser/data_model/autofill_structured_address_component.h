@@ -11,6 +11,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/strings/string_piece.h"
+#include "components/autofill/core/browser/data_model/autofill_i18n_parsing_expression_components.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -138,9 +139,12 @@ enum MergeMode {
 //  NAME_LAST values but only a formatted NAME_FULL value.
 class AddressComponent {
  public:
+  // List of node subcomponents.
+  using SubcomponentsList = std::vector<std::unique_ptr<AddressComponent>>;
+
   // Constructor for a compound child node.
   AddressComponent(ServerFieldType storage_type,
-                   AddressComponent* parent,
+                   SubcomponentsList subcomponents,
                    unsigned int merge_mode);
 
   // Disallows copies and direct assignments since they are not needed in the
@@ -231,11 +235,7 @@ class AddressComponent {
   bool UnsetValueForTypeIfSupported(ServerFieldType field_type);
 
   // Parses |value_| to assign values to the subcomponents.
-  // The method uses 3 stages:
-  //
-  // * Use |ParseValueAndAssignSubcomponentsByMethod()|. This stage exists
-  // to catch special cases and may fail. The method is virtual and can be
-  // implemented on the type level.
+  // The method uses 2 stages:
   //
   // * Use |ParseValueAndAssignSubcomponentsByRegularExpressions()|. This stage
   // uses a list of regular expressions acquired by the virtual method
@@ -299,9 +299,7 @@ class AddressComponent {
   bool MergeTokenEquivalentComponent(const AddressComponent& newer_component);
 
   // Returns a constant vector of pointers to the child nodes of the component.
-  const std::vector<AddressComponent*>& Subcomponents() const {
-    return subcomponents_;
-  }
+  const SubcomponentsList& Subcomponents() const { return subcomponents_; }
 
   // Returns a vector containing sorted normalized tokens of the
   // value of the component. The tokens are lazily calculated when first needed.
@@ -394,12 +392,6 @@ class AddressComponent {
   virtual std::vector<const re2::RE2*> GetParseRegularExpressionsByRelevance()
       const;
 
-  // Method to parse |value_| into the values of |subcomponents_|. The
-  // purpose of this method is to cover special cases. This method returns true
-  // on success and is allowed to fail. On failure, the |subcomponents_| are
-  // not altered.
-  virtual bool ParseValueAndAssignSubcomponentsByMethod();
-
   // This method parses |value_| to assign values to the subcomponents.
   // The method is virtual and can be reimplemented per type.
   // It must succeed.
@@ -489,9 +481,8 @@ class AddressComponent {
 
   // Function to be called by child nodes on construction to register
   // themselves as child nodes.
-  void RegisterChildNode(AddressComponent* child);
+  void RegisterChildNode(std::unique_ptr<AddressComponent> child);
 
- private:
   // Returns the node in the tree that supports `field_type`. This node, if it
   // exists, is unique by definition. Returns nullptr if no such node exists.
   AddressComponent* GetNodeForType(ServerFieldType field_type);
@@ -499,6 +490,7 @@ class AddressComponent {
   // const version of GetNodeForType.
   const AddressComponent* GetNodeForType(ServerFieldType field_type) const;
 
+ private:
   // Unsets the node and all of its children.
   void UnsetAddressComponentAndItsSubcomponents();
 
@@ -523,6 +515,11 @@ class AddressComponent {
   std::u16string ReplacePlaceholderTypesWithValues(
       std::u16string_view format) const;
 
+  // This method uses i18n parsing instructions used by
+  // `ParseValueByI18nRegularExpression` to parse |value_| into the values of
+  // the subcomponents. Returns true on success and is allowed to fail.
+  bool ParseValueAndAssignSubcomponentsByI18nParsingRules();
+
   // This method uses regular expressions acquired by
   // |GetParseRegularExpressionsByRelevance| to parse |value_| into the values
   // of the subcomponents. Returns true on success and is allowed to fail.
@@ -544,6 +541,18 @@ class AddressComponent {
       const std::u16string& value,
       const re2::RE2* parse_expression);
 
+  // Assigns parsing results to the corresponding subcomponents. Overrides
+  // previously set values if necessary.
+  void AssignParsedValuesToSubcomponents(
+      i18n_model_definition::ValueParsingResults values);
+
+  // Assigns parsing results to the corresponding subcomponents. The value
+  // assigned to each subcomponent must be compatible with the information
+  // growth invariant (i.e child information is always contained in their
+  // ancestors). Previously set values are not overridden.
+  bool AssignParsedValuesToSubcomponentsRespectingSetValues(
+      i18n_model_definition::ValueParsingResults values);
+
   // This method verifies that the `value` is token compatible with this node
   // and all the node's descendants.
   bool IsValueCompatibleWithDescendants(const std::u16string& value) const;
@@ -562,8 +571,8 @@ class AddressComponent {
   // The storable Autofill type of the component.
   const ServerFieldType storage_type_;
 
-  // A vector of pointers to the subcomponents.
-  std::vector<AddressComponent*> subcomponents_;
+  // A vector of children of the component.
+  SubcomponentsList subcomponents_;
 
   // A vector that contains the tokens of |value_| after normalization,
   // meaning that it was converted to lower case and diacritics have been
@@ -573,7 +582,7 @@ class AddressComponent {
 
   // A pointer to the parent node. It is set to nullptr if the node is the root
   // node of the AddressComponent tree.
-  raw_ptr<AddressComponent> parent_;
+  raw_ptr<AddressComponent> parent_ = nullptr;
 
   // Defines if and how two components can be merged.
   int merge_mode_;

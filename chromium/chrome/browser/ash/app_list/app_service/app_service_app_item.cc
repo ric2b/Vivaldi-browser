@@ -22,6 +22,7 @@
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
+#include "chrome/browser/apps/app_service/package_id_util.h"
 #include "chrome/browser/ash/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ash/app_list/app_service/app_service_context_menu.h"
 #include "chrome/browser/ash/crostini/crostini_util.h"
@@ -123,16 +124,14 @@ AppServiceAppItem::AppServiceAppItem(
     }
   }
 
-  if (!app_update.PublisherId().empty() &&
-      (app_update.AppType() == apps::AppType::kArc ||
-       app_update.AppType() == apps::AppType::kWeb)) {
-    std::string package_id =
-        apps::PackageId(app_update.AppType(), app_update.PublisherId())
-            .ToString();
-    SetPromisePackageId(package_id);
+  absl::optional<apps::PackageId> package_id =
+      apps_util::GetPackageIdForApp(profile, app_update);
+  if (package_id.has_value()) {
+    SetPromisePackageId(package_id.value().ToString());
   }
 
-  const bool is_new_install = !sync_item && IsNewInstall(app_update);
+  const bool is_new_install =
+      (!sync_item || sync_item->is_new) && IsNewInstall(app_update);
   DVLOG(1) << "New AppServiceAppItem is_new_install " << is_new_install
            << " from update " << app_update;
   SetIsNewInstall(is_new_install);

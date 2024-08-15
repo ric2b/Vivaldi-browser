@@ -32,11 +32,11 @@ import {AppManagementEntryPoint, AppManagementEntryPointsHistogramName} from 'ch
 import {getAppIcon, getSelectedApp} from 'chrome://resources/cr_components/app_management/util.js';
 import {PrefsMixin} from 'chrome://resources/cr_components/settings_prefs/prefs_mixin.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
-import {assert} from 'chrome://resources/js/assert_ts.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {androidAppsVisible, isArcVmEnabled, isPlayStoreAvailable, isPluginVmAvailable, isRevampWayfindingEnabled} from '../common/load_time_booleans.js';
+import {androidAppsVisible, isArcVmEnabled, isPlayStoreAvailable, isPluginVmAvailable, isRevampWayfindingEnabled, shouldShowStartup} from '../common/load_time_booleans.js';
 import {DeepLinkingMixin} from '../deep_linking_mixin.js';
 import {App as AppWithNotifications, AppNotificationsHandlerInterface, AppNotificationsObserverReceiver, Readiness} from '../mojom-webui/app_notification_handler.mojom-webui.js';
 import {Section} from '../mojom-webui/routes.mojom-webui.js';
@@ -68,7 +68,7 @@ export function isAppInstalled(app: AppWithNotifications): boolean {
 const OsSettingsAppsPageElementBase = DeepLinkingMixin(RouteOriginMixin(
     PrefsMixin(AppManagementStoreMixin(I18nMixin(PolymerElement)))));
 
-class OsSettingsAppsPageElement extends OsSettingsAppsPageElementBase {
+export class OsSettingsAppsPageElement extends OsSettingsAppsPageElementBase {
   static get is() {
     return 'os-settings-apps-page' as const;
   }
@@ -124,6 +124,16 @@ class OsSettingsAppsPageElement extends OsSettingsAppsPageElementBase {
         },
       },
 
+      /**
+       * Whether the Manage Isolated Web Apps page should be shown.
+       */
+      showManageIsolatedWebAppsRow_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('showManageIsolatedWebAppsRow');
+        },
+      },
+
       isPluginVmAvailable_: {
         type: Boolean,
         value: () => {
@@ -134,10 +144,10 @@ class OsSettingsAppsPageElement extends OsSettingsAppsPageElementBase {
       /**
        * Show On startup settings and sub-page.
        */
-      showStartup_: {
+      shouldShowStartup_: {
         type: Boolean,
         value: () => {
-          return loadTimeData.getBoolean('showStartup');
+          return shouldShowStartup();
         },
         readOnly: true,
       },
@@ -200,13 +210,14 @@ class OsSettingsAppsPageElement extends OsSettingsAppsPageElementBase {
   private isDndEnabled_: boolean;
   private isPlayStoreAvailable_: boolean;
   private isPluginVmAvailable_: boolean;
+  private isRevampWayfindingEnabled_: boolean;
   private mojoInterfaceProvider_: AppNotificationsHandlerInterface;
   private onStartupOptions_: DropdownMenuOptionList;
   private section_: Section;
   private showAndroidApps_: boolean;
   private showAppNotificationsRow_: boolean;
-  private showStartup_: boolean;
-  private isRevampWayfindingEnabled_: boolean;
+  private showManageIsolatedWebAppsRow_: boolean;
+  private readonly shouldShowStartup_: boolean;
 
   constructor() {
     super();
@@ -241,11 +252,13 @@ class OsSettingsAppsPageElement extends OsSettingsAppsPageElementBase {
     });
   }
 
-  override ready() {
+  override ready(): void {
     super.ready();
 
     this.addFocusConfig(routes.APP_MANAGEMENT, '#appManagementRow');
     this.addFocusConfig(routes.APP_NOTIFICATIONS, '#appNotificationsRow');
+    this.addFocusConfig(
+        routes.MANAGE_ISOLATED_WEB_APPS, '#manageIsolatedWebAppsRow');
     this.addFocusConfig(
         routes.ANDROID_APPS_DETAILS, '#androidApps .subpage-arrow');
   }
@@ -280,6 +293,10 @@ class OsSettingsAppsPageElement extends OsSettingsAppsPageElementBase {
     Router.getInstance().navigateTo(routes.APP_NOTIFICATIONS);
   }
 
+  private onClickManageIsolatedWebApps_(): void {
+    Router.getInstance().navigateTo(routes.MANAGE_ISOLATED_WEB_APPS);
+  }
+
   private onEnableAndroidAppsClick_(event: Event): void {
     this.setPrefValue('arc.enabled', true);
     event.stopPropagation();
@@ -290,7 +307,7 @@ class OsSettingsAppsPageElement extends OsSettingsAppsPageElementBase {
     return pref.enforcement === chrome.settingsPrivate.Enforcement.ENFORCED;
   }
 
-  private onAndroidAppsSubpageClick_() {
+  private onAndroidAppsSubpageClick_(): void {
     if (this.androidAppsInfo.playStoreEnabled) {
       Router.getInstance().navigateTo(routes.ANDROID_APPS_DETAILS);
     }
@@ -304,7 +321,7 @@ class OsSettingsAppsPageElement extends OsSettingsAppsPageElementBase {
   }
 
   /** Override ash.settings.appNotification.onNotificationAppChanged */
-  onNotificationAppChanged(updatedApp: AppWithNotifications) {
+  onNotificationAppChanged(updatedApp: AppWithNotifications): void {
     const foundIdx = this.appsWithNotifications_.findIndex(app => {
       return app.id === updatedApp.id;
     });
@@ -324,7 +341,7 @@ class OsSettingsAppsPageElement extends OsSettingsAppsPageElementBase {
   }
 
   /** Override ash.settings.appNotification.onQuietModeChanged */
-  onQuietModeChanged(enabled: boolean) {
+  onQuietModeChanged(enabled: boolean): void {
     this.isDndEnabled_ = enabled;
   }
 
@@ -334,11 +351,6 @@ class OsSettingsAppsPageElement extends OsSettingsAppsPageElementBase {
         this.i18n(
             'appNotificationsCountDescription',
             this.appsWithNotifications_.length);
-  }
-
-  private getStartupSublabel_(): string|null {
-    return this.isRevampWayfindingEnabled_ ? this.i18n('onStartupDescription') :
-                                             null;
   }
 }
 

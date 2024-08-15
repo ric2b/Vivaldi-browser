@@ -28,7 +28,7 @@ import {Route, Router, routes} from '../router.js';
 import {AndroidAppsBrowserProxyImpl, AndroidAppsInfo} from './android_apps_browser_proxy.js';
 import {getTemplate} from './android_apps_subpage.html.js';
 
-interface SettingsAndroidAppsSubpageElement {
+export interface SettingsAndroidAppsSubpageElement {
   $: {
     confirmDisableDialog: CrDialogElement,
   };
@@ -39,7 +39,7 @@ const GOOGLE_PLAY_STORE_URL = 'https://play.google.com/store/';
 const SettingsAndroidAppsSubpageElementBase =
     DeepLinkingMixin(RouteObserverMixin(PrefsMixin(I18nMixin(PolymerElement))));
 
-class SettingsAndroidAppsSubpageElement extends
+export class SettingsAndroidAppsSubpageElement extends
     SettingsAndroidAppsSubpageElementBase {
   static get is() {
     return 'settings-android-apps-subpage' as const;
@@ -100,7 +100,7 @@ class SettingsAndroidAppsSubpageElement extends
   private playStoreEnabled_: boolean;
   private isRevampWayfindingEnabled_: boolean;
 
-  override currentRouteChanged(route: Route) {
+  override currentRouteChanged(route: Route): void {
     // Does not apply to this page.
     if (route !== routes.ANDROID_APPS_DETAILS) {
       return;
@@ -109,7 +109,7 @@ class SettingsAndroidAppsSubpageElement extends
     this.attemptDeepLink();
   }
 
-  private onPlayStoreEnabledChanged_(enabled: boolean) {
+  private onPlayStoreEnabledChanged_(enabled: boolean): void {
     if (!enabled &&
         Router.getInstance().currentRoute === routes.ANDROID_APPS_DETAILS) {
       Router.getInstance().navigateToPreviousRoute();

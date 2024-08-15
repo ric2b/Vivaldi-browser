@@ -47,7 +47,7 @@ class WebKioskAppManager : public KioskAppManagerBase {
   static KioskAppManagerBase::App CreateAppByData(const WebKioskAppData& data);
 
   // KioskAppManagerBase:
-  void GetApps(std::vector<App>* apps) const override;
+  std::vector<App> GetApps() const override;
 
   void LoadIcons();
 
@@ -66,7 +66,7 @@ class WebKioskAppManager : public KioskAppManagerBase {
   void UpdateAppByAccountId(const AccountId& account_id,
                             const std::string& title,
                             const GURL& start_url,
-                            const IconBitmaps& icon_bitmaps);
+                            const web_app::IconBitmaps& icon_bitmaps);
 
   // Adds fake apps in tests.
   void AddAppForTesting(const AccountId& account_id, const GURL& install_url);

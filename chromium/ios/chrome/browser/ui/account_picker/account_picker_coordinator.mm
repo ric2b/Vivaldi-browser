@@ -38,9 +38,6 @@
     UINavigationControllerDelegate,
     UIViewControllerTransitioningDelegate>
 
-// Returns `_accountPickerConfirmationScreenCoordinator.selectedIdentity`.
-@property(nonatomic, readonly) id<SystemIdentity> selectedIdentity;
-
 @end
 
 @implementation AccountPickerCoordinator {
@@ -71,6 +68,26 @@
     _configuration = configuration;
   }
   return self;
+}
+
+- (void)stopAnimated:(BOOL)animated {
+  __weak __typeof(self) weakSelf = self;
+  [_navigationController.presentingViewController
+      dismissViewControllerAnimated:animated
+                         completion:^{
+                           [weakSelf.delegate
+                               accountPickerCoordinatorDidStop:weakSelf];
+                         }];
+  _navigationController.delegate = nil;
+  _navigationController.transitioningDelegate = nil;
+  _navigationController = nil;
+
+  [_alertCoordinator stop];
+  _alertCoordinator = nil;
+  [_accountPickerSelectionScreenCoordinator stop];
+  _accountPickerSelectionScreenCoordinator = nil;
+  [_accountPickerConfirmationScreenCoordinator stop];
+  _accountPickerConfirmationScreenCoordinator = nil;
 }
 
 - (void)startValidationSpinner {
@@ -108,29 +125,18 @@
 }
 
 - (void)stop {
-  __weak __typeof(self) weakSelf = self;
-  [_navigationController.presentingViewController
-      dismissViewControllerAnimated:NO
-                         completion:^{
-                           [weakSelf.delegate
-                               accountPickerCoordinatorDidStop:weakSelf];
-                         }];
-  _navigationController.delegate = nil;
-  _navigationController.transitioningDelegate = nil;
-  _navigationController = nil;
-
-  [_alertCoordinator stop];
-  _alertCoordinator = nil;
-  [_accountPickerSelectionScreenCoordinator stop];
-  _accountPickerSelectionScreenCoordinator = nil;
-  [_accountPickerConfirmationScreenCoordinator stop];
-  _accountPickerConfirmationScreenCoordinator = nil;
+  [self stopAnimated:NO];
 }
 
 #pragma mark - Properties
 
 - (id<SystemIdentity>)selectedIdentity {
   return _accountPickerConfirmationScreenCoordinator.selectedIdentity;
+}
+
+- (void)setSelectedIdentity:(id<SystemIdentity>)selectedIdentity {
+  _accountPickerConfirmationScreenCoordinator.selectedIdentity =
+      selectedIdentity;
 }
 
 - (UIViewController*)viewController {

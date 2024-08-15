@@ -132,10 +132,11 @@ class NavigationURLLoaderTest : public testing::Test {
             nullptr /* client_security_state */,
             absl::nullopt /* devtools_accepted_stream_types */,
             false /* is_pdf */,
-            content::WeakDocumentPtr() /* initiator_document */,
+            ChildProcessHost::kInvalidUniqueID /* initiator_process_id */,
+            absl::nullopt /* initiator_document_token */,
             GlobalRenderFrameHostId() /* previous_render_frame_host_id */,
             false /* allow_cookies_from_browser */, 0 /* navigation_id */,
-            false /* shared_storage_writable */));
+            false /* shared_storage_writable */, false /* is_ad_tagged */));
     return NavigationURLLoader::Create(
         browser_context_.get(), storage_partition, std::move(request_info),
         nullptr, nullptr, nullptr, delegate,

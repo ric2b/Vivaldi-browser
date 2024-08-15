@@ -348,7 +348,7 @@ absl::optional<uint32_t> GoogleUpdateSettings::GetHashedCohortId() {
     // to interpret it.
     return absl::nullopt;
   }
-  return base::PersistentHash(id_utf8.c_str(), last_colon);
+  return base::PersistentHash(std::string_view(id_utf8.c_str(), last_colon));
 }
 
 void GoogleUpdateSettings::StoreMetricsClientInfo(
@@ -794,51 +794,4 @@ bool GoogleUpdateSettings::GetUpdateDetailForGoogleUpdate(ProductData* data) {
 bool GoogleUpdateSettings::GetUpdateDetail(ProductData* data) {
   return GetUpdateDetailForApp(!InstallUtil::IsPerUserInstall(),
                                install_static::GetAppGuid(), data);
-}
-
-bool GoogleUpdateSettings::SetExperimentLabels(
-    const std::wstring& experiment_labels) {
-  const bool system_install = install_static::IsSystemInstall();
-  const HKEY reg_root = system_install ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
-  // Use install level to write to the correct client state/app guid key.
-  std::wstring client_state_path(
-      system_install ? install_static::GetClientStateMediumKeyPath()
-                     : install_static::GetClientStateKeyPath());
-  RegKey client_state(reg_root, client_state_path.c_str(),
-                      KEY_SET_VALUE | KEY_WOW64_32KEY);
-  // It is possible that the registry keys do not yet exist or have not yet
-  // been ACLed by Google Update to be user writable.
-  if (!client_state.Valid())
-    return false;
-  if (experiment_labels.empty()) {
-    return client_state.DeleteValue(google_update::kExperimentLabels) ==
-           ERROR_SUCCESS;
-  }
-  return client_state.WriteValue(google_update::kExperimentLabels,
-                                 experiment_labels.c_str()) == ERROR_SUCCESS;
-}
-
-bool GoogleUpdateSettings::ReadExperimentLabels(
-    std::wstring* experiment_labels) {
-  const bool system_install = install_static::IsSystemInstall();
-  const HKEY reg_root = system_install ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
-  std::wstring client_state_path(
-      system_install ? install_static::GetClientStateMediumKeyPath()
-                     : install_static::GetClientStateKeyPath());
-
-  RegKey client_state;
-  LONG result = client_state.Open(reg_root, client_state_path.c_str(),
-                                  KEY_QUERY_VALUE | KEY_WOW64_32KEY);
-  if (result == ERROR_SUCCESS) {
-    result = client_state.ReadValue(google_update::kExperimentLabels,
-                                    experiment_labels);
-  }
-
-  // If the key or value was not present, return the empty string.
-  if (result == ERROR_FILE_NOT_FOUND || result == ERROR_PATH_NOT_FOUND) {
-    experiment_labels->clear();
-    return true;
-  }
-
-  return result == ERROR_SUCCESS;
 }

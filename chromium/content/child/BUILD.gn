@@ -70,6 +70,7 @@ target(link_target_type, "child") {
     "//cc/paint",
     "//components/discardable_memory/client",
     "//components/discardable_memory/public/mojom",
+    "//components/permissions:permissions_common",
     "//components/tracing:startup_tracing",
     "//components/variations",
     "//components/webcrypto",
@@ -118,6 +119,8 @@ target(link_target_type, "child") {
     sources += [
       "child_process_sandbox_support_impl_linux.cc",
       "child_process_sandbox_support_impl_linux.h",
+      "sandboxed_process_thread_type_handler.cc",
+      "sandboxed_process_thread_type_handler.h",
     ]
     deps += [
       "//components/services/font/public/cpp",

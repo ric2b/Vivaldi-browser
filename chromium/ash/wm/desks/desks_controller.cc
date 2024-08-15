@@ -11,10 +11,10 @@
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/notifier_catalogs.h"
+#include "ash/public/cpp/accessibility_controller.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shelf_prefs.h"
 #include "ash/public/cpp/shelf_types.h"
-#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/system/toast_data.h"
 #include "ash/public/cpp/system/toast_manager.h"
 #include "ash/public/cpp/window_properties.h"
@@ -22,7 +22,6 @@
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/utility/haptics_util.h"
 #include "ash/wm/desks/desk.h"
 #include "ash/wm/desks/desk_animation_base.h"
 #include "ash/wm/desks/desk_animation_impl.h"
@@ -43,6 +42,7 @@
 #include "ash/wm/switchable_windows.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_cycle/window_cycle_controller.h"
+#include "ash/wm/window_properties.h"
 #include "ash/wm/window_restore/window_restore_controller.h"
 #include "ash/wm/window_restore/window_restore_util.h"
 #include "ash/wm/window_state.h"
@@ -65,7 +65,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
-#include "chromeos/ui/wm/features.h"
+#include "chromeos/utils/haptics_util.h"
 #include "components/app_restore/app_launch_info.h"
 #include "components/app_restore/full_restore_utils.h"
 #include "components/app_restore/window_info.h"
@@ -95,6 +95,9 @@ constexpr char kMoveWindowFromActiveDeskHistogramName[] =
 constexpr char kCloseAllUndoHistogramName[] = "Ash.Desks.CloseAllUndo";
 constexpr char kCloseAllTotalHistogramName[] = "Ash.Desks.CloseAllTotal";
 constexpr char kRemoveDeskTypeHistogramName[] = "Ash.Desks.RemoveDeskType";
+constexpr char kDeskApiRemoveDeskTypeHistogramName[] =
+    "Ash.DeskApi.RemoveDeskType";
+constexpr char kDeskApiCloseAllUndoHistogramName[] = "Ash.DeskApi.CloseAllUndo";
 constexpr char kNumberOfWindowsClosed[] = "Ash.Desks.NumberOfWindowsClosed2";
 constexpr char kNumberOfWindowsClosedByButton[] =
     "Ash.Desks.NumberOfWindowsClosed2.Button";
@@ -595,6 +598,12 @@ void DesksController::NewDesk(DesksCreationRemovalSource source) {
   available_container_ids_.pop();
   Desk* new_desk = desks_.back().get();
 
+  // We should notify observers that the desk is added before possibly
+  // notifying observers that the name is set.
+  for (auto& observer : observers_) {
+    observer.OnDeskAdded(new_desk, /*from_undo=*/false);
+  }
+
   // The new desk should have an empty name when the user creates a desk with
   // a button. This is done to encourage them to rename their desks.
   const bool empty_name =
@@ -619,9 +628,6 @@ void DesksController::NewDesk(DesksCreationRemovalSource source) {
         l10n_util::GetStringFUTF8(IDS_ASH_VIRTUAL_DESKS_ALERT_NEW_DESK_CREATED,
                                   base::NumberToString16(desks_.size())));
   }
-
-  for (auto& observer : observers_)
-    observer.OnDeskAdded(new_desk, /*from_undo=*/false);
 
   if (!is_first_ever_desk) {
     if (features::IsDeskButtonEnabled()) {
@@ -861,7 +867,7 @@ bool DesksController::ActivateAdjacentDesk(bool going_left,
   } else {
     // Fire a haptic event if necessary.
     if (source == DesksSwitchSource::kDeskSwitchTouchpad) {
-      haptics_util::PlayHapticTouchpadEffect(
+      chromeos::haptics_util::PlayHapticTouchpadEffect(
           ui::HapticTouchpadEffect::kKnock,
           ui::HapticTouchpadEffectStrength::kMedium);
     }
@@ -1013,9 +1019,7 @@ void DesksController::AddVisibleOnAllDesksWindow(aura::Window* window) {
   }
 
   if (features::IsPerDeskZOrderEnabled()) {
-    for (auto& desk : desks_) {
-      desk->TrackAllDeskWindow(window);
-    }
+    TrackWindowOnAllDesks(window);
   }
 
   if (do_window_bound_animation) {
@@ -1032,10 +1036,7 @@ void DesksController::AddVisibleOnAllDesksWindow(aura::Window* window) {
 void DesksController::MaybeRemoveVisibleOnAllDesksWindow(aura::Window* window) {
   if (visible_on_all_desks_windows_.erase(window)) {
     if (features::IsPerDeskZOrderEnabled()) {
-      for (auto& desk : desks_) {
-        desk->UntrackAllDeskWindow(window,
-                                   /*recent_root=*/window->GetRootWindow());
-      }
+      UntrackWindowFromAllDesks(window);
     }
 
     wm::AnimateWindow(window, wm::WINDOW_ANIMATION_TYPE_BOUNCE);
@@ -1298,9 +1299,7 @@ const Desk* DesksController::CreateNewDeskForSavedDesk(
     // list.
     auto active_desk_windows = active_desk_->windows();
     for (aura::Window* window : active_desk_windows) {
-      if (window->GetId() == kShellWindowId_DesksBarWindow ||
-          window->GetId() == kShellWindowId_SaveDeskButtonContainer ||
-          window->GetId() == kShellWindowId_SavedDeskLibraryWindow) {
+      if (window->GetProperty(kOverviewUiKey)) {
         aura::Window* destination_container =
             desk->GetDeskContainerForRoot(window->GetRootWindow());
         destination_container->AddChild(window);
@@ -1505,7 +1504,7 @@ void DesksController::MaybeDismissPersistentDeskRemovalToast() {
 
 bool DesksController::MaybeToggleA11yHighlightOnUndoDeskRemovalToast() {
   if (!temporary_removed_desk_ ||
-      !ToastManager::Get()->IsRunning(temporary_removed_desk_->toast_id())) {
+      !ToastManager::Get()->IsToastShown(temporary_removed_desk_->toast_id())) {
     return false;
   }
 
@@ -1516,7 +1515,7 @@ bool DesksController::MaybeToggleA11yHighlightOnUndoDeskRemovalToast() {
 
 bool DesksController::MaybeActivateDeskRemovalUndoButtonOnHighlightedToast() {
   if (!temporary_removed_desk_ ||
-      !ToastManager::Get()->IsRunning(temporary_removed_desk_->toast_id())) {
+      !ToastManager::Get()->IsToastShown(temporary_removed_desk_->toast_id())) {
     return false;
   }
 
@@ -1663,6 +1662,12 @@ void DesksController::OnAnimationFinished(DeskAnimationBase* animation) {
   DCHECK_EQ(animation_.get(), animation);
   metrics_helper_->OnAnimationFinished(animation->visible_desk_changes());
   animation_.reset();
+
+  // If we just switched desks due to removing the active desk, we immediately
+  // highlight the undo button.
+  if (Shell::Get()->accessibility_controller()->spoken_feedback().enabled()) {
+    MaybeToggleA11yHighlightOnUndoDeskRemovalToast();
+  }
 }
 
 bool DesksController::HasDeskWithName(const std::u16string& desk_name) const {
@@ -1972,14 +1977,23 @@ void DesksController::RemoveDeskInternal(const Desk* desk,
 
   UMA_HISTOGRAM_ENUMERATION(kRemoveDeskHistogramName, source);
   UMA_HISTOGRAM_ENUMERATION(kRemoveDeskTypeHistogramName, close_type);
+  if (source == DesksCreationRemovalSource::kApi) {
+    base::UmaHistogramEnumeration(kDeskApiRemoveDeskTypeHistogramName,
+                                  close_type);
+  }
 
   // We should only announce desks are being merged if we are combining desks.
+  // Otherwise, we tell the user that the desk has closed with its windows.
+  AccessibilityControllerImpl* accessibility_controller =
+      shell->accessibility_controller();
   if (close_type == DeskCloseType::kCombineDesks) {
-    Shell::Get()
-        ->accessibility_controller()
-        ->TriggerAccessibilityAlertWithMessage(l10n_util::GetStringFUTF8(
-            IDS_ASH_VIRTUAL_DESKS_ALERT_DESK_REMOVED, removed_desk->name(),
-            active_desk_->name()));
+    accessibility_controller->TriggerAccessibilityAlertWithMessage(
+        l10n_util::GetStringFUTF8(IDS_ASH_VIRTUAL_DESKS_ALERT_DESK_REMOVED,
+                                  removed_desk->name(), active_desk_->name()));
+  } else if (close_type == DeskCloseType::kCloseAllWindowsAndWait) {
+    accessibility_controller->TriggerAccessibilityAlertWithMessage(
+        l10n_util::GetStringUTF8(
+            IDS_ASH_VIRTUAL_DESKS_ALERT_DESK_CLOSED_WITH_WINDOWS));
   }
 
   desks_restore_util::UpdatePrimaryUserDeskNamesPrefs();
@@ -2008,6 +2022,10 @@ void DesksController::RemoveDeskInternal(const Desk* desk,
 void DesksController::UndoDeskRemoval() {
   DCHECK(temporary_removed_desk_);
   base::UmaHistogramBoolean(kCloseAllUndoHistogramName, true);
+  if (temporary_removed_desk_->desk_removal_source() ==
+      DesksCreationRemovalSource::kApi) {
+    base::UmaHistogramBoolean(kDeskApiCloseAllUndoHistogramName, true);
+  }
   Desk* readded_desk_ptr = temporary_removed_desk_->desk();
   auto readded_desk_data = std::move(temporary_removed_desk_);
   const int readded_desk_index = readded_desk_data->index();
@@ -2126,12 +2144,8 @@ void DesksController::FinalizeDeskRemoval(RemovedDeskData* removed_desk_data) {
     // container are removed from the container in case we want to immediately
     // reuse that container. Since floated window doesn't belong to desk
     // container, handle it separately.
-    aura::Window* floated_window = nullptr;
-    if (chromeos::wm::features::IsWindowLayoutMenuEnabled()) {
-      floated_window =
-          Shell::Get()->float_controller()->FindFloatedWindowOfDesk(
-              removed_desk);
-    }
+    aura::Window* floated_window =
+        Shell::Get()->float_controller()->FindFloatedWindowOfDesk(removed_desk);
 
     // When windows are being closed, they do so asynchronously. So, to free up
     // the desk container while the windows are being closed, we want to move
@@ -2174,6 +2188,30 @@ void DesksController::MaybeCommitPendingDeskRemoval(
   if (toast_id.empty() || (temporary_removed_desk_ &&
                            temporary_removed_desk_->toast_id() == toast_id)) {
     temporary_removed_desk_.reset();
+  }
+}
+
+bool DesksController::IsUndoToastShown() const {
+  return temporary_removed_desk_ &&
+         ToastManager::Get()->IsToastShown(temporary_removed_desk_->toast_id());
+}
+
+bool DesksController::IsUndoToastHighlighted() const {
+  return temporary_removed_desk_ &&
+         ToastManager::Get()->IsToastDismissButtonHighlighted(
+             temporary_removed_desk_->toast_id());
+}
+
+void DesksController::TrackWindowOnAllDesks(aura::Window* window) {
+  for (auto& desk : desks_) {
+    desk->TrackAllDeskWindow(window);
+  }
+}
+
+void DesksController::UntrackWindowFromAllDesks(aura::Window* window) {
+  for (auto& desk : desks_) {
+    desk->UntrackAllDeskWindow(window,
+                               /*recent_root=*/window->GetRootWindow());
   }
 }
 
@@ -2258,6 +2296,12 @@ void DesksController::RestackVisibleOnAllDesksWindowsOnActiveDesk() {
   auto mru_windows =
       Shell::Get()->mru_window_tracker()->BuildMruWindowList(kActiveDesk);
   for (auto* visible_on_all_desks_window : visible_on_all_desks_windows_) {
+    // If the window is floated, it will always be on top, so there is no need
+    // to restack it.
+    if (WindowState::Get(visible_on_all_desks_window)->IsFloated()) {
+      continue;
+    }
+
     auto visible_on_all_desks_window_iter =
         base::ranges::find(mru_windows, visible_on_all_desks_window);
     if (visible_on_all_desks_window_iter == mru_windows.end())
@@ -2307,9 +2351,8 @@ const Desk* DesksController::FindDeskOfWindow(aura::Window* window) const {
   DCHECK(window);
 
   // Floating windows are stored in float container, their relationship with
-  // desks can be found in `FloatedWindowInfo`.
-  if (chromeos::wm::features::IsWindowLayoutMenuEnabled() &&
-      WindowState::Get(window)->IsFloated()) {
+  // desks can be found in `FloatController::FloatedWindowInfo`.
+  if (WindowState::Get(window)->IsFloated()) {
     return Shell::Get()->float_controller()->FindDeskOfFloatedWindow(window);
   }
 

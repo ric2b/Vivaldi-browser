@@ -15,7 +15,6 @@
 #include "components/viz/common/quads/debug_border_draw_quad.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/quads/texture_draw_quad.h"
-#include "components/viz/common/resources/resource_settings.h"
 #include "components/viz/common/resources/returned_resource.h"
 #include "components/viz/common/resources/shared_image_format.h"
 #include "components/viz/common/resources/transferable_resource.h"
@@ -42,7 +41,6 @@
 #include "services/viz/public/cpp/compositing/filter_operations_mojom_traits.h"
 #include "services/viz/public/cpp/compositing/frame_sink_id_mojom_traits.h"
 #include "services/viz/public/cpp/compositing/local_surface_id_mojom_traits.h"
-#include "services/viz/public/cpp/compositing/resource_settings_mojom_traits.h"
 #include "services/viz/public/cpp/compositing/returned_resource_mojom_traits.h"
 #include "services/viz/public/cpp/compositing/selection_mojom_traits.h"
 #include "services/viz/public/cpp/compositing/shared_quad_state_mojom_traits.h"
@@ -409,18 +407,6 @@ TEST_F(StructTraitsTest, CopyOutputRequest_CallbackRunsOnce) {
   EXPECT_EQ(1, n_called);
 }
 
-TEST_F(StructTraitsTest, ResourceSettings) {
-  constexpr bool kArbitraryBool = true;
-  ResourceSettings input;
-  input.use_gpu_memory_buffer_resources = kArbitraryBool;
-
-  ResourceSettings output;
-  mojo::test::SerializeAndDeserialize<mojom::ResourceSettings>(input, output);
-
-  EXPECT_EQ(input.use_gpu_memory_buffer_resources,
-            output.use_gpu_memory_buffer_resources);
-}
-
 TEST_F(StructTraitsTest, Selection) {
   gfx::SelectionBound start;
   start.SetEdge(gfx::PointF(1234.5f, 67891.f), gfx::PointF(5432.1f, 1987.6f));
@@ -456,8 +442,8 @@ TEST_F(StructTraitsTest, SharedQuadState) {
   SharedQuadState input_sqs;
   input_sqs.SetAll(quad_to_target_transform, layer_rect, visible_layer_rect,
                    mask_filter_info, clip_rect, are_contents_opaque, opacity,
-                   blend_mode, sorting_context_id);
-  input_sqs.is_fast_rounded_corner = is_fast_rounded_corner;
+                   blend_mode, sorting_context_id, /*layer_id=*/0u,
+                   is_fast_rounded_corner);
   SharedQuadState output_sqs;
   mojo::test::SerializeAndDeserialize<mojom::SharedQuadState>(input_sqs,
                                                               output_sqs);
@@ -498,7 +484,8 @@ TEST_F(StructTraitsTest, CompositorFrame) {
   sqs->SetAll(sqs_quad_to_target_transform, sqs_layer_rect,
               sqs_visible_layer_rect, sqs_mask_filter_info, sqs_clip_rect,
               sqs_are_contents_opaque, sqs_opacity, sqs_blend_mode,
-              sqs_sorting_context_id);
+              sqs_sorting_context_id, /*layer_id=*/0u,
+              /*fast_rounded_corner=*/false);
 
   // DebugBorderDrawQuad.
   const gfx::Rect rect1(1234, 4321, 1357, 7531);
@@ -803,7 +790,9 @@ TEST_F(StructTraitsTest, RenderPass) {
                                1.2f),
       gfx::Rect(1, 2), gfx::Rect(1337, 5679, 9101112, 131415),
       gfx::MaskFilterInfo(gfx::RRectF(gfx::RectF(5.f, 6.f, 70.f, 89.f), 10.f)),
-      gfx::Rect(1357, 2468, 121314, 1337), true, 2, SkBlendMode::kSrcOver, 1);
+      gfx::Rect(1357, 2468, 121314, 1337), /*contents_opaque=*/true,
+      /*opacity_f=*/2, SkBlendMode::kSrcOver, /*sorting_context=*/1,
+      /*layer_id=*/0u, /*fast_rounded_corner=*/false);
 
   SharedQuadState* shared_state_2 = input->CreateAndAppendSharedQuadState();
   shared_state_2->SetAll(
@@ -812,7 +801,9 @@ TEST_F(StructTraitsTest, RenderPass) {
                                16.2f),
       gfx::Rect(1337, 1234), gfx::Rect(1234, 5678, 9101112, 13141516),
       gfx::MaskFilterInfo(gfx::RRectF(gfx::RectF(23.f, 45.f, 60.f, 70.f), 8.f)),
-      gfx::Rect(1357, 2468, 121314, 1337), true, 2, SkBlendMode::kSrcOver, 1);
+      gfx::Rect(1357, 2468, 121314, 1337), /*contents_opaque=*/true,
+      /*opacity_f=*/2, SkBlendMode::kSrcOver, /*sorting_context=*/1,
+      /*layer_id=*/0u, /*fast_rounded_corner=*/false);
 
   // This quad uses the first shared quad state. The next two quads use the
   // second shared quad state.

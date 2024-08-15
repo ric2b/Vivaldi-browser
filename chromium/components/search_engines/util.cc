@@ -19,12 +19,12 @@
 #include "base/ranges/algorithm.h"
 #include "base/time/time.h"
 #include "components/prefs/pref_service.h"
+#include "components/search_engines/search_engine_choice_utils.h"
 #include "components/search_engines/search_engines_pref_names.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_starter_pack_data.h"
-#include "components/signin/public/base/signin_switches.h"
 
 std::u16string GetDefaultSearchEngineName(TemplateURLService* service) {
   DCHECK(service);
@@ -352,7 +352,8 @@ ActionsFromCurrentData CreateActionsFromCurrentPrepopulateData(
 }
 
 const std::string& GetDefaultSearchProviderPrefValue(PrefService& prefs) {
-  if (base::FeatureList::IsEnabled(switches::kSearchEngineChoice)) {
+  if (search_engines::IsChoiceScreenFlagEnabled(
+          search_engines::ChoicePromo::kAny)) {
     const auto& default_search_provider =
         prefs.GetString(prefs::kDefaultSearchProviderGUID);
 
@@ -373,7 +374,8 @@ const std::string& GetDefaultSearchProviderPrefValue(PrefService& prefs) {
 
 void SetDefaultSearchProviderPrefValue(PrefService& prefs,
                                        const std::string& value) {
-  if (base::FeatureList::IsEnabled(switches::kSearchEngineChoice)) {
+  if (search_engines::IsChoiceScreenFlagEnabled(
+          search_engines::ChoicePromo::kAny)) {
     prefs.SetString(prefs::kDefaultSearchProviderGUID, value);
   } else {
     prefs.SetString(prefs::kSyncedDefaultSearchProviderGUID, value);
@@ -537,6 +539,13 @@ void GetSearchProvidersUsingKeywordResult(
       service, prefs, template_urls, default_search_provider, search_terms_data,
       new_resource_keyword_version, new_resource_starter_pack_version,
       removed_keyword_guids);
+
+  // If a data change happened (new version != 0), it should not be caused by a
+  // version downgrade. Upgrades (builtin > new) or feature-related merges
+  // (builtin == new) only are expected.
+  DCHECK(*new_resource_keyword_version == 0 ||
+         *new_resource_keyword_version >=
+             keyword_result.builtin_keyword_version);
 }
 
 void GetSearchProvidersUsingLoadedEngines(
@@ -558,11 +567,27 @@ void GetSearchProvidersUsingLoadedEngines(
 
   const int prepopulate_resource_keyword_version =
       TemplateURLPrepopulateData::GetDataVersion(prefs);
-  if (*resource_keyword_version < prepopulate_resource_keyword_version) {
+  bool should_keywords_use_extended_list =
+      search_engines::IsChoiceScreenFlagEnabled(
+          search_engines::ChoicePromo::kAny);
+  bool force_re_merge =
+      prefs->GetBoolean(prefs::kDefaultSearchProviderKeywordsUseExtendedList) !=
+          should_keywords_use_extended_list &&
+      // Guard against the risk of a version downgrade.
+      *resource_keyword_version == prepopulate_resource_keyword_version;
+
+  if (*resource_keyword_version < prepopulate_resource_keyword_version ||
+      force_re_merge) {
     MergeEnginesFromPrepopulateData(service, &prepopulated_urls, template_urls,
                                     default_search_provider,
                                     removed_keyword_guids);
     *resource_keyword_version = prepopulate_resource_keyword_version;
+    if (should_keywords_use_extended_list) {
+      prefs->SetBoolean(prefs::kDefaultSearchProviderKeywordsUseExtendedList,
+                        true);
+    } else {
+      prefs->ClearPref(prefs::kDefaultSearchProviderKeywordsUseExtendedList);
+    }
   } else {
     *resource_keyword_version = 0;
   }

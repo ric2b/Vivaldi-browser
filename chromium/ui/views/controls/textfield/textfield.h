@@ -716,6 +716,7 @@ class VIEWS_EXPORT Textfield : public View,
   int minimum_width_in_chars_ = -1;
 
   // Colors which override default system colors.
+  // TODO(tluk): These should be updated to be ColorIds instead of SkColors.
   absl::optional<SkColor> text_color_;
   absl::optional<SkColor> background_color_;
   absl::optional<SkColor> selection_text_color_;
@@ -844,7 +845,7 @@ class VIEWS_EXPORT Textfield : public View,
   std::unique_ptr<views::MenuRunner> context_menu_runner_;
 
   // View containing the text cursor.
-  raw_ptr<View, DanglingUntriaged> cursor_view_ = nullptr;
+  raw_ptr<View> cursor_view_ = nullptr;
 
 #if BUILDFLAG(IS_MAC)
   // Used to track active password input sessions.

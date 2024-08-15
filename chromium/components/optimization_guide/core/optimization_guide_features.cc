@@ -26,6 +26,7 @@
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/google_api_keys.h"
 #include "net/base/url_util.h"
+#include "optimization_guide_features.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #include "app/vivaldi_apptools.h"
@@ -96,6 +97,55 @@ bool IsSupportedLocaleForFeature(
          base::Contains(supported_locales, locale_language);
 }
 
+bool IsSupportedCountryForFeature(const std::string& country_code,
+                                  const base::Feature& feature,
+                                  const std::string& default_value) {
+  if (!base::FeatureList::IsEnabled(feature)) {
+    return false;
+  }
+
+  std::string value =
+      base::GetFieldTrialParamValueByFeature(feature, "supported_countries");
+  if (value.empty()) {
+    // The default list of supported countries for optimization guide features.
+    value = default_value;
+  } else if (value == "*") {
+    // Still provide a way to enable all countries remotely via the '*'
+    // character.
+    return true;
+  }
+
+  std::vector<std::string> supported_countries = base::SplitString(
+      value, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  // An empty allowlist admits any country.
+  if (supported_countries.empty()) {
+    return true;
+  }
+
+  return base::ranges::any_of(
+      supported_countries, [&country_code](const auto& supported_country_code) {
+        return base::EqualsCaseInsensitiveASCII(supported_country_code,
+                                                country_code);
+      });
+}
+
+std::set<std::string> GetOauthScopesForFeature(const base::Feature& feature) {
+  std::set<std::string> scopes;
+  if (base::FeatureList::IsEnabled(feature)) {
+    std::string param =
+        base::GetFieldTrialParamValueByFeature(feature, "oauth_scopes");
+    for (const auto& scope : base::SplitString(
+             param, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
+      scopes.insert(scope);
+    }
+  }
+  if (scopes.empty()) {
+    scopes.insert(GaiaConstants::kGoogleUserInfoProfile);
+  }
+
+  return scopes;
+}
+
 }  // namespace
 
 // Enables the syncing of the Optimization Hints component, which provides
@@ -142,7 +192,7 @@ BASE_FEATURE(kPageContentAnnotations,
 // Enables fetching page metadata from the remote Optimization Guide service.
 BASE_FEATURE(kRemotePageMetadata,
              "RemotePageMetadata",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             enabled_by_default_desktop_only);
 
 // Enables the page entities model to be annotated on every page load.
 BASE_FEATURE(kPageEntitiesPageContentAnnotations,
@@ -228,7 +278,7 @@ BASE_FEATURE(kExtractRelatedSearchesFromPrefetchedZPSResponse,
 
 BASE_FEATURE(kPageContentAnnotationsPersistSalientImageMetadata,
              "PageContentAnnotationsPersistSalientImageMetadata",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             enabled_by_default_desktop_only);
 
 // Killswitch for fetching on search results from a remote Optimization Guide
 // Service.
@@ -254,11 +304,6 @@ BASE_FEATURE(kOptimizationGuidePersonalizedFetching,
              "OptimizationPersonalizedHintsFetching",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Whether to resolve all URLs (minus fragments) to the same URL.
-BASE_FEATURE(kOptimizationGuideHintsURLKeyedCacheDropFragments,
-             "OptimizationGuideHintsURLKeyedCacheDropFragments",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Enables text embeddings to annotated on every page visit and later queried.
 BASE_FEATURE(kQueryInMemoryTextEmbeddings,
              "QueryInMemoryTextEmbeddings",
@@ -270,6 +315,11 @@ BASE_FEATURE(kQueryInMemoryTextEmbeddings,
 // immediate remedy is needed to stop serving those versions.
 BASE_FEATURE(kOptimizationGuidePredictionModelKillswitch,
              "OptimizationGuidePredictionModelKillswitch",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Whether to enable model execution.
+BASE_FEATURE(kOptimizationGuideModelExecution,
+             "OptimizationGuideModelExecution",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 size_t MaxRelatedSearchesCacheSize() {
@@ -453,14 +503,14 @@ size_t MaxConcurrentPageNavigationFetches() {
       "max_concurrent_page_navigation_fetches", 20);
 }
 
-int ActiveTabsHintsFetchRandomMinDelaySecs() {
-  return GetFieldTrialParamByFeatureAsInt(kRemoteOptimizationGuideFetching,
-                                          "fetch_random_min_delay_secs", 30);
+base::TimeDelta ActiveTabsHintsFetchRandomMinDelay() {
+  return base::Seconds(GetFieldTrialParamByFeatureAsInt(
+      kRemoteOptimizationGuideFetching, "fetch_random_min_delay_secs", 30));
 }
 
-int ActiveTabsHintsFetchRandomMaxDelaySecs() {
-  return GetFieldTrialParamByFeatureAsInt(kRemoteOptimizationGuideFetching,
-                                          "fetch_random_max_delay_secs", 60);
+base::TimeDelta ActiveTabsHintsFetchRandomMaxDelay() {
+  return base::Seconds(GetFieldTrialParamByFeatureAsInt(
+      kRemoteOptimizationGuideFetching, "fetch_random_max_delay_secs", 60));
 }
 
 base::TimeDelta StoredHostModelFeaturesFreshnessDuration() {
@@ -549,23 +599,6 @@ bool ShouldEnablePersonalizedMetadata(proto::RequestContext request_context) {
   return allowed_contexts.Has(request_context);
 }
 
-std::set<std::string> GetOAuthScopesForPersonalizedMetadata() {
-  std::set<std::string> scopes;
-  if (base::FeatureList::IsEnabled(kOptimizationGuidePersonalizedFetching)) {
-    std::string param = base::GetFieldTrialParamValueByFeature(
-        kOptimizationGuidePersonalizedFetching, "oauth_scopes");
-    for (const auto& scope : base::SplitString(
-             param, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
-      scopes.insert(scope);
-    }
-  }
-  if (scopes.empty()) {
-    scopes.insert(GaiaConstants::kGoogleUserInfoProfile);
-  }
-
-  return scopes;
-}
-
 bool ShouldOverrideOptimizationTargetDecisionForMetricsPurposes(
     proto::OptimizationTarget optimization_target) {
   if (optimization_target != proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD)
@@ -575,14 +608,14 @@ bool ShouldOverrideOptimizationTargetDecisionForMetricsPurposes(
       kOptimizationTargetPrediction, "painful_page_load_metrics_only", false);
 }
 
-int PredictionModelFetchRandomMinDelaySecs() {
-  return GetFieldTrialParamByFeatureAsInt(kOptimizationTargetPrediction,
-                                          "fetch_random_min_delay_secs", 30);
+base::TimeDelta PredictionModelFetchRandomMinDelay() {
+  return base::Seconds(GetFieldTrialParamByFeatureAsInt(
+      kOptimizationTargetPrediction, "fetch_random_min_delay_secs", 30));
 }
 
-int PredictionModelFetchRandomMaxDelaySecs() {
-  return GetFieldTrialParamByFeatureAsInt(kOptimizationTargetPrediction,
-                                          "fetch_random_max_delay_secs", 60);
+base::TimeDelta PredictionModelFetchRandomMaxDelay() {
+  return base::Seconds(GetFieldTrialParamByFeatureAsInt(
+      kOptimizationTargetPrediction, "fetch_random_max_delay_secs", 60));
 }
 
 base::TimeDelta PredictionModelFetchRetryDelay() {
@@ -679,8 +712,11 @@ bool ShouldExecuteTextEmbeddingModelOnPageContent(const std::string& locale) {
                                      kTextEmbeddingPageContentAnnotations);
 }
 
-bool RemotePageMetadataEnabled() {
-  return base::FeatureList::IsEnabled(kRemotePageMetadata);
+bool RemotePageMetadataEnabled(const std::string& locale,
+                               const std::string& country_code) {
+  return base::FeatureList::IsEnabled(kRemotePageMetadata) &&
+         IsSupportedLocaleForFeature(locale, kRemotePageMetadata, "en-US") &&
+         IsSupportedCountryForFeature(country_code, kRemotePageMetadata, "us");
 }
 
 int GetMinimumPageCategoryScoreToPersist() {
@@ -819,14 +855,16 @@ bool IsInstallWideModelStoreEnabled() {
   return base::FeatureList::IsEnabled(kOptimizationGuideInstallWideModelStore);
 }
 
-bool ShouldPersistSalientImageMetadata() {
+bool ShouldPersistSalientImageMetadata(const std::string& locale,
+                                       const std::string& country_code) {
   return base::FeatureList::IsEnabled(
-      kPageContentAnnotationsPersistSalientImageMetadata);
-}
-
-bool ShouldDropFragmentsForURLKeyedHintCacheKey() {
-  return base::FeatureList::IsEnabled(
-      kOptimizationGuideHintsURLKeyedCacheDropFragments);
+             kPageContentAnnotationsPersistSalientImageMetadata) &&
+         IsSupportedLocaleForFeature(
+             locale, kPageContentAnnotationsPersistSalientImageMetadata,
+             "en-US") &&
+         IsSupportedCountryForFeature(
+             country_code, kPageContentAnnotationsPersistSalientImageMetadata,
+             "us");
 }
 
 bool ShouldQueryEmbeddings() {
@@ -863,6 +901,10 @@ GetPredictionModelVersionsInKillSwitch() {
     }
   }
   return killswitch_model_versions;
+}
+
+std::set<std::string> GetOAuthScopesForModelExecution() {
+  return GetOauthScopesForFeature(kOptimizationGuideModelExecution);
 }
 
 }  // namespace features

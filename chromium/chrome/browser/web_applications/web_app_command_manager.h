@@ -18,7 +18,7 @@
 #include "base/values.h"
 #include "chrome/browser/web_applications/commands/web_app_command.h"
 #include "chrome/browser/web_applications/locks/web_app_lock_manager.h"
-#include "chrome/browser/web_applications/web_app_id.h"
+#include "components/webapps/common/web_app_id.h"
 
 class Profile;
 
@@ -29,7 +29,7 @@ class WebContents;
 namespace web_app {
 
 class WebAppProvider;
-enum class WebAppUrlLoaderResult;
+class WebAppUrlLoader;
 
 // The command manager is used to schedule commands or callbacks to write & read
 // from the WebAppProvider system. To use, simply call `ScheduleCommand` to
@@ -72,7 +72,9 @@ class WebAppCommandManager {
   bool IsInstallingForWebContents(
       const content::WebContents* web_contents) const;
 
-  std::size_t GetCommandCountForTesting() { return commands_.size(); }
+  std::size_t GetCommandCountForTesting();
+
+  std::size_t GetCommandsInstallingForWebContentsForTesting();
 
   void AwaitAllCommandsCompleteForTesting();
 
@@ -100,7 +102,8 @@ class WebAppCommandManager {
   void OnLockAcquired(WebAppCommand::Id command_id,
                       base::OnceClosure start_command);
 
-  void StartCommand(WebAppCommand* command, base::OnceClosure start_command);
+  void StartCommand(base::WeakPtr<WebAppCommand> command,
+                    base::OnceClosure start_command);
 
   content::WebContents* EnsureWebContentsCreated();
 
@@ -112,6 +115,7 @@ class WebAppCommandManager {
   raw_ptr<WebAppProvider> provider_ = nullptr;
 
   std::unique_ptr<content::WebContents> shared_web_contents_;
+  std::unique_ptr<WebAppUrlLoader> url_loader_;
 
   bool started_ = false;
   bool is_in_shutdown_ = false;

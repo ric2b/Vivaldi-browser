@@ -51,11 +51,8 @@ update_target("//ios/chrome/browser/ui/settings/default_browser:default_browser"
 }
 
 update_target("//ios/chrome/browser/ui/tab_switcher/tab_grid:tab_grid_ui_constants") {
-  deps -= [
-    "resources:grid_background_color"
-  ]
   deps += [
-    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:grid_background_color",
+    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:vivaldi_grid_background_color",
     "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:grid_empty_state_title_text_color",
     "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:grid_empty_state_body_text_color",
     "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:grid_empty_state_login_button_bg_color",
@@ -86,7 +83,7 @@ update_target("//ios/chrome/browser/ui/first_run/default_browser:default_browser
   ]
 }
 
-update_target("//ios/chrome/browser/ui/tab_switcher/tab_grid:tab_grid_ui") {
+update_target("//ios/chrome/browser/ui/tab_switcher/tab_grid/grid:grid_ui") {
   deps -= [
     "resources:tab_grid_incognito_tabs_empty",
     "resources:tab_grid_regular_tabs_empty",
@@ -107,6 +104,7 @@ update_template_instance("//ios/chrome/widget_kit_extension:widget_kit_extension
     "resources:widget_separator_color",
     "resources:widget_text_color",
     "resources:widget_incognito_icon",
+    "resources:widget_password_manager_logo",
   ]
   deps += [
     "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_vivaldi_logo",
@@ -117,6 +115,9 @@ update_template_instance("//ios/chrome/widget_kit_extension:widget_kit_extension
     "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_button_background_color",
     "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_incognito_icon",
     "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_qr_icon",
+    "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_lock_screen_search",
+    "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_lock_screen_private_search",
+    "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_password_manager_logo",
   ]
 }
 
@@ -184,6 +185,7 @@ update_target("//ios/chrome/browser/ui/settings:settings") {
     "//vivaldi/ios/ui/settings/resources:vivaldi_passwords_manager_empty",
     "//vivaldi/ios/ui/settings/custom_app_icon:vivaldi_custom_app_icon",
     "//vivaldi/ios/ui/settings/search_engine:vivaldi_search_engine_settings",
+    "//vivaldi/ios/ui/settings/appearance:vivaldi_appearance_setting"
   ]
 }
 
@@ -194,7 +196,7 @@ update_target("//ios/chrome/common/ui/colors:colors") {
 }
 
 
-update_target("//ios/chrome/browser/browser_state:browser_state") {
+update_target("//ios/chrome/browser/shared/model/browser_state:browser_state") {
   deps += [
     "//vivaldi/browser:default_bookmarks",
     "//vivaldi/ios/ad_blocker:ad_blocker",

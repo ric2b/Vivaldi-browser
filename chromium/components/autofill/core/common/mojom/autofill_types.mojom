@@ -11,6 +11,27 @@ import "mojo/public/mojom/base/unguessable_token.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
 import "url/mojom/url.mojom";
 
+// The form control types supported by Autofill: a subset of
+// blink::mojom::FormControlType plus kContentEditable.
+// Do not modify the integer values because they are used UKM metrics.
+enum FormControlType {
+  kContentEditable = 0,
+  kInputCheckbox = 1,
+  kInputEmail = 2,
+  kInputMonth = 3,
+  kInputNumber = 4,
+  kInputPassword = 5,
+  kInputRadio = 6,
+  kInputSearch = 7,
+  kInputTelephone = 8,
+  kInputText = 9,
+  kInputUrl = 10,
+  kSelectOne = 11,
+  kSelectMultiple = 12,
+  kSelectList = 13,
+  kTextArea = 14,
+};
+
 // The list of all HTML autocomplete field mode hints supported by Chrome.
 // See [ http://is.gd/whatwg_autocomplete ] for the full list of specced hints.
 enum HtmlFieldMode {
@@ -46,7 +67,7 @@ enum HtmlFieldType {
   kCountryCode = 14,     // The ISO 3166-1-alpha-2 country code.
   kCountryName = 15,     // The localized country name.
   kPostalCode = 16,
-  kFullAddress = 17,     // The complete address, formatted for display.
+  // kFullAddress = 17 is deprecated.
 
   // Credit card types.
   kCreditCardNameFull = 18,
@@ -328,7 +349,9 @@ struct FormFieldData {
   mojo_base.mojom.String16 id_attribute;
   mojo_base.mojom.String16 name_attribute;
   mojo_base.mojom.String16 value;
-  string form_control_type;
+  uint32 selection_start;
+  uint32 selection_end;
+  FormControlType form_control_type;
   string autocomplete_attribute;
   AutocompleteParsingResult? parsed_autocomplete;
   mojo_base.mojom.String16 placeholder;
@@ -359,8 +382,7 @@ struct FormFieldData {
 
   gfx.mojom.RectF bounds;
 
-  array<mojo_base.mojom.String16> datalist_values;
-  array<mojo_base.mojom.String16> datalist_labels;
+  array<SelectOption> datalist_options;
 
   bool force_override;
 };
@@ -410,6 +432,7 @@ struct FormFieldDataPredictions {
 struct FormDataPredictions {
   FormData data;
   string signature;
+  string alternative_signature;
   array<FormFieldDataPredictions> fields;
 };
 
@@ -477,16 +500,22 @@ enum AutofillState {
 };
 
 // Represents whether an autofill action, which is an operation that changes a
-// form, will persist (kFill) or will be cleared later (kPreview)
-enum AutofillActionPersistence {
+// form, will persist (kFill) or will be cleared later (kPreview).
+enum ActionPersistence {
   kFill,     // The action is filled.
   kPreview,  // The action is previewed and will be cleared afterwards.
 };
 
 // The possible actions that Autofill can perform on forms.
-enum AutofillActionType {
+enum ActionType {
   kFill,  // Autofill should fill the form.
   kUndo,  // Autofill should undo some previous fill operation on the form.
+};
+
+// Indicates which part of a text field's value Autofill replaces.
+enum TextReplacement {
+  kReplaceAll,        // Replace the field's current value.
+  kReplaceSelection,  // Replace only the currently selected text.
 };
 
 // Describes which action triggered Autofill suggestions. This has implications
@@ -505,6 +534,9 @@ enum AutofillSuggestionTriggerSource {
   // - Focusing a text input using a screen reader.
   // Suggestion of this type can trigger FastCheckout or TouchToFill.
   kFormControlElementClicked,
+  // Suggestions triggered as above except that the target is a
+  // contenteditable element rather than a form control element.
+  kContentEditableClicked,
   // Suggestions triggered by modifying the content of a text input.
   kTextFieldDidChange,
   // Suggestions triggered by pressing the down key on a text input. This auto
@@ -540,7 +572,10 @@ enum AutofillSuggestionTriggerSource {
   // This code currently doesn't distinguish between different suggestion
   // trigger sources. They are all treated as `kiOS`. See crbug.com/1448447.
   kiOS,
-  // Suggestions triggered by selecting the manual fallback entry for
-  // autocomplete=unrecognized fields in the context menu.
-  kManualFallbackForAutocompleteUnrecognized,
+  // Suggestions triggered by selecting the Autofill address manual fallback
+  // entry from the Chrome context menu.
+  kManualFallbackAddress,
+  // Suggestions triggered by the user closing a dialog after performing some
+  // action.
+  kShowPromptAfterDialogClosed,
 };

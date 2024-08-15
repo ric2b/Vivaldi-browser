@@ -5,6 +5,8 @@
 #import "base/apple/foundation_util.h"
 #import "ios/chrome/browser/net/crurl.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_link_header_footer_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_cell.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_button_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_link_item.h"
 #import "ios/chrome/common/string_util.h"
@@ -29,6 +31,7 @@ const CGFloat forgotUsernamePasswordSectionHeaderHeight = 12;
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierHeader = kSectionIdentifierEnumZero,
   SectionIdentifierUsernamePassword,
+  SectionIdentifierSavePassword,
   SectionIdentifierForgotUsernamePassword,
   SectionIdentifierLoginButton,
 };
@@ -38,6 +41,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeTitle,
   ItemTypeUsername,
   ItemTypePassword,
+  ItemTypeSavePasswordSwitch,
   ItemTypeForgotUsernamePassword,
   ItemTypeLoginButton,
   ItemTypeError,
@@ -50,6 +54,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 @property(nonatomic, strong) VivaldiTableViewTextEditItem* usernameItem;
 @property(nonatomic, strong) VivaldiTableViewTextEditItem* passwordItem;
+@property(nonatomic, strong) TableViewSwitchItem* switchItemSavePassword;
 
 @property(nonatomic, weak) id<ModalPageCommands> modalPageHandler;
 
@@ -93,6 +98,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   TableViewModel* model = self.tableViewModel;
   [model addSectionWithIdentifier:SectionIdentifierHeader];
   [model addSectionWithIdentifier:SectionIdentifierUsernamePassword];
+  [model addSectionWithIdentifier:SectionIdentifierSavePassword];
   [model addSectionWithIdentifier:SectionIdentifierForgotUsernamePassword];
   [model addSectionWithIdentifier:SectionIdentifierLoginButton];
 
@@ -153,6 +159,14 @@ typedef NS_ENUM(NSInteger, ItemType) {
       IDS_VIVALDI_IOS_SETTINGS_SHOW_PASSWORD_HINT);
   [model addItem:self.passwordItem
       toSectionWithIdentifier:SectionIdentifierUsernamePassword];
+
+  self.switchItemSavePassword =
+    [[TableViewSwitchItem alloc] initWithType:ItemTypeSavePasswordSwitch];
+  self.switchItemSavePassword.text = l10n_util::GetNSString(
+      IDS_VIVALDI_ACCOUNT_SAVE_CREDENTIALS);
+  self.switchItemSavePassword.on = NO;
+  [model addItem:self.switchItemSavePassword
+      toSectionWithIdentifier:SectionIdentifierSavePassword];
 
   // Add forgot username/password section. Order is important to keep this
   // section below password field.
@@ -232,6 +246,14 @@ typedef NS_ENUM(NSInteger, ItemType) {
       VivaldiTableViewIllustratedCell* titleCell =
           base::apple::ObjCCast<VivaldiTableViewIllustratedCell>(cell);
       titleCell.subtitleLabel.delegate = self;
+      break;
+    }
+    case ItemTypeSavePasswordSwitch: {
+      TableViewSwitchCell* switchCell =
+          base::apple::ObjCCastStrict<TableViewSwitchCell>(cell);
+      [switchCell.switchView addTarget:self
+                                action:@selector(savePasswordSwitchToggled)
+                      forControlEvents:UIControlEventValueChanged];
       break;
     }
     case ItemTypeForgotUsernamePassword: {
@@ -328,6 +350,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [self reconfigureCellsForItems:@[ self.passwordItem ]];
 }
 
+- (void)savePasswordSwitchToggled {
+  self.switchItemSavePassword.on = !self.switchItemSavePassword.on;
+}
+
 - (void)logInButtonPressed:(UIButton*)sender {
   NSString* errorMessage;
 
@@ -348,7 +374,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   [self.delegate logInButtonPressed:self.usernameItem.textFieldValue
                            password:self.passwordItem.textFieldValue
-                       savePassword:YES];
+                       savePassword:self.switchItemSavePassword.on];
 }
 
 @end

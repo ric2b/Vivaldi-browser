@@ -250,6 +250,9 @@ class WebStateImpl;
 // Returns the page theme color.
 - (UIColor*)themeColor;
 
+// Returns the under page background color.
+- (UIColor*)underPageBackgroundColor;
+
 #pragma mark Navigation Message Handlers
 
 // Handles a navigation hash change message for the current webpage.
@@ -267,11 +270,8 @@ class WebStateImpl;
 // Retrieves the existing web frames in `contentWorld`.
 - (void)retrieveExistingFramesInContentWorld:(WKContentWorld*)contentWorld;
 
-// Do not use these executeJavaScript functions directly, prefer
-// WebFrame::CallJavaScriptFunction if possible, otherwise use
-// WebState::ExecuteJavaScript and WebState::ExecuteUserJavaScript.
-- (void)executeJavaScript:(NSString*)javascript
-        completionHandler:(void (^)(id result, NSError* error))completion;
+// Do not call this function directly, instead use
+// WebState::ExecuteUserJavaScript.
 - (void)executeUserJavaScript:(NSString*)javascript
             completionHandler:(void (^)(id result, NSError* error))completion;
 
@@ -297,6 +297,12 @@ class WebStateImpl;
 
 // Loads the HTML into the page at the given URL.
 - (void)loadHTML:(NSString*)HTML forURL:(const GURL&)URL;
+
+// Executes `javascript` in the current page.
+// Prefer `WebFrame::CallJavaScriptFunction` if possible, otherwise
+// use `WebState::ExecuteJavaScript`.
+- (void)executeJavaScript:(NSString*)javascript
+        completionHandler:(void (^)(id result, NSError* error))completion;
 
 @end
 

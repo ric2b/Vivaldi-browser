@@ -21,6 +21,14 @@
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "ui/gfx/ios/uikit_util.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_constants.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_page_control_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 namespace {
 // TODO(crbug.com/1412115): Refactor this method.
 // Frame-based layout utilities for GridTransitionCell.
@@ -129,6 +137,13 @@ UIColor* GetInterfaceStyleDarkColor(UIColor* dynamicColor) {
     self.contentView.backgroundColor = GetInterfaceStyleDarkColor(
         [UIColor colorNamed:kSecondaryBackgroundColor]);
 
+    if (IsVivaldiRunning()) {
+      self.layer.cornerRadius = vSliderCornerRadius;
+      self.contentView.layer.cornerRadius = vSliderCornerRadius;
+      self.backgroundColor = UIColor.whiteColor;
+      self.contentView.backgroundColor = UIColor.whiteColor;
+    } // End Vivaldi
+
     [self setupSelectedBackgroundView];
     [self setupSnapshotView];
     [self setupHeaderView];
@@ -143,8 +158,6 @@ UIColor* GetInterfaceStyleDarkColor(UIColor* dynamicColor) {
 
 - (void)prepareForReuse {
   [super prepareForReuse];
-
-  self.itemIdentifier = nil;
   self.icon = nil;
   self.title = nil;
   self.snapshot = nil;
@@ -225,6 +238,13 @@ UIColor* GetInterfaceStyleDarkColor(UIColor* dynamicColor) {
   selectedBackgroundBorderView.layer.cornerRadius =
       kPinnedCellCornerRadius + kPinnedCellSelectionRingGapWidth +
       kPinnedCellSelectionRingTintWidth;
+
+  if (IsVivaldiRunning()) {
+    selectedBackgroundBorderView.layer.cornerRadius =
+        vSliderCornerRadius + kPinnedCellSelectionRingGapWidth +
+        kPinnedCellSelectionRingTintWidth;
+  } // End Vivaldi
+
   selectedBackgroundBorderView.layer.borderWidth =
       kPinnedCellSelectionRingTintWidth;
   selectedBackgroundBorderView.layer.borderColor =
@@ -284,16 +304,28 @@ UIColor* GetInterfaceStyleDarkColor(UIColor* dynamicColor) {
   UIView* headerView = [[UIView alloc] init];
   headerView.translatesAutoresizingMaskIntoConstraints = NO;
   headerView.clipsToBounds = YES;
+
+  if (IsVivaldiRunning()) {
+    headerView.backgroundColor = UIColor.whiteColor;
+    headerView.layer.cornerRadius = vSliderCornerRadius;
+  } else {
   headerView.backgroundColor = GetInterfaceStyleDarkColor(
       [UIColor colorNamed:kSecondaryBackgroundColor]);
   headerView.layer.cornerRadius = kPinnedCellCornerRadius;
+  } // End Vivaldi
+
   _headerView = headerView;
 
   UIView* contentView = self.contentView;
   [contentView addSubview:headerView];
 
+  if (IsVivaldiRunning()) {
+    _headerViewHeightConstraint =
+        [headerView.heightAnchor constraintEqualToConstant:vPinnedCellHeight];
+  } else {
   _headerViewHeightConstraint =
       [headerView.heightAnchor constraintEqualToConstant:kPinnedCellHeight];
+  } // End Vivaldi
 
   NSArray* constraints = @[
     _headerViewHeightConstraint,
@@ -315,6 +347,12 @@ UIColor* GetInterfaceStyleDarkColor(UIColor* dynamicColor) {
   _faviconContainerViewCenterYConstraint = [faviconContainerView.centerYAnchor
       constraintEqualToAnchor:_headerView.topAnchor
                      constant:kPinnedCellHeight / 2];
+
+  if (IsVivaldiRunning()) {
+    _faviconContainerViewCenterYConstraint = [faviconContainerView.centerYAnchor
+        constraintEqualToAnchor:_headerView.topAnchor
+                       constant:vPinnedCellHeight / 2];
+  } // End Vivaldi
 
   [NSLayoutConstraint activateConstraints:@[
     _faviconContainerViewCenterYConstraint,
@@ -340,8 +378,13 @@ UIColor* GetInterfaceStyleDarkColor(UIColor* dynamicColor) {
   faviconView.clipsToBounds = YES;
   faviconView.layer.cornerRadius = kPinnedCellFaviconCornerRadius;
   faviconView.layer.masksToBounds = YES;
+
+  if (IsVivaldiRunning()) {
+    faviconView.tintColor = [UIColor blackColor];
+  } else {
   faviconView.tintColor =
       GetInterfaceStyleDarkColor([UIColor colorNamed:kTextPrimaryColor]);
+  } // End Vivaldi
 
   [NSLayoutConstraint activateConstraints:@[
     [faviconView.widthAnchor constraintEqualToConstant:kPinnedCellFaviconWidth],
@@ -384,8 +427,13 @@ UIColor* GetInterfaceStyleDarkColor(UIColor* dynamicColor) {
   titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
   titleLabel.adjustsFontForContentSizeCategory = YES;
   titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+
+  if (IsVivaldiRunning()) {
+    titleLabel.textColor = [UIColor blackColor];
+  } else {
   titleLabel.textColor =
       GetInterfaceStyleDarkColor([UIColor colorNamed:kTextPrimaryColor]);
+  } // End Vivaldi
 
   UIView* titleLabelContainer = [[UIView alloc] init];
   titleLabelContainer.translatesAutoresizingMaskIntoConstraints = NO;
@@ -426,6 +474,10 @@ UIColor* GetInterfaceStyleDarkColor(UIColor* dynamicColor) {
 - (void)setupTitleLabelFader {
   UIColor* backgroundColor = GetInterfaceStyleDarkColor(
       [UIColor colorNamed:kSecondaryBackgroundColor]);
+
+  if (IsVivaldiRunning()) {
+    backgroundColor = UIColor.whiteColor;
+  } // End Vivaldi
 
   UIColor* transparentColor = [backgroundColor colorWithAlphaComponent:0.0f];
   UIColor* opaqueColor = [backgroundColor colorWithAlphaComponent:1.0f];
@@ -645,7 +697,12 @@ UIColor* GetInterfaceStyleDarkColor(UIColor* dynamicColor) {
   [self scaleTabViews];
 
   self.snapshotViewTopConstraint.constant = kPinnedCellSnapshotTopPadding;
+
+  if (IsVivaldiRunning()) {
+    self.faviconContainerViewCenterYConstraint.constant = vPinnedCellHeight / 2;
+  } else {
   self.faviconContainerViewCenterYConstraint.constant = kPinnedCellHeight / 2;
+  } // End Vivaldi
 
   [self setNeedsUpdateConstraints];
   [self layoutIfNeeded];

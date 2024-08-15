@@ -126,8 +126,7 @@ ExtensionNavigationUIData::ExtensionNavigationUIData(
   // NOTE(andre@vivaldi.com) : Vivaldi uses WebContents from the tabstrip in
   // WebViewGuests and chrome.webRequest will look for webview specific filters
   // if we identify the webcontents as webviews here.
-  Browser* browser =
-      chrome::FindBrowserWithWebContents(web_contents);
+  Browser* browser = chrome::FindBrowserWithTab(web_contents);
   bool id_as_webview =
       !(vivaldi::IsVivaldiRunning() && browser && browser->is_type_normal());
   if (web_view && id_as_webview) {

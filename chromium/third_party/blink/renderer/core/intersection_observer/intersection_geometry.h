@@ -57,8 +57,9 @@ class CORE_EXPORT IntersectionGeometry {
 
    public:
     RootGeometry(const LayoutObject* root, const Vector<Length>& margin);
+    bool operator==(const RootGeometry&) const;
 
-    float zoom;
+    float zoom = 1.0f;
     // The root object's content rect in the root object's own coordinate system
     PhysicalRect local_root_rect;
     gfx::Transform root_to_document_transform;
@@ -84,20 +85,18 @@ class CORE_EXPORT IntersectionGeometry {
 
   static const LayoutObject* GetExplicitRootLayoutObject(const Node& root_node);
 
+  // If `root_geometry` is nullopt, it will be emplaced with `root` and
+  // `root_margin`. The caller can call this constructor again with the same
+  // `root_geometry` as long as `root` and `root_margin` are the same as the
+  // first call.
   IntersectionGeometry(const Node* root,
                        const Element& target,
                        const Vector<Length>& root_margin,
                        const Vector<float>& thresholds,
                        const Vector<Length>& target_margin,
+                       const Vector<Length>& scroll_margin,
                        unsigned flags,
-                       CachedRects* cached_rects = nullptr);
-
-  IntersectionGeometry(const RootGeometry& root_geometry,
-                       const Node& explicit_root,
-                       const Element& target,
-                       const Vector<float>& thresholds,
-                       const Vector<Length>& target_margin,
-                       unsigned flags,
+                       absl::optional<RootGeometry>& root_geometry,
                        CachedRects* cached_rects = nullptr);
 
   IntersectionGeometry(const IntersectionGeometry&) = default;
@@ -181,11 +180,14 @@ class CORE_EXPORT IntersectionGeometry {
   RootAndTarget PrepareComputeGeometry(const Node* root_node,
                                        const Element& target_element,
                                        CachedRects* cached_rects);
+
   void ComputeGeometry(const RootGeometry& root_geometry,
                        const RootAndTarget& root_and_target,
                        const Vector<float>& thresholds,
                        const Vector<Length>& target_margin,
+                       const Vector<Length>& scroll_margin,
                        CachedRects* cached_rects);
+
   // Map intersection_rect from the coordinate system of the target to the
   // coordinate system of the root, applying intervening clips.
   bool ClipToRoot(const LayoutObject* root,
@@ -193,14 +195,17 @@ class CORE_EXPORT IntersectionGeometry {
                   const PhysicalRect& root_rect,
                   PhysicalRect& unclipped_intersection_rect,
                   PhysicalRect& intersection_rect,
+                  const Vector<Length>& scroll_margin,
                   CachedRects* cached_rects = nullptr);
   unsigned FirstThresholdGreaterThan(float ratio,
                                      const Vector<float>& thresholds) const;
+
   gfx::Vector2dF ComputeMinScrollDeltaToUpdate(
       const RootAndTarget& root_and_target,
       const gfx::Transform& target_to_document_transform,
       const gfx::Transform& root_to_document_transform,
-      const Vector<float>& thresholds) const;
+      const Vector<float>& thresholds,
+      const Vector<Length>& scroll_margin) const;
 
   PhysicalRect target_rect_;
   PhysicalRect intersection_rect_;

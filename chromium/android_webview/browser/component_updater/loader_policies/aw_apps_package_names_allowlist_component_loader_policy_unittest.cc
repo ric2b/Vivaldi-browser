@@ -71,9 +71,7 @@ class AwAppsPackageNamesAllowlistComponentLoaderPolicyTest
     ASSERT_TRUE(base::CreateTemporaryFile(&allowlist_path_));
   }
 
-  void TearDown() override {
-    base::DeleteFile(allowlist_path_);
-  }
+  void TearDown() override { base::DeleteFile(allowlist_path_); }
 
   void WriteAllowListToFile(const std::vector<uint8_t>& data) {
     ASSERT_TRUE(base::WriteFile(allowlist_path_, data));

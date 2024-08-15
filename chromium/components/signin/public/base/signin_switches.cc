@@ -4,16 +4,17 @@
 
 #include "components/signin/public/base/signin_switches.h"
 #include "base/feature_list.h"
+#include "base/metrics/field_trial_params.h"
 
 namespace switches {
 
 // All switches in alphabetical order.
 
 #if BUILDFLAG(IS_ANDROID)
-// Feature to add a signed-out avatar on the NTP.
-BASE_FEATURE(kIdentityStatusConsistency,
-             "IdentityStatusConsistency",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+// Feature to refactor how and when accounts are seeded on Android.
+BASE_FEATURE(kSeedAccountsRevamp,
+             "SeedAccountsRevamp",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
 // Clears the token service before using it. This allows simulating the
@@ -29,6 +30,16 @@ BASE_FEATURE(kEnableBoundSessionCredentials,
 bool IsBoundSessionCredentialsEnabled() {
   return base::FeatureList::IsEnabled(switches::kEnableBoundSessionCredentials);
 }
+
+const base::FeatureParam<EnableBoundSessionCredentialsDiceSupport>::Option
+    enable_bound_session_credentials_dice_support[] = {
+        {EnableBoundSessionCredentialsDiceSupport::kDisabled, "disabled"},
+        {EnableBoundSessionCredentialsDiceSupport::kEnabled, "enabled"}};
+const base::FeatureParam<EnableBoundSessionCredentialsDiceSupport>
+    kEnableBoundSessionCredentialsDiceSupport{
+        &kEnableBoundSessionCredentials, "dice-support",
+        EnableBoundSessionCredentialsDiceSupport::kDisabled,
+        &enable_bound_session_credentials_dice_support};
 #endif
 
 // Enables fetching account capabilities and populating AccountInfo with the
@@ -61,8 +72,27 @@ BASE_FEATURE(kTangibleSync,
 
 );
 
+// Enables the search engine choice feature for existing users.
 BASE_FEATURE(kSearchEngineChoice,
              "SearchEngineChoice",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables the search engine choice feature in the FRE.
+BASE_FEATURE(kSearchEngineChoiceFre,
+             "SearchEngineChoiceFre",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables the new search engine choice setting UI.
+BASE_FEATURE(kSearchEngineChoiceSettingsUi,
+             "SearchEngineChoiceSettingsUi",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kUnoDesktop, "UnoDesktop", base::FEATURE_DISABLED_BY_DEFAULT);
+
+#if BUILDFLAG(IS_IOS)
+BASE_FEATURE(kRemoveSignedInAccountsDialog,
+             "RemoveSignedInAccountsDialog",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#endif
 
 }  // namespace switches

@@ -33,6 +33,7 @@
 #include "chrome/common/url_constants.h"
 #include "components/policy/core/browser/signin/profile_separation_policies.h"
 #include "components/policy/core/browser/signin/user_cloud_signin_restriction_policy_fetcher.h"
+#include "components/signin/public/base/signin_pref_names.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -191,7 +192,8 @@ void TurnSyncOnHelperDelegateImpl::OnProfileSigninRestrictionsFetched(
     return;
   }
   auto profile_creation_required_by_policy =
-      signin_util::IsProfileSeparationEnforcedByProfile(browser_->profile()) ||
+      signin_util::IsProfileSeparationEnforcedByProfile(browser_->profile(),
+                                                        account_info.email) ||
       signin_util::IsProfileSeparationEnforcedByPolicies(
           profile_separation_policies);
   bool show_link_data_option = signin_util::
@@ -227,7 +229,10 @@ void TurnSyncOnHelperDelegateImpl::OnProfileCheckComplete(
             base::BindOnce(&TurnSyncOnHelperDelegateImpl::
                                OnProfileSigninRestrictionsFetched,
                            weak_ptr_factory_.GetWeakPtr(), account_info,
-                           std::move(callback)));
+                           std::move(callback)),
+            std::make_unique<std::string>(
+                browser_->profile()->GetPrefs()->GetString(
+                    prefs::kUserCloudSigninPolicyResponseFromPolicyTestPage)));
     return;
   }
 #endif

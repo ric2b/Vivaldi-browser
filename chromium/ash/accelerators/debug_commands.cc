@@ -12,7 +12,6 @@
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/constants/notifier_catalogs.h"
-#include "ash/glanceables/glanceables_controller.h"
 #include "ash/hud_display/hud_display.h"
 #include "ash/public/cpp/accelerators.h"
 #include "ash/public/cpp/debug_utils.h"
@@ -21,11 +20,14 @@
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
+#include "ash/style/ash_color_id.h"
 #include "ash/style/color_palette_controller.h"
 #include "ash/style/dark_light_mode_controller_impl.h"
+#include "ash/style/mojom/color_scheme.mojom-shared.h"
 #include "ash/style/style_viewer/system_ui_components_style_viewer_view.h"
 #include "ash/system/power/power_button_controller.h"
 #include "ash/system/status_area_widget.h"
+#include "ash/system/toast/anchored_nudge_manager_impl.h"
 #include "ash/system/toast/toast_manager_impl.h"
 #include "ash/system/video_conference/video_conference_common.h"
 #include "ash/system/video_conference/video_conference_tray.h"
@@ -35,6 +37,7 @@
 #include "ash/wallpaper/wallpaper_controller_impl.h"
 #include "ash/wm/float/float_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "ash/wm/window_restore/window_restore_controller.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
@@ -43,6 +46,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "components/prefs/pref_service.h"
+#include "components/vector_icons/vector_icons.h"
 #include "ui/accessibility/ax_tree_id.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/display/manager/display_manager.h"
@@ -175,18 +179,7 @@ void HandleClearKMeansPref() {
   // cleared. Tonal spot is the default color scheme, which is necessary to see
   // the k means color.
   Shell::Get()->color_palette_controller()->SetColorScheme(
-      ColorScheme::kTonalSpot, account_id, base::DoNothing());
-}
-
-void HandleToggleGlanceables() {
-  if (!features::AreGlanceablesEnabled())
-    return;
-  auto* controller = Shell::Get()->glanceables_controller();
-  DCHECK(controller);
-  if (controller->IsShowing())
-    controller->DestroyUi();
-  else
-    controller->CreateUi();
+      style::mojom::ColorScheme::kTonalSpot, account_id, base::DoNothing());
 }
 
 void HandleTogglePowerButtonMenu() {
@@ -256,6 +249,10 @@ void HandleToggleVirtualTrackpad() {
   VirtualTrackpadView::Toggle();
 }
 
+void HandleShowInformedRestore() {
+  Shell::Get()->window_restore_controller()->MaybeStartInformedRestore();
+}
+
 // Toast debug shortcut constants.
 const std::u16string oneline_toast_text = u"SystemUI toast text string";
 const std::u16string multiline_toast_text =
@@ -283,6 +280,47 @@ void HandleShowToast() {
       /*custom_dismiss_text=*/u"Button",
       /*dismiss_callback=*/base::RepeatingClosure(),
       has_leading_icon ? kSystemMenuBusinessIcon : gfx::kNoneIcon));
+}
+
+// Iterates through different system nudge variations:
+// 1. Body text only
+// 2. Body text and buttons
+// 3. Title, body text and buttons
+// 4. Image, title, body text and buttons
+void HandleShowSystemNudge() {
+  static int index = 0;
+  bool use_long_text = index > 0;
+  bool has_buttons = index > 1;
+  bool has_title = index > 2;
+  bool has_image = index > 3;
+  ++index %= 5;
+
+  const std::u16string title_text = u"Title text";
+  const std::u16string short_body_text = u"Nudge body text";
+  const std::u16string long_body_text =
+      u"Nudge body text should be clear, short and succint (80 characters "
+      u"recommended)";
+
+  AnchoredNudgeData nudge_data(
+      /*id=*/"id", NudgeCatalogName::kTestCatalogName,
+      use_long_text ? long_body_text : short_body_text);
+
+  if (has_title) {
+    nudge_data.title_text = title_text;
+  }
+
+  if (has_image) {
+    nudge_data.image_model = ui::ImageModel::FromVectorIcon(
+        vector_icons::kDogfoodIcon, kColorAshIconColorPrimary,
+        /*icon_size=*/60);
+  }
+
+  if (has_buttons) {
+    nudge_data.first_button_text = u"First";
+    nudge_data.second_button_text = u"Second";
+  }
+
+  Shell::Get()->anchored_nudge_manager()->Show(nudge_data);
 }
 
 }  // namespace
@@ -326,8 +364,14 @@ void PerformDebugActionIfEnabled(AcceleratorAction action) {
     case AcceleratorAction::kDebugPrintWindowHierarchy:
       HandlePrintWindowHierarchy();
       break;
+    case AcceleratorAction::kDebugShowInformedRestore:
+      HandleShowInformedRestore();
+      break;
     case AcceleratorAction::kDebugShowToast:
       HandleShowToast();
+      break;
+    case AcceleratorAction::kDebugShowSystemNudge:
+      HandleShowSystemNudge();
       break;
     case AcceleratorAction::kDebugSystemUiStyleViewer:
       SystemUIComponentsStyleViewerView::CreateAndShowWidget();
@@ -340,9 +384,6 @@ void PerformDebugActionIfEnabled(AcceleratorAction action) {
       break;
     case AcceleratorAction::kDebugClearUseKMeansPref:
       HandleClearKMeansPref();
-      break;
-    case AcceleratorAction::kDebugToggleGlanceables:
-      HandleToggleGlanceables();
       break;
     case AcceleratorAction::kDebugTogglePowerButtonMenu:
       HandleTogglePowerButtonMenu();

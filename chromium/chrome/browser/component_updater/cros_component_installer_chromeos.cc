@@ -42,6 +42,10 @@ const char kPreferDcheckSwitch[] = "prefer-dcheck";
 const char kPreferDcheckOptIn[] = "opt-in";
 const char kPreferDcheckOptOut[] = "opt-out";
 
+// Switch to control which serving campaigns file versions to select in test
+// cohort.
+const char kCompaignsTestTag[] = "campaigns-test-tag";
+
 // Root path where all components are stored.
 constexpr char kComponentsRootPath[] = "cros-components";
 
@@ -67,6 +71,8 @@ const ComponentConfig kConfigs[] = {
      "7d5c1428f7f67b56f95123851adec1da105980c56b5c126352040f3b65d3e43b"},
     {"lacros-dogfood-stable", ComponentConfig::PolicyType::kLacros, nullptr,
      "47f910805afac79e2d4d9117c42d5291a32ac60a4ea1a42e537fd86082c3ba48"},
+    {"growth-campaigns", ComponentConfig::PolicyType::kGrowthCampaigns, nullptr,
+     "36448796af5fb67380ec0180a8379ddd26fce20d3da6a231e0a60dfe2360407e"},
 };
 
 const char* g_ash_version_for_test = nullptr;
@@ -201,7 +207,8 @@ void EnvVersionInstallerPolicy::ComponentReady(const base::Version& version,
   if (!IsCompatible(env_version_, *min_env_version))
     return;
 
-  cros_component_installer_->RegisterCompatiblePath(GetName(), path);
+  cros_component_installer_->RegisterCompatiblePath(
+      GetName(), CompatibleComponentInfo(path, version));
 }
 
 update_client::InstallerAttributes
@@ -248,7 +255,8 @@ void LacrosInstallerPolicy::ComponentReady(const base::Version& version,
     // Current lacros install is not compatible.
     return;
   }
-  cros_component_installer_->RegisterCompatiblePath(GetName(), path);
+  cros_component_installer_->RegisterCompatiblePath(
+      GetName(), CompatibleComponentInfo(path, version));
 
   // Clear the load cache for the newly installed component version to avoid
   // loading stale components on successive loads, causing a version update
@@ -282,7 +290,8 @@ DemoAppInstallerPolicy::~DemoAppInstallerPolicy() = default;
 void DemoAppInstallerPolicy::ComponentReady(const base::Version& version,
                                             const base::FilePath& path,
                                             base::Value::Dict manifest) {
-  cros_component_installer_->RegisterCompatiblePath(GetName(), path);
+  cros_component_installer_->RegisterCompatiblePath(
+      GetName(), CompatibleComponentInfo(path, version));
 }
 
 update_client::InstallerAttributes
@@ -296,6 +305,31 @@ DemoAppInstallerPolicy::GetInstallerAttributes() const {
   demo_app_installer_attributes["is_feature_aware_device"] =
       ash::demo_mode::IsFeatureAwareDevice() ? "true" : "false";
   return demo_app_installer_attributes;
+}
+
+GrowthCampaignsInstallerPolicy::GrowthCampaignsInstallerPolicy(
+    const ComponentConfig& config,
+    CrOSComponentInstaller* cros_component_installer)
+    : CrOSComponentInstallerPolicy(config, cros_component_installer) {}
+
+GrowthCampaignsInstallerPolicy::~GrowthCampaignsInstallerPolicy() = default;
+
+void GrowthCampaignsInstallerPolicy::ComponentReady(
+    const base::Version& version,
+    const base::FilePath& path,
+    base::Value::Dict manifest) {
+  cros_component_installer_->RegisterCompatiblePath(
+      GetName(), CompatibleComponentInfo(path, version));
+}
+
+update_client::InstallerAttributes
+GrowthCampaignsInstallerPolicy::GetInstallerAttributes() const {
+  update_client::InstallerAttributes attributes;
+  auto* const cmdline = base::CommandLine::ForCurrentProcess();
+  if (cmdline->HasSwitch(kCompaignsTestTag)) {
+    attributes["tag"] = cmdline->GetSwitchValueASCII(kCompaignsTestTag);
+  }
+  return attributes;
 }
 
 CrOSComponentInstaller::CrOSComponentInstaller(
@@ -351,13 +385,21 @@ void CrOSComponentInstaller::GetVersion(
     return;
   }
 
-  // Path compatible to `name` must exist.
-  CHECK(!GetCompatiblePath(name).empty());
+  auto component_iter = compatible_components_.find(name);
 
-  ash::ImageLoaderClient::Get()->RequestComponentVersion(
-      name,
-      base::BindOnce(&CrOSComponentInstaller::FinishGetVersion,
-                     weak_factory_.GetWeakPtr(), std::move(version_callback)));
+  // Path compatible to `name` must exist.
+  CHECK(component_iter != compatible_components_.end() &&
+        !(component_iter->second.path.empty()));
+  if (component_iter->second.version.has_value()) {
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce(std::move(version_callback),
+                                  component_iter->second.version.value()));
+  } else {
+    ash::ImageLoaderClient::Get()->RequestComponentVersion(
+        name, base::BindOnce(&CrOSComponentInstaller::FinishGetVersion,
+                             weak_factory_.GetWeakPtr(),
+                             std::move(version_callback)));
+  }
 }
 
 void CrOSComponentInstaller::RegisterInstalled() {
@@ -369,8 +411,8 @@ void CrOSComponentInstaller::RegisterInstalled() {
 
 void CrOSComponentInstaller::RegisterCompatiblePath(
     const std::string& name,
-    const base::FilePath& path) {
-  compatible_components_[name] = path;
+    CompatibleComponentInfo info) {
+  compatible_components_[name] = std::move(info);
 }
 
 void CrOSComponentInstaller::UnregisterCompatiblePath(const std::string& name) {
@@ -382,7 +424,8 @@ void CrOSComponentInstaller::UnregisterCompatiblePath(const std::string& name) {
 base::FilePath CrOSComponentInstaller::GetCompatiblePath(
     const std::string& name) const {
   const auto it = compatible_components_.find(name);
-  return it == compatible_components_.end() ? base::FilePath() : it->second;
+  return it == compatible_components_.end() ? base::FilePath()
+                                            : it->second.path;
 }
 
 void CrOSComponentInstaller::EmitInstalledSignal(const std::string& component) {
@@ -422,6 +465,9 @@ void CrOSComponentInstaller::Register(const ComponentConfig& config,
       break;
     case ComponentConfig::PolicyType::kDemoApp:
       policy = std::make_unique<DemoAppInstallerPolicy>(config, this);
+      break;
+    case ComponentConfig::PolicyType::kGrowthCampaigns:
+      policy = std::make_unique<GrowthCampaignsInstallerPolicy>(config, this);
       break;
   }
   auto installer = base::MakeRefCounted<ComponentInstaller>(std::move(policy));

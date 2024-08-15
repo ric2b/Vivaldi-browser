@@ -28,8 +28,8 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "ui/webui/color_change_listener/color_change_handler.h"
 #include "ui/webui/mojo_bubble_web_ui_controller.h"
-#include "ui/webui/resources/cr_components/color_change_listener/color_change_listener.mojom.h"
 
 ShoppingInsightsSidePanelUI::ShoppingInsightsSidePanelUI(content::WebUI* web_ui)
     : ui::MojoBubbleWebUIController(web_ui) {
@@ -65,6 +65,8 @@ ShoppingInsightsSidePanelUI::ShoppingInsightsSidePanelUI(content::WebUI* web_ui)
       {"trackPriceError", IDS_SHOPPING_INSIGHTS_SIDE_PANEL_TRACK_PRICE_ERROR},
       {"yesterday", IDS_PRICE_HISTORY_YESTERDAY_PRICE},
       {"historyGraphAccessibility", IDS_PRICE_HISTORY_GRAPH_ACCESSIBILITY},
+      {"historyTitleMultipleOptions", IDS_PRICE_HISTORY_TITLE_MULTIPLE_OPTIONS},
+      {"historyTitleSingleOption", IDS_PRICE_HISTORY_TITLE_SINGLE_OPTION},
   };
   for (const auto& str : kLocalizedStrings) {
     webui::AddLocalizedString(source, str.name, str.id);
@@ -72,6 +74,8 @@ ShoppingInsightsSidePanelUI::ShoppingInsightsSidePanelUI(content::WebUI* web_ui)
 
   source->AddBoolean("shouldShowFeedback",
                      commerce::kPriceInsightsShowFeedback.Get());
+
+  webui::SetupChromeRefresh2023(source);
 
   webui::SetupWebUIDataSource(source,
                               base::make_span(kSidePanelCommerceResources,
@@ -82,6 +86,13 @@ ShoppingInsightsSidePanelUI::ShoppingInsightsSidePanelUI(content::WebUI* web_ui)
 }
 
 ShoppingInsightsSidePanelUI::~ShoppingInsightsSidePanelUI() = default;
+
+void ShoppingInsightsSidePanelUI::BindInterface(
+    mojo::PendingReceiver<color_change_listener::mojom::PageHandler>
+        pending_receiver) {
+  color_provider_handler_ = std::make_unique<ui::ColorChangeHandler>(
+      web_ui()->GetWebContents(), std::move(pending_receiver));
+}
 
 void ShoppingInsightsSidePanelUI::BindInterface(
     mojo::PendingReceiver<shopping_list::mojom::ShoppingListHandlerFactory>

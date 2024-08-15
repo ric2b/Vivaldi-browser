@@ -86,6 +86,8 @@ class CORE_EXPORT CSSMathExpressionNode
       // https://www.w3.org/TR/css-color-5/#relative-colors
       const HashMap<CSSValueID, double> color_channel_keyword_values = {});
 
+  virtual CSSMathExpressionNode* Copy() const = 0;
+
   virtual bool IsNumericLiteral() const { return false; }
   virtual bool IsOperation() const { return false; }
   virtual bool IsAnchorQuery() const { return false; }
@@ -212,6 +214,8 @@ class CORE_EXPORT CSSMathExpressionNumericLiteral final
 
   explicit CSSMathExpressionNumericLiteral(const CSSNumericLiteralValue* value);
 
+  CSSMathExpressionNode* Copy() const final { return Create(value_.Get()); }
+
   const CSSNumericLiteralValue& GetValue() const { return *value_; }
 
   bool IsNumericLiteral() const final { return true; }
@@ -309,10 +313,22 @@ class CORE_EXPORT CSSMathExpressionOperation final
                              const bool can_be_resolved_with_conversion_data,
                              CSSMathOperator op);
 
+  CSSMathExpressionNode* Copy() const final {
+    Operands operands(operands_);
+    return MakeGarbageCollected<CSSMathExpressionOperation>(
+        category_, can_be_resolved_with_conversion_data_, std::move(operands),
+        operator_);
+  }
+
   const Operands& GetOperands() const { return operands_; }
   CSSMathOperator OperatorType() const { return operator_; }
 
   bool IsOperation() const final { return true; }
+  bool IsAddOrSubtract() const {
+    return operator_ == CSSMathOperator::kAdd ||
+           operator_ == CSSMathOperator::kSubtract;
+  }
+  bool AllOperandsAreNumeric() const;
   bool IsMinOrMax() const {
     return operator_ == CSSMathOperator::kMin ||
            operator_ == CSSMathOperator::kMax;
@@ -406,6 +422,11 @@ class CORE_EXPORT CSSMathExpressionAnchorQuery final
                                const CSSValue* anchor_specifier,
                                const CSSValue& value,
                                const CSSPrimitiveValue* fallback);
+
+  CSSMathExpressionNode* Copy() const final {
+    return MakeGarbageCollected<CSSMathExpressionAnchorQuery>(
+        type_, anchor_specifier_, *value_, fallback_);
+  }
 
   bool IsAnchor() const { return type_ == CSSAnchorQueryType::kAnchor; }
   bool IsAnchorSize() const { return type_ == CSSAnchorQueryType::kAnchorSize; }

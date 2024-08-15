@@ -220,7 +220,7 @@ class CORE_EXPORT StyleRule : public StyleRuleBase {
   ~StyleRule();
 
   void SetProperties(CSSPropertyValueSet* properties) {
-    DCHECK_EQ(properties_, nullptr);
+    DCHECK_EQ(properties_.Get(), nullptr);
     properties_ = properties;
   }
 
@@ -320,7 +320,7 @@ class CORE_EXPORT StyleRuleFontFace : public StyleRuleBase {
   }
 
   void SetCascadeLayer(const CascadeLayer* layer) { layer_ = layer; }
-  const CascadeLayer* GetCascadeLayer() const { return layer_; }
+  const CascadeLayer* GetCascadeLayer() const { return layer_.Get(); }
 
   void TraceAfterDispatch(blink::Visitor*) const;
 
@@ -347,7 +347,7 @@ class StyleRulePage : public StyleRuleBase {
   }
 
   void SetCascadeLayer(const CascadeLayer* layer) { layer_ = layer; }
-  const CascadeLayer* GetCascadeLayer() const { return layer_; }
+  const CascadeLayer* GetCascadeLayer() const { return layer_.Get(); }
 
   void TraceAfterDispatch(blink::Visitor*) const;
 
@@ -369,8 +369,11 @@ class CORE_EXPORT StyleRuleProperty : public StyleRuleBase {
   const CSSValue* Inherits() const;
   const CSSValue* GetInitialValue() const;
 
+  bool SetNameText(const ExecutionContext* execution_context,
+                   const String& name_text);
+
   void SetCascadeLayer(const CascadeLayer* layer) { layer_ = layer; }
-  const CascadeLayer* GetCascadeLayer() const { return layer_; }
+  const CascadeLayer* GetCascadeLayer() const { return layer_.Get(); }
 
   StyleRuleProperty* Copy() const {
     return MakeGarbageCollected<StyleRuleProperty>(*this);
@@ -391,8 +394,8 @@ class CORE_EXPORT StyleRuleGroup : public StyleRuleBase {
   }
   HeapVector<Member<StyleRuleBase>>& ChildRules() { return child_rules_; }
 
-  void WrapperInsertRule(unsigned, StyleRuleBase*);
-  void WrapperRemoveRule(unsigned);
+  void WrapperInsertRule(CSSStyleSheet*, unsigned, StyleRuleBase*);
+  void WrapperRemoveRule(CSSStyleSheet*, unsigned);
 
   void TraceAfterDispatch(blink::Visitor*) const;
 

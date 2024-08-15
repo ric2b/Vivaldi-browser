@@ -34,6 +34,7 @@
 #include "ui/gfx/geometry/rrect_f.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icon_utils.h"
+#include "ui/views/animation/ink_drop_host.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/md_text_button.h"
@@ -249,6 +250,12 @@ void TrayPopupUtils::ConfigureAsStickyHeader(views::View* view) {
   view->layer()->SetFillsBoundsOpaquely(false);
 }
 
+void TrayPopupUtils::ConfigureRowButtonInkdrop(views::InkDropHost* ink_drop) {
+  ink_drop->SetMode(views::InkDropHost::InkDropMode::ON);
+  ink_drop->SetVisibleOpacity(1.0f);  // The colors already contain opacity
+  ink_drop->SetBaseColorId(cros_tokens::kCrosSysRippleNeutralOnSubtle);
+}
+
 views::LabelButton* TrayPopupUtils::CreateTrayPopupButton(
     views::Button::PressedCallback callback,
     const std::u16string& text) {
@@ -294,6 +301,13 @@ views::Separator* TrayPopupUtils::CreateListItemSeparator(bool left_inset) {
 
 bool TrayPopupUtils::CanOpenWebUISettings() {
   return Shell::Get()->session_controller()->ShouldEnableSettings();
+}
+
+bool TrayPopupUtils::CanShowNightLightFeatureTile() {
+  CHECK(features::IsQsRevampEnabled());
+  return Shell::Get()->session_controller()->ShouldEnableSettings() ||
+         (Shell::Get()->session_controller()->GetSessionState() ==
+          session_manager::SessionState::LOCKED);
 }
 
 void TrayPopupUtils::InitializeAsCheckableRow(HoverHighlightView* container,

@@ -21,7 +21,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/test_launcher_utils.h"
@@ -334,9 +333,9 @@ class EncryptedMediaTestBase : public MediaBrowserTest {
     }
 
     // TODO(crbug.com/1243903): WhatsNewUI might be causing timeouts.
+    command_line->AppendSwitch(switches::kNoFirstRun);
+
     std::vector<base::test::FeatureRefAndParams> enabled_features;
-    std::vector<base::test::FeatureRef> disabled_features = {
-        features::kChromeWhatsNewUI};
 
     for (auto feature : enable_additional_features) {
       enabled_features.emplace_back(feature);
@@ -375,8 +374,7 @@ class EncryptedMediaTestBase : public MediaBrowserTest {
     }
 #endif  // BUILDFLAG(IS_WIN)
 
-    scoped_feature_list_.InitWithFeaturesAndParameters(enabled_features,
-                                                       disabled_features);
+    scoped_feature_list_.InitWithFeaturesAndParameters(enabled_features, {});
   }
 
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -1068,11 +1066,25 @@ INSTANTIATE_TEST_SUITE_P(Capture_Browser,
                          ECKEncryptedMediaOutputProtectionTest,
                          Values("browser"));
 
-IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaOutputProtectionTest, BeforeMediaKeys) {
+// TODO(https://crbug.com/1047944): Failing on Win.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_BeforeMediaKeys DISABLED_BeforeMediaKeys
+#else
+#define MAYBE_BeforeMediaKeys BeforeMediaKeys
+#endif
+IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaOutputProtectionTest,
+                       MAYBE_BeforeMediaKeys) {
   TestOutputProtection(/*create_recorder_before_media_keys=*/true);
 }
 
-IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaOutputProtectionTest, AfterMediaKeys) {
+// TODO(https://crbug.com/1047944): Failing on Win.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_AfterMediaKeys DISABLED_AfterMediaKeys
+#else
+#define MAYBE_AfterMediaKeys AfterMediaKeys
+#endif
+IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaOutputProtectionTest,
+                       MAYBE_AfterMediaKeys) {
   TestOutputProtection(/*create_recorder_before_media_keys=*/false);
 }
 

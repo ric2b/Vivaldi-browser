@@ -20,6 +20,7 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_features.h"
 #include "chrome/browser/signin/signin_promo.h"
+#include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/trusted_vault/trusted_vault_encryption_keys_tab_helper.h"
@@ -29,11 +30,11 @@
 #include "chrome/browser/ui/views/profiles/profile_picker_web_contents_host.h"
 #include "chrome/common/webui_url_constants.h"
 #include "components/signin/public/base/signin_metrics.h"
+#include "components/signin/public/identity_manager/account_info.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
-#include "google_apis/gaia/core_account_id.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/base/url_util.h"
@@ -177,7 +178,7 @@ void ProfilePickerDiceSignInProvider::NavigationStateChanged(
     InitializeDiceTabHelper(*tab_helper, DiceTabHelperMode::kInBrowser);
     // The rest of the SAML flow logic is handled by the signed-in flow
     // controller.
-    FinishFlow(CoreAccountId());
+    FinishFlow(CoreAccountInfo());
   }
 }
 
@@ -254,11 +255,11 @@ bool ProfilePickerDiceSignInProvider::IsInitialized() const {
 }
 
 void ProfilePickerDiceSignInProvider::FinishFlow(
-    const CoreAccountId& account_id) {
+    const CoreAccountInfo& account_info) {
   DCHECK(IsInitialized());
   host_->SetNativeToolbarVisible(false);
   contents()->SetDelegate(nullptr);
-  std::move(callback_).Run(profile_.get(), account_id, std::move(contents_));
+  std::move(callback_).Run(profile_.get(), account_info, std::move(contents_));
 }
 
 void ProfilePickerDiceSignInProvider::FinishFlowInPicker(
@@ -267,18 +268,16 @@ void ProfilePickerDiceSignInProvider::FinishFlowInPicker(
     signin_metrics::PromoAction /*promo_action*/,
     signin_metrics::Reason /*reason*/,
     content::WebContents* /*contents*/,
-    const CoreAccountId& account_id) {
+    const CoreAccountInfo& account_info) {
   CHECK_EQ(profile, profile_.get());
-  FinishFlow(account_id);
+  FinishFlow(account_info);
 }
 
 GURL ProfilePickerDiceSignInProvider::BuildSigninURL() const {
-  // Activating `kSigninPageWithoutOutboundLinks` will use the embedded version
-  // of the gaia page with no outbound links.
-  signin::Flow signin_flow =
-      base::FeatureList::IsEnabled(kGaiaSigninUrlEmbedded)
-          ? signin::Flow::EMBEDDED_PROMO
-          : signin::Flow::PROMO;
+  // Use the Emebedded flow if we are in the context of ForceSignin.
+  signin::Flow signin_flow = signin_util::IsForceSigninEnabled()
+                                 ? signin::Flow::EMBEDDED_PROMO
+                                 : signin::Flow::PROMO;
 
   return signin::GetChromeSyncURLForDice({
       .request_dark_scheme = host_->ShouldUseDarkColors(),
@@ -325,5 +324,6 @@ void ProfilePickerDiceSignInProvider::InitializeDiceTabHelper(
       signin_metrics::Reason::kSigninPrimaryAccount,
       signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO,
       std::move(redirect_url), record_signin_started_metrics,
-      std::move(enable_sync_callback), std::move(show_signin_error_callback));
+      std::move(enable_sync_callback), DiceTabHelper::OnSigninHeaderReceived(),
+      std::move(show_signin_error_callback));
 }

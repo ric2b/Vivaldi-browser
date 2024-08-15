@@ -81,19 +81,19 @@
     padding-inline: 11px;
   }
 
-  :host([highlighted][key-state='modifier-selected']) div.key-container {
+  :host(:focus-within[key-state='modifier-selected']) div.key-container {
     background-color: var(--cros-color-prominent);
   }
 
-  :host([highlighted][key-state='modifier-selected']) #key-text {
+  :host(:focus-within[key-state='modifier-selected']) #key-text {
     color: var(--cros-button-label-color-primary);
   }
 
-  :host([highlighted][key-state='alpha-numeric-selected']) div.key-container {
+  :host(:focus-within[key-state='alpha-numeric-selected']) div.key-container {
     background-color: var(--cros-bg-color);
   }
 
-  :host([highlighted][key-state='modifier-selected']) #key-icon {
+  :host(:focus-within[key-state='modifier-selected']) #key-icon {
     --iron-icon-fill-color: var(--cros-button-label-color-primary);
   }
 
@@ -113,14 +113,12 @@
 
 <div id="key" class="key-container">
   <template is="dom-if" if="[[getIconIdForKey(key)]]">
-    <iron-icon
-        id="key-icon"
-        icon="[[getIconIdForKey(key)]]"
-        aria-label$="[[getAriaLabelForIcon(key)]]"
-        role="img">
-    </iron-icon>
+    <div aria-describedby="icon-description">
+      <iron-icon icon="[[getIconIdForKey(key)]]" id="key-icon" aria-hidden="true"></iron-icon>
+    </div>
+    <div id="icon-description" hidden>[[getAriaLabelForIcon(key)]]</div>
   </template>
   <template is="dom-if" if="[[!getIconIdForKey(key)]]">
-    <span id="key-text">[[key]]</span>
+    <span id="key-text" aria-hidden="[[getAriaHidden(key, keyState)]]">[[key]]</span>
   </template>
 </div>

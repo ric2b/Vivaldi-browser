@@ -16,13 +16,13 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/service_worker_context_observer.h"
-#include "content/public/browser/storage_partition.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/service_worker_test_helpers.h"
 #include "extensions/browser/api/test/test_api.h"
 #include "extensions/browser/background_script_executor.h"
 #include "extensions/browser/browsertest_util.h"
 #include "extensions/browser/extension_prefs.h"
+#include "extensions/browser/service_worker/service_worker_keepalive.h"
 #include "extensions/browser/service_worker/service_worker_test_utils.h"
 #include "extensions/common/extension.h"
 #include "extensions/test/extension_test_message_listener.h"
@@ -52,12 +52,6 @@ constexpr char kPersistentPortConnectedMessage[] = "Persistent port connected";
 constexpr char kPersistentPortDisconnectedMessage[] =
     "Persistent port disconnected";
 #endif
-
-content::ServiceWorkerContext* GetServiceWorkerContext(
-    content::BrowserContext* browser_context) {
-  return browser_context->GetDefaultStoragePartition()
-      ->GetServiceWorkerContext();
-}
 
 }  // namespace
 
@@ -159,7 +153,7 @@ class ServiceWorkerLifetimeKeepaliveBrowsertest : public ExtensionApiTest {
     // This is required because the TickClock must outlive ServiceWorkerVersion,
     // otherwise ServiceWorkerVersion will hold a dangling pointer.
     content::ResetTickClockToDefaultForAllLiveServiceWorkerVersions(
-        GetServiceWorkerContext(browser()->profile()));
+        GetServiceWorkerContext());
   }
 
   void TriggerTimeoutAndCheckActive(content::ServiceWorkerContext* context,
@@ -186,8 +180,7 @@ class ServiceWorkerLifetimeKeepaliveBrowsertest : public ExtensionApiTest {
 // minutes).
 IN_PROC_BROWSER_TEST_F(ServiceWorkerLifetimeKeepaliveBrowsertest,
                        ServiceWorkersTimeOutWithoutPolicy) {
-  content::ServiceWorkerContext* context =
-      GetServiceWorkerContext(browser()->profile());
+  content::ServiceWorkerContext* context = GetServiceWorkerContext();
 
   TestServiceWorkerContextObserver sw_observer_receiver_extension(
       context, kTestReceiverExtensionId);
@@ -243,8 +236,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerLifetimeKeepaliveBrowsertest,
       pref_names::kExtendedBackgroundLifetimeForPortConnectionsToUrls,
       std::move(urls));
 
-  content::ServiceWorkerContext* context =
-      GetServiceWorkerContext(browser()->profile());
+  content::ServiceWorkerContext* context = GetServiceWorkerContext();
 
   TestServiceWorkerContextObserver sw_observer_receiver_extension(
       context, kTestReceiverExtensionId);
@@ -305,8 +297,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerLifetimeKeepaliveBrowsertest,
       pref_names::kExtendedBackgroundLifetimeForPortConnectionsToUrls,
       std::move(urls));
 
-  content::ServiceWorkerContext* context =
-      GetServiceWorkerContext(browser()->profile());
+  content::ServiceWorkerContext* context = GetServiceWorkerContext();
 
   TestServiceWorkerContextObserver sw_observer_receiver_extension(
       context, kTestReceiverExtensionId);
@@ -364,8 +355,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerLifetimeKeepaliveBrowsertest,
       pref_names::kExtendedBackgroundLifetimeForPortConnectionsToUrls,
       std::move(urls));
 
-  content::ServiceWorkerContext* context =
-      GetServiceWorkerContext(browser()->profile());
+  content::ServiceWorkerContext* context = GetServiceWorkerContext();
 
   TestServiceWorkerContextObserver sw_observer_receiver_extension(
       context, kTestReceiverExtensionId);
@@ -467,7 +457,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerLifetimeKeepaliveBrowsertest,
       BackgroundScriptExecutor::ResultCapture::kSendScriptResult);
   EXPECT_EQ("success", result);
 
-  content::ServiceWorkerContext* context = GetServiceWorkerContext(profile());
+  content::ServiceWorkerContext* context = GetServiceWorkerContext();
 
   // Right now, the permissions request should be pending. Since
   // `permissions.request()` is specified as a function that can keep the
@@ -532,7 +522,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerLifetimeKeepaliveBrowsertest,
 
   ASSERT_TRUE(message_listener.WaitUntilSatisfied());
 
-  content::ServiceWorkerContext* context = GetServiceWorkerContext(profile());
+  content::ServiceWorkerContext* context = GetServiceWorkerContext();
   TestServiceWorkerContextObserver context_observer(context, extension->id());
   context_observer.SetRunningId(version_id);
 
@@ -615,7 +605,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerLifetimeKeepaliveBrowsertest,
   // Ensure the keepalive associated with sendScriptResult() has resolved.
   base::RunLoop().RunUntilIdle();
 
-  content::ServiceWorkerContext* context = GetServiceWorkerContext(profile());
+  content::ServiceWorkerContext* context = GetServiceWorkerContext();
 
   // Since the extension has an active debugger session, it should not be
   // terminated, even for going past the typical time limit.
@@ -636,6 +626,98 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerLifetimeKeepaliveBrowsertest,
   content::AdvanceClockAfterRequestTimeout(context, version_id,
                                            &tick_clock_opener_);
   TriggerTimeoutAndCheckStopped(context, version_id);
+}
+
+// Tests the behavior of the ServiceWorkerKeepalive struct, ensuring it properly
+// keeps the service worker alive.
+IN_PROC_BROWSER_TEST_F(ServiceWorkerLifetimeKeepaliveBrowsertest,
+                       ServiceWorkerKeepaliveUtility) {
+  // Load up a simple extension and grab its service worker data.
+  static constexpr char kManifest[] =
+      R"({
+           "name": "Test",
+           "version": "0.1",
+           "manifest_version": 3,
+           "background": {"service_worker": "background.js"}
+         })";
+  static constexpr char kBackground[] = R"(chrome.test.sendMessage('ready');)";
+
+  TestExtensionDir test_dir;
+  test_dir.WriteManifest(kManifest);
+  test_dir.WriteFile(FILE_PATH_LITERAL("background.js"), kBackground);
+
+  ExtensionTestMessageListener ready_listener("ready");
+  const Extension* extension = LoadExtension(test_dir.UnpackedPath());
+  ASSERT_TRUE(extension);
+  ASSERT_TRUE(ready_listener.WaitUntilSatisfied());
+  // Note: We RunUntilIdle() to ensure the implementation handling of the
+  // test.sendMessage() API call has finished; otherwise, that affects our
+  // keepalives.
+  base::RunLoop().RunUntilIdle();
+
+  ProcessManager* process_manager = ProcessManager::Get(profile());
+
+  std::vector<WorkerId> worker_ids =
+      process_manager->GetServiceWorkersForExtension(extension->id());
+  ASSERT_EQ(1u, worker_ids.size());
+  WorkerId worker_id = worker_ids[0];
+
+  // To begin, there should be no associated keepalives for the extension.
+  EXPECT_EQ(0u, process_manager
+                    ->GetServiceWorkerKeepaliveDataForRecords(extension->id())
+                    .size());
+
+  auto get_keepalive_matcher = [](const WorkerId& worker_id,
+                                  Activity::Type type,
+                                  const std::string& activity_extra_data) {
+    return testing::AllOf(
+        testing::Field(&ProcessManager::ServiceWorkerKeepaliveData::worker_id,
+                       worker_id),
+        testing::Field(
+            &ProcessManager::ServiceWorkerKeepaliveData::activity_type, type),
+        testing::Field(&ProcessManager::ServiceWorkerKeepaliveData::extra_data,
+                       activity_extra_data));
+  };
+
+  // Create a single keepalive.
+  absl::optional<ServiceWorkerKeepalive> function_keepalive(
+      ServiceWorkerKeepalive(
+          profile(), worker_id,
+          content::ServiceWorkerExternalRequestTimeoutType::kDefault,
+          Activity::API_FUNCTION, "alarms.create"));
+
+  // There should be one keepalive for the extension.
+  EXPECT_THAT(
+      process_manager->GetServiceWorkerKeepaliveDataForRecords(extension->id()),
+      testing::UnorderedElementsAre(get_keepalive_matcher(
+          worker_id, Activity::API_FUNCTION, "alarms.create")));
+
+  // Create a second keepalive (an event-related one).
+  absl::optional<ServiceWorkerKeepalive> event_keepalive(ServiceWorkerKeepalive(
+      profile(), worker_id,
+      content::ServiceWorkerExternalRequestTimeoutType::kDefault,
+      Activity::EVENT, "alarms.onAlarm"));
+
+  // Now, there should be two keepalives.
+  EXPECT_THAT(
+      process_manager->GetServiceWorkerKeepaliveDataForRecords(extension->id()),
+      testing::UnorderedElementsAre(
+          get_keepalive_matcher(worker_id, Activity::API_FUNCTION,
+                                "alarms.create"),
+          get_keepalive_matcher(worker_id, Activity::EVENT, "alarms.onAlarm")));
+
+  // Reset the first. There should now be only the second keepalive.
+  function_keepalive.reset();
+  EXPECT_THAT(
+      process_manager->GetServiceWorkerKeepaliveDataForRecords(extension->id()),
+      testing::UnorderedElementsAre(
+          get_keepalive_matcher(worker_id, Activity::EVENT, "alarms.onAlarm")));
+
+  // Reset the second, and the keepalive count should go to zero.
+  event_keepalive.reset();
+  EXPECT_EQ(0u, process_manager
+                    ->GetServiceWorkerKeepaliveDataForRecords(extension->id())
+                    .size());
 }
 
 }  // namespace extensions

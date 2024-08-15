@@ -46,8 +46,9 @@ class AdBlockerContentRuleListProviderImpl
       const AdBlockerContentRuleListProviderImpl&) = delete;
 
   // Implementing AdBlockerContentRuleListProvider
+  void SetIncognitoBrowserState(web::BrowserState* browser_state) override;
   void InstallContentRuleLists(const base::Value::List& lists) override;
-  void ApplyLoadedRules() override { ApplyContentRuleLists(); }
+  void ApplyLoadedRules() override;
   bool IsApplyingRules() override {
     return !list_application_in_progress_stamps_.empty();
   }
@@ -63,10 +64,15 @@ class AdBlockerContentRuleListProviderImpl
       int64_t rule_list_timestamp,
       std::vector<WKContentRuleList*> content_rule_lists);
   void ApplyContentRuleLists();
+  void ApplyContentRuleListsForController(
+      __weak WKUserContentController* user_content_controller);
 
   web::BrowserState* browser_state_;
+  web::BrowserState* incognito_browser_state_;
+  bool can_apply_rules_ = false;
   RuleGroup group_;
   __weak WKUserContentController* user_content_controller_;
+  __weak WKUserContentController* incognito_user_content_controller_;
   std::vector<WKContentRuleList*> installed_content_rule_lists_;
   std::set<int64_t> list_application_in_progress_stamps_;
   base::RepeatingClosure on_done_applying_rules_;
@@ -127,6 +133,23 @@ AdBlockerContentRuleListProviderImpl::~AdBlockerContentRuleListProviderImpl() {
       .RemoveObserver(this);
 }
 
+void AdBlockerContentRuleListProviderImpl::ApplyLoadedRules() {
+  can_apply_rules_ = true;
+  ApplyContentRuleLists();
+}
+
+void AdBlockerContentRuleListProviderImpl::SetIncognitoBrowserState(
+    web::BrowserState* browser_state) {
+  incognito_browser_state_ = browser_state;
+  if (incognito_browser_state_) {
+    web::WKWebViewConfigurationProvider& config_provider =
+        web::WKWebViewConfigurationProvider::FromBrowserState(
+            incognito_browser_state_);
+    DidCreateNewConfiguration(&config_provider,
+                              config_provider.GetWebViewConfiguration());
+  }
+}
+
 void AdBlockerContentRuleListProviderImpl::InstallContentRuleLists(
     const base::Value::List& lists) {
   if (lists.empty()) {
@@ -177,8 +200,17 @@ void AdBlockerContentRuleListProviderImpl::InstallContentRuleLists(
 void AdBlockerContentRuleListProviderImpl::DidCreateNewConfiguration(
     web::WKWebViewConfigurationProvider* config_provider,
     WKWebViewConfiguration* new_config) {
-  user_content_controller_ = new_config.userContentController;
-  ApplyContentRuleLists();
+  if (config_provider ==
+      &web::WKWebViewConfigurationProvider::FromBrowserState(browser_state_)) {
+    user_content_controller_ = new_config.userContentController;
+    ApplyContentRuleListsForController(user_content_controller_);
+  } else if (incognito_browser_state_ &&
+             config_provider ==
+                 &web::WKWebViewConfigurationProvider::FromBrowserState(
+                     incognito_browser_state_)) {
+    incognito_user_content_controller_ = new_config.userContentController;
+    ApplyContentRuleListsForController(incognito_user_content_controller_);
+  }
 }
 
 void AdBlockerContentRuleListProviderImpl::DoInstallContentRuleLists(
@@ -205,6 +237,7 @@ void AdBlockerContentRuleListProviderImpl::DoInstallContentRuleLists(
 
   RemoveInstalledLists();
   installed_content_rule_lists_.swap(content_rule_lists);
+  can_apply_rules_ = true;
   ApplyContentRuleLists();
   list_application_in_progress_stamps_.erase(rule_list_timestamp);
   if (list_application_in_progress_stamps_.empty())
@@ -213,7 +246,13 @@ void AdBlockerContentRuleListProviderImpl::DoInstallContentRuleLists(
 
 void AdBlockerContentRuleListProviderImpl::RemoveInstalledLists() {
   for (auto* content_rule_list : installed_content_rule_lists_) {
-    [user_content_controller_ removeContentRuleList:content_rule_list];
+    if (user_content_controller_) {
+      [user_content_controller_ removeContentRuleList:content_rule_list];
+    }
+    if (incognito_user_content_controller_) {
+      [incognito_user_content_controller_
+          removeContentRuleList:content_rule_list];
+    }
     [WKContentRuleListStore.defaultStore
         removeContentRuleListForIdentifier:content_rule_list.identifier
                          completionHandler:^(NSError* error) {
@@ -226,8 +265,20 @@ void AdBlockerContentRuleListProviderImpl::RemoveInstalledLists() {
 }
 
 void AdBlockerContentRuleListProviderImpl::ApplyContentRuleLists() {
+  if (user_content_controller_)
+    ApplyContentRuleListsForController(user_content_controller_);
+  if (incognito_user_content_controller_)
+    ApplyContentRuleListsForController(incognito_user_content_controller_);
+}
+
+void AdBlockerContentRuleListProviderImpl::ApplyContentRuleListsForController(
+    __weak WKUserContentController* user_content_controller) {
+  if (!can_apply_rules_) {
+    return;
+  }
+
   for (auto* content_rule_list : installed_content_rule_lists_) {
-    [user_content_controller_ addContentRuleList:content_rule_list];
+    [user_content_controller addContentRuleList:content_rule_list];
   }
 }
 }  // namespace

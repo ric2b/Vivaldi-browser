@@ -12,6 +12,7 @@
 
 #include "base/containers/contains.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/types/optional_util.h"
 #include "build/build_config.h"
@@ -170,7 +171,7 @@ class MediaStreamConstraintsUtilAudioTestBase : public SimTest {
 
     return std::make_unique<blink::LocalMediaStreamAudioSource>(
         /*blink::WebLocalFrame=*/nullptr, device, requested_buffer_size,
-        disable_local_echo,
+        enable_system_echo_canceller, disable_local_echo,
         blink::WebPlatformMediaStreamSource::ConstraintsRepeatingCallback(),
         blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   }
@@ -449,10 +450,14 @@ class MediaStreamConstraintsUtilAudioTestBase : public SimTest {
 
   blink::MockConstraintFactory constraint_factory_;
   AudioDeviceCaptureCapabilities capabilities_;
-  const AudioDeviceCaptureCapability* default_device_ = nullptr;
-  const AudioDeviceCaptureCapability* system_echo_canceller_device_ = nullptr;
-  const AudioDeviceCaptureCapability* four_channels_device_ = nullptr;
-  const AudioDeviceCaptureCapability* variable_latency_device_ = nullptr;
+  raw_ptr<const AudioDeviceCaptureCapability, ExperimentalRenderer>
+      default_device_ = nullptr;
+  raw_ptr<const AudioDeviceCaptureCapability, ExperimentalRenderer>
+      system_echo_canceller_device_ = nullptr;
+  raw_ptr<const AudioDeviceCaptureCapability, ExperimentalRenderer>
+      four_channels_device_ = nullptr;
+  raw_ptr<const AudioDeviceCaptureCapability, ExperimentalRenderer>
+      variable_latency_device_ = nullptr;
   std::unique_ptr<ProcessedLocalAudioSource> system_echo_canceller_source_;
   const WTF::Vector<media::Point> kMicPositions = {{8, 8, 8}, {4, 4, 4}};
 
@@ -2020,6 +2025,8 @@ TEST_P(MediaStreamConstraintsUtilAudioTest, ExperimentalEcWithSource) {
   auto result = SelectSettingsAudioCapture(
       source.get(), constraint_factory_.CreateMediaConstraints());
   EXPECT_TRUE(result.HasValue());
+  EXPECT_EQ(result.audio_processing_properties().echo_cancellation_type,
+            EchoCancellationType::kEchoCancellationDisabled);
 }
 
 TEST_P(MediaStreamConstraintsRemoteAPMTest, DeviceSampleRate) {

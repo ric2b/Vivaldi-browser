@@ -43,6 +43,7 @@
 #include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "third_party/skia/include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "third_party/skia/include/gpu/ganesh/gl/GrGLBackendSurface.h"
+#include "third_party/skia/include/gpu/ganesh/gl/GrGLDirectContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLAssembleInterface.h"
 #include "third_party/skia/include/gpu/gl/GrGLInterface.h"
 #include "third_party/skia/include/gpu/gl/GrGLTypes.h"
@@ -504,7 +505,7 @@ bool ClientBase::Init(const InitParams& params) {
         nullptr,
         [](void* ctx, const char name[]) { return eglGetProcAddress(name); });
     DCHECK(native_interface);
-    gr_context_ = GrDirectContext::MakeGL(std::move(native_interface));
+    gr_context_ = GrDirectContexts::MakeGL(std::move(native_interface));
     DCHECK(gr_context_);
 
 #if defined(USE_VULKAN)
@@ -1177,7 +1178,8 @@ void ClientBase::SetupAuraShellIfAvailable() {
       [](void* data, struct zaura_shell* zaura_shell) {},
       [](void* data, struct zaura_shell* zaura_shell) {},
       [](void* data, struct zaura_shell* zaura_shell,
-         const char* compositor_version) {}};
+         const char* compositor_version) {},
+      [](void* data, struct zaura_shell* zaura_shell) {}};
   zaura_shell_add_listener(globals_.aura_shell.get(), &kAuraShellListener,
                            this);
 

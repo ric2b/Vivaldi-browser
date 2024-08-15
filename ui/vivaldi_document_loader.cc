@@ -25,10 +25,8 @@ VivaldiDocumentLoader::VivaldiDocumentLoader(
                                                    site_instance.get());
   vivaldi_web_contents_ = content::WebContents::Create(create_params);
 
-  // There can only be one backgroundpage, and this is already used for
-  // messaging in vivaldi. Using extensiondialog to not conflict with this.
   extensions::SetViewType(vivaldi_web_contents_.get(),
-                          extensions::mojom::ViewType::kExtensionDialog);
+                          extensions::mojom::ViewType::kExtensionBackgroundPage);
 
   vivaldi_web_contents_->SetDelegate(this);
 
@@ -44,12 +42,9 @@ VivaldiDocumentLoader::VivaldiDocumentLoader(
 
 void VivaldiDocumentLoader::Load() {
   GURL resource_url = vivaldi_extension_->GetResourceURL(VIVALDI_CORE_DOCUMENT);
-
-  content::NavigationController::LoadURLParams load_params(resource_url);
-  load_params.should_replace_current_entry = true;
-  load_params.should_clear_history_list = true;
-  vivaldi_web_contents_->GetController().LoadURLWithParams(load_params);
-
+  vivaldi_web_contents_->GetController().LoadURL(
+      resource_url, content::Referrer(),
+      ui::PAGE_TRANSITION_AUTO_TOPLEVEL, std::string());
 }
 
 VivaldiDocumentLoader::~VivaldiDocumentLoader() {}

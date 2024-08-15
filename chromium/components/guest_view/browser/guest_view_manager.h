@@ -115,8 +115,7 @@ class GuestViewManager : public content::BrowserPluginGuestManager,
   std::unique_ptr<content::WebContents> CreateGuestWithWebContentsParams(
       const std::string& view_type,
       content::RenderFrameHost* owner_rfh,
-      const content::WebContents::CreateParams& create_params,
-      int disposition);
+      const content::WebContents::CreateParams& create_params);
 
   content::SiteInstance* GetGuestSiteInstance(
       const content::StoragePartitionConfig& storage_partition_config);

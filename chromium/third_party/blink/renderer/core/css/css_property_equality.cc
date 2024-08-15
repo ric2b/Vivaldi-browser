@@ -80,14 +80,27 @@ bool FillLayersEqual(const FillLayer& a_layers, const FillLayer& b_layers) {
         }
         break;
       case CSSPropertyID::kBackgroundClip:
+      case CSSPropertyID::kMaskClip:
       case CSSPropertyID::kWebkitMaskClip:
         if (a_layer->Clip() != b_layer->Clip()) {
           return false;
         }
         break;
+      case CSSPropertyID::kMaskComposite:
+      case CSSPropertyID::kWebkitMaskComposite:
+        if (a_layer->CompositingOperator() != b_layer->CompositingOperator()) {
+          return false;
+        }
+        break;
       case CSSPropertyID::kBackgroundOrigin:
+      case CSSPropertyID::kMaskOrigin:
       case CSSPropertyID::kWebkitMaskOrigin:
         if (a_layer->Origin() != b_layer->Origin()) {
+          return false;
+        }
+        break;
+      case CSSPropertyID::kMaskMode:
+        if (a_layer->MaskMode() != b_layer->MaskMode()) {
           return false;
         }
         break;
@@ -109,25 +122,22 @@ bool FillLayersEqual(const FillLayer& a_layers, const FillLayer& b_layers) {
           return false;
         }
         break;
-      case CSSPropertyID::kWebkitMaskRepeatX:
-      case CSSPropertyID::kBackgroundRepeatX:
-        if (a_layer->RepeatX() != b_layer->RepeatX()) {
-          return false;
-        }
-        break;
-      case CSSPropertyID::kWebkitMaskRepeatY:
-      case CSSPropertyID::kBackgroundRepeatY:
-        if (a_layer->RepeatY() != b_layer->RepeatY()) {
+      case CSSPropertyID::kMaskRepeat:
+      case CSSPropertyID::kWebkitMaskRepeat:
+      case CSSPropertyID::kBackgroundRepeat:
+        if (a_layer->Repeat() != b_layer->Repeat()) {
           return false;
         }
         break;
       case CSSPropertyID::kBackgroundSize:
       case CSSPropertyID::kWebkitMaskSize:
+      case CSSPropertyID::kMaskSize:
         if (!(a_layer->SizeLength() == b_layer->SizeLength())) {
           return false;
         }
         break;
       case CSSPropertyID::kBackgroundImage:
+      case CSSPropertyID::kMaskImage:
         if (!base::ValuesEquivalent(a_layer->GetImage(), b_layer->GetImage())) {
           return false;
         }
@@ -199,11 +209,8 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
     case CSSPropertyID::kBackgroundPositionY:
       return FillLayersEqual<CSSPropertyID::kBackgroundPositionY>(
           a.BackgroundLayers(), b.BackgroundLayers());
-    case CSSPropertyID::kBackgroundRepeatX:
-      return FillLayersEqual<CSSPropertyID::kBackgroundRepeatX>(
-          a.BackgroundLayers(), b.BackgroundLayers());
-    case CSSPropertyID::kBackgroundRepeatY:
-      return FillLayersEqual<CSSPropertyID::kBackgroundRepeatY>(
+    case CSSPropertyID::kBackgroundRepeat:
+      return FillLayersEqual<CSSPropertyID::kBackgroundRepeat>(
           a.BackgroundLayers(), b.BackgroundLayers());
     case CSSPropertyID::kBackgroundSize:
       return FillLayersEqual<CSSPropertyID::kBackgroundSize>(
@@ -417,8 +424,8 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
       return a.GetFontWeight() == b.GetFontWeight();
     case CSSPropertyID::kForcedColorAdjust:
       return a.ForcedColorAdjust() == b.ForcedColorAdjust();
-    case CSSPropertyID::kFormSizing:
-      return a.FormSizing() == b.FormSizing();
+    case CSSPropertyID::kFieldSizing:
+      return a.FieldSizing() == b.FieldSizing();
     case CSSPropertyID::kGridAutoColumns:
       return a.GridAutoColumns() == b.GridAutoColumns();
     case CSSPropertyID::kGridAutoFlow:
@@ -602,8 +609,6 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
       return a.ScrollbarWidth() == b.ScrollbarWidth();
     case CSSPropertyID::kScrollBehavior:
       return a.GetScrollBehavior() == b.GetScrollBehavior();
-    case CSSPropertyID::kScrollCustomization:
-      return a.ScrollCustomization() == b.ScrollCustomization();
     case CSSPropertyID::kScrollMarginBottom:
       return a.ScrollMarginBottom() == b.ScrollMarginBottom();
     case CSSPropertyID::kScrollMarginLeft:
@@ -710,6 +715,9 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
       return base::ValuesEquivalent(a.TextShadow(), b.TextShadow());
     case CSSPropertyID::kTextSizeAdjust:
       return a.GetTextSizeAdjust() == b.GetTextSizeAdjust();
+    case CSSPropertyID::kTextSpacingTrim:
+      return a.GetFontDescription().GetTextSpacingTrim() ==
+             b.GetFontDescription().GetTextSpacingTrim();
     case CSSPropertyID::kTextTransform:
       return a.TextTransform() == b.TextTransform();
     case CSSPropertyID::kTextUnderlineOffset:
@@ -718,8 +726,6 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
       return a.GetTextUnderlinePosition() == b.GetTextUnderlinePosition();
     case CSSPropertyID::kTextWrap:
       return a.GetTextWrap() == b.GetTextWrap();
-    case CSSPropertyID::kToggleVisibility:
-      return a.ToggleVisibility() == b.ToggleVisibility();
     case CSSPropertyID::kTop:
       return a.Top() == b.Top();
     case CSSPropertyID::kOverlay:
@@ -780,11 +786,28 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
                                     b.MaskBoxImageSource());
     case CSSPropertyID::kWebkitMaskBoxImageWidth:
       return a.MaskBoxImageWidth() == b.MaskBoxImageWidth();
+    case CSSPropertyID::kMaskClip:
+      return FillLayersEqual<CSSPropertyID::kMaskClip>(a.MaskLayers(),
+                                                       b.MaskLayers());
     case CSSPropertyID::kWebkitMaskClip:
       return FillLayersEqual<CSSPropertyID::kWebkitMaskClip>(a.MaskLayers(),
                                                              b.MaskLayers());
+    case CSSPropertyID::kMaskComposite:
+      return FillLayersEqual<CSSPropertyID::kMaskComposite>(a.MaskLayers(),
+                                                            b.MaskLayers());
+    case CSSPropertyID::kWebkitMaskComposite:
+      return FillLayersEqual<CSSPropertyID::kWebkitMaskComposite>(
+          a.MaskLayers(), b.MaskLayers());
+    case CSSPropertyID::kMaskImage:
     case CSSPropertyID::kWebkitMaskImage:
-      return base::ValuesEquivalent(a.MaskImage(), b.MaskImage());
+      return FillLayersEqual<CSSPropertyID::kMaskImage>(a.MaskLayers(),
+                                                        b.MaskLayers());
+    case CSSPropertyID::kMaskOrigin:
+      return FillLayersEqual<CSSPropertyID::kMaskOrigin>(a.MaskLayers(),
+                                                         b.MaskLayers());
+    case CSSPropertyID::kMaskMode:
+      return FillLayersEqual<CSSPropertyID::kMaskMode>(a.MaskLayers(),
+                                                       b.MaskLayers());
     case CSSPropertyID::kWebkitMaskOrigin:
       return FillLayersEqual<CSSPropertyID::kWebkitMaskOrigin>(a.MaskLayers(),
                                                                b.MaskLayers());
@@ -794,12 +817,15 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
     case CSSPropertyID::kWebkitMaskPositionY:
       return FillLayersEqual<CSSPropertyID::kWebkitMaskPositionY>(
           a.MaskLayers(), b.MaskLayers());
-    case CSSPropertyID::kWebkitMaskRepeatX:
-      return FillLayersEqual<CSSPropertyID::kWebkitMaskRepeatX>(a.MaskLayers(),
-                                                                b.MaskLayers());
-    case CSSPropertyID::kWebkitMaskRepeatY:
-      return FillLayersEqual<CSSPropertyID::kWebkitMaskRepeatY>(a.MaskLayers(),
-                                                                b.MaskLayers());
+    case CSSPropertyID::kMaskRepeat:
+      return FillLayersEqual<CSSPropertyID::kMaskRepeat>(a.MaskLayers(),
+                                                         b.MaskLayers());
+    case CSSPropertyID::kWebkitMaskRepeat:
+      return FillLayersEqual<CSSPropertyID::kWebkitMaskRepeat>(a.MaskLayers(),
+                                                               b.MaskLayers());
+    case CSSPropertyID::kMaskSize:
+      return FillLayersEqual<CSSPropertyID::kMaskSize>(a.MaskLayers(),
+                                                       b.MaskLayers());
     case CSSPropertyID::kWebkitMaskSize:
       return FillLayersEqual<CSSPropertyID::kWebkitMaskSize>(a.MaskLayers(),
                                                              b.MaskLayers());
@@ -912,6 +938,14 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
     case CSSPropertyID::kAliasWebkitAlternativeAnimationDelay:
     case CSSPropertyID::kAliasWebkitAlternativeAnimationWithDelayStartEnd:
     case CSSPropertyID::kAliasWebkitAlternativeAnimationWithTimeline:
+    case CSSPropertyID::kAliasWebkitAlternativeMask:
+    case CSSPropertyID::kAliasWebkitAlternativeMaskClip:
+    case CSSPropertyID::kAliasWebkitAlternativeMaskComposite:
+    case CSSPropertyID::kAliasWebkitAlternativeMaskImage:
+    case CSSPropertyID::kAliasWebkitAlternativeMaskOrigin:
+    case CSSPropertyID::kAliasWebkitAlternativeMaskPosition:
+    case CSSPropertyID::kAliasWebkitAlternativeMaskRepeat:
+    case CSSPropertyID::kAliasWebkitAlternativeMaskSize:
     case CSSPropertyID::kAliasWebkitAnimation:
     case CSSPropertyID::kAliasWebkitAnimationDelay:
     case CSSPropertyID::kAliasWebkitAnimationDirection:
@@ -1020,6 +1054,7 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
     case CSSPropertyID::kWebkitBoxAlign:
     case CSSPropertyID::kWebkitBoxDecorationBreak:
     case CSSPropertyID::kWebkitBoxDirection:
+    case CSSPropertyID::kWebkitBoxDirectionAlternative:
     case CSSPropertyID::kWebkitBoxFlex:
     case CSSPropertyID::kWebkitBoxOrdinalGroup:
     case CSSPropertyID::kWebkitBoxOrient:
@@ -1028,7 +1063,6 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
     case CSSPropertyID::kWebkitLineBreak:
     case CSSPropertyID::kWebkitLineClamp:
     case CSSPropertyID::kWebkitMaskBoxImageRepeat:
-    case CSSPropertyID::kWebkitMaskComposite:
     case CSSPropertyID::kWebkitPrintColorAdjust:
     case CSSPropertyID::kWebkitRtlOrdering:
     case CSSPropertyID::kWebkitRubyPosition:
@@ -1155,7 +1189,6 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
     // Shorthand properties shouldn't be compared, use their longhands.
     case CSSPropertyID::kBackground:
     case CSSPropertyID::kBackgroundPosition:
-    case CSSPropertyID::kBackgroundRepeat:
     case CSSPropertyID::kBorder:
     case CSSPropertyID::kBorderBottom:
     case CSSPropertyID::kBorderColor:
@@ -1207,17 +1240,18 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
     case CSSPropertyID::kScrollTimeline:
     case CSSPropertyID::kTextDecoration:
     case CSSPropertyID::kTextEmphasis:
-    case CSSPropertyID::kToggle:
+    case CSSPropertyID::kTextSpacing:
     case CSSPropertyID::kTransition:
     case CSSPropertyID::kViewTimeline:
     case CSSPropertyID::kAlternativeViewTimelineWithInset:
+    case CSSPropertyID::kAlternativeMask:
     case CSSPropertyID::kWebkitColumnBreakAfter:
     case CSSPropertyID::kWebkitColumnBreakBefore:
     case CSSPropertyID::kWebkitColumnBreakInside:
     case CSSPropertyID::kWebkitMask:
     case CSSPropertyID::kWebkitMaskBoxImage:
+    case CSSPropertyID::kMaskPosition:
     case CSSPropertyID::kWebkitMaskPosition:
-    case CSSPropertyID::kWebkitMaskRepeat:
     case CSSPropertyID::kWebkitTextStroke:
     case CSSPropertyID::kWhiteSpace:
       NOTREACHED() << property.GetCSSPropertyName().ToAtomicString().Ascii();
@@ -1250,9 +1284,6 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
     case CSSPropertyID::kTextCombineUpright:
     case CSSPropertyID::kTextOrientation:
     case CSSPropertyID::kTimelineScope:
-    case CSSPropertyID::kToggleGroup:
-    case CSSPropertyID::kToggleRoot:
-    case CSSPropertyID::kToggleTrigger:
     case CSSPropertyID::kTransitionBehavior:
     case CSSPropertyID::kTransitionDelay:
     case CSSPropertyID::kTransitionDuration:

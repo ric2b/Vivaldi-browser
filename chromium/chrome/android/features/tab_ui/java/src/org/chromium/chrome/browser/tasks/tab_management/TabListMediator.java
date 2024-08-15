@@ -40,10 +40,13 @@ import org.chromium.base.Log;
 import org.chromium.base.ResettersForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.base.shared_preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.price_tracking.PriceTrackingFeatures;
 import org.chromium.chrome.browser.price_tracking.PriceTrackingUtilities;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
@@ -201,16 +204,21 @@ class TabListMediator {
         void maybeShowPriceWelcomeMessage(
                 @Nullable ShoppingPersistedTabData shoppingPersistedTabData) {
             // Avoid inserting message while RecyclerView is computing a layout.
-            new Handler().post(() -> {
-                if (!PriceTrackingUtilities.isPriceWelcomeMessageCardEnabled()
-                        || (mPriceWelcomeMessageController == null)
-                        || (shoppingPersistedTabData == null)
-                        || (shoppingPersistedTabData.getPriceDrop() == null)) {
-                    return;
-                }
-                mPriceWelcomeMessageController.showPriceWelcomeMessage(
-                        new PriceTabData(mTab.getId(), shoppingPersistedTabData.getPriceDrop()));
-            });
+            new Handler()
+                    .post(
+                            () -> {
+                                if (!PriceTrackingUtilities.isPriceWelcomeMessageCardEnabled(
+                                                Profile.getLastUsedRegularProfile())
+                                        || (mPriceWelcomeMessageController == null)
+                                        || (shoppingPersistedTabData == null)
+                                        || (shoppingPersistedTabData.getPriceDrop() == null)) {
+                                    return;
+                                }
+                                mPriceWelcomeMessageController.showPriceWelcomeMessage(
+                                        new PriceTabData(
+                                                mTab.getId(),
+                                                shoppingPersistedTabData.getPriceDrop()));
+                            });
         }
     }
 
@@ -754,9 +762,12 @@ class TabListMediator {
 
         // Right now we need to update layout only if there is a price welcome message card in tab
         // switcher.
-        if (mMode == TabListMode.GRID && mUiType != UiType.SELECTABLE
-                && PriceTrackingFeatures.isPriceTrackingEnabled()
-                && !ChromeApplicationImpl.isVivaldi()) { // Vivaldi
+        if (mMode == TabListMode.GRID
+                && mUiType != UiType.SELECTABLE
+                && ProfileManager.isInitialized()
+                && !ChromeApplicationImpl.isVivaldi() // Vivaldi
+                && PriceTrackingFeatures.isPriceTrackingEnabled(
+                        Profile.getLastUsedRegularProfile())) {
             mListObserver = new ListObserver<Void>() {
                 @Override
                 public void onItemRangeInserted(ListObservable source, int index, int count) {
@@ -1025,7 +1036,7 @@ class TabListMediator {
                 }
                 TabGroupModelFilter filter =
                         (TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider()
-                                .getCurrentTabModelFilter(true); // Vivaldi
+                                .getCurrentTabModelFilter();
                 List<Tab> relatedTabs = getRelatedTabsForId(movedTab.getId());
                 Tab currentGroupSelectedTab =
                         TabGroupUtils.getSelectedTabInGroupForTab(mTabModelSelector, movedTab);
@@ -1066,10 +1077,10 @@ class TabListMediator {
         };
 
         ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(
-                 false, true)) // Vivaldi
+                 false))
                 .addTabGroupObserver(mTabGroupObserver);
         ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(
-                 true, true)) // Vivaldi
+                 true))
                 .addTabGroupObserver(mTabGroupObserver);
 
         mTabGroupTitleEditor = new TabGroupTitleEditor(mContext, mTabModelSelector) {
@@ -1291,9 +1302,10 @@ class TabListMediator {
 
     void hardCleanup() {
         assert !mVisible;
-        if (PriceTrackingUtilities.isTrackPricesOnTabsEnabled()
-                && (PriceTrackingFeatures.isPriceDropIphEnabled()
-                        || PriceTrackingFeatures.isPriceDropBadgeEnabled())) {
+        Profile profile = Profile.getLastUsedRegularProfile();
+        if (PriceTrackingUtilities.isTrackPricesOnTabsEnabled(profile)
+                && (PriceTrackingFeatures.isPriceDropIphEnabled(profile)
+                        || PriceTrackingFeatures.isPriceDropBadgeEnabled(profile))) {
             saveSeenPriceDrops();
         }
         sViewedTabIds.clear();
@@ -1449,9 +1461,14 @@ class TabListMediator {
      * @param recyclerView the {@link TabListRecyclerView} to add the listener too.
      */
     void registerOnScrolledListener(RecyclerView recyclerView) {
-        if (PriceTrackingUtilities.isTrackPricesOnTabsEnabled()
-                && (PriceTrackingFeatures.isPriceDropIphEnabled()
-                        || PriceTrackingFeatures.isPriceDropBadgeEnabled())) {
+        // For InstantStart, this can be called before native is initialized, so ensure the Profile
+        // is available before proceeding.
+        if (!ProfileManager.isInitialized()) return;
+
+        Profile profile = Profile.getLastUsedRegularProfile();
+        if (PriceTrackingUtilities.isTrackPricesOnTabsEnabled(profile)
+                && (PriceTrackingFeatures.isPriceDropIphEnabled(profile)
+                        || PriceTrackingFeatures.isPriceDropBadgeEnabled(profile))) {
             mRecyclerView = recyclerView;
             mOnScrollListener = new OnScrollListener() {
                 @Override
@@ -1556,10 +1573,10 @@ class TabListMediator {
         }
         if (mTabGroupObserver != null) {
             ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(
-                     false, true)) // Vivaldi
+                     false))
                     .removeTabGroupObserver(mTabGroupObserver);
             ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(
-                     true, true)) // Vivaldi
+                     true))
                     .removeTabGroupObserver(mTabGroupObserver);
         }
         if (mComponentCallbacks != null) {
@@ -1807,7 +1824,8 @@ class TabListMediator {
 
     private void setupPersistedTabDataFetcherForTab(PseudoTab pseudoTab, int index) {
         if (mMode == TabListMode.GRID && pseudoTab.hasRealTab() && !pseudoTab.isIncognito()) {
-            if (PriceTrackingUtilities.isTrackPricesOnTabsEnabled()
+            if (PriceTrackingUtilities.isTrackPricesOnTabsEnabled(
+                            Profile.getLastUsedRegularProfile())
                     && isUngroupedTab(pseudoTab.getId())) {
                 mModel.get(index).model.set(TabProperties.SHOPPING_PERSISTED_TAB_DATA_FETCHER,
                         new ShoppingPersistedTabDataFetcher(
@@ -1946,7 +1964,10 @@ class TabListMediator {
     void updateLayout() {
         // Right now we need to update layout only if there is a price welcome message card in tab
         // switcher.
-        if (!PriceTrackingUtilities.isPriceWelcomeMessageCardEnabled()) return;
+        if (!PriceTrackingUtilities.isPriceWelcomeMessageCardEnabled(
+                Profile.getLastUsedRegularProfile())) {
+            return;
+        }
         assert mGridLayoutManager != null;
         int spanCount = mGridLayoutManager.getSpanCount();
         GridLayoutManager.SpanSizeLookup spanSizeLookup = mGridLayoutManager.getSpanSizeLookup();
@@ -1984,19 +2005,24 @@ class TabListMediator {
 
     @VisibleForTesting
     void recordPriceAnnotationsEnabledMetrics() {
-        if (mMode != TabListMode.GRID || !mActionsOnAllRelatedTabs
-                || !PriceTrackingFeatures.isPriceTrackingEligible()) {
+        if (mMode != TabListMode.GRID
+                || !mActionsOnAllRelatedTabs
+                || !ProfileManager.isInitialized()
+                || !PriceTrackingFeatures.isPriceTrackingEligible(
+                        Profile.getLastUsedRegularProfile())) {
             return;
         }
-        SharedPreferencesManager preferencesManager = SharedPreferencesManager.getInstance();
+        SharedPreferencesManager preferencesManager = ChromeSharedPreferences.getInstance();
         if (System.currentTimeMillis()
                         - preferencesManager.readLong(
                                 ChromePreferenceKeys
                                         .PRICE_TRACKING_ANNOTATIONS_ENABLED_METRICS_TIMESTAMP,
                                 -1)
                 >= PriceTrackingFeatures.getAnnotationsEnabledMetricsWindowDurationMilliSeconds()) {
-            RecordHistogram.recordBooleanHistogram("Commerce.PriceDrop.AnnotationsEnabled",
-                    PriceTrackingUtilities.isTrackPricesOnTabsEnabled());
+            RecordHistogram.recordBooleanHistogram(
+                    "Commerce.PriceDrop.AnnotationsEnabled",
+                    PriceTrackingUtilities.isTrackPricesOnTabsEnabled(
+                            Profile.getLastUsedRegularProfile()));
             preferencesManager.writeLong(
                     ChromePreferenceKeys.PRICE_TRACKING_ANNOTATIONS_ENABLED_METRICS_TIMESTAMP,
                     System.currentTimeMillis());

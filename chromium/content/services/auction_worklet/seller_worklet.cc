@@ -29,6 +29,7 @@
 #include "content/services/auction_worklet/direct_from_seller_signals_requester.h"
 #include "content/services/auction_worklet/for_debugging_only_bindings.h"
 #include "content/services/auction_worklet/private_aggregation_bindings.h"
+#include "content/services/auction_worklet/public/cpp/auction_network_events_delegate.h"
 #include "content/services/auction_worklet/public/mojom/auction_worklet_service.mojom.h"
 #include "content/services/auction_worklet/public/mojom/seller_worklet.mojom.h"
 #include "content/services/auction_worklet/register_ad_beacon_bindings.h"
@@ -300,7 +301,7 @@ bool AppendAuctionConfig(AuctionV8Helper* v8_helper,
                          const absl::optional<uint16_t> experiment_group_id,
                          const blink::AuctionConfig::NonSharedParams&
                              auction_ad_config_non_shared_params,
-                         std::vector<v8::Local<v8::Value>>* args) {
+                         v8::LocalVector<v8::Value>* args) {
   v8::Isolate* isolate = v8_helper->isolate();
   v8::Local<v8::Object> auction_config_value = v8::Object::New(isolate);
   gin::Dictionary auction_config_dict(isolate, auction_config_value);
@@ -315,7 +316,7 @@ bool AppendAuctionConfig(AuctionV8Helper* v8_helper,
   }
 
   if (auction_ad_config_non_shared_params.interest_group_buyers) {
-    std::vector<v8::Local<v8::Value>> interest_group_buyers;
+    v8::LocalVector<v8::Value> interest_group_buyers(isolate);
     for (const url::Origin& buyer :
          *auction_ad_config_non_shared_params.interest_group_buyers) {
       v8::Local<v8::String> v8_buyer;
@@ -436,7 +437,7 @@ bool AppendAuctionConfig(AuctionV8Helper* v8_helper,
   const auto& component_auctions =
       auction_ad_config_non_shared_params.component_auctions;
   if (!component_auctions.empty()) {
-    std::vector<v8::Local<v8::Value>> component_auction_vector;
+    v8::LocalVector<v8::Value> component_auction_vector(isolate);
     for (const auto& component_auction : component_auctions) {
       if (!AppendAuctionConfig(
               v8_helper, context, *component_auction.decision_logic_url,
@@ -565,6 +566,8 @@ SellerWorklet::SellerWorklet(
     bool pause_for_debugger_on_start,
     mojo::PendingRemote<network::mojom::URLLoaderFactory>
         pending_url_loader_factory,
+    mojo::PendingRemote<auction_worklet::mojom::AuctionNetworkEventsHandler>
+        auction_network_events_handler,
     const GURL& decision_logic_url,
     const absl::optional<GURL>& trusted_scoring_signals_url,
     const url::Origin& top_window_origin,
@@ -576,19 +579,23 @@ SellerWorklet::SellerWorklet(
           base::MakeRefCounted<AuctionV8Helper::DebugId>(v8_helper_.get())),
       url_loader_factory_(std::move(pending_url_loader_factory)),
       script_source_url_(decision_logic_url),
-      trusted_signals_request_manager_(
-          trusted_scoring_signals_url
-              ? std::make_unique<TrustedSignalsRequestManager>(
-                    TrustedSignalsRequestManager::Type::kScoringSignals,
-                    url_loader_factory_.get(),
-                    /*automatically_send_requests=*/true,
-                    top_window_origin,
-                    *trusted_scoring_signals_url,
-                    /*experiment_group_id=*/experiment_group_id,
-                    v8_helper_.get())
-              : nullptr),
-      v8_state_(nullptr, base::OnTaskRunnerDeleter(v8_runner_)) {
+      v8_state_(nullptr, base::OnTaskRunnerDeleter(v8_runner_)),
+      auction_network_events_handler_(
+          std::move(auction_network_events_handler)) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(user_sequence_checker_);
+
+  trusted_signals_request_manager_ =
+      (trusted_scoring_signals_url
+           ? std::make_unique<TrustedSignalsRequestManager>(
+                 TrustedSignalsRequestManager::Type::kScoringSignals,
+                 url_loader_factory_.get(),
+                 /*auction_network_events_handler=*/
+                 CreateNewAuctionNetworkEventsHandlerRemote(
+                     auction_network_events_handler_),
+                 /*automatically_send_requests=*/true, top_window_origin,
+                 *trusted_scoring_signals_url,
+                 /*experiment_group_id=*/experiment_group_id, v8_helper_.get())
+           : nullptr);
 
   v8_state_ = std::unique_ptr<V8State, base::OnTaskRunnerDeleter>(
       new V8State(v8_helper_, debug_id_, std::move(shared_storage_host_remote),
@@ -930,7 +937,7 @@ void SellerWorklet::V8State::ScoreAd(
   ContextRecyclerScope context_recycler_scope(context_recycler);
   v8::Local<v8::Context> context = context_recycler_scope.GetContext();
 
-  std::vector<v8::Local<v8::Value>> args;
+  v8::LocalVector<v8::Value> args(isolate);
   if (!v8_helper_->AppendJsonValue(context, ad_metadata_json, &args)) {
     PostScoreAdCallbackToUserThreadOnError(
         std::move(callback),
@@ -1255,22 +1262,6 @@ void SellerWorklet::V8State::ScoreAd(
     }
   }
 
-  // Fail if `allow_component_auction` is false and this is a component seller
-  // or a top-level seller scoring a bid from a component auction -
-  // `browser_signals_other_seller` is non-null in only those two cases.
-  if (browser_signals_other_seller && !allow_component_auction) {
-    errors_out.push_back(base::StrCat(
-        {decision_logic_url_.spec(),
-         " scoreAd() return value does not have allowComponentAuction set to "
-         "true. Ad dropped from component auction."}));
-    PostScoreAdCallbackToUserThreadOnError(
-        std::move(callback),
-        /*scoring_latency=*/elapsed, std::move(errors_out),
-        context_recycler.private_aggregation_bindings()
-            ->TakePrivateAggregationRequests());
-    return;
-  }
-
   // Fail if the score is invalid.
   if (std::isnan(score) || !std::isfinite(score)) {
     errors_out.push_back(base::StrCat(
@@ -1295,6 +1286,24 @@ void SellerWorklet::V8State::ScoreAd(
         context_recycler.private_aggregation_bindings()
             ->TakePrivateAggregationRequests(),
         /*scoring_latency=*/elapsed, std::move(errors_out));
+    return;
+  }
+
+  // Fail if `allow_component_auction` is false and this is a component seller
+  // or a top-level seller scoring a bid from a component auction -
+  // `browser_signals_other_seller` is non-null in only those two cases.
+  // This is after the score check so that returning a negative score with
+  // nothing else is not treated as an error in a component auction.
+  if (browser_signals_other_seller && !allow_component_auction) {
+    errors_out.push_back(base::StrCat(
+        {decision_logic_url_.spec(),
+         " scoreAd() return value does not have allowComponentAuction set to "
+         "true. Ad dropped from component auction."}));
+    PostScoreAdCallbackToUserThreadOnError(
+        std::move(callback),
+        /*scoring_latency=*/elapsed, std::move(errors_out),
+        context_recycler.private_aggregation_bindings()
+            ->TakePrivateAggregationRequests());
     return;
   }
 
@@ -1386,7 +1395,7 @@ void SellerWorklet::V8State::ReportResult(
   ContextRecyclerScope context_recycler_scope(context_recycler);
   v8::Local<v8::Context> context = context_recycler_scope.GetContext();
 
-  std::vector<v8::Local<v8::Value>> args;
+  v8::LocalVector<v8::Value> args(isolate);
   if (!AppendAuctionConfig(v8_helper_.get(), context, decision_logic_url_,
                            trusted_scoring_signals_url_, experiment_group_id_,
                            auction_ad_config_non_shared_params, &args)) {
@@ -1667,7 +1676,10 @@ void SellerWorklet::Start() {
       "Ads.InterestGroup.Net.RequestUrlSizeBytes.ScoringScriptJS",
       script_source_url_.spec().size());
   worklet_loader_ = std::make_unique<WorkletLoader>(
-      url_loader_factory_.get(), script_source_url_, v8_helper_, debug_id_,
+      url_loader_factory_.get(), /*auction_network_events_handler=*/
+      CreateNewAuctionNetworkEventsHandlerRemote(
+          auction_network_events_handler_),
+      script_source_url_, v8_helper_, debug_id_,
       base::BindOnce(&SellerWorklet::OnDownloadComplete,
                      base::Unretained(this)));
 }

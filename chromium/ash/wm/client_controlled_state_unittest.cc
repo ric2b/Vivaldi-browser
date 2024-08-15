@@ -32,12 +32,10 @@
 #include "ash/wm/wm_event.h"
 #include "base/memory/raw_ptr.h"
 #include "base/test/bind.h"
-#include "base/test/scoped_feature_list.h"
 #include "chromeos/ui/base/window_state_type.h"
 #include "chromeos/ui/frame/caption_buttons/snap_controller.h"
 #include "chromeos/ui/frame/header_view.h"
 #include "chromeos/ui/wm/constants.h"
-#include "chromeos/ui/wm/features.h"
 #include "chromeos/ui/wm/window_util.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
@@ -154,10 +152,6 @@ class ClientControlledStateTest : public AshTestBase {
   ~ClientControlledStateTest() override = default;
 
   void SetUp() override {
-    // We need to enable the flag before `AshTestBase::SetUp()` to make
-    // FloatController instantiated in Shell.
-    scoped_feature_list_.InitAndEnableFeature(
-        chromeos::wm::features::kWindowLayoutMenu);
     AshTestBase::SetUp();
 
     widget_delegate_ = new TestWidgetDelegate();
@@ -226,7 +220,6 @@ class ClientControlledStateTest : public AshTestBase {
   raw_ptr<FakeWindowStateDelegate, DanglingUntriaged | ExperimentalAsh>
       window_state_delegate_ = nullptr;
   std::unique_ptr<views::Widget> widget_;
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 // This suite runs test cases both in clamshell mode and tablet mode.
@@ -416,10 +409,11 @@ TEST_F(ClientControlledStateTest, SetBounds) {
 
 TEST_F(ClientControlledStateTest, CenterWindow) {
   display::Screen* screen = display::Screen::GetScreen();
-  gfx::Rect bounds = screen->GetPrimaryDisplay().work_area();
+  const gfx::Rect bounds = screen->GetPrimaryDisplay().work_area();
 
-  const WMEvent center_event(WM_EVENT_CENTER);
-  window_state()->OnWMEvent(&center_event);
+  gfx::Rect center_bounds = bounds;
+  center_bounds.ClampToCenteredSize(window()->bounds().size());
+  window()->SetBoundsInScreen(center_bounds, screen->GetPrimaryDisplay());
   EXPECT_NEAR(bounds.CenterPoint().x(),
               delegate()->requested_bounds().CenterPoint().x(), 1);
   EXPECT_NEAR(bounds.CenterPoint().y(),
@@ -1159,7 +1153,7 @@ TEST_P(ClientControlledStateTestClamshellAndTablet, FloatWindow) {
 
 TEST_P(ClientControlledStateTestClamshellAndTablet,
        DragOverviewWindowToSnapOneSide) {
-  auto* const overview_controller = Shell::Get()->overview_controller();
+  auto* const overview_controller = OverviewController::Get();
   auto* const split_view_controller = SplitViewController::Get(window());
 
   widget_delegate()->EnableSnap();
@@ -1204,7 +1198,7 @@ TEST_P(ClientControlledStateTestClamshellAndTablet,
 
 TEST_P(ClientControlledStateTestClamshellAndTablet,
        DragOverviewWindowToSnapBothSide) {
-  auto* const overview_controller = Shell::Get()->overview_controller();
+  auto* const overview_controller = OverviewController::Get();
   auto* const split_view_controller = SplitViewController::Get(window());
   auto* const event_generator = GetEventGenerator();
 
@@ -1269,7 +1263,7 @@ TEST_P(ClientControlledStateTestClamshellAndTablet,
 
 TEST_P(ClientControlledStateTestClamshellAndTablet,
        SnapBeforePreviousEventIsApplied) {
-  auto* const overview_controller = Shell::Get()->overview_controller();
+  auto* const overview_controller = OverviewController::Get();
   auto* const split_view_controller = SplitViewController::Get(window());
 
   widget_delegate()->EnableSnap();
@@ -1312,6 +1306,47 @@ TEST_P(ClientControlledStateTestClamshellAndTablet,
     EXPECT_EQ(split_view_controller->primary_window(), window());
     EXPECT_TRUE(overview_controller->InOverviewSession());
   }
+}
+
+TEST_P(ClientControlledStateTestClamshellAndTablet, SnapFloatedWindow) {
+  const gfx::Rect work_area =
+      display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
+
+  // The AppType must be set to any except `AppType::NON_APP` (default value) to
+  // make it floatable.
+  window()->SetProperty(aura::client::kAppType,
+                        static_cast<int>(AppType::ARC_APP));
+  widget_delegate()->EnableFloat();
+  ASSERT_TRUE(chromeos::wm::CanFloatWindow(window()));
+
+  widget_delegate()->EnableSnap();
+  ASSERT_TRUE(window_state()->CanSnap());
+
+  // Send a float request and accepts it.
+  const WindowFloatWMEvent float_event(
+      chromeos::FloatStartLocation::kBottomRight);
+  window_state()->OnWMEvent(&float_event);
+  state()->EnterNextState(window_state(), delegate()->new_state());
+  ApplyPendingRequestedBounds();
+  ASSERT_TRUE(window_state()->IsFloated());
+
+  // Send a snap request but don't accept it yet.
+  const WindowSnapWMEvent snap(WM_EVENT_SNAP_PRIMARY);
+  window_state()->OnWMEvent(&snap);
+  ASSERT_EQ(WindowStateType::kPrimarySnapped, delegate()->new_state());
+  ASSERT_FALSE(window_state()->IsSnapped());
+
+  // Emit the size constraints changed event.
+  widget()->OnSizeConstraintsChanged();
+
+  // The requested bounds should be the snapped one (not floated bounds).
+  gfx::Rect expected_bounds(
+      work_area.x(), work_area.y(),
+      work_area.width() * chromeos::kDefaultSnapRatio -
+          (InTabletMode() ? kSplitviewDividerShortSideLength / 2 : 0),
+      work_area.height());
+  EXPECT_EQ(WindowStateType::kPrimarySnapped, delegate()->new_state());
+  EXPECT_EQ(expected_bounds, delegate()->requested_bounds());
 }
 
 }  // namespace ash

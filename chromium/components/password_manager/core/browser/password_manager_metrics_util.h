@@ -15,6 +15,8 @@
 #include "base/timer/elapsed_timer.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom.h"
 #include "components/autofill/core/common/password_generation_util.h"
+#include "components/device_reauth/device_reauth_metrics_util.h"
+#include "components/password_manager/core/browser/features/password_manager_features_util.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 
@@ -23,13 +25,6 @@ struct PasswordForm;
 }
 
 namespace password_manager::metrics_util {
-
-using IsUsernameChanged = base::StrongAlias<class IsUsernameChangedTag, bool>;
-using IsDisplayNameChanged =
-    base::StrongAlias<class IsDisplayNameChangedTag, bool>;
-using IsPasswordChanged = base::StrongAlias<class IsPasswordChangedTag, bool>;
-using IsPasswordNoteChanged =
-    base::StrongAlias<class IsPasswordNoteChangedTag, bool>;
 
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
@@ -52,6 +47,8 @@ enum UIDisplayDisposition {
   AUTOMATIC_BIOMETRIC_AUTHENTICATION_FOR_FILLING = 14,
   AUTOMATIC_BIOMETRIC_AUTHENTICATION_CONFIRMATION = 15,
   AUTOMATIC_SHARED_PASSWORDS_NOTIFICATION = 16,
+  AUTOMATIC_ADD_USERNAME_BUBBLE = 17,
+  MANUAL_ADD_USERNAME_BUBBLE = 18,
   NUM_DISPLAY_DISPOSITIONS,
 };
 
@@ -223,18 +220,6 @@ enum AccessPasswordInSettingsEvent {
   ACCESS_PASSWORD_COPIED = 1,
   ACCESS_PASSWORD_EDITED = 2,
   ACCESS_PASSWORD_COUNT
-};
-
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused. Needs to stay in sync with
-// "PasswordManager.ReauthResult" in enums.xml.
-// Metrics: PasswordManager.ReauthToAccessPasswordInSettings
-// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.password_manager
-enum class ReauthResult {
-  kSuccess = 0,
-  kFailure = 1,
-  kSkipped = 2,
-  kMaxValue = kSkipped,
 };
 
 // Specifies the type of PasswordFormManagers and derived classes to distinguish
@@ -410,30 +395,6 @@ enum class SignInState {
   kSyncing = 2,
 };
 
-// Represents the state of the user wrt. sign-in and account-scoped storage.
-// Used for metrics. Always keep this enum in sync with the corresponding
-// histogram_suffixes in histograms.xml!
-enum class PasswordAccountStorageUserState {
-  // Signed-out user (and no account storage opt-in exists).
-  kSignedOutUser = 0,
-  // Signed-out user, but an account storage opt-in exists.
-  kSignedOutAccountStoreUser = 1,
-  // Signed-in non-syncing user, not opted in to the account storage (but may
-  // save passwords to the account storage by default).
-  kSignedInUser = 2,
-  // Signed-in non-syncing user, not opted in to the account storage, and has
-  // explicitly chosen to save passwords only on the device.
-  kSignedInUserSavingLocally = 3,
-  // Signed-in non-syncing user, opted in to the account storage, and saving
-  // passwords to the account storage.
-  kSignedInAccountStoreUser = 4,
-  // Signed-in non-syncing user and opted in to the account storage, but has
-  // chosen to save passwords only on the device.
-  kSignedInAccountStoreUserSavingLocally = 5,
-  // Syncing user.
-  kSyncUser = 6,
-};
-
 // Represents different user interactions related to password check.
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused. Always keep this enum in sync with the
@@ -495,23 +456,6 @@ enum class MoveToAccountStoreTrigger {
   kMaxValue = kUserOptedInAfterSavingLocally,
 };
 
-// Used to record metrics for the usage and timing of the GetChangePasswordUrl
-// call. These values are persisted to logs. Entries should not be renumbered
-// and numeric values should never be reused.
-enum class GetChangePasswordUrlMetric {
-  // Used when GetChangePasswordUrl is called before the response
-  // arrives.
-  kNotFetchedYet = 0,
-  // Used when a url was used, which corresponds to the requested site.
-  kUrlOverrideUsed = 1,
-  // Used when no override url was available.
-  kNoUrlOverrideAvailable = 2,
-  // Used when a url was used, which corresponds to a site from within same
-  // FacetGroup.
-  kGroupUrlOverrideUsed = 3,
-  kMaxValue = kGroupUrlOverrideUsed,
-};
-
 // Used to record what exactly was updated during password editing flow.
 // Entries should not be renumbered and numeric values should never be reused.
 enum class PasswordEditUpdatedValues {
@@ -547,23 +491,8 @@ enum class PasswordNoteAction {
 };
 
 std::string GetPasswordAccountStorageUserStateHistogramSuffix(
-    PasswordAccountStorageUserState user_state);
-
-// The usage level of the account-scoped password storage. This is essentially
-// a less-detailed version of PasswordAccountStorageUserState, for metrics that
-// don't need the fully-detailed breakdown.
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-enum class PasswordAccountStorageUsageLevel {
-  // The user is not using the account-scoped password storage. Either they're
-  // not signed in, or they haven't opted in to the account storage.
-  kNotUsingAccountStorage = 0,
-  // The user is signed in (but not syncing) and has opted in to the account
-  // storage.
-  kUsingAccountStorage = 1,
-  // The user has enabled Sync.
-  kSyncing = 2,
-};
+    password_manager::features_util::PasswordAccountStorageUserState
+        user_state);
 
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
@@ -711,8 +640,41 @@ enum class GroupedPasswordFetchResult {
   kMaxValue = kOnlyGroupedMatches,
 };
 
+// Represents the result of processing an incoming password sharing invitation.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused. Always keep this enum in sync with the
+// corresponding PasswordManager.ProcessIncomingPasswordSharingInvitationResult
+// in enums.xml.
+enum class ProcessIncomingPasswordSharingInvitationResult {
+  kInvitationAutoApproved = 0,
+  kNoPasswordStore = 1,
+  kCredentialsExistWithSamePassword = 2,
+  kCredentialsExistWithDifferentPassword = 3,
+  kSharedCredentialsExistWithSameSenderAndSamePassword = 4,
+  kSharedCredentialsExistWithSameSenderAndDifferentPassword = 5,
+  kSharedCredentialsExistWithDifferentSenderAndSamePassword = 6,
+  kSharedCredentialsExistWithDifferentSenderAndDifferentPassword = 7,
+  kMaxValue = kSharedCredentialsExistWithDifferentSenderAndDifferentPassword,
+};
+
+#if BUILDFLAG(IS_ANDROID)
+// Enum that describes different outcomes on the attempt of triggering the
+// Touch-To-Fill bottom sheet for password generation.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class TouchToFillPasswordGenerationTriggerOutcome {
+  kShown = 0,
+  kHasSavedCredentials = 1,
+  kDismissed4TimesInARow = 2,
+  kShownBefore = 3,
+  kFailedToDisplay = 4,
+  kMaxValue = kFailedToDisplay
+};
+#endif
+
 std::string GetPasswordAccountStorageUsageLevelHistogramSuffix(
-    PasswordAccountStorageUsageLevel usage_level);
+    password_manager::features_util::PasswordAccountStorageUsageLevel
+        usage_level);
 
 // Records the `type` of a leak dialog shown to the user and the `reason`
 // why it was dismissed.
@@ -758,24 +720,18 @@ void LogGeneralUIDismissalReason(UIDismissalReason reason);
 
 // Log the |reason| a user dismissed the save password bubble. If
 // |user_state| is set, the |reason| is also logged to a separate
-// user-state-specific histogram. If the submission is detected on a cleared
-// change password form, dismissal reason is also recorded in a histogram
-// specific for this type of submission.
+// user-state-specific histogram.
 void LogSaveUIDismissalReason(
     UIDismissalReason reason,
-    autofill::mojom::SubmissionIndicatorEvent submission_event,
-    absl::optional<PasswordAccountStorageUserState> user_state);
+    absl::optional<features_util::PasswordAccountStorageUserState> user_state);
 
-// Log the |reason| a user dismissed the update password bubble. If the
-// submission is detected on a cleared change password form, dismissal reason is
-// also recorded in a histogram specific for this type of submission.
-void LogUpdateUIDismissalReason(
-    UIDismissalReason reason,
-    autofill::mojom::SubmissionIndicatorEvent submission_event);
+// Log the |reason| a user dismissed the update password bubble.
+void LogUpdateUIDismissalReason(UIDismissalReason reason);
 
 // Log the |reason| a user dismissed the move password bubble.
-void LogMoveUIDismissalReason(UIDismissalReason reason,
-                              PasswordAccountStorageUserState user_state);
+void LogMoveUIDismissalReason(
+    UIDismissalReason reason,
+    features_util::PasswordAccountStorageUserState user_state);
 
 // Log the appropriate display disposition.
 void LogUIDisplayDisposition(UIDisplayDisposition disposition);
@@ -843,7 +799,7 @@ void LogDownloadedBlocklistedEntriesCountFromAccountStoreAfterUnlock(
     int blocklist_entries_count);
 
 // Logs the result of a re-auth challenge in the password settings.
-void LogPasswordSettingsReauthResult(ReauthResult result);
+void LogPasswordSettingsReauthResult(device_reauth::ReauthResult result);
 
 // Log a return value of LoginDatabase::DeleteUndecryptableLogins method.
 void LogDeleteUndecryptableLoginsReturnValue(
@@ -854,7 +810,8 @@ void LogDeleteUndecryptableLoginsReturnValue(
 void LogNewlySavedPasswordMetrics(
     bool is_generated_password,
     bool is_username_empty,
-    PasswordAccountStorageUsageLevel account_storage_usage_level);
+    password_manager::features_util::PasswordAccountStorageUsageLevel
+        account_storage_usage_level);
 
 // Log whether the generated password was accepted or rejected for generation of
 // |type| (automatic or manual).
@@ -895,6 +852,10 @@ void LogUserInteractionsInPasswordManagementBubble(
 void LogUserInteractionsInSharedPasswordsNotificationBubble(
     SharedPasswordsNotificationBubbleInteractions interaction);
 
+// Log the result of processing an incoming password sharing invitation.
+void LogProcessIncomingPasswordSharingInvitationResult(
+    ProcessIncomingPasswordSharingInvitationResult result);
+
 // Logs GroupedPasswordFetchResult.
 void LogGroupedPasswordsResults(
     const std::vector<std::unique_ptr<password_manager::PasswordForm>>& logins);
@@ -914,6 +875,11 @@ base::OnceCallback<R(Args...)> TimeCallback(
       },
       histogram, base::ElapsedTimer(), std::move(callback));
 }
+
+#if BUILDFLAG(IS_ANDROID)
+void LogTouchToFillPasswordGenerationTriggerOutcome(
+    TouchToFillPasswordGenerationTriggerOutcome outcome);
+#endif
 
 #if BUILDFLAG(IS_IOS)
 // This enum indicates migration status from Keychain to OSCrypt for passwords
@@ -960,7 +926,8 @@ enum class PasswordNotesMigrationToOSCrypt {
   kFailedToEncrypt = 2,
   kFailedToUpdate = 3,
   kSuccess = 4,
-  kMaxValue = kSuccess,
+  kFailedToDelete = 5,
+  kMaxValue = kFailedToDelete,
 };
 
 // Records the status of the password notes migration to OSCrypt of the login db

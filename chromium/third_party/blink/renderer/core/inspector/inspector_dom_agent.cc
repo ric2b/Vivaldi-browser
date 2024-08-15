@@ -104,6 +104,7 @@
 
 namespace blink {
 
+using mojom::blink::FormControlType;
 using protocol::Maybe;
 
 namespace {
@@ -698,7 +699,7 @@ Node* InspectorDOMAgent::NodeForId(int id) const {
 
   const auto it = id_to_node_.find(id);
   if (it != id_to_node_.end())
-    return it->value;
+    return it->value.Get();
   return nullptr;
 }
 
@@ -1466,8 +1467,9 @@ protocol::Response InspectorDOMAgent::setFileInputFiles(
 
   auto* html_input_element = DynamicTo<HTMLInputElement>(node);
   if (!html_input_element ||
-      html_input_element->type() != input_type_names::kFile)
+      html_input_element->FormControlType() != FormControlType::kInputFile) {
     return protocol::Response::ServerError("Node is not a file input element");
+  }
 
   Vector<String> paths;
   for (const String& file : *files)
@@ -1861,8 +1863,9 @@ std::unique_ptr<protocol::DOM::Node> InspectorDOMAgent::BuildObjectForNode(
       force_push_children = true;
     }
 
-    if (auto* link_element = DynamicTo<HTMLLinkElement>(*element))
+    if (IsA<HTMLLinkElement>(*element)) {
       force_push_children = true;
+    }
 
     if (auto* template_element = DynamicTo<HTMLTemplateElement>(*element)) {
       // The inspector should not try to access the .content() property of
@@ -2533,8 +2536,7 @@ protocol::Response InspectorDOMAgent::pushNodesByBackendIdsToFrontend(
 class InspectableNode final
     : public v8_inspector::V8InspectorSession::Inspectable {
  public:
-  explicit InspectableNode(Node* node)
-      : node_id_(DOMNodeIds::IdForNode(node)) {}
+  explicit InspectableNode(Node* node) : node_id_(node->GetDomNodeId()) {}
 
   v8::Local<v8::Value> get(v8::Local<v8::Context> context) override {
     return NodeV8Value(context, DOMNodeIds::NodeForId(node_id_));

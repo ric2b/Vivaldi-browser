@@ -8,6 +8,7 @@
 #include "android_webview/common/aw_features.h"
 #include "base/android/feature_map.h"
 #include "base/feature_list.h"
+#include "base/features.h"
 #include "base/no_destructor.h"
 #include "components/embedder_support/android/metrics/features.h"
 #include "components/safe_browsing/core/common/features.h"
@@ -28,6 +29,7 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &features::kWebViewTestFeature,
     &features::kWebViewJavaJsBridgeMojo,
     &features::kWebViewUseMetricsUploadService,
+    &features::kWebViewUseMetricsUploadServiceOnlySdkRuntime,
     &features::kWebViewXRequestedWithHeaderControl,
     &features::kWebViewXRequestedWithHeaderManifestAllowList,
     &features::kWebViewRestrictSensitiveContent,
@@ -35,9 +37,12 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &metrics::kAndroidMetricsAsyncMetricLogging,
     &features::kWebViewZoomKeyboardShortcuts,
     &features::kWebViewClearFunctorInBackground,
-    &features::kWebViewReportFrameMetrics,
+    &safe_browsing::kHashPrefixRealTimeLookups,
+    &safe_browsing::kSafeBrowsingSkipSubresources,
     &features::kWebViewSupervisedUserSiteDetection,
     &features::kWebViewSupervisedUserSiteBlock,
+    &base::features::kCollectAndroidFrameTimelineMetrics,
+    &features::kWebViewInjectPlatformJsApis,
 };
 
 // static

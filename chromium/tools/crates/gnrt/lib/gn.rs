@@ -29,6 +29,16 @@ pub struct BuildFile {
     pub rules: Vec<(String, Rule)>,
 }
 
+/// Identifies a package version. A package's dependency list uses this to refer
+/// to other targets.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct PackageId {
+    /// Package name in normalized form, as used in GN target and path names.
+    pub name: String,
+    /// Package epoch if relevant (i.e. when needed as part of target paths).
+    pub epoch: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct RuleCommon {
     pub testonly: bool,
@@ -52,13 +62,17 @@ pub struct RuleConcrete {
     pub cargo_pkg_name: String,
     pub cargo_pkg_description: Option<String>,
     pub deps: Vec<DepGroup>,
-    pub dev_deps: Vec<DepGroup>,
     pub build_deps: Vec<DepGroup>,
     pub aliased_deps: Vec<(String, String)>,
     pub features: Vec<String>,
     pub build_root: Option<String>,
+    pub build_script_sources: Vec<String>,
+    pub build_script_inputs: Vec<String>,
     pub build_script_outputs: Vec<String>,
     pub extra_kv: HashMap<String, serde_json::Value>,
+    /// Whether this rule depends on the main lib target in its group (e.g. a
+    /// bin target alongside a lib inside a package).
+    pub dep_on_lib: bool,
 }
 
 /// Describes a single GN build rule for a crate configuration. Each field
@@ -89,8 +103,9 @@ pub enum Rule {
 pub struct DepGroup {
     /// `if` condition for GN, or `None` for unconditional deps.
     cond: Option<Condition>,
-    /// GN rule names to depend on.
-    rules: Vec<String>,
+    /// Packages to depend on. The build file template determines the exact name
+    /// based on the identified package and context.
+    packages: Vec<PackageId>,
 }
 
 /// Extra metadata influencing GN output for a particular crate.
@@ -201,6 +216,22 @@ pub fn build_rule_from_std_dep(
         cargo_pkg_name: dep.package_name.to_string(),
         cargo_pkg_description: dep.description.as_ref().map(|s| s.trim_end().to_string()),
         build_root: build_script_from_src.as_ref().map(|p| format!("//{p}")),
+        build_script_sources: build_script_from_src
+            .as_ref()
+            .map(|p| format!("//{p}"))
+            .into_iter()
+            .chain(
+                details
+                    .build_script_sources
+                    .iter()
+                    .map(|p| format!("//{}", paths.to_gn_abs_path(p).unwrap().to_string())),
+            )
+            .collect(),
+        build_script_inputs: details
+            .build_script_inputs
+            .iter()
+            .map(|p| format!("//{}", paths.to_gn_abs_path(p).unwrap().to_string()))
+            .collect(),
         extra_kv,
         ..Default::default()
     };
@@ -213,10 +244,14 @@ pub fn build_rule_from_std_dep(
     rule.features.sort_unstable();
     rule.features.dedup();
 
-    // Add only normal dependencies: we don't run unit tests, and we don't run
-    // build scripts (instead manually configuring build flags and env vars).
+    // Add only normal and build dependencies: we don't run unit tests.
     let dep_deps: Vec<&DepOfDep> = dep
         .dependencies
+        .iter()
+        .filter(|d| !exclude_deps.iter().any(|e| e.as_str() == &*d.package_name))
+        .collect();
+    let build_deps: Vec<&DepOfDep> = dep
+        .build_dependencies
         .iter()
         .filter(|d| !exclude_deps.iter().any(|e| e.as_str() == &*d.package_name))
         .collect();
@@ -224,7 +259,14 @@ pub fn build_rule_from_std_dep(
     // Group the dependencies by condition, where the unconditional deps come
     // first. `group_deps` always returns at least one element, even if the
     // first set is empty.
-    rule.deps = group_deps(&dep_deps, |d| format!(":{}", normalize_target_name(&d.package_name)));
+    rule.deps = group_deps(&dep_deps, |d| PackageId {
+        name: normalize_target_name(&d.package_name),
+        epoch: None,
+    });
+    rule.build_deps = group_deps(&build_deps, |d| PackageId {
+        name: normalize_target_name(&d.package_name),
+        epoch: None,
+    });
 
     for dep in dep_deps {
         let target_name = normalize_target_name(&dep.package_name);
@@ -232,9 +274,11 @@ pub fn build_rule_from_std_dep(
             rule.aliased_deps.push((dep.use_name.clone(), format!(":{target_name}__rlib")));
         }
     }
+    // TODO: No support for aliased_build_deps in the `cargo_crate` GN template as
+    // there's been no usage needed.
 
     // If there are still no deps after `extra_deps`, simply clear the list.
-    if rule.deps.len() == 1 && rule.deps[0].rules.len() == 0 {
+    if rule.deps.len() == 1 && rule.deps[0].packages.len() == 0 {
         rule.deps.clear();
     }
 
@@ -255,7 +299,6 @@ fn make_build_file_for_chromium_dep(
     details: &CrateFiles,
     metadata: PerCrateMetadata,
 ) -> Option<(VendoredCrate, BuildFile)> {
-    let third_party_path_str = paths.third_party.to_str().unwrap();
     let crate_id = dep.crate_id();
     let crate_path_from_chromium_src =
         paths.third_party.join(ThirdPartySource::build_path(&crate_id));
@@ -278,20 +321,20 @@ fn make_build_file_for_chromium_dep(
         cargo_pkg_name: dep.package_name.clone(),
         cargo_pkg_description,
         build_root: dep.build_script.as_ref().map(|p| to_gn_path(p.as_path())),
+        build_script_sources: dep
+            .build_script
+            .as_ref()
+            .map(|p| to_gn_path(p.as_path()))
+            .into_iter()
+            .collect(),
         build_script_outputs: metadata.build_script_outputs,
         ..Default::default()
     };
 
     // Enumerate the dependencies of each kind for the package.
-    //
-    // TODO(crbug.com/1304772): If this target itself was a ":cargo_tests_support"
-    // then it should only depend on other ":cargo_tests_support" targets. We
-    // should also define a group("cargo_tests_support") that points to ":lib"
-    // if there is no Development library rule definition.
-    for (target_name, gn_deps, cargo_deps) in [
-        ("lib", &mut rule_template.deps, &dep.dependencies),
-        ("cargo_tests_support", &mut rule_template.dev_deps, &dep.dev_dependencies),
-        ("buildrs_support", &mut rule_template.build_deps, &dep.build_dependencies),
+    for (gn_deps, cargo_deps) in [
+        (&mut rule_template.deps, &dep.dependencies),
+        (&mut rule_template.build_deps, &dep.build_dependencies),
     ] {
         let cargo_deps: Vec<_> = cargo_deps.iter().collect();
 
@@ -300,13 +343,13 @@ fn make_build_file_for_chromium_dep(
         // first set is empty.
         *gn_deps = group_deps(&cargo_deps, |d| {
             let crate_id = d.crate_id();
-            let normalized_name = crate_id.normalized_name();
-            let epoch = Epoch::from_version(&crate_id.version);
-            format!("//{third_party_path_str}/{normalized_name}/{epoch}:{target_name}")
+            let normalized_name = crate_id.normalized_name().to_string();
+            let epoch = Some(Epoch::from_version(&crate_id.version).to_string());
+            PackageId { name: normalized_name, epoch }
         });
 
         // If there are still no deps after `extra_deps`, simply clear the list.
-        if gn_deps.len() == 1 && gn_deps[0].rules.len() == 0 {
+        if gn_deps.len() == 1 && gn_deps[0].packages.len() == 0 {
             gn_deps.clear();
         }
     }
@@ -337,10 +380,10 @@ fn make_build_file_for_chromium_dep(
         };
 
         if dep.lib_target.is_some() {
+            bin_rule.dep_on_lib = true;
             if bin_rule.deps.is_empty() {
-                bin_rule.deps.push(DepGroup { cond: None, rules: Vec::new() });
+                bin_rule.deps.push(DepGroup { cond: None, packages: Vec::new() });
             }
-            bin_rule.deps[0].rules.push(":lib".to_string());
         }
 
         rules.push((
@@ -353,16 +396,11 @@ fn make_build_file_for_chromium_dep(
     }
 
     // Generate the rule for the main library target, if it exists.
-    //
-    // TODO(crbug.com/1304772): We should also define a group("cargo_tests_support")
-    // that points to ":lib" if there is no Development library rule definition
-    // so that other ":cargo_tests_support" rules are simpler and can always
-    // depend on that target name.
     if let Some(lib_target) = &dep.lib_target {
         use deps::DependencyKind::*;
         // Generate the rules for each dependency kind. We use a stable
         // order instead of the hashmap iteration order.
-        for dep_kind in [Normal, Build, Development] {
+        for dep_kind in [Normal, Build] {
             let per_kind_info = match dep.dependency_kinds.get(&dep_kind) {
                 Some(x) => x,
                 None => continue,
@@ -370,7 +408,6 @@ fn make_build_file_for_chromium_dep(
 
             let lib_rule_name = match dep_kind {
                 deps::DependencyKind::Normal => "lib",
-                deps::DependencyKind::Development => "cargo_tests_support",
                 deps::DependencyKind::Build => "buildrs_support",
                 _ => unreachable!(),
             }
@@ -403,9 +440,10 @@ fn make_build_file_for_chromium_dep(
 
             rules.push((lib_rule_name.clone(), lib_rule));
 
-            // If first-party tests should be able to use the dependency, but it's only
-            // visible to third-party we need to provide a ":test_support"
-            // target for the tests to use.
+            // A package may be available to first-party tests. In this case limit :lib's
+            // visibility to third-party but provide a testonly alias visible
+            // everywhere. The :lib target must still exist for third-party
+            // transitive deps, which aren't testonly.
             if dep_kind == Normal && visibility == Visibility::TestOnlyAndThirdParty {
                 let test_support_rule = Rule::Group {
                     common: RuleCommon { testonly: true, public_visibility: true },
@@ -421,11 +459,11 @@ fn make_build_file_for_chromium_dep(
 
 /// Group dependencies by condition, with unconditional deps first. The first
 /// element is always present even if its set is empty.
-fn group_deps<F: Fn(&DepOfDep) -> String>(deps: &[&DepOfDep], target_name: F) -> Vec<DepGroup>
+fn group_deps<F: Fn(&DepOfDep) -> PackageId>(deps: &[&DepOfDep], target_name: F) -> Vec<DepGroup>
 where
-    F: Fn(&DepOfDep) -> String,
+    F: Fn(&DepOfDep) -> PackageId,
 {
-    let mut groups = HashMap::<Option<Condition>, Vec<String>>::new();
+    let mut groups = HashMap::<Option<Condition>, Vec<_>>::new();
     for dep in deps {
         let cond = match &dep.platform {
             None => None,
@@ -438,10 +476,10 @@ where
     groups.entry(None).or_default();
 
     let mut groups: Vec<DepGroup> =
-        groups.into_iter().map(|(cond, rules)| DepGroup { cond, rules }).collect();
+        groups.into_iter().map(|(cond, rules)| DepGroup { cond, packages: rules }).collect();
 
     for group in groups.iter_mut() {
-        group.rules.sort_unstable();
+        group.packages.sort_unstable();
     }
     groups.sort_unstable_by(|l, r| l.cond.cmp(&r.cond));
     groups
@@ -503,16 +541,24 @@ pub fn cfg_expr_to_condition(cfg_expr: &cargo_platform::CfgExpr) -> String {
         cargo_platform::CfgExpr::Not(expr) => {
             format!("!({})", cfg_expr_to_condition(expr))
         }
-        cargo_platform::CfgExpr::All(exprs) => exprs
-            .iter()
-            .map(|expr| format!("({})", cfg_expr_to_condition(expr)))
-            .collect::<Vec<String>>()
-            .join(" && "),
-        cargo_platform::CfgExpr::Any(exprs) => exprs
-            .iter()
-            .map(|expr| format!("({})", cfg_expr_to_condition(expr)))
-            .collect::<Vec<String>>()
-            .join(" || "),
+        cargo_platform::CfgExpr::All(exprs) => {
+            let mut conds = exprs
+                .iter()
+                .map(|expr| format!("({})", cfg_expr_to_condition(expr)))
+                .collect::<Vec<String>>();
+            conds.sort();
+            conds.dedup();
+            conds.join(" && ")
+        }
+        cargo_platform::CfgExpr::Any(exprs) => {
+            let mut conds = exprs
+                .iter()
+                .map(|expr| format!("({})", cfg_expr_to_condition(expr)))
+                .collect::<Vec<String>>();
+            conds.sort();
+            conds.dedup();
+            conds.join(" || ")
+        }
         cargo_platform::CfgExpr::Value(cfg) => cfg_to_condition(cfg),
     }
 }
@@ -613,7 +659,17 @@ mod tests {
             ))))
             .unwrap()
             .0,
-            "((is_win) || (is_android))"
+            "((is_android) || (is_win))"
+        );
+
+        // Redundant cfg expression.
+        assert_eq!(
+            Condition::from_platform_set(PlatformSet::one(Some(Platform::Cfg(
+                CfgExpr::from_str("any(windows, windows)").unwrap()
+            ))))
+            .unwrap()
+            .0,
+            "((is_win))"
         );
 
         // Try a PlatformSet with multiple filters.

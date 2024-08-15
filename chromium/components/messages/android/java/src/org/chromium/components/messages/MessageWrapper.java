@@ -10,10 +10,12 @@ import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 
 import androidx.annotation.DrawableRes;
+import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.annotations.JNINamespace;
-import org.chromium.base.annotations.NativeMethods;
+import org.jni_zero.CalledByNative;
+import org.jni_zero.JNINamespace;
+import org.jni_zero.NativeMethods;
+
 import org.chromium.components.browser_ui.widget.listmenu.ListMenu;
 import org.chromium.components.browser_ui.widget.listmenu.ListMenuItemProperties;
 import org.chromium.ui.base.WindowAndroid;
@@ -35,7 +37,8 @@ public final class MessageWrapper implements ListMenu.Delegate {
      * @return reference to created MessageWrapper.
      */
     @CalledByNative
-    static MessageWrapper create(long nativeMessageWrapper, int messageIdentifier) {
+    @VisibleForTesting
+    public static MessageWrapper create(long nativeMessageWrapper, int messageIdentifier) {
         return new MessageWrapper(nativeMessageWrapper, messageIdentifier);
     }
 
@@ -51,7 +54,12 @@ public final class MessageWrapper implements ListMenu.Delegate {
                         .build();
     }
 
-    PropertyModel getMessageProperties() {
+    /**
+     * Get the {@link PropertyModel} wrapped inside.
+     * Note that actions for this property model are linked from the native side creator, so making
+     * updates for actions are not advised.
+     */
+    public PropertyModel getMessageProperties() {
         return mMessageProperties;
     }
 

@@ -44,9 +44,6 @@ class CORE_EXPORT StylePropertySerializer {
   String AsText() const;
   String SerializeShorthand(CSSPropertyID) const;
 
-  static bool IsValidToggleShorthand(const CSSValue* toggle_root,
-                                     const CSSValue* toggle_trigger);
-
  private:
   String GetCommonValue(const StylePropertyShorthand&) const;
   String BorderPropertyValue(const StylePropertyShorthand&,
@@ -67,6 +64,8 @@ class CORE_EXPORT StylePropertySerializer {
   String GetShorthandValueForDoubleBarCombinator(
       const StylePropertyShorthand&) const;
   String GetShorthandValueForGrid(const StylePropertyShorthand&) const;
+  String GetShorthandValueForGridArea(const StylePropertyShorthand&) const;
+  String GetShorthandValueForGridLine(const StylePropertyShorthand&) const;
   String GetShorthandValueForGridTemplate(const StylePropertyShorthand&) const;
   String ContainerValue() const;
   String TimelineValue(const StylePropertyShorthand&) const;
@@ -82,7 +81,7 @@ class CORE_EXPORT StylePropertySerializer {
                                           StringBuilder& result) const;
   String OffsetValue() const;
   String TextDecorationValue() const;
-  String BackgroundRepeatPropertyValue() const;
+  String TextSpacingValue() const;
   String ContainIntrinsicSizeValue() const;
   String WhiteSpaceValue() const;
   String ScrollStartValue() const;

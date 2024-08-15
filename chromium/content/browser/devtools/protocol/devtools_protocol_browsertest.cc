@@ -3626,11 +3626,13 @@ IN_PROC_BROWSER_TEST_F(NetworkResponseProtocolTest, SecurityDetails) {
 
   absl::optional<double> valid_from =
       response.FindDoubleByDottedPath("response.securityDetails.validFrom");
-  EXPECT_EQ(server.GetCertificate()->valid_start().ToDoubleT(), valid_from);
+  EXPECT_EQ(server.GetCertificate()->valid_start().InSecondsFSinceUnixEpoch(),
+            valid_from);
 
   absl::optional<double> valid_to =
       response.FindDoubleByDottedPath("response.securityDetails.validTo");
-  EXPECT_EQ(server.GetCertificate()->valid_expiry().ToDoubleT(), valid_to);
+  EXPECT_EQ(server.GetCertificate()->valid_expiry().InSecondsFSinceUnixEpoch(),
+            valid_to);
 }
 
 // Test SecurityDetails, but with a TLS 1.3 cipher suite, which should not
@@ -3846,42 +3848,6 @@ IN_PROC_BROWSER_TEST_F(NetworkResponseProtocolECHTest, SecurityDetailsECH) {
   EXPECT_EQ(true, ech);
 }
 
-IN_PROC_BROWSER_TEST_F(PrerenderDevToolsProtocolTest,
-                       ReportPrerenderDisallowedAPICancellationDetails) {
-  base::HistogramTester histogram_tester;
-  ASSERT_TRUE(embedded_test_server()->Start());
-  const GURL kInitialUrl = GetUrl("/empty.html");
-  const GURL kPrerenderingUrl = GetUrl("/empty.html?prerender");
-
-  // Navigate to an initial page.
-  ASSERT_TRUE(NavigateToURL(shell(), kInitialUrl));
-
-  // Make a prerendered page.
-  int host_id = AddPrerender(kPrerenderingUrl);
-  auto* prerender_render_frame_host = GetPrerenderedMainFrameHost(host_id);
-  Attach();
-  SendCommandSync("Preload.enable");
-  SendCommandSync("Runtime.enable");
-
-  // Executing `navigator.getGamepads()` to start binding the GamepadMonitor
-  // interface, and this is expected to cause prerender cancellation because
-  // the API is disallowed.
-  ExecuteScriptAsyncWithoutUserGesture(prerender_render_frame_host,
-                                       "navigator.getGamepads()");
-
-  base::Value::Dict result =
-      WaitForNotification("Preload.prerenderAttemptCompleted", true);
-
-  // Verify Mojo capability control cancels prerendering.
-  EXPECT_FALSE(HasHostForUrl(kPrerenderingUrl));
-  EXPECT_THAT(*result.FindString("disallowedApiMethod"),
-              Eq("device.mojom.GamepadMonitor"));
-
-  histogram_tester.ExpectUniqueSample(
-      "Prerender.Experimental.PrerenderHostFinalStatus.SpeculationRule",
-      PrerenderFinalStatus::kMojoBinderPolicy, 1);
-}
-
 IN_PROC_BROWSER_TEST_F(
     PrerenderDevToolsProtocolTest,
     PrerenderStatusUpdatedReportsFailureWithDisallowedMojoInterface) {
@@ -3955,72 +3921,6 @@ IN_PROC_BROWSER_TEST_F(PrerenderDevToolsProtocolTest,
   EXPECT_THAT(old_host->GetTitle(), testing::Eq(""));
 }
 
-IN_PROC_BROWSER_TEST_F(MultiplePrerendersDevToolsProtocolTest,
-                       PrerenderActivation) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  const GURL kInitialUrl = GetUrl("/empty.html");
-  const GURL kPrerenderingUrl = GetUrl("/empty.html?prerender1");
-  const GURL kPrerenderingUrl2 = GetUrl("/title1.html?prerender2");
-
-  // Navigate to an initial page.
-  ASSERT_TRUE(NavigateToURL(shell(), kInitialUrl));
-
-  AddPrerender(kPrerenderingUrl);
-  AddPrerender(kPrerenderingUrl2);
-
-  EXPECT_TRUE(HasHostForUrl(kPrerenderingUrl));
-  EXPECT_TRUE(HasHostForUrl(kPrerenderingUrl2));
-
-  Attach();
-  SendCommandSync("Preload.enable");
-  SendCommandSync("Runtime.enable");
-
-  // Ensure that prerenderAttemptCompleted can be fired properly with
-  // multiple speculation rules is enabled.
-  NavigatePrimaryPage(kPrerenderingUrl);
-  base::Value::Dict result =
-      WaitForNotification("Preload.prerenderAttemptCompleted", true);
-  EXPECT_THAT(*result.FindString("finalStatus"), Eq("TriggerDestroyed"));
-
-  // TODO(crbug/1332386): Verifies that multiple activations can be received
-  // properly when crbug/1350676 is ready. kPrerenderingUrl2 should be canceled
-  // as navigating to kPrerenderingUrl2.
-  result = WaitForNotification("Preload.prerenderAttemptCompleted", true);
-  EXPECT_THAT(*result.FindString("finalStatus"), Eq("Activated"));
-}
-
-IN_PROC_BROWSER_TEST_F(MultiplePrerendersDevToolsProtocolTest,
-                       MultiplePrerendersCancellation) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  const GURL kInitialUrl = GetUrl("/empty.html");
-  const GURL kPrerenderingUrl = GetUrl("/empty.html?prerender1");
-  const GURL kPrerenderingUrl2 = GetUrl("/title1.html?prerender2");
-  const GURL kNavigateAwayUrl = GetUrl("/empty.html?navigateway");
-
-  // Navigate to an initial page.
-  ASSERT_TRUE(NavigateToURL(shell(), kInitialUrl));
-
-  AddPrerender(kPrerenderingUrl);
-  AddPrerender(kPrerenderingUrl2);
-
-  EXPECT_TRUE(HasHostForUrl(kPrerenderingUrl));
-  EXPECT_TRUE(HasHostForUrl(kPrerenderingUrl2));
-
-  Attach();
-  SendCommandSync("Preload.enable");
-  SendCommandSync("Runtime.enable");
-
-  ASSERT_TRUE(NavigateToURL(shell(), kNavigateAwayUrl));
-
-  // Both prerendered pages should receive prerenderAttemptCompleted for
-  // cancelation reasons.
-  base::Value::Dict result =
-      WaitForNotification("Preload.prerenderAttemptCompleted", true);
-  EXPECT_THAT(*result.FindString("finalStatus"), Eq("TriggerDestroyed"));
-  result = WaitForNotification("Preload.prerenderAttemptCompleted", true);
-  EXPECT_THAT(*result.FindString("finalStatus"), Eq("TriggerDestroyed"));
-}
-
 IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, ResponseAfterReload) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url = embedded_test_server()->GetURL("a.test", "/title1.html");
@@ -4076,7 +3976,7 @@ class SharedStorageDevToolsProtocolTest : public DevToolsProtocolTest {
     ASSERT_TRUE(manager);
     base::test::TestFuture<storage::SharedStorageManager::OperationResult>
         future;
-    manager->MakeBudgetWithdrawal(url::Origin::Create(url), bits,
+    manager->MakeBudgetWithdrawal(net::SchemefulSite(url), bits,
                                   future.GetCallback());
     EXPECT_EQ(storage::SharedStorageManager::OperationResult::kSuccess,
               future.Get());

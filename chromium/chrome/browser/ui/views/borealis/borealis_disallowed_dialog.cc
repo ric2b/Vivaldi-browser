@@ -67,11 +67,9 @@ class DisallowedHardware : public BehaviourProvider {
     return l10n_util::GetStringUTF16(IDS_BOREALIS_DISALLOWED_HARDWARE);
   }
   std::vector<std::pair<std::u16string, GURL>> GetLinks() const override {
-    // TODO(b/256699588): Replace this with an actual help-center link when
-    // one is created.
     return {{l10n_util::GetStringUTF16(IDS_LEARN_MORE),
-             GURL("https://www.chromium.org/chromium-os/steam-on-chromeos/"
-                  "#supported-devices")}};
+             GURL("https://support.google.com/"
+                  "chromebook?p=steam_on_chromebook")}};
   }
 };
 
@@ -102,6 +100,11 @@ class DisallowedPrimary : public BehaviourProvider {
 class DisallowedChild : public BehaviourProvider {
   std::u16string GetMessage() const override {
     return l10n_util::GetStringUTF16(IDS_BOREALIS_DISALLOWED_CHILD);
+  }
+  std::vector<std::pair<std::u16string, GURL>> GetLinks() const override {
+    return {{l10n_util::GetStringUTF16(IDS_LEARN_MORE),
+             GURL("https://support.google.com/"
+                  "chromebook?p=steam_on_chromebook")}};
   }
 };
 
@@ -161,7 +164,7 @@ class BorealisDisallowedDialog : public DialogDelegate {
                      l10n_util::GetStringUTF16(IDS_CLOSE));
     }
     InitializeView(*behaviour, title_id);
-    SetModalType(ui::MODAL_TYPE_NONE);
+    SetModalType(ui::MODAL_TYPE_SYSTEM);
     SetOwnedByWidget(true);
     SetShowCloseButton(false);
     set_fixed_width(ChromeLayoutProvider::Get()->GetDistanceMetric(
@@ -254,8 +257,6 @@ void ShowDisallowedDialog(AllowStatus status, int title_id) {
       StatusBehaviour(status), title_id);
   g_instance_ = views::DialogDelegate::CreateDialogWidget(std::move(delegate),
                                                           nullptr, nullptr);
-  g_instance_->GetNativeWindow()->SetProperty(
-      ash::kShelfIDKey, ash::ShelfID(::borealis::kInstallerAppId).Serialize());
   g_instance_->Show();
 }
 

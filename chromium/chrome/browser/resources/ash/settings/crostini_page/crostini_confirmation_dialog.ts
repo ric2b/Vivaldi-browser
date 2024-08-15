@@ -22,13 +22,13 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 
 import {getTemplate} from './crostini_confirmation_dialog.html.js';
 
-interface SettingsCrostiniConfirmationDialogElement {
+export interface SettingsCrostiniConfirmationDialogElement {
   $: {
     dialog: CrDialogElement,
   };
 }
 
-class SettingsCrostiniConfirmationDialogElement extends PolymerElement {
+export class SettingsCrostiniConfirmationDialogElement extends PolymerElement {
   static get is() {
     return 'settings-crostini-confirmation-dialog';
   }
@@ -55,24 +55,24 @@ class SettingsCrostiniConfirmationDialogElement extends PolymerElement {
     this.accepted_ = true;
   }
 
-  private onCancelClick_() {
+  private onCancelClick_(): void {
     this.$.dialog.cancel();
   }
 
-  private onAcceptClick_() {
+  private onAcceptClick_(): void {
     this.$.dialog.close();
   }
 
-  private onDialogCancel_() {
+  private onDialogCancel_(): void {
     this.accepted_ = false;
   }
 
-  private onDialogClose_(e: Event) {
+  private onDialogClose_(e: Event): void {
     e.stopPropagation();
 
     const closeEvent = new CustomEvent(
         'close',
-        {bubbles: true, composed: true, detail: {'accepted': this.accepted_}});
+        {bubbles: true, composed: true, detail: {accepted: this.accepted_}});
     this.dispatchEvent(closeEvent);
   }
 }

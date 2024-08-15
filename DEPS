@@ -1,7 +1,7 @@
 # DO NOT EDIT EXCEPT FOR LOCAL TESTING.
 
 vars = {
-  "upstream_commit_id": "I37353dd0442200f61096e348dd2b8de846305002",
+  "upstream_commit_id": "Id5ddeb1fe8c3784141a74988617a4c4ef4256d65",
 
   # The path of the sysroots.json file.
   # This is used by vendor builds like Electron.
@@ -532,16 +532,16 @@ hooks = [
                 'chromium/third_party/depot_tools',
     ],
   },
-  {
-    # Clean up build dirs for crbug.com/1337238.
-    # After a libc++ roll and revert, .ninja_deps would get into a state
-    # that breaks Ninja on Windows.
-    # TODO(crbug.com/1409337): Remove this after updating Ninja 1.12 or newer.
-    'name': 'del_ninja_deps_cache',
-    'pattern': '.',
-    'condition': 'host_os == "win"',
-    'action': ['python3', 'chromium/build/del_ninja_deps_cache.py'],
-  },
+  #{ # Vivaldi don't do libc++ roll and reverts; disabling
+  #  # Clean up build dirs for crbug.com/1337238.
+  #  # After a libc++ roll and revert, .ninja_deps would get into a state
+  #  # that breaks Ninja on Windows.
+  #  # TODO(crbug.com/1409337): Remove this after updating Ninja 1.12 or newer.
+  #  'name': 'del_ninja_deps_cache',
+  #  'pattern': '.',
+  #  'condition': 'host_os == "win"',
+  #  'action': ['python3', 'chromium/build/del_ninja_deps_cache.py'],
+  #},
   {
     'name': 'bootstrap-gn',
     'pattern': '.',

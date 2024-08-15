@@ -35,6 +35,10 @@ extern NSString* const vNTPBackgroundColor;
 extern NSString* const vPrivateNTPBackgroundColor;
 // Color for the search bar background
 extern NSString* const vSearchbarBackgroundColor;
+// Color for private mode toolbar background
+extern NSString* const vPrivateModeToolbarBackgroundColor;
+// Color for private mode selected tab view background color
+extern NSString* const vPrivateModeTabSelectedBackgroundColor;
 // Color for the new tab page toolbar selection underline
 extern NSString* const vNTPToolbarSelectionLineColor;
 // Color for the new tab page toolbar item when not selected or highlighted

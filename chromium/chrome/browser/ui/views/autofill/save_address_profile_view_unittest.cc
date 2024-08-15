@@ -21,6 +21,9 @@
 
 namespace autofill {
 
+using profile_ref = base::optional_ref<const AutofillProfile>;
+using ::testing::Property;
+
 class MockSaveUpdateAddressProfileBubbleController
     : public SaveUpdateAddressProfileBubbleController {
  public:
@@ -47,9 +50,8 @@ class MockSaveUpdateAddressProfileBubbleController
   MOCK_METHOD(void,
               OnUserDecision,
               (AutofillClient::SaveAddressProfileOfferUserDecision,
-               AutofillProfile),
+               base::optional_ref<const AutofillProfile>),
               (override));
-  MOCK_METHOD(void, OnUserCanceledEditing, (), (override));
   MOCK_METHOD(void, OnEditButtonClicked, (), (override));
   MOCK_METHOD(void, OnBubbleClosed, (), (override));
 };
@@ -135,7 +137,7 @@ TEST_F(SaveAddressProfileViewTest, AcceptInvokesTheController) {
       *mock_controller(),
       OnUserDecision(
           AutofillClient::SaveAddressProfileOfferUserDecision::kAccepted,
-          address_profile_to_save()));
+          Property(&profile_ref::has_value, false)));
   view()->AcceptDialog();
 }
 
@@ -145,7 +147,7 @@ TEST_F(SaveAddressProfileViewTest, CancelInvokesTheController) {
       *mock_controller(),
       OnUserDecision(
           AutofillClient::SaveAddressProfileOfferUserDecision::kDeclined,
-          address_profile_to_save()));
+          Property(&profile_ref::has_value, false)));
   view()->CancelDialog();
 }
 

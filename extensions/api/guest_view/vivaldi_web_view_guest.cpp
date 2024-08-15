@@ -285,7 +285,7 @@ void WebViewGuest::ToggleFullscreenModeForTab(
     return;
   is_fullscreen_ = enter_fullscreen;
 
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+  Browser* browser = chrome::FindBrowserWithTab(web_contents);
 
 #if defined(USE_AURA)
   PrefService* pref_service =
@@ -313,7 +313,7 @@ void WebViewGuest::BeforeUnloadFired(content::WebContents* web_contents,
                                      bool* proceed_to_fire_unload) {
   // Call the Browser class as it already has an instance of the
   // active unload controller.
-  Browser* browser = ::vivaldi::FindBrowserWithWebContents(web_contents);
+  Browser* browser = ::vivaldi::FindBrowserWithTab(web_contents);
   DCHECK(browser);
   if (browser) {
     browser->DoBeforeUnloadFired(web_contents, proceed, proceed_to_fire_unload);
@@ -323,7 +323,7 @@ void WebViewGuest::BeforeUnloadFired(content::WebContents* web_contents,
 void WebViewGuest::SetContentsBounds(content::WebContents* source,
                                      const gfx::Rect& bounds) {
   DCHECK_EQ(web_contents(), source);
-  Browser* browser = ::vivaldi::FindBrowserWithWebContents(source);
+  Browser* browser = ::vivaldi::FindBrowserWithTab(source);
   if (browser && browser->window() && !browser->is_type_normal() &&
       !browser->is_type_picture_in_picture()) {
     browser->window()->SetBounds(bounds);
@@ -349,7 +349,7 @@ void WebViewGuest::ShowPageInfo(gfx::Point pos) {
   }
 
   const GURL url = controller.GetActiveEntry()->GetURL();
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
+  Browser* browser = chrome::FindBrowserWithTab(web_contents());
   Profile* profile =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
 
@@ -369,7 +369,7 @@ void WebViewGuest::NavigationStateChanged(
     content::InvalidateTypes changed_flags) {
   // This class is the WebContentsDelegate, so forward this event
   // to the normal delegate here.
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
+  Browser* browser = chrome::FindBrowserWithTab(web_contents());
   if (browser) {
     static_cast<content::WebContentsDelegate*>(browser)->NavigationStateChanged(
         web_contents(), changed_flags);
@@ -495,11 +495,6 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
                                            int windowId,
                                            bool activePage,
                                            bool inherit_opener) {
-  if (chrome::FindBrowserWithWebContents(guest->web_contents())) {
-    // The guest is already added to a tabstrip.
-    return;
-  }
-
   Browser* browser =
       chrome::FindBrowserWithID(SessionID::FromSerializedValue(windowId));
 
@@ -569,17 +564,6 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
   navigate_params.tabstrip_index = index;
   navigate_params.tabstrip_add_types = add_types;
   navigate_params.source_contents = web_contents();
-
-  // Use the sessionstorage from the opener guest.
-  static_cast<content::WebContentsImpl*>(guest->web_contents())
-      ->GetController()
-      .SetSessionStorageNamespace(
-          web_contents()->GetSiteInstance()->GetStoragePartitionConfig(),
-          static_cast<content::WebContentsImpl*>(web_contents())
-              ->GetController()
-              .GetSessionStorageNamespace(web_contents()
-                                              ->GetSiteInstance()
-                                              ->GetStoragePartitionConfig()));
 
   Navigate(&navigate_params);
 
@@ -661,7 +645,7 @@ bool WebViewGuest::ShouldAllowRunningInsecureContent(WebContents* web_contents,
                                                      bool allowed_per_prefs,
                                                      const url::Origin& origin,
                                                      const GURL& resource_url) {
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+  Browser* browser = chrome::FindBrowserWithTab(web_contents);
   if (browser) {
     return browser->ShouldAllowRunningInsecureContent(
         web_contents, allowed_per_prefs, origin, resource_url);
@@ -765,7 +749,7 @@ content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
   if (event.windows_key_code == ui::VKEY_ESCAPE) {
     // Go out of fullscreen or mouse-lock and pass the event as
     // handled if any of these modes are ended.
-    Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
+    Browser* browser = chrome::FindBrowserWithTab(web_contents());
     if (browser && browser->is_vivaldi()) {
       // If we have both an html5 full screen and a mouse lock, follow Chromium
       // and unlock both.
@@ -1108,55 +1092,12 @@ blink::mojom::DisplayMode WebViewGuest::GetDisplayMode(
   return owner_web_contents()->GetDelegate()->GetDisplayMode(source);
 }
 
-void WebViewGuest::MaybeAddToOpenersTabStrip(
-    const base::Value::Dict& create_params) {
-  absl::optional<int> opener_process_id =
-      create_params.FindInt("opener_process_id");
-  absl::optional<int> opener_frame_id =
-      create_params.FindInt("opener_render_frame_id");
-  absl::optional<int> disposition = create_params.FindInt("disposition");
-
-  WindowOpenDisposition window_open_disposition =
-      (disposition ? static_cast<WindowOpenDisposition>(*disposition)
-                   : WindowOpenDisposition::NEW_FOREGROUND_TAB);
-
-  if (window_open_disposition == WindowOpenDisposition::NEW_POPUP) {
-    return;
-  }
-
-  if ((opener_process_id &&
-       *opener_process_id != content::ChildProcessHost::kInvalidUniqueID) &&
-      (opener_frame_id && *opener_frame_id != MSG_ROUTING_NONE)) {
-    content::WebContents* opener_web_contents =
-        content::WebContents::FromRenderFrameHost(
-            content::RenderFrameHost::FromID(*opener_process_id,
-                                             *opener_frame_id));
-
-    auto* opener_guest = WebViewGuest::FromWebContents(opener_web_contents);
-
-    SetOpener(opener_guest);
-  }
-  WebViewGuest* opener = GetOpener();
-  if (opener) {
-    Browser* browser =
-        chrome::FindBrowserWithWebContents(opener->web_contents());
-    if (browser && !browser->is_type_popup()) {
-      opener->AddGuestToTabStripModel(
-          this, browser->session_id().id(),
-          /*bool activePage =*/
-          (window_open_disposition !=
-           WindowOpenDisposition::NEW_BACKGROUND_TAB),
-          /*bool inherit_opener =*/true);
-    }
-  }
-}
-
 void WebViewGuest::ActivateContents(content::WebContents* web_contents) {
   if (!attached() || !embedder_web_contents()->GetDelegate())
     return;
 
   if (VivaldiTabCheck::IsVivaldiTab(web_contents)) {
-    Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+    Browser* browser = chrome::FindBrowserWithTab(web_contents);
     if (browser) {
       browser->ActivateContents(web_contents);
     }

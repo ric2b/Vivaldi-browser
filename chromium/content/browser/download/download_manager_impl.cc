@@ -62,8 +62,6 @@
 #include "content/public/browser/download_manager_delegate.h"
 #include "content/public/browser/download_request_utils.h"
 #include "content/public/browser/global_routing_id.h"
-#include "content/public/browser/notification_service.h"
-#include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/resource_context.h"
@@ -1130,15 +1128,12 @@ download::DownloadItem* DownloadManagerImpl::CreateDownloadItem(
     base::Time last_access_time,
     bool transient,
     const std::vector<download::DownloadItem::ReceivedSlice>& received_slices) {
-  SCOPED_UMA_HISTOGRAM_TIMER(
-      "Download.DownloadManagerImpl.CreateDownloadItemTime");
   // Retrieve the in-progress download if it exists. Notice that this also
   // removes it from |in_progress_downloads_|.
   auto in_progress_download = RetrieveInProgressDownload(id);
 
   // Return null to clear cancelled or non-resumable download.
-  if (cleared_download_guids_on_startup_.find(guid) !=
-      cleared_download_guids_on_startup_.end()) {
+  if (base::Contains(cleared_download_guids_on_startup_, guid)) {
     return nullptr;
   }
 
@@ -1217,8 +1212,6 @@ void DownloadManagerImpl::PostInitialization(
   if (initialized_)
     return;
 
-  SCOPED_UMA_HISTOGRAM_TIMER(
-      "Download.DownloadManagerImpl.PostInitializationTime");
   switch (dependency) {
     case DOWNLOAD_INITIALIZATION_DEPENDENCY_HISTORY_DB:
       history_db_initialized_ = true;

@@ -38,7 +38,6 @@
 #include "ash/system/tray/tray_background_view.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_container.h"
-#include "ash/system/unified/camera_mic_tray_item_view.h"
 #include "ash/system/unified/current_locale_view.h"
 #include "ash/system/unified/date_tray.h"
 #include "ash/system/unified/ime_mode_view.h"
@@ -160,9 +159,7 @@ bool UnifiedSystemTray::UiDelegate::ShowPopups() {
   return true;
 }
 
-void UnifiedSystemTray::UiDelegate::HidePopups() {
-  message_popup_collection_->SetBaselineOffset(0);
-}
+void UnifiedSystemTray::UiDelegate::HidePopups() {}
 
 bool UnifiedSystemTray::UiDelegate::ShowMessageCenter() {
   if (owner_->IsBubbleShown()) {
@@ -190,8 +187,8 @@ UnifiedSystemTray::UnifiedSystemTray(Shelf* shelf)
               ? nullptr
               : std::make_unique<NotificationIconsController>(shelf,
                                                               model_.get())) {
-  SetPressedCallback(base::BindRepeating(&UnifiedSystemTray::OnButtonPressed,
-                                         base::Unretained(this)));
+  SetCallback(base::BindRepeating(&UnifiedSystemTray::OnButtonPressed,
+                                  base::Unretained(this)));
 
   if (features::IsUserEducationEnabled()) {
     // NOTE: Set `kHelpBubbleContextKey` before `views::kElementIdentifierKey`
@@ -239,15 +236,6 @@ UnifiedSystemTray::UnifiedSystemTray(Shelf* shelf)
   ime_mode_view_ = AddTrayItemToContainer(std::make_unique<ImeModeView>(shelf));
   managed_device_view_ = AddTrayItemToContainer(
       std::make_unique<ManagedDeviceTrayItemView>(shelf));
-
-  if (!features::IsPrivacyIndicatorsEnabled() &&
-      !features::IsVideoConferenceEnabled()) {
-    camera_view_ =
-        AddTrayItemToContainer(std::make_unique<CameraMicTrayItemView>(
-            shelf, CameraMicTrayItemView::Type::kCamera));
-    mic_view_ = AddTrayItemToContainer(std::make_unique<CameraMicTrayItemView>(
-        shelf, CameraMicTrayItemView::Type::kMic));
-  }
 
   if (features::IsHotspotEnabled()) {
     hotspot_tray_view_ =
@@ -406,17 +394,38 @@ void UnifiedSystemTray::ShowVolumeSliderBubble() {
 
 void UnifiedSystemTray::ShowAudioDetailedViewBubble() {
   ShowBubble();
-  bubble_->ShowAudioDetailedView();
+
+  // There is a case that `bubble_` is still a nullptr after `ShowBubble()` is
+  // called (e.g. in kiosk mode, `ShowBubbleInternal()` will early return, and
+  // `bubble_` is still uninitialized). Only show detailed view if `bubble_` is
+  // not null.
+  if (bubble_) {
+    bubble_->ShowAudioDetailedView();
+  }
 }
 
 void UnifiedSystemTray::ShowDisplayDetailedViewBubble() {
   ShowBubble();
-  bubble_->ShowDisplayDetailedView();
+
+  // There is a case that `bubble_` is still a nullptr after `ShowBubble()` is
+  // called (e.g. in kiosk mode, `ShowBubbleInternal()` will early return, and
+  // `bubble_` is still uninitialized). Only show detailed view if `bubble_` is
+  // not null.
+  if (bubble_) {
+    bubble_->ShowDisplayDetailedView();
+  }
 }
 
 void UnifiedSystemTray::ShowNetworkDetailedViewBubble() {
   ShowBubble();
-  bubble_->ShowNetworkDetailedView(true /* force */);
+
+  // There is a case that `bubble_` is still a nullptr after `ShowBubble()` is
+  // called (e.g. in kiosk mode, `ShowBubbleInternal()` will early return, and
+  // `bubble_` is still uninitialized). Only show detailed view if `bubble_` is
+  // not null.
+  if (bubble_) {
+    bubble_->ShowNetworkDetailedView(/*force=*/true);
+  }
 }
 
 void UnifiedSystemTray::NotifySecondaryBubbleHeight(int height) {
@@ -502,6 +511,10 @@ views::Widget* UnifiedSystemTray::GetBubbleWidget() const {
   return bubble_ ? bubble_->GetBubbleWidget() : nullptr;
 }
 
+TrayBubbleView* UnifiedSystemTray::GetBubbleView() {
+  return bubble_ ? bubble_->GetBubbleView() : nullptr;
+}
+
 const char* UnifiedSystemTray::GetClassName() const {
   return "UnifiedSystemTray";
 }
@@ -509,28 +522,6 @@ const char* UnifiedSystemTray::GetClassName() const {
 absl::optional<AcceleratorAction> UnifiedSystemTray::GetAcceleratorAction()
     const {
   return absl::make_optional(AcceleratorAction::kToggleSystemTrayBubble);
-}
-
-void UnifiedSystemTray::OnAnyBubbleVisibilityChanged(
-    views::Widget* bubble_widget,
-    bool visible) {
-  if (!features::IsQsRevampEnabled()) {
-    return;
-  }
-
-  if (!IsBubbleShown()) {
-    return;
-  }
-
-  if (bubble_widget == GetBubbleWidget()) {
-    return;
-  }
-
-  if (visible) {
-    // Another bubble is becoming visible while this bubble is being shown, so
-    // hide this bubble.
-    CloseBubble();
-  }
 }
 
 void UnifiedSystemTray::OnShelfConfigUpdated() {
@@ -704,23 +695,13 @@ std::u16string UnifiedSystemTray::GetAccessibleNameForTray() {
     status.push_back(network_string);
   }
 
-  // For privacy string, we use either `privacy_indicators_view_` or the combo
-  // of `mic_view_` and `camera_view_`.
   if (privacy_indicators_view_) {
     status.push_back(
         privacy_indicators_view_->GetVisible()
             ? privacy_indicators_view_->GetTooltipText(gfx::Point())
             : base::EmptyString16());
   } else {
-    auto mic_string = mic_view_ && mic_view_->GetVisible()
-                          ? mic_view_->GetAccessibleNameString()
-                          : base::EmptyString16();
-    auto camera_string = camera_view_ && camera_view_->GetVisible()
-                             ? camera_view_->GetAccessibleNameString()
-                             : base::EmptyString16();
-    status.push_back(l10n_util::GetStringFUTF16(
-        IDS_ASH_STATUS_TRAY_PRIVACY_ACCESSIBLE_DESCRIPTION,
-        {mic_string, camera_string}, nullptr));
+    status.push_back(base::EmptyString16());
   }
 
   status.push_back(managed_device_view_->GetVisible()

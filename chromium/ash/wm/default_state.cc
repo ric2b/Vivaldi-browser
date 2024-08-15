@@ -5,8 +5,6 @@
 #include "ash/wm/default_state.h"
 
 #include "ash/public/cpp/metrics_util.h"
-#include "ash/public/cpp/shell_window_ids.h"
-#include "ash/public/cpp/window_animation_types.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
@@ -34,6 +32,7 @@
 #include "ui/display/display_observer.h"
 #include "ui/display/screen.h"
 #include "ui/display/types/display_constants.h"
+#include "ui/wm/core/window_animations.h"
 #include "ui/wm/core/window_util.h"
 
 namespace ash {
@@ -170,7 +169,8 @@ void DefaultState::AttachState(WindowState* window_state,
         display::DisplayObserver::DISPLAY_METRIC_BOUNDS);
     window_state->OnWMEvent(&event);
   } else if (stored_display_state_.work_area() != current_display.work_area()) {
-    const WMEvent event(WM_EVENT_WORKAREA_BOUNDS_CHANGED);
+    const DisplayMetricsChangedWMEvent event(
+        display::DisplayObserver::DISPLAY_METRIC_WORK_AREA);
     window_state->OnWMEvent(&event);
   }
 }
@@ -240,34 +240,35 @@ void DefaultState::HandleWorkspaceEvents(WindowState* window_state,
       window_state->SetBoundsConstrained(bounds);
       return;
     }
-    case WM_EVENT_DISPLAY_BOUNDS_CHANGED: {
-      // When display bounds has changed, make sure the entire window is fully
-      // visible.
-      UpdateBoundsForDisplayOrWorkAreaBoundsChange(
-          window_state, /*ensure_full_window_visibility=*/true);
-      return;
-    }
-    case WM_EVENT_WORKAREA_BOUNDS_CHANGED: {
-      // Don't resize the maximized window when the desktop is covered
-      // by fullscreen window. crbug.com/504299.
-      // TODO(afakhry): Decide whether we want the active desk's workspace, or
-      // the workspace of the desk of `window_state->window()`.
-      // For now use the active desk's.
-      auto* workspace_controller =
-          GetActiveWorkspaceController(window_state->window()->GetRootWindow());
-      DCHECK(workspace_controller);
-      bool in_fullscreen = workspace_controller->GetWindowState() ==
-                           WorkspaceWindowState::kFullscreen;
-      if (in_fullscreen && window_state->IsMaximized())
-        return;
+    case WM_EVENT_DISPLAY_METRICS_CHANGED: {
+      const DisplayMetricsChangedWMEvent* display_event =
+          event->AsDisplayMetricsChangedWMEvent();
+      if (display_event->display_bounds_changed()) {
+        // When display bounds has changed, make sure the entire window is fully
+        // visible.
+        UpdateBoundsForDisplayOrWorkAreaBoundsChange(
+            window_state, /*ensure_full_window_visibility=*/true);
+      } else if (display_event->work_area_changed()) {
+        // Don't resize the maximized window when the desktop is covered
+        // by fullscreen window. crbug.com/504299.
+        // TODO(afakhry): Decide whether we want the active desk's workspace, or
+        // the workspace of the desk of `window_state->window()`.
+        // For now use the active desk's.
+        auto* workspace_controller = GetActiveWorkspaceController(
+            window_state->window()->GetRootWindow());
+        DCHECK(workspace_controller);
+        const bool in_fullscreen = workspace_controller->GetWindowState() ==
+                                   WorkspaceWindowState::kFullscreen;
+        if (in_fullscreen && window_state->IsMaximized()) {
+          return;
+        }
 
-      UpdateBoundsForDisplayOrWorkAreaBoundsChange(
-          window_state,
-          /*ensure_full_window_visibility=*/false);
+        UpdateBoundsForDisplayOrWorkAreaBoundsChange(
+            window_state,
+            /*ensure_full_window_visibility=*/false);
+      }
       return;
     }
-    case WM_EVENT_SYSTEM_UI_AREA_CHANGED:
-      break;
     default:
       NOTREACHED() << "Unknown event:" << event->type();
   }
@@ -376,9 +377,6 @@ void DefaultState::HandleBoundsEvents(WindowState* window_state,
           static_cast<const SetBoundsWMEvent*>(event);
       SetBounds(window_state, set_bounds_event);
     } break;
-    case WM_EVENT_CENTER:
-      CenterWindow(window_state);
-      break;
     default:
       NOTREACHED() << "Unknown event:" << event->type();
       break;
@@ -410,7 +408,8 @@ void DefaultState::HandleTransitionEvents(WindowState* window_state,
   }
 
   if (type == WM_EVENT_SNAP_PRIMARY || type == WM_EVENT_SNAP_SECONDARY) {
-    HandleWindowSnapping(window_state, type);
+    HandleWindowSnapping(window_state, type,
+                         event->AsSnapEvent()->snap_action_source());
   }
 
   if (next_state_type == current_state_type && window_state->IsSnapped()) {
@@ -435,7 +434,7 @@ void DefaultState::HandleTransitionEvents(WindowState* window_state,
     } else {
       CHECK(event->IsSnapEvent());
       window_state->RecordWindowSnapActionSource(
-          static_cast<const WindowSnapWMEvent*>(event)->snap_action_source());
+          event->AsSnapEvent()->snap_action_source());
     }
   }
 

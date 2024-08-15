@@ -7,16 +7,23 @@
 #include <memory>
 #include <string>
 
+#include "ash/game_dashboard/game_dashboard_button.h"
+#include "ash/game_dashboard/game_dashboard_controller.h"
 #include "ash/game_dashboard/game_dashboard_main_menu_view.h"
 #include "ash/game_dashboard/game_dashboard_toolbar_view.h"
-#include "ash/strings/grit/ash_strings.h"
-#include "ash/style/pill_button.h"
+#include "ash/game_dashboard/game_dashboard_utils.h"
+#include "ash/game_dashboard/game_dashboard_widget.h"
+#include "ash/public/cpp/app_types_util.h"
+#include "ash/public/cpp/arc_game_controls_flag.h"
+#include "ash/public/cpp/window_properties.h"
+#include "base/check.h"
+#include "base/check_op.h"
 #include "base/i18n/time_formatting.h"
-#include "base/timer/timer.h"
 #include "chromeos/ui/frame/frame_header.h"
 #include "ui/aura/window.h"
-#include "ui/base/l10n/l10n_util.h"
+#include "ui/base/l10n/time_format.h"
 #include "ui/compositor/layer.h"
+#include "ui/events/types/event_type.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/transform.h"
 #include "ui/views/animation/animation_builder.h"
@@ -30,9 +37,9 @@ namespace {
 
 constexpr base::TimeDelta kCountUpTimerRefreshInterval = base::Seconds(1);
 
-// Number of pixels to add to the top and bottom of the main menu button so
+// Number of pixels to add to the top and bottom of the Game Dashboard button so
 // that it's centered within the frame header.
-static const int kMainMenuButtonVerticalPaddingDp = 3;
+static const int kGameDashboardButtonVerticalPaddingDp = 3;
 
 // Toolbar padding from the border of the game window.
 static const int kToolbarEdgePadding = 10;
@@ -44,7 +51,9 @@ static constexpr base::TimeDelta kToolbarBoundsChangeAnimationDuration =
 std::unique_ptr<GameDashboardWidget> CreateTransientChildWidget(
     aura::Window* game_window,
     const std::string& widget_name,
-    std::unique_ptr<views::View> view) {
+    std::unique_ptr<views::View> view,
+    views::Widget::InitParams::Activatable activatable =
+        views::Widget::InitParams::Activatable::kDefault) {
   views::Widget::InitParams params(
       views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
@@ -53,6 +62,7 @@ std::unique_ptr<GameDashboardWidget> CreateTransientChildWidget(
   // screenshots or screen recordings.
   params.parent = game_window;
   params.name = widget_name;
+  params.activatable = activatable;
 
   auto widget = std::make_unique<GameDashboardWidget>();
   widget->Init(std::move(params));
@@ -70,10 +80,11 @@ GameDashboardContext::GameDashboardContext(aura::Window* game_window)
     : game_window_(game_window),
       toolbar_snap_location_(ToolbarSnapLocation::kTopRight) {
   DCHECK(game_window_);
-  CreateAndAddMainMenuButtonWidget();
+  CreateAndAddGameDashboardButtonWidget();
 }
 
 GameDashboardContext::~GameDashboardContext() {
+  game_dashboard_button_->RemoveObserver(this);
   if (main_menu_widget_) {
     main_menu_widget_->CloseNow();
   }
@@ -86,15 +97,22 @@ void GameDashboardContext::SetToolbarSnapLocation(
 }
 
 void GameDashboardContext::OnWindowBoundsChanged() {
-  UpdateMainMenuButtonWidgetBounds();
+  UpdateGameDashboardButtonWidgetBounds();
   MaybeUpdateToolbarWidgetBounds();
 }
 
-void GameDashboardContext::SetMainMenuButtonEnabled(bool enable) {
-  DCHECK(main_menu_button_widget_);
-  auto* contents_view = main_menu_button_widget_->GetContentsView();
-  DCHECK(contents_view);
-  contents_view->SetEnabled(enable);
+void GameDashboardContext::UpdateForGameControlsFlags() {
+  CHECK(IsArcWindow(game_window_));
+
+  const ArcGameControlsFlag flags =
+      game_window_->GetProperty(kArcGameControlsFlagsKey);
+  game_dashboard_button_->SetEnabled(
+      game_dashboard_utils::IsFlagSet(flags, ArcGameControlsFlag::kKnown) &&
+      !game_dashboard_utils::IsFlagSet(flags, ArcGameControlsFlag::kEdit));
+
+  if (toolbar_view_) {
+    toolbar_view_->UpdateViewForGameControls(flags);
+  }
 }
 
 void GameDashboardContext::ToggleMainMenu() {
@@ -105,17 +123,22 @@ void GameDashboardContext::ToggleMainMenu() {
     main_menu_widget_ =
         base::WrapUnique(views::BubbleDialogDelegateView::CreateBubble(
             std::move(widget_delegate)));
+    main_menu_widget_->AddObserver(this);
     main_menu_widget_->Show();
+    game_dashboard_button_->SetToggled(true);
   } else {
+    DCHECK(main_menu_view_);
+    DCHECK(main_menu_widget_);
     CloseMainMenu();
   }
 }
 
 void GameDashboardContext::CloseMainMenu() {
-  DCHECK(main_menu_view_);
-  DCHECK(main_menu_widget_.get());
   main_menu_view_ = nullptr;
+  DCHECK(main_menu_widget_);
+  main_menu_widget_->RemoveObserver(this);
   main_menu_widget_.reset();
+  game_dashboard_button_->SetToggled(false);
 }
 
 bool GameDashboardContext::ToggleToolbar() {
@@ -128,7 +151,18 @@ bool GameDashboardContext::ToggleToolbar() {
     DCHECK_EQ(game_window_,
               wm::GetTransientParent(toolbar_widget_->GetNativeWindow()));
     MaybeUpdateToolbarWidgetBounds();
-    toolbar_widget_->Show();
+
+    if (main_menu_widget_) {
+      // Display the toolbar behind the main menu view.
+      toolbar_widget_->ShowInactive();
+      auto* toolbar_window = toolbar_widget_->GetNativeWindow();
+      auto* main_menu_window = main_menu_widget_->GetNativeWindow();
+      CHECK_EQ(toolbar_window->parent(), main_menu_window->parent());
+      toolbar_window->parent()->StackChildBelow(toolbar_window,
+                                                main_menu_window);
+    } else {
+      toolbar_widget_->Show();
+    }
     return true;
   }
 
@@ -155,11 +189,10 @@ bool GameDashboardContext::IsToolbarVisible() const {
 
 void GameDashboardContext::OnRecordingStarted(bool is_recording_game_window) {
   if (is_recording_game_window) {
-    // TODO(b/273641154): Update the the main menu button to the recording
-    // state.
     CHECK(!recording_timer_.IsRunning());
     DCHECK(recording_start_time_.is_null());
     DCHECK(recording_duration_.empty());
+    game_dashboard_button_->OnRecordingStarted();
     recording_start_time_ = base::Time::Now();
     OnUpdateRecordingTimer();
     recording_timer_.Start(FROM_HERE, kCountUpTimerRefreshInterval, this,
@@ -178,7 +211,7 @@ void GameDashboardContext::OnRecordingEnded() {
   recording_timer_.Stop();
   recording_start_time_ = base::Time();
   recording_duration_.clear();
-  // TODO(b/273641154): Update the the main menu button to the default state.
+  game_dashboard_button_->OnRecordingEnded();
   if (main_menu_view_) {
     main_menu_view_->OnRecordingEnded();
   }
@@ -187,24 +220,42 @@ void GameDashboardContext::OnRecordingEnded() {
   }
 }
 
-void GameDashboardContext::CreateAndAddMainMenuButtonWidget() {
-  main_menu_button_widget_ = CreateTransientChildWidget(
-      game_window_, "GameDashboardButton",
-      std::make_unique<PillButton>(
-          base::BindRepeating(&GameDashboardContext::OnMainMenuButtonPressed,
-                              weak_ptr_factory_.GetWeakPtr()),
-          l10n_util::GetStringUTF16(
-              IDS_ASH_GAME_DASHBOARD_MAIN_MENU_BUTTON_TITLE)));
-  DCHECK_EQ(game_window_, wm::GetTransientParent(
-                              main_menu_button_widget_->GetNativeWindow()));
-  UpdateMainMenuButtonWidgetBounds();
-  main_menu_button_widget_->Show();
+void GameDashboardContext::OnViewPreferredSizeChanged(
+    views::View* observed_view) {
+  CHECK_EQ(game_dashboard_button_, observed_view);
+  UpdateGameDashboardButtonWidgetBounds();
 }
 
-void GameDashboardContext::UpdateMainMenuButtonWidgetBounds() {
-  DCHECK(main_menu_button_widget_);
+void GameDashboardContext::OnWidgetDestroying(views::Widget* widget) {
+  DCHECK(main_menu_view_);
+  DCHECK_EQ(widget, main_menu_view_->GetWidget());
+  main_menu_view_ = nullptr;
+  game_dashboard_button_->SetToggled(false);
+}
+
+void GameDashboardContext::CreateAndAddGameDashboardButtonWidget() {
+  auto game_dashboard_button = std::make_unique<GameDashboardButton>(
+      base::BindRepeating(&GameDashboardContext::OnGameDashboardButtonPressed,
+                          weak_ptr_factory_.GetWeakPtr()));
+  DCHECK(!game_dashboard_button_);
+  game_dashboard_button_ = game_dashboard_button.get();
+  game_dashboard_button_widget_ = CreateTransientChildWidget(
+      game_window_, "GameDashboardButton", std::move(game_dashboard_button),
+      views::Widget::InitParams::Activatable::kNo);
+  // Add observer after `game_dashboard_button_widget_` is created because the
+  // observation is to update `game_dashboard_button_widget_` bounds.
+  game_dashboard_button_->AddObserver(this);
+  DCHECK_EQ(
+      game_window_,
+      wm::GetTransientParent(game_dashboard_button_widget_->GetNativeWindow()));
+  UpdateGameDashboardButtonWidgetBounds();
+  game_dashboard_button_widget_->Show();
+}
+
+void GameDashboardContext::UpdateGameDashboardButtonWidgetBounds() {
+  DCHECK(game_dashboard_button_widget_);
   auto preferred_size =
-      main_menu_button_widget_->GetContentsView()->GetPreferredSize();
+      game_dashboard_button_widget_->GetContentsView()->GetPreferredSize();
   gfx::Point origin = game_window_->GetBoundsInScreen().top_center();
 
   auto* frame_header = chromeos::FrameHeader::Get(
@@ -215,14 +266,14 @@ void GameDashboardContext::UpdateMainMenuButtonWidgetBounds() {
   }
   // Position the button in the top center of the `FrameHeader`.
   origin.set_x(origin.x() - preferred_size.width() / 2);
-  origin.set_y(origin.y() + kMainMenuButtonVerticalPaddingDp);
+  origin.set_y(origin.y() + kGameDashboardButtonVerticalPaddingDp);
   preferred_size.set_height(frame_header->GetHeaderHeight() -
-                            2 * kMainMenuButtonVerticalPaddingDp);
-  main_menu_button_widget_->SetBounds(gfx::Rect(origin, preferred_size));
+                            2 * kGameDashboardButtonVerticalPaddingDp);
+  game_dashboard_button_widget_->SetBounds(gfx::Rect(origin, preferred_size));
 }
 
-void GameDashboardContext::OnMainMenuButtonPressed() {
-  // TODO(b/273640775): Add metrics to know when the main menu button was
+void GameDashboardContext::OnGameDashboardButtonPressed() {
+  // TODO(b/273640775): Add metrics to know when the Game Dashboard button was
   // physically pressed.
   ToggleMainMenu();
 }
@@ -301,11 +352,8 @@ void GameDashboardContext::OnUpdateRecordingTimer() {
   if (delta < base::Hours(1)) {
     base::ReplaceFirstSubstringAfterOffset(&duration, 0, u"0:", u"");
   }
-
   recording_duration_ = duration;
-
-  // TODO(b/273641154): Update the the main menu button with the recording
-  // duration.
+  game_dashboard_button_->UpdateRecordingDuration(duration);
   if (main_menu_view_) {
     main_menu_view_->UpdateRecordingDuration(duration);
   }

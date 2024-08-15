@@ -37,7 +37,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/grit/chromium_strings.h"
+#include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/components/network/portal_detector/network_portal_detector.h"
 #include "components/consent_auditor/consent_auditor.h"
@@ -85,7 +85,7 @@ std::string GetTosHost(ToS terms_type) {
 
   const char* url_path = kTermsTypeToUrlAndSwitch.at(terms_type).first;
   if (terms_type == ToS::GOOGLE_EULA || terms_type == ToS::CROS_EULA) {
-    return base::StringPrintf(
+    return base::StringPrintfNonConstexpr(
         url_path, g_browser_process->GetApplicationLocale().c_str());
   }
   return url_path;

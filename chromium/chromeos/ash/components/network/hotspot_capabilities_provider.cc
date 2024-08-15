@@ -108,15 +108,17 @@ void HotspotCapabilitiesProvider::NetworkConnectionStateChanged(
     return;
   }
 
-  if (!network->IsConnectingOrConnected()) {
-    // The cellular network got disconnected.
-    SetHotspotAllowStatus(HotspotAllowStatus::kDisallowedNoMobileData);
+  if (!policy_allow_hotspot_) {
+    SetHotspotAllowStatus(HotspotAllowStatus::kDisallowedByPolicy);
     return;
   }
 
-  if (network->IsConnectedState()) {
+  if (network->IsOnline()) {
     CheckTetheringReadiness(base::DoNothing());
+    return;
   }
+
+  SetHotspotAllowStatus(HotspotAllowStatus::kDisallowedNoMobileData);
 }
 
 void HotspotCapabilitiesProvider::OnShuttingDown() {
@@ -201,6 +203,11 @@ void HotspotCapabilitiesProvider::UpdateHotspotCapabilities(
     return;
   }
 
+  if (!policy_allow_hotspot_) {
+    SetHotspotAllowStatus(HotspotAllowStatus::kDisallowedByPolicy);
+    return;
+  }
+
   // Check if there's a connected cellular network
   const NetworkState* connected_cellular_network =
       network_state_handler_->ConnectedNetworkByType(
@@ -231,9 +238,7 @@ void HotspotCapabilitiesProvider::OnCheckReadinessSuccess(
   using HotspotAllowStatus = hotspot_config::mojom::HotspotAllowStatus;
   NET_LOG(EVENT) << "Check tethering readiness result: " << result;
   if (result == shill::kTetheringReadinessReady) {
-    SetHotspotAllowStatus(policy_allow_hotspot_
-                              ? HotspotAllowStatus::kAllowed
-                              : HotspotAllowStatus::kDisallowedByPolicy);
+    SetHotspotAllowStatus(HotspotAllowStatus::kAllowed);
     HotspotMetricsHelper::RecordCheckTetheringReadinessResult(
         CheckTetheringReadinessResult::kReady);
     std::move(callback).Run(CheckTetheringReadinessResult::kReady);
@@ -293,8 +298,7 @@ void HotspotCapabilitiesProvider::NotifyHotspotCapabilitiesChanged() {
 void HotspotCapabilitiesProvider::SetPolicyAllowed(bool allowed) {
   policy_allow_hotspot_ = allowed;
   if (!policy_allow_hotspot_ &&
-      hotspot_capabilities_.allow_status ==
-          hotspot_config::mojom::HotspotAllowStatus::kAllowed) {
+      !IsDisallowedByPlatformCapabilities(hotspot_capabilities_.allow_status)) {
     SetHotspotAllowStatus(
         hotspot_config::mojom::HotspotAllowStatus::kDisallowedByPolicy);
     return;
@@ -302,7 +306,7 @@ void HotspotCapabilitiesProvider::SetPolicyAllowed(bool allowed) {
   if (policy_allow_hotspot_ &&
       hotspot_capabilities_.allow_status ==
           hotspot_config::mojom::HotspotAllowStatus::kDisallowedByPolicy) {
-    SetHotspotAllowStatus(hotspot_config::mojom::HotspotAllowStatus::kAllowed);
+    CheckTetheringReadiness(base::DoNothing());
   }
 }
 

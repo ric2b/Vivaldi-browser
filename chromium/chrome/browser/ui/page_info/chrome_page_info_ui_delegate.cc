@@ -10,6 +10,7 @@
 #include "chrome/browser/page_info/about_this_site_tab_helper.h"
 #include "chrome/browser/page_info/page_info_features.h"
 #include "chrome/browser/permissions/permission_manager_factory.h"
+#include "chrome/browser/privacy_sandbox/tracking_protection_settings_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/chrome_pages.h"
@@ -22,6 +23,7 @@
 #include "components/permissions/permission_manager.h"
 #include "components/permissions/permissions_client.h"
 #include "components/prefs/pref_service.h"
+#include "components/privacy_sandbox/tracking_protection_settings.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/permission_controller.h"
 #include "content/public/browser/permission_result.h"
@@ -108,7 +110,7 @@ std::u16string ChromePageInfoUiDelegate::GetAutomaticallyBlockedReason(
 #if !BUILDFLAG(IS_ANDROID)
 absl::optional<page_info::proto::SiteInfo>
 ChromePageInfoUiDelegate::GetAboutThisSiteInfo() {
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents_);
+  Browser* browser = chrome::FindBrowserWithTab(web_contents_);
   if (!browser || !browser->is_type_normal()) {
     // TODO(crbug.com/1435450): SidePanel is not available. Evaluate if we can
     //                          show ATP in a different way.
@@ -177,12 +179,12 @@ bool ChromePageInfoUiDelegate::IsMultipleTabsOpen() {
 }
 
 void ChromePageInfoUiDelegate::ShowPrivacySandboxAdPersonalization() {
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents_);
+  Browser* browser = chrome::FindBrowserWithTab(web_contents_);
   chrome::ShowPrivacySandboxAdPersonalization(browser);
 }
 
 void ChromePageInfoUiDelegate::ShowPrivacySandboxSettings() {
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents_);
+  Browser* browser = chrome::FindBrowserWithTab(web_contents_);
   chrome::ShowPrivacySandboxSettings(browser);
 }
 
@@ -208,6 +210,11 @@ content::PermissionResult ChromePageInfoUiDelegate::GetPermissionResult(
       ->GetPermissionController()
       ->GetPermissionResultForOriginWithoutContext(
           permission, url::Origin::Create(site_url_));
+}
+
+bool ChromePageInfoUiDelegate::IsTrackingProtection3pcdEnabled() {
+  return TrackingProtectionSettingsFactory::GetForProfile(GetProfile())
+      ->IsTrackingProtection3pcdEnabled();
 }
 
 absl::optional<content::PermissionResult>

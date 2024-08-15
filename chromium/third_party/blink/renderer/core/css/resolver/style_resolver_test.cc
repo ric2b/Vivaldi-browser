@@ -609,7 +609,7 @@ TEST_F(StyleResolverTest, NoFetchForAtPage) {
     </style>
   )HTML");
 
-  GetDocument().GetStyleEngine().UpdateActiveStyle();
+  UpdateAllLifecyclePhasesForTest();
   const ComputedStyle* page_style =
       GetDocument().GetStyleResolver().StyleForPage(0, g_empty_atom);
   ASSERT_TRUE(page_style);
@@ -1277,8 +1277,8 @@ TEST_F(StyleResolverTest, InheritStyleImagesFromDisplayContents) {
   EXPECT_FALSE(style->MaskBoxImageSource()->IsPendingImage())
       << "-webkit-mask-box-image-source";
 
-  ASSERT_TRUE(style->MaskImage());
-  EXPECT_FALSE(style->MaskImage()->IsPendingImage())
+  ASSERT_TRUE(style->MaskLayers().GetImage());
+  EXPECT_FALSE(style->MaskLayers().GetImage()->IsPendingImage())
       << "-webkit-mask-image is fetched";
 }
 
@@ -2233,6 +2233,8 @@ TEST_F(StyleResolverTest, IsInertWithFrameAndFullscreen) {
 }
 
 TEST_F(StyleResolverTest, IsInertWithBackdrop) {
+  ScopedBackdropInheritOriginatingForTest backdrop_inherit(true);
+
   Document& document = GetDocument();
   NonThrowableExceptionState exception_state;
 
@@ -2262,7 +2264,7 @@ TEST_F(StyleResolverTest, IsInertWithBackdrop) {
   UpdateAllLifecyclePhasesForTest();
 
   EXPECT_EQ(html->GetPseudoElement(kPseudoIdBackdrop), nullptr);
-  EXPECT_FALSE(IsBackdropInert(body));
+  EXPECT_TRUE(IsBackdropInert(body));
   EXPECT_FALSE(IsBackdropInert(dialog));
 
   dialog->close();
@@ -2282,8 +2284,8 @@ TEST_F(StyleResolverTest, IsInertWithBackdrop) {
   dialog->showModal(exception_state);
   UpdateAllLifecyclePhasesForTest();
 
-  EXPECT_FALSE(IsBackdropInert(html));
-  EXPECT_FALSE(IsBackdropInert(body));
+  EXPECT_TRUE(IsBackdropInert(html));
+  EXPECT_TRUE(IsBackdropInert(body));
   EXPECT_FALSE(IsBackdropInert(dialog));
   ExitFullscreen(document);
 }

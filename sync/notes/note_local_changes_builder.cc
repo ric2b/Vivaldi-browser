@@ -9,11 +9,10 @@
 #include <utility>
 #include <vector>
 
-#include "base/strings/utf_string_conversions.h"
+#include "components/notes/note_node.h"
 #include "components/sync/base/time.h"
-#include "components/sync/protocol/notes_model_metadata.pb.h"
-#include "components/sync_bookmarks/switches.h"
-#include "notes/note_node.h"
+#include "components/sync/base/unique_position.h"
+#include "sync/notes/note_model_view.h"
 #include "sync/notes/note_specifics_conversions.h"
 #include "sync/notes/synced_note_tracker.h"
 #include "sync/notes/synced_note_tracker_entity.h"
@@ -22,7 +21,7 @@ namespace sync_notes {
 
 NoteLocalChangesBuilder::NoteLocalChangesBuilder(
     SyncedNoteTracker* const note_tracker,
-    vivaldi::NotesModel* notes_model)
+    NoteModelView* notes_model)
     : note_tracker_(note_tracker), notes_model_(notes_model) {
   DCHECK(note_tracker);
   DCHECK(notes_model);
@@ -97,6 +96,14 @@ syncer::CommitRequestDataList NoteLocalChangesBuilder::BuildCommitRequests(
     // Specifics hash has been computed in the tracker when this entity has been
     // added/updated.
     request->specifics_hash = metadata.specifics_hash();
+
+    if (!metadata.is_deleted()) {
+      const vivaldi::NoteNode* node = entity->note_node();
+      CHECK(node);
+      request->deprecated_note_folder = node->is_folder();
+      request->deprecated_note_unique_position =
+          syncer::UniquePosition::FromProto(metadata.unique_position());
+    }
 
     note_tracker_->MarkCommitMayHaveStarted(entity);
 

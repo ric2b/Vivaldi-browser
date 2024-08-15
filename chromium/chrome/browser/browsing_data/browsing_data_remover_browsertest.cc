@@ -40,7 +40,7 @@
 #include "components/history/core/common/pref_names.h"
 #include "components/metrics/content/subprocess_metrics_provider.h"
 #include "components/password_manager/core/browser/features/password_features.h"
-#include "components/password_manager/core/browser/password_manager_features_util.h"
+#include "components/password_manager/core/browser/features/password_manager_features_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/account_reconcilor.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -134,6 +134,9 @@ class BrowsingDataRemoverBrowserTest
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
     enabled_features.push_back(media::kExternalClearKeyForTesting);
 #endif
+    // WebSQL is disabled by default as of M119 (crbug/695592). Enable feature
+    // in tests during deprecation trial and enterprise policy support.
+    enabled_features.push_back(blink::features::kWebSQLAccess);
     InitFeatureLists(std::move(enabled_features), {});
   }
 
@@ -1522,11 +1525,16 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest,
   // LocalStorage are counted. TODO(crbug.com/1307796): Use a different approach
   // to determine presence of data that does not depend on UI code and has a
   // better resolution when 3PSP is fully enabled.
-  ExpectTotalModelCount(kStorageTypes.size() - 2,
-                        base::FeatureList::IsEnabled(
-                            browsing_data::features::kMigrateStorageToBDM)
-                            ? 2
-                            : 3);
+  auto expected_model_size = 3;
+  if (base::FeatureList::IsEnabled(
+          browsing_data::features::kMigrateStorageToBDM)) {
+    expected_model_size--;
+  }
+  if (base::FeatureList::IsEnabled(
+          browsing_data::features::kDeprecateCookiesTreeModel)) {
+    expected_model_size--;
+  }
+  ExpectTotalModelCount(kStorageTypes.size() - 2, expected_model_size);
   RemoveAndWait(chrome_browsing_data_remover::DATA_TYPE_SITE_DATA |
                 content::BrowsingDataRemover::DATA_TYPE_CACHE |
                 chrome_browsing_data_remover::DATA_TYPE_HISTORY |
@@ -1582,11 +1590,17 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest,
   // Cookies and LocalStorage are counted. TODO(crbug.com/1307796): Use a
   // different approach to determine presence of data that does not depend on UI
   // code and has a better resolution when 3PSP is fully enabled.
+  auto expected_model_size = 3;
+  if (base::FeatureList::IsEnabled(
+          browsing_data::features::kMigrateStorageToBDM)) {
+    expected_model_size--;
+  }
+  if (base::FeatureList::IsEnabled(
+          browsing_data::features::kDeprecateCookiesTreeModel)) {
+    expected_model_size--;
+  }
   ExpectTotalModelCount(kSessionOnlyStorageTestTypes.size() - 1,
-                        base::FeatureList::IsEnabled(
-                            browsing_data::features::kMigrateStorageToBDM)
-                            ? 2
-                            : 3);
+                        expected_model_size);
   HostContentSettingsMapFactory::GetForProfile(GetBrowser()->profile())
       ->SetDefaultContentSetting(ContentSettingsType::COOKIES,
                                  CONTENT_SETTING_SESSION_ONLY);

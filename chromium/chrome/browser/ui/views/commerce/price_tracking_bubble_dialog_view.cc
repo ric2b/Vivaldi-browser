@@ -15,8 +15,10 @@
 #include "components/commerce/core/price_tracking_utils.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/views/controls/styled_label.h"
 #include "ui/views/layout/fill_layout.h"
+#include "ui/views/view_class_properties.h"
 #include "ui/views/view_tracker.h"
 #include "ui/views/view_utils.h"
 
@@ -33,6 +35,8 @@ std::unique_ptr<views::StyledLabel> CreateBodyLabel(std::u16string& body_text) {
 
 }  // namespace
 
+DEFINE_ELEMENT_IDENTIFIER_VALUE(kPriceTrackingBubbleDialogId);
+
 PriceTrackingBubbleDialogView::PriceTrackingBubbleDialogView(
     View* anchor_view,
     content::WebContents* web_contents,
@@ -45,6 +49,7 @@ PriceTrackingBubbleDialogView::PriceTrackingBubbleDialogView(
       profile_(profile),
       url_(url),
       type_(type) {
+  SetProperty(views::kElementIdentifierKey, kPriceTrackingBubbleDialogId);
   SetShowCloseButton(true);
   SetLayoutManager(std::make_unique<views::FillLayout>());
   SetButtons(ui::DIALOG_BUTTON_CANCEL | ui::DIALOG_BUTTON_OK);
@@ -149,6 +154,9 @@ void PriceTrackingBubbleDialogView::OnCanceled(
   }
   std::move(on_track_price_callback).Run(false);
 }
+
+BEGIN_METADATA(PriceTrackingBubbleDialogView, LocationBarBubbleDelegateView)
+END_METADATA
 
 // PriceTrackingBubbleCoordinator
 PriceTrackingBubbleCoordinator::PriceTrackingBubbleCoordinator(

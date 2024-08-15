@@ -166,8 +166,15 @@ public class SearchEngineAdapter extends BaseAdapter
         }
 
         List<TemplateUrl> templateUrls = templateUrlService.getTemplateUrls();
-        TemplateUrl defaultSearchEngineTemplateUrl =
-                templateUrlService.getDefaultSearchEngineTemplateUrl();
+        TemplateUrl defaultSearchEngineTemplateUrl;
+        if (mProfile.isOffTheRecord()) {
+            defaultSearchEngineTemplateUrl =
+                    templateUrlService.vivaldiGetDefaultSearchEngine(
+                            TemplateUrlService.DefaultSearchType.DEFAULT_SEARCH_PRIVATE);
+        } else {
+            defaultSearchEngineTemplateUrl =
+                    templateUrlService.getDefaultSearchEngineTemplateUrl();
+        }
         // In Vivaldi, we get everything sorted on the native side.
         //sortAndFilterUnnecessaryTemplateUrl(templateUrls, defaultSearchEngineTemplateUrl);
         boolean forceRefresh = mIsLocationPermissionChanged;
@@ -453,7 +460,12 @@ public class SearchEngineAdapter extends BaseAdapter
         mSelectedSearchEnginePosition = position;
 
         String keyword = toKeyword(mSelectedSearchEnginePosition);
-        TemplateUrlServiceFactory.getForProfile(mProfile).setSearchEngine(keyword);
+        if (mProfile.isOffTheRecord()) {
+            TemplateUrlServiceFactory.getForProfile(mProfile).setSearchEngine(keyword,
+                    TemplateUrlService.DefaultSearchType.DEFAULT_SEARCH_PRIVATE);
+        } else {
+            TemplateUrlServiceFactory.getForProfile(mProfile).setSearchEngine(keyword);
+        }
 
         // If the user has manually set the default search engine, disable auto switching.
         boolean manualSwitch = mSelectedSearchEnginePosition != mInitialEnginePosition;

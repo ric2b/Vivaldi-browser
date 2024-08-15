@@ -11,8 +11,10 @@
 #include "ui/base/test/ui_controls.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/ozone/platform/wayland/host/shell_toplevel_wrapper.h"
+#include "ui/ozone/platform/wayland/host/wayland_popup.h"
 #include "ui/ozone/platform/wayland/host/wayland_toplevel_window.h"
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
+#include "ui/ozone/platform/wayland/host/xdg_popup_wrapper_impl.h"
 #include "ui/ozone/platform/wayland/host/xdg_surface_wrapper_impl.h"
 #include "ui/ozone/platform/wayland/host/xdg_toplevel_wrapper_impl.h"
 
@@ -88,6 +90,11 @@ void WaylandInputEmulate::EmulateKeyboardKey(ui::DomCode dom_code,
     return;
   }
 
+  VLOG(1) << "Requesting keyboard key: dom_code="
+          << ui::KeycodeConverter::DomCodeToCodeString(dom_code)
+          << " state=" << key_state
+          << " accelerator_state=" << accelerator_state;
+
   zcr_ui_controls_v1_send_key_events(
       ui_controls_, ui::KeycodeConverter::DomCodeToEvdevCode(dom_code),
       key_state, accelerator_state, request_id);
@@ -126,18 +133,47 @@ void WaylandInputEmulate::EmulatePointerMotion(
   gfx::Point target_location = mouse_screen_location;
   if (widget) {
     auto* window = wayland_proxy->GetWaylandWindowForAcceleratedWidget(widget);
-    auto* toplevel_window = window->AsWaylandToplevelWindow();
-    auto* xdg_surface = toplevel_window ? toplevel_window->shell_toplevel()
-                                              ->AsXDGToplevelWrapper()
-                                              ->xdg_surface_wrapper()
-                                              ->xdg_surface()
-                                        : nullptr;
+    xdg_surface* xdg_surface = nullptr;
+    if (auto* toplevel_window = window->AsWaylandToplevelWindow()) {
+      xdg_surface = toplevel_window->shell_toplevel()
+                        ->AsXDGToplevelWrapper()
+                        ->xdg_surface_wrapper()
+                        ->xdg_surface();
+    } else if (auto* popup = window->AsWaylandPopup()) {
+      xdg_surface = popup->shell_popup()
+                        ->AsXDGPopupWrapper()
+                        ->xdg_surface_wrapper()
+                        ->xdg_surface();
+    }
     bool screen_coordinates = window->IsScreenCoordinatesEnabled();
+    if (force_use_screen_coordinates_once_) {
+      screen_coordinates = true;
+      force_use_screen_coordinates_once_ = false;
+    }
+
+    // If we can't use screen coordinates, we must have a surface so we can use
+    // surface-local coordinates.
+    DCHECK(screen_coordinates || xdg_surface);
 
     target_surface = screen_coordinates ? nullptr : xdg_surface;
-    target_location =
-        screen_coordinates ? mouse_screen_location : mouse_surface_location;
+    // Ignore `force_use_screen_coordinates_once_` for selecting which
+    // coordinates to use. This is because the only difference between
+    // `mouse_screen_location` and `mouse_surface_location` is that the former
+    // is offset by the window's origin, while the latter isn't. If screen
+    // coordinates aren't enabled, the window's origin should always be (0, 0),
+    // and thus it shouldn't matter if we use `mouse_screen_location` or
+    // `mouse_surface_location`. But as described in https://crbug.com/1454427,
+    // the origin isn't actually (0, 0) until the first `xdg_toplevel.configure`
+    // event with non-zero width and height is received, so we must use
+    // `mouse_surface_location` even if `force_use_screen_coordinates_once_` is
+    // true.
+    target_location = window->IsScreenCoordinatesEnabled()
+                          ? mouse_screen_location
+                          : mouse_surface_location;
   }
+
+  VLOG(1) << "Requesting pointer motion: location="
+          << target_location.ToString();
 
   zcr_ui_controls_v1_send_mouse_move(ui_controls_, target_location.x(),
                                      target_location.y(), target_surface,
@@ -158,6 +194,9 @@ void WaylandInputEmulate::EmulatePointerButton(ui_controls::MouseButton button,
     pending_requests_.emplace_back(std::move(pending_request));
     return;
   }
+
+  VLOG(1) << "Requesting pointer button: button=" << button
+          << " button_state=" << button_state;
 
   zcr_ui_controls_v1_send_mouse_button(ui_controls_, button, button_state,
                                        accelerator_state, request_id);
@@ -180,6 +219,9 @@ void WaylandInputEmulate::EmulateTouch(int action,
     return;
   }
 
+  VLOG(1) << "Requesting touch: location=" << touch_screen_location.ToString()
+          << " action=" << action << " touch_id=" << touch_id;
+
   zcr_ui_controls_v1_send_touch(
       ui_controls_, action, touch_id, touch_screen_location.x(),
       touch_screen_location.y(), /*surface=*/nullptr, request_id);
@@ -187,6 +229,12 @@ void WaylandInputEmulate::EmulateTouch(int action,
   auto* wayland_proxy = wl::WaylandProxy::GetInstance();
   wayland_proxy->FlushForTesting();
 }
+
+#if BUILDFLAG(IS_LINUX)
+void WaylandInputEmulate::ForceUseScreenCoordinatesOnce() {
+  force_use_screen_coordinates_once_ = true;
+}
+#endif
 
 void WaylandInputEmulate::OnWindowConfigured(gfx::AcceleratedWidget widget,
                                              bool is_configured) {

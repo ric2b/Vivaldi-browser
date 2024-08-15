@@ -47,8 +47,14 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/reporting/metric_default_utils.h"
+#include "chrome/browser/chromeos/reporting/metric_reporting_prefs.h"
 #include "chrome/browser/chromeos/reporting/network/network_bandwidth_sampler.h"
 #include "chrome/browser/chromeos/reporting/user_reporting_settings.h"
+#include "chrome/browser/chromeos/reporting/websites/website_events_observer.h"
+#include "chrome/browser/chromeos/reporting/websites/website_metrics_retriever_ash.h"
+#include "chrome/browser/chromeos/reporting/websites/website_usage_observer.h"
+#include "chrome/browser/chromeos/reporting/websites/website_usage_telemetry_periodic_collector_ash.h"
+#include "chrome/browser/chromeos/reporting/websites/website_usage_telemetry_sampler.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "components/reporting/client/report_queue_configuration.h"
@@ -79,6 +85,7 @@ constexpr char kPsrTelemetry[] = "psr_telemetry";
 constexpr char kDelayedPeripheralTelemetry[] = "delayed_peripheral_telemetry";
 constexpr char kDisplaysTelemetry[] = "displays_telemetry";
 constexpr char kDeviceActivityTelemetry[] = "device_activity_telemetry";
+constexpr char kWebsiteTelemetry[] = "website_telemetry";
 
 // App event rate limiter configuration.
 constexpr size_t kAppEventsTotalSize = 4096u /**bytes**/ * 1024;
@@ -90,13 +97,13 @@ constexpr size_t kAppEventsBucketCount = 10;
 // static
 BASE_FEATURE(kEnableAppEventsObserver,
              "EnableAppEventsObserver",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kEnableFatalCrashEventsObserver,
              "EnableFatalCrashEventsObserver",
              base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kEnableRuntimeCounters,
-             "EnableRuntimeCounters",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kEnableRuntimeCountersTelemetry,
+             "EnableRuntimeCountersTelemetry",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool MetricReportingManager::Delegate::IsUserAffiliated(
     Profile& profile) const {
@@ -179,7 +186,7 @@ void MetricReportingManager::OnLogin(Profile* profile) {
           EventType::kUser, Destination::PERIPHERAL_EVENTS, Priority::SECURITY,
           /*rate_limiter=*/nullptr, std::move(source_info));
 
-  DCHECK(profile);
+  CHECK(profile);
   user_reporting_settings_ =
       std::make_unique<UserReportingSettings>(profile->GetWeakPtr());
 
@@ -248,6 +255,7 @@ MetricReportingManager::MetricReportingManager(
 void MetricReportingManager::Shutdown() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+  website_usage_observer_.reset();
   app_usage_observer_.reset();
   delegate_.reset();
   event_observer_managers_.clear();
@@ -336,10 +344,11 @@ void MetricReportingManager::InitOnAffiliatedLogin(Profile* profile) {
       /*init_delay=*/base::TimeDelta());
   InitPeripheralsCollectors();
 
-  // Start observing app events and telemetry only if the app service is
+  // Start observing app/website events and telemetry only if the app service is
   // available for the given profile.
   if (delegate_->IsAppServiceAvailableForProfile(profile)) {
     InitAppCollectors(profile);
+    InitWebsiteMetricCollectors(profile);
   }
 }
 
@@ -381,7 +390,7 @@ void MetricReportingManager::InitOneShotTelemetryCollector(
     bool enable_default_value,
     base::TimeDelta init_delay) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!base::Contains(telemetry_collectors_, collector_name));
+  CHECK(!base::Contains(telemetry_collectors_, collector_name));
   if (!metric_report_queue) {
     return;
   }
@@ -399,7 +408,7 @@ void MetricReportingManager::InitManualTelemetryCollector(
     const std::string& enable_setting_path,
     bool enable_default_value) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!base::Contains(telemetry_collectors_, collector_name));
+  CHECK(!base::Contains(telemetry_collectors_, collector_name));
   if (!metric_report_queue) {
     return;
   }
@@ -421,7 +430,7 @@ void MetricReportingManager::InitPeriodicTelemetryCollector(
     int rate_unit_to_ms,
     base::TimeDelta init_delay) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!base::Contains(telemetry_collectors_, collector_name));
+  CHECK(!base::Contains(telemetry_collectors_, collector_name));
   if (!metric_report_queue) {
     return;
   }
@@ -546,10 +555,10 @@ void MetricReportingManager::InitNetworkPeriodicCollector(
 
 void MetricReportingManager::InitAppCollectors(Profile* profile) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!base::Contains(telemetry_collectors_, kAppTelemetry));
-  DCHECK(user_event_report_queue_);
-  DCHECK(user_reporting_settings_);
-  DCHECK(user_telemetry_report_queue_);
+  CHECK(!base::Contains(telemetry_collectors_, kAppTelemetry));
+  CHECK(user_event_report_queue_);
+  CHECK(user_reporting_settings_);
+  CHECK(user_telemetry_report_queue_);
   // App events.
   if (base::FeatureList::IsEnabled(kEnableAppEventsObserver)) {
     auto app_events_observer = AppEventsObserver::CreateForProfile(
@@ -613,7 +622,7 @@ void MetricReportingManager::InitBootPerformanceCollector() {
 
 void MetricReportingManager::InitRuntimeCountersCollectors() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (base::FeatureList::IsEnabled(kEnableRuntimeCounters)) {
+  if (base::FeatureList::IsEnabled(kEnableRuntimeCountersTelemetry)) {
     auto psr_telemetry_handler =
         std::make_unique<CrosHealthdPsrSamplerHandler>();
     auto psr_telemetry_sampler = std::make_unique<CrosHealthdMetricSampler>(
@@ -632,14 +641,44 @@ void MetricReportingManager::InitRuntimeCountersCollectors() {
   }
 }
 
+void MetricReportingManager::InitWebsiteMetricCollectors(Profile* profile) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK(profile);
+  const auto profile_weak_ptr = profile->GetWeakPtr();
+
+  // Website events.
+  auto website_events_observer = std::make_unique<WebsiteEventsObserver>(
+      std::make_unique<WebsiteMetricsRetrieverAsh>(profile_weak_ptr),
+      user_reporting_settings_.get());
+  InitEventObserverManager(
+      std::move(website_events_observer), user_event_report_queue_.get(),
+      user_reporting_settings_.get(),
+      /*enable_setting_path=*/kReportWebsiteActivityAllowlist,
+      metrics::kReportWebsiteActivityEnabledDefaultValue,
+      /*init_delay=*/base::TimeDelta());
+
+  // Website telemetry.
+  website_usage_observer_ = std::make_unique<WebsiteUsageObserver>(
+      profile_weak_ptr, user_reporting_settings_.get(),
+      std::make_unique<WebsiteMetricsRetrieverAsh>(profile_weak_ptr));
+  auto website_usage_telemetry_sampler =
+      std::make_unique<WebsiteUsageTelemetrySampler>(profile_weak_ptr);
+  auto website_usage_telemetry_periodic_collector =
+      std::make_unique<WebsiteUsageTelemetryPeriodicCollectorAsh>(
+          website_usage_telemetry_sampler.get(),
+          user_telemetry_report_queue_.get(), user_reporting_settings_.get());
+  samplers_.emplace_back(std::move(website_usage_telemetry_sampler));
+  telemetry_collectors_.emplace(
+      kWebsiteTelemetry, std::move(website_usage_telemetry_periodic_collector));
+}
+
 void MetricReportingManager::InitFatalCrashCollectors() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (base::FeatureList::IsEnabled(kEnableFatalCrashEventsObserver)) {
     event_observer_managers_.emplace_back(delegate_->CreateEventObserverManager(
-        std::make_unique<FatalCrashEventsObserver>(),
-        telemetry_report_queue_.get(), &reporting_settings_,
-        ash::kReportDeviceCrashReportInfo,
+        FatalCrashEventsObserver::Create(), telemetry_report_queue_.get(),
+        &reporting_settings_, ash::kReportDeviceCrashReportInfo,
         metrics::kReportDeviceCrashReportInfoDefaultValue,
         /*collector_pool=*/this));
   }

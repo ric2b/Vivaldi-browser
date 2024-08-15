@@ -60,12 +60,22 @@ pub struct CrateConfig {
     /// other generated targets.
     pub exclude_deps_in_gn: Vec<String>,
     /// Include rs and input files under these relative paths as part of the
-    /// crate.
+    /// crate. The roots may each be a single file or a directory.
     #[serde(default)]
     pub extra_src_roots: Vec<std::path::PathBuf>,
     /// Include input files under these relative paths as part of the crate.
+    /// The roots may each be a single file or a directory.
     #[serde(default)]
     pub extra_input_roots: Vec<std::path::PathBuf>,
+    /// Include rs and input files under these relative paths as part of the
+    /// crate's build script. The roots may each be a single file or a
+    /// directory.
+    #[serde(default)]
+    pub extra_build_script_src_roots: Vec<std::path::PathBuf>,
+    /// Include input files under these relative paths as part of the crate's
+    /// build script. The roots may each be a single file or a directory.
+    #[serde(default)]
+    pub extra_build_script_input_roots: Vec<std::path::PathBuf>,
     #[serde(default)]
     pub extra_kv: HashMap<String, serde_json::Value>,
 }

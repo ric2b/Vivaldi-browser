@@ -17,6 +17,7 @@
 #include "content/browser/preloading/prefetch/prefetch_service.h"
 #include "content/browser/preloading/prefetch/prefetch_serving_page_metrics_container.h"
 #include "content/browser/preloading/prefetch/prefetch_url_loader_helper.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/prefetch_metrics.h"
@@ -87,6 +88,8 @@ SpeculationCandidateToPrefetchUrlParams(
 PrefetchDocumentManager::PrefetchDocumentManager(RenderFrameHost* rfh)
     : DocumentUserData(rfh),
       WebContentsObserver(WebContents::FromRenderFrameHost(rfh)),
+      document_token_(
+          static_cast<RenderFrameHostImpl*>(rfh)->GetDocumentToken()),
       prefetch_destruction_callback_(base::DoNothing()) {}
 
 PrefetchDocumentManager::~PrefetchDocumentManager() {
@@ -146,25 +149,8 @@ void PrefetchDocumentManager::DidStartNavigation(
       PrefetchServingPageMetricsContainer::GetOrCreateForNavigationHandle(
           *navigation_handle);
 
-  // Currently, prefetches can only be used with a navigation from the referring
-  // page and in the same tab. Eventually we will support other types of
-  // navigations where the prefetch is used in a different tab.
-  serving_page_metrics_container->SetSameTabAsPrefetchingTab(true);
-
-  base::WeakPtr<PrefetchContainer> prefetch_container = nullptr;
-
-  // Get the prefetch for the URL being navigated to. If there is no prefetch
-  // for that URL, then check if there is an equivalent prefetch using
-  // No-Vary-Search equivalence. If there is not then stop.
-  auto prefetch_iter = all_prefetches_.find(navigation_handle->GetURL());
-  if (prefetch_iter != all_prefetches_.end()) {
-    prefetch_container = prefetch_iter->second;
-  }
-
-  if (!prefetch_container && no_vary_search_support_enabled_ &&
-      base::FeatureList::IsEnabled(network::features::kPrefetchNoVarySearch)) {
-    prefetch_container = MatchUrl(navigation_handle->GetURL());
-  }
+  base::WeakPtr<PrefetchContainer> prefetch_container =
+      MatchUrl(navigation_handle->GetURL());
 
   if (!prefetch_container) {
     DVLOG(1) << "PrefetchDocumentManager::DidStartNavigation() for "
@@ -180,13 +166,20 @@ void PrefetchDocumentManager::DidStartNavigation(
       serving_page_metrics_container->GetWeakPtr());
   prefetch_container->UpdateServingPageMetrics();
 
-  // Inform |PrefetchService| of the navigation to the prefetch.
-  // |navigation_handle->GetURL()| and |prefetched_iter->second->GetURL()|
-  // might be different but be equivalent under No-Vary-Search.
-  PrefetchService* prefetch_service = GetPrefetchService();
-  if (prefetch_service) {
-    prefetch_service->PrepareToServe(navigation_handle->GetURL(),
-                                     std::move(prefetch_container));
+  switch (prefetch_container->GetServableState(PrefetchCacheableDuration())) {
+    case PrefetchContainer::ServableState::kServable:
+      if (PrefetchService* prefetch_service = GetPrefetchService()) {
+        // For prefetches that are already servable, start the process of
+        // copying cookies from the isolated network context used to make the
+        // prefetch to the default network context.
+        prefetch_service->CopyIsolatedCookies(
+            prefetch_container->CreateReader());
+      }
+      break;
+
+    case PrefetchContainer::ServableState::kNotServable:
+    case PrefetchContainer::ServableState::kShouldBlockUntilHeadReceived:
+      break;
   }
 }
 
@@ -296,8 +289,8 @@ void PrefetchDocumentManager::PrefetchUrl(
   }
   // Create a new |PrefetchContainer| and take ownership of it
   auto container = std::make_unique<PrefetchContainer>(
-      render_frame_host().GetGlobalId(), url, prefetch_type, referrer,
-      std::move(no_vary_search_expected), world,
+      render_frame_host().GetGlobalId(), document_token_, url, prefetch_type,
+      referrer, std::move(no_vary_search_expected), world,
       weak_method_factory_.GetWeakPtr());
   container->SetDevToolsObserver(std::move(devtools_observer));
   DVLOG(1) << *container << ": created";
@@ -338,17 +331,17 @@ bool PrefetchDocumentManager::IsPrefetchAttemptFailedOrDiscarded(
     case PrefetchStatus::kPrefetchSuccessful:
     case PrefetchStatus::kPrefetchResponseUsed:
       return false;
-    case PrefetchStatus::kPrefetchNotEligibleUserHasCookies:
-    case PrefetchStatus::kPrefetchNotEligibleUserHasServiceWorker:
-    case PrefetchStatus::kPrefetchNotEligibleSchemeIsNotHttps:
-    case PrefetchStatus::kPrefetchNotEligibleNonDefaultStoragePartition:
+    case PrefetchStatus::kPrefetchIneligibleUserHasCookies:
+    case PrefetchStatus::kPrefetchIneligibleUserHasServiceWorker:
+    case PrefetchStatus::kPrefetchIneligibleSchemeIsNotHttps:
+    case PrefetchStatus::kPrefetchIneligibleNonDefaultStoragePartition:
     case PrefetchStatus::kPrefetchIneligibleRetryAfter:
-    case PrefetchStatus::kPrefetchProxyNotAvailable:
-    case PrefetchStatus::kPrefetchNotEligibleHostIsNonUnique:
-    case PrefetchStatus::kPrefetchNotEligibleDataSaverEnabled:
-    case PrefetchStatus::kPrefetchNotEligibleBatterySaverEnabled:
-    case PrefetchStatus::kPrefetchNotEligiblePreloadingDisabled:
-    case PrefetchStatus::kPrefetchNotEligibleExistingProxy:
+    case PrefetchStatus::kPrefetchIneligiblePrefetchProxyNotAvailable:
+    case PrefetchStatus::kPrefetchIneligibleHostIsNonUnique:
+    case PrefetchStatus::kPrefetchIneligibleDataSaverEnabled:
+    case PrefetchStatus::kPrefetchIneligibleBatterySaverEnabled:
+    case PrefetchStatus::kPrefetchIneligiblePreloadingDisabled:
+    case PrefetchStatus::kPrefetchIneligibleExistingProxy:
     case PrefetchStatus::kPrefetchNotUsedProbeFailed:
     case PrefetchStatus::kPrefetchNotStarted:
     case PrefetchStatus::kPrefetchNotFinishedInTime:
@@ -358,14 +351,14 @@ bool PrefetchDocumentManager::IsPrefetchAttemptFailedOrDiscarded(
     case PrefetchStatus::kPrefetchIsPrivacyDecoy:
     case PrefetchStatus::kPrefetchIsStale:
     case PrefetchStatus::kPrefetchNotUsedCookiesChanged:
-    case PrefetchStatus::kPrefetchNotEligibleBrowserContextOffTheRecord:
+    case PrefetchStatus::kPrefetchIneligibleBrowserContextOffTheRecord:
     case PrefetchStatus::kPrefetchHeldback:
     case PrefetchStatus::kPrefetchAllowed:
     case PrefetchStatus::kPrefetchFailedInvalidRedirect:
     case PrefetchStatus::kPrefetchFailedIneligibleRedirect:
     case PrefetchStatus::kPrefetchFailedPerPageLimitExceeded:
     case PrefetchStatus::
-        kPrefetchNotEligibleSameSiteCrossOriginPrefetchRequiredProxy:
+        kPrefetchIneligibleSameSiteCrossOriginPrefetchRequiredProxy:
     case PrefetchStatus::kPrefetchEvicted:
       return true;
   }
@@ -393,23 +386,6 @@ void PrefetchDocumentManager::OnEligibilityCheckComplete(bool is_eligible) {
     referring_page_metrics_.prefetch_eligible_count++;
 }
 
-void PrefetchDocumentManager::OnPrefetchedHeadReceived(const GURL& url) {
-  if (!no_vary_search_support_enabled_ ||
-      !base::FeatureList::IsEnabled(network::features::kPrefetchNoVarySearch)) {
-    return;
-  }
-  // Find the PrefetchContainer associated with |url|.
-  const auto it = all_prefetches_.find(url);
-  if (it == all_prefetches_.end() || !it->second) {
-    return;
-  }
-
-  const auto* head = it->second->GetHead();
-  DCHECK(head);
-  no_vary_search::MaybeSendErrorsToConsole(url, *head, render_frame_host());
-  no_vary_search::SetNoVarySearchData(it->second);
-}
-
 void PrefetchDocumentManager::OnPrefetchSuccessful(
     PrefetchContainer* prefetch) {
   referring_page_metrics_.prefetch_successful_count++;
@@ -423,6 +399,11 @@ void PrefetchDocumentManager::OnPrefetchSuccessful(
 
 void PrefetchDocumentManager::EnableNoVarySearchSupport() {
   no_vary_search_support_enabled_ = true;
+}
+
+bool PrefetchDocumentManager::NoVarySearchSupportEnabled() const {
+  return no_vary_search_support_enabled_ &&
+         base::FeatureList::IsEnabled(network::features::kPrefetchNoVarySearch);
 }
 
 std::tuple<bool, base::WeakPtr<PrefetchContainer>>

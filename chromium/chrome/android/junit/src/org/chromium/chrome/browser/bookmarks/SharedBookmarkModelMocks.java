@@ -15,7 +15,6 @@ import org.chromium.url.GURL;
 import org.chromium.url.JUnitTestGURLs;
 
 import java.util.Arrays;
-import java.util.Collections;
 
 /** Shared set of {@link BookmarkModel} mocks used by multiple tests. */
 public class SharedBookmarkModelMocks {
@@ -82,9 +81,15 @@ public class SharedBookmarkModelMocks {
         doReturn(MOBILE_BOOKMARK_ID).when(bookmarkModel).getMobileFolderId();
         doReturn(READING_LIST_BOOKMARK_ID).when(bookmarkModel).getReadingListFolder();
         doReturn(PARTNER_BOOKMARK_ID).when(bookmarkModel).getPartnerFolderId();
-        doReturn(Collections.singletonList(READING_LIST_BOOKMARK_ID))
+        doReturn(
+                        Arrays.asList(
+                                DESKTOP_BOOKMARK_ID,
+                                OTHER_BOOKMARK_ID,
+                                MOBILE_BOOKMARK_ID,
+                                PARTNER_BOOKMARK_ID,
+                                READING_LIST_BOOKMARK_ID))
                 .when(bookmarkModel)
-                .getTopLevelFolderIds(/*getSpecial*/ true, /*getNormal*/ false);
+                .getTopLevelFolderIds();
 
         doReturn(DESKTOP_BOOKMARK_ITEM).when(bookmarkModel).getBookmarkById(DESKTOP_BOOKMARK_ID);
         doReturn(OTHER_BOOKMARK_ITEM).when(bookmarkModel).getBookmarkById(OTHER_BOOKMARK_ID);
@@ -104,8 +109,13 @@ public class SharedBookmarkModelMocks {
         doReturn(true).when(bookmarkModel).isFolderVisible(DESKTOP_BOOKMARK_ID);
         doReturn(false).when(bookmarkModel).isFolderVisible(OTHER_BOOKMARK_ID);
         doReturn(true).when(bookmarkModel).isFolderVisible(MOBILE_BOOKMARK_ID);
-        doReturn(Arrays.asList(FOLDER_BOOKMARK_ID_A, URL_BOOKMARK_ID_A, URL_BOOKMARK_ID_F,
-                         URL_BOOKMARK_ID_G, URL_BOOKMARK_ID_H))
+        doReturn(
+                        Arrays.asList(
+                                FOLDER_BOOKMARK_ID_A,
+                                URL_BOOKMARK_ID_A,
+                                URL_BOOKMARK_ID_F,
+                                URL_BOOKMARK_ID_G,
+                                URL_BOOKMARK_ID_H))
                 .when(bookmarkModel)
                 .getChildIds(MOBILE_BOOKMARK_ID);
         doReturn(Arrays.asList(URL_BOOKMARK_ID_B, URL_BOOKMARK_ID_C))
@@ -135,7 +145,7 @@ public class SharedBookmarkModelMocks {
     }
 
     private static BookmarkItem makeFolderItem(BookmarkId id, String title, BookmarkId parentId) {
-        boolean isEditable = ROOT_BOOKMARK_ID.equals(parentId);
+        boolean isEditable = !ROOT_BOOKMARK_ID.equals(parentId);
         long dateAdded = id.getId();
         return new BookmarkItem(
                 id, title, null, true, parentId, isEditable, false, dateAdded, false, 0);

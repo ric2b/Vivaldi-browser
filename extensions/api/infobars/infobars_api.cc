@@ -30,8 +30,7 @@ ExtensionFunction::ResponseAction InfobarsSendButtonActionFunction::Run() {
     return RespondNow(Error(error));
 
   auto* service = infobars::ContentInfoBarManager::FromWebContents(contents);
-  for (size_t i = 0; i < service->infobar_count(); i++) {
-    infobars::InfoBar* infobar = service->infobar_at(i);
+  for (auto* infobar: service->infobars()) {
     if (infobar->delegate()->GetIdentifier() ==
         static_cast<infobars::InfoBarDelegate::InfoBarIdentifier>(identifier)) {
       ConfirmInfoBarDelegate* delegate =

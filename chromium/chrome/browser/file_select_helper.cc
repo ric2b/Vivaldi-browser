@@ -80,6 +80,9 @@ void DeleteFiles(std::vector<base::FilePath> paths) {
 
 bool IsValidProfile(Profile* profile) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (!profile) {
+    return false;
+  }
   // No profile manager in unit tests.
   if (!g_browser_process->profile_manager())
     return true;
@@ -116,6 +119,7 @@ bool IsDownloadAllowedBySafeBrowsing(
     case Result::SENSITIVE_CONTENT_WARNING:
     case Result::DEEP_SCANNED_SAFE:
     case Result::PROMPT_FOR_SCANNING:
+    case Result::PROMPT_FOR_LOCAL_PASSWORD_SCANNING:
     case Result::BLOCKED_UNSUPPORTED_FILE_TYPE:
     case Result::DEEP_SCANNED_FAILED:
       NOTREACHED();
@@ -820,6 +824,7 @@ void FileSelectHelper::RenderFrameDeleted(
 void FileSelectHelper::WebContentsDestroyed() {
   render_frame_host_ = nullptr;
   web_contents_ = nullptr;
+  profile_ = nullptr;
   CleanUp();
 }
 

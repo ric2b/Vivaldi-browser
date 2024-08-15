@@ -23,6 +23,8 @@
 <translation id="1379470994139227452">Vivaldi-ն դարձնել հիմնական</translation>
 <translation id="1381484244248892686">Պահպանված գաղտնաբառերը կարող եք օգտագործել ցանկացած սարքում։ Դրանք պահպանված են Vivaldi-ի գաղտնաբառերի կառավարչում <ph name="EMAIL" />-ի համար</translation>
 <translation id="1383876407941801731">Որոնել</translation>
+<translation id="1397515084080510783">Սինքրոնացված ներդիրներ չկան</translation>
+<translation id="1410197035576869800">Հավելվածի պատկերակ</translation>
 <translation id="1430638949087011281">Չարգելափակել</translation>
 <translation id="1446108955355168157">Ձեր սինքրոնացման տվյալները (գաղտնաբառեր, էջանիշեր, նոթեր և ավելին) գաղտնագրելու և պաշտպանելու համար խնդրում ենք ստեղծել գաղտնագրման գաղտնաբառ։ Այս գաղտնաբառը երբեք չի ուղարկվելու մեզ։</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> նոթ</translation>
@@ -46,7 +48,6 @@
 <translation id="1861262398884155592">Այս պանակը դատարկ է</translation>
 <translation id="1887193815546011584">Նոր Արագ կանչ</translation>
 <translation id="1929299157575856072">ՍՏԱՆԴԱՐՏ ԱՐԳԵԼԱՓԱԿՄԱՆ ՄԱԿԱՐԴԱԿ</translation>
-<translation id="1979539205367899613">Հպեք պլյուսի նշանը ստորև՝ նոր գաղտնի ներդիր ստեղծելու համար։</translation>
 <translation id="2030706494969937066">Չհաջողվեց ստանալ Ձեր մուտքի տվյալները։ Խնդրում ենք նորից մուտք գործել։</translation>
 <translation id="2034405583989639424">Խմբագրել արագ կանչը</translation>
 <translation id="2048247880942380698">Արաբերեն (<ph name="ORIGIN" />)</translation>
@@ -54,7 +55,6 @@
 <translation id="2117093051794889870">Ըստ բովանդակության</translation>
 <translation id="2129408066358825297">Տարիք</translation>
 <translation id="2148384276939959392">Սինքրոնացնել ընտրվածը</translation>
-<translation id="21693288559538605">Գովազդի և հետևիչների արգելափակչի ամփոփում</translation>
 <translation id="2195713384412091023">Սինքրոնացման բոլոր տվյալները մեր սերվերից կջնջվեն, Ձեր գաղտնագրման գաղտնաբառը կզրոյացվի և կիրագործվի ելք Ձեր հաշվից։</translation>
 <translation id="2243210264130642074">Նոթը պահպանված է</translation>
 <translation id="2272338747456392228">Հաշիվը կողպվել է</translation>
@@ -67,6 +67,7 @@
 <translation id="2391028308389203648">Թուրքերեն (<ph name="ORIGIN" />)</translation>
 <translation id="2392369802118427583">Ակտիվացնել</translation>
 <translation id="2434910957904013691">Սինքրոնացնել բոլորը</translation>
+<translation id="2448144008809286557">Մոռացե՞լ եք <ph name="BEGIN_LINK" />Օգտվողի անունը<ph name="END_LINK" /> կամ <ph name="BEGIN_LINK" />Գաղտնաբառը<ph name="END_LINK" />։</translation>
 <translation id="2536780277491102902">ԲԱՑԱՌՈՒԹՅՈՒՆՆԵՐ</translation>
 <translation id="2558801801411970131">Արգելափակված են հետևիչները</translation>
 <translation id="2577446409661931381">Նոր նոթ</translation>
@@ -83,7 +84,6 @@
 <translation id="2843343418360315034">Հունգարերեն (<ph name="ORIGIN" />)</translation>
 <translation id="2850144663494818309">Սինքրոնացման գործարկում…</translation>
 <translation id="2874111661876416905">Որոնել Vivaldi-ով</translation>
-<translation id="2874121295511641364">Սինքրոնացնել մուտքագրված URL-ներն ու բաց ներդիրները</translation>
 <translation id="2898963176829412617">Նոր պանակ…</translation>
 <translation id="2961573414320947355">Ուզո՞ւմ եք բոլոր հղումները բացել Vivaldi-ում։ Դարձրեք այն հիմնական բրաուզերը։</translation>
 <translation id="3006429105107822794">Ձեզ պետք չի լինի հիշել այս գաղտնաբառը։ Այլ կպահպանվի Vivaldi-ի գաղտնաբառերի կառավարչում։</translation>
@@ -92,12 +92,11 @@
 <translation id="3073196329485613487">Մուտք գործել հաշիվ</translation>
 <translation id="307859903981308731">Շարունակելով՝ Դուք համաձայնում եք Vivaldi-ի</translation>
 <translation id="3086746722712840547">նոթ</translation>
-<translation id="3091563570137981919">Հետևիչների և գովազդի արգելափակում</translation>
-<translation id="313566647356924831">Արգելափակման կարգավորումներ</translation>
 <translation id="3177673846235066154">Սերվերը մերժեց Ձեր մուտքի տվյալները։</translation>
 <translation id="3229182533910980085">Ավելացրեք Ձեր առաջին էջանիշը՝ հպելով պլյուսի նշանը ստորև</translation>
 <translation id="3236835587712044564">Դո՞ւր է գալիս Vivaldi-ն։ Դարձրեք այն Ձեր հիմնականը։</translation>
 <translation id="3270894089048358271">Vivaldi-ն դարձնել հիմնական</translation>
+<translation id="3270930591809084274">Սինքրոնացված ներդիրներ</translation>
 <translation id="3335772982573114336">Նոր նոթ</translation>
 <translation id="33451081266695216">Միացումը խեղդվել է սերվերի կողմից։</translation>
 <translation id="3346386541263128307">Էլ. փոստի հասցեները պետք է համընկնեն։</translation>
@@ -130,6 +129,7 @@
 <translation id="3997823869212225788">Մուտքագրեք 6 թվանշանից կազմված կոդը</translation>
 <translation id="4002066346123236978">Վերնագիր</translation>
 <translation id="4032606071208172574">(Ստանդարտ)</translation>
+<translation id="4048057312173843244">Այլ սարքերի սինքրոնացված ներդիրները կհայտնվեն այստեղ։ Մուտք գործեք սինքրոնացման ծառայություն՝ օգտագործելու համար։</translation>
 <translation id="4073968054795398875">Սինքրոնացման սերվերում խնդիրներ կան։ Քիչ անց կրկին փորձ կարվի գործարկելու…</translation>
 <translation id="4096707694175478403">Վահանակ</translation>
 <translation id="414098425907666915">Գաղտնի որոնում</translation>
@@ -152,6 +152,7 @@
 <translation id="4394049700291259645">Անջատել</translation>
 <translation id="4413780690230851155">Ջնջել դիտման պատմությունը</translation>
 <translation id="4452878871193896747">Ինդոնեզերեն (<ph name="ORIGIN" />)</translation>
+<translation id="4474581062946673155">Դուք այս պահին չունեք սինքրոնացված ներդիրներ այլ սարքերից։</translation>
 <translation id="4493850495402472953">և</translation>
 <translation id="4497115807425788318">Վայր</translation>
 <translation id="4507213865286211606">Չափի դիտում</translation>
@@ -184,10 +185,12 @@
 <translation id="497942794017668482">Արգելափակված են հետևիչներն ու գովազդը</translation>
 <translation id="5037761343305489956">Պատճենված է նոթի մեջ</translation>
 <translation id="504986598654589766">Գաղտնի ներդիրում աշխատել նշանակում է, որ Vivaldi-ն չի պահի այցելված կայքերի ու որոնումների պատմություն, քուքիներ և ժամանակավոր ֆայլեր։ Ձեր ցանցային միացումը չի ենթարկվում գաղտնագրման կամ այլ ձևափոխության։</translation>
+<translation id="5094376253685335202">Միացնել սինքրոնացումը</translation>
 <translation id="5116316489033177455">Սինքրոնացնել էջանիշերն ու Արագ կանչը</translation>
 <translation id="5122095890854520072">Լատիշերեն (<ph name="ORIGIN" />)</translation>
 <translation id="5153806174841856652">Մուտքը ձախողվեց</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />Նորից կոդ ուղարկել<ph name="END_LINK" /></translation>
+<translation id="5191012692655103305">Ստացվում են ներդիրներն ու պատմությունը…</translation>
 <translation id="5238642303473095117">Ջնջել տվյալները</translation>
 <translation id="5245732982828228444">Ձեր նոթերը կգտնեք այստեղ</translation>
 <translation id="5249199221558969362">Խնդրում ենք մուտքագրել իրական տարիքի համապատասխանող թիվ։</translation>
@@ -256,8 +259,10 @@
 <translation id="6946395294519639514">Վահանակների հետ Դուք կարող եք պահել անհրաժեշտ գործիքները ձեռքի տակ՝ բրաուզերի կողային երիզում։</translation>
 <translation id="6967884871145366229">Գաղտնիության կարգավորումներ</translation>
 <translation id="6973630695168034713">Պանակներ</translation>
+<translation id="7006864796794806241">Գաղտնաբառի վերականգնում</translation>
 <translation id="7029809446516969842">Գաղտնաբառեր</translation>
 <translation id="7041964446309059643">Ձեռքով</translation>
+<translation id="7110758301321962823">Օգտվողի անվան վերականգնում</translation>
 <translation id="7194677467200983873">Վերջին սինքրոնացումը՝</translation>
 <translation id="7196846668589096106">Համակարգչային ներդիրներ</translation>
 <translation id="7210372243397300116">Որոնել պանակ</translation>
@@ -307,8 +312,10 @@
 <translation id="8275038454117074363">Ներկրել</translation>
 <translation id="8329813750766387010">Թարմացված է՝ <ph name="DATE" /></translation>
 <translation id="8347535536909603600">Հեռացնել քուքիների զգուշացումները (<ph name="TYPE" />)</translation>
+<translation id="8359194106448244241">Այլ սարքերի ներդիրները տեսնելու համար, Դուք պետք է միացնեք սինքրոնացումը։</translation>
 <translation id="8366175803122817174">Բացել բոլոր նոթերի հասցեները</translation>
 <translation id="8384409685584033392">Էջի տեղեկատվություն</translation>
+<translation id="839736845446313156">Գրանցվել</translation>
 <translation id="8414685983518053656">Նոթեր</translation>
 <translation id="8423076545503792640">Հարցումը ձախողվեց սխալի պատճառով։ Նորից փորձեք ավելի ուշ։</translation>
 <translation id="8428213095426709021">Կարգավորումներ</translation>

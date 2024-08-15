@@ -72,7 +72,8 @@ class V4L2QueueFactory {
                                               base::OnceClosure destroy_cb) {
     return new V4L2Queue(base::BindRepeating(&V4L2Device::Ioctl, dev),
                          base::BindRepeating(&V4L2Device::SchedulePoll, dev),
-                         base::BindRepeating(&V4L2Device::Mmap, dev), type,
+                         base::BindRepeating(&V4L2Device::Mmap, dev),
+                         dev->get_secure_allocate_cb(), type,
                          std::move(destroy_cb));
   }
 };
@@ -836,6 +837,7 @@ bool V4L2Device::SetExtCtrls(uint32_t ctrl_class,
 
   const int result = Ioctl(VIDIOC_S_EXT_CTRLS, &ext_ctrls);
   if (result < 0) {
+    RecordVidiocIoctlErrorUMA(VidiocIoctlRequests::kVidiocSExtCtrls);
     if (ext_ctrls.error_idx == ext_ctrls.count)
       VPLOGF(1) << "VIDIOC_S_EXT_CTRLS: validation failed while trying to set "
                    "controls";

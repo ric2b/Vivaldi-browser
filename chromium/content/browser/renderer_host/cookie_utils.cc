@@ -5,6 +5,7 @@
 #include "content/browser/renderer_host/cookie_utils.h"
 
 #include "base/ranges/algorithm.h"
+#include "base/strings/string_util.h"
 #include "content/browser/devtools/devtools_instrumentation.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/public/browser/browser_context.h"
@@ -17,6 +18,79 @@
 namespace content {
 
 namespace {
+
+void PotentiallyRecordNonAsciiCookieNameValue(
+    RenderFrameHost* rfh,
+    CookieAccessDetails::Type access_type,
+    const std::string& name,
+    const std::string& value) {
+  CHECK(rfh);
+
+  if (access_type != CookieAccessDetails::Type::kChange) {
+    return;
+  }
+
+  // Our data collection policy disallows collecting UKMs while prerendering.
+  // See //content/browser/preloading/prerender/README.md and ask the team to
+  // explore options to record data for prerendering pages if we need to
+  // support the case.
+  if (rfh->IsInLifecycleState(RenderFrameHost::LifecycleState::kPrerendering)) {
+    return;
+  }
+
+  bool name_has_non_ascii = !base::IsStringASCII(name);
+  bool value_has_non_ascii = !base::IsStringASCII(value);
+
+  if (name_has_non_ascii || value_has_non_ascii) {
+    ukm::SourceId source_id = rfh->GetPageUkmSourceId();
+
+    auto event = ukm::builders::CookieHasNonAsciiCharacter(source_id);
+
+    // The event itself is what we're interested in, the value of "true" here
+    // can be ignored.
+    if (name_has_non_ascii) {
+      event.SetName(true);
+    }
+
+    if (value_has_non_ascii) {
+      event.SetValue(true);
+    }
+
+    event.Record(ukm::UkmRecorder::Get());
+  }
+}
+
+void RecordFirstPartyPartitionedCookieCrossSiteContextUKM(
+    RenderFrameHostImpl* render_frame_host_impl,
+    const net::CanonicalCookie& cookie) {
+  // Our data collection policy disallows collecting UKMs while prerendering.
+  // See //content/browser/preloading/prerender/README.md and ask the team to
+  // explore options to record data for prerendering pages if we need to
+  // support the case.
+  if (render_frame_host_impl->IsInLifecycleState(
+          RenderFrameHost::LifecycleState::kPrerendering)) {
+    return;
+  }
+
+  if (!cookie.IsFirstPartyPartitioned()) {
+    return;
+  }
+
+  // Same-site embed with cross-site ancestors (ABA embeds) have a null site
+  // for cookies since it is a cross-site context. If the result of
+  // ComputeSiteForCookies is first-party that means we are not in an ABA
+  // embedded context.
+  if (render_frame_host_impl->ComputeSiteForCookies().IsFirstParty(
+          GURL(base::StrCat({url::kHttpsScheme, url::kStandardSchemeSeparator,
+                             cookie.DomainWithoutDot()})))) {
+    return;
+  }
+
+  ukm::builders::Cookies_FirstPartyPartitionedInCrossSiteContext(
+      render_frame_host_impl->GetPageUkmSourceId())
+      .SetCookiePresent(true)
+      .Record(ukm::UkmRecorder::Get());
+}
 
 void RecordPartitionedCookieUseUKM(RenderFrameHost* rfh,
                                    bool partitioned_cookies_exist) {
@@ -108,59 +182,15 @@ bool ShouldReportDevToolsIssueForStatus(
              net::CookieInclusionStatus::EXCLUDE_DOMAIN_NON_ASCII) ||
          status.HasExclusionReason(
              net::CookieInclusionStatus::
-                 EXCLUDE_THIRD_PARTY_BLOCKED_WITHIN_FIRST_PARTY_SET);
+                 EXCLUDE_THIRD_PARTY_BLOCKED_WITHIN_FIRST_PARTY_SET) ||
+         status.HasExclusionReason(
+             net::CookieInclusionStatus::EXCLUDE_THIRD_PARTY_PHASEOUT);
 }
 
-}  // namespace
-
-void SplitCookiesIntoAllowedAndBlocked(
-    const network::mojom::CookieAccessDetailsPtr& cookie_details,
-    CookieAccessDetails* allowed,
-    CookieAccessDetails* blocked) {
-  *allowed =
-      CookieAccessDetails({cookie_details->type,
-                           cookie_details->url,
-                           cookie_details->site_for_cookies.RepresentativeUrl(),
-                           {},
-                           /* blocked_by_policy=*/false});
-  int allowed_count = base::ranges::count_if(
-      cookie_details->cookie_list,
-      [](const network::mojom::CookieOrLineWithAccessResultPtr&
-             cookie_and_access_result) {
-        // "Included" cookies have no exclusion reasons so we don't also have to
-        // check for !(net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES).
-        return cookie_and_access_result->access_result.status.IsInclude();
-      });
-  allowed->cookie_list.reserve(allowed_count);
-
-  *blocked =
-      CookieAccessDetails({cookie_details->type,
-                           cookie_details->url,
-                           cookie_details->site_for_cookies.RepresentativeUrl(),
-                           {},
-                           /* blocked_by_policy=*/true});
-  int blocked_count = base::ranges::count_if(
-      cookie_details->cookie_list,
-      [](const network::mojom::CookieOrLineWithAccessResultPtr&
-             cookie_and_access_result) {
-        return cookie_and_access_result->access_result.status
-            .ExcludedByUserPreferences();
-      });
-  blocked->cookie_list.reserve(blocked_count);
-
-  for (const auto& cookie_and_access_result : cookie_details->cookie_list) {
-    if (cookie_and_access_result->access_result.status
-            .ExcludedByUserPreferences()) {
-      blocked->cookie_list.emplace_back(
-          std::move(cookie_and_access_result->cookie_or_line->get_cookie()));
-    } else if (cookie_and_access_result->access_result.status.IsInclude()) {
-      allowed->cookie_list.emplace_back(
-          std::move(cookie_and_access_result->cookie_or_line->get_cookie()));
-    }
-  }
-}
-
-void EmitCookieWarningsAndMetrics(
+// Logs cookie warnings to DevTools Issues Panel and logs events to UseCounters
+// and UKM for a single cookie-accessed event. Does not log to the JS console.
+// TODO(crbug.com/977040): Remove when no longer needed.
+void EmitCookieWarningsAndMetricsOnce(
     RenderFrameHostImpl* rfh,
     const network::mojom::CookieAccessDetailsPtr& cookie_details) {
   RenderFrameHostImpl* root_frame_host = rfh->GetMainFrame();
@@ -241,6 +271,11 @@ void EmitCookieWarningsAndMetrics(
 
     RecordPartitionedCookieUseUKM(rfh, partitioned_cookies_exist);
 
+    if (partitioned_cookies_exist) {
+      RecordFirstPartyPartitionedCookieCrossSiteContextUKM(
+          rfh, cookie->cookie_or_line->get_cookie());
+    }
+
     breaking_context_downgrade =
         breaking_context_downgrade ||
         cookie->access_result.status.HasSchemefulDowngradeWarning();
@@ -260,6 +295,13 @@ void EmitCookieWarningsAndMetrics(
       RecordRedirectContextDowngradeUKM(rfh, cookie_details->type,
                                         cookie->cookie_or_line->get_cookie(),
                                         cookie_details->url);
+    }
+
+    if (cookie->cookie_or_line->is_cookie()) {
+      PotentiallyRecordNonAsciiCookieNameValue(
+          rfh, cookie_details->type,
+          cookie->cookie_or_line->get_cookie().Name(),
+          cookie->cookie_or_line->get_cookie().Value());
     }
 
     // In order to anticipate the potential effects of the expiry limit in
@@ -336,6 +378,81 @@ void EmitCookieWarningsAndMetrics(
   if (cookie_has_domain_non_ascii) {
     GetContentClient()->browser()->LogWebFeatureForCurrentPage(
         rfh, blink::mojom::WebFeature::kCookieDomainNonASCII);
+  }
+}
+
+}  // namespace
+
+void SplitCookiesIntoAllowedAndBlocked(
+    const network::mojom::CookieAccessDetailsPtr& cookie_details,
+    CookieAccessDetails* allowed,
+    CookieAccessDetails* blocked) {
+  // For some cases `site_for_cookies` representative url is empty when
+  // OnCookieAccess is triggered for a third party. For example iframe third
+  // party accesses cookies when TPCD Metadata allows third party cookie access.
+  //
+  // Make `first_party_url` considering both `top_frame_origin` and
+  // `site_for_cookies` which is similar with GetFirstPartyURL() in
+  // components/content_settings/core/common/cookie_settings_base.h.
+  // If the `top_frame_origin` is non-opaque, it is chosen; otherwise, the
+  // `site_for_cookies` representative url is used.
+  const GURL first_party_url =
+      cookie_details->top_frame_origin.opaque()
+          ? cookie_details->site_for_cookies.RepresentativeUrl()
+          : cookie_details->top_frame_origin.GetURL();
+
+  *allowed = CookieAccessDetails({cookie_details->type,
+                                  cookie_details->url,
+                                  first_party_url,
+                                  {},
+                                  cookie_details->count,
+                                  /* blocked_by_policy=*/false,
+                                  cookie_details->is_ad_tagged,
+                                  cookie_details->cookie_setting_overrides});
+  int allowed_count = base::ranges::count_if(
+      cookie_details->cookie_list,
+      [](const network::mojom::CookieOrLineWithAccessResultPtr&
+             cookie_and_access_result) {
+        // "Included" cookies have no exclusion reasons so we don't also have to
+        // check for !(net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES).
+        return cookie_and_access_result->access_result.status.IsInclude();
+      });
+  allowed->cookie_list.reserve(allowed_count);
+
+  *blocked = CookieAccessDetails({cookie_details->type,
+                                  cookie_details->url,
+                                  first_party_url,
+                                  {},
+                                  cookie_details->count,
+                                  /* blocked_by_policy=*/true,
+                                  cookie_details->is_ad_tagged,
+                                  cookie_details->cookie_setting_overrides});
+  int blocked_count = base::ranges::count_if(
+      cookie_details->cookie_list,
+      [](const network::mojom::CookieOrLineWithAccessResultPtr&
+             cookie_and_access_result) {
+        return cookie_and_access_result->access_result.status
+            .ExcludedByUserPreferences();
+      });
+  blocked->cookie_list.reserve(blocked_count);
+
+  for (const auto& cookie_and_access_result : cookie_details->cookie_list) {
+    if (cookie_and_access_result->access_result.status
+            .ExcludedByUserPreferences()) {
+      blocked->cookie_list.emplace_back(
+          std::move(cookie_and_access_result->cookie_or_line->get_cookie()));
+    } else if (cookie_and_access_result->access_result.status.IsInclude()) {
+      allowed->cookie_list.emplace_back(
+          std::move(cookie_and_access_result->cookie_or_line->get_cookie()));
+    }
+  }
+}
+
+void EmitCookieWarningsAndMetrics(
+    RenderFrameHostImpl* rfh,
+    const network::mojom::CookieAccessDetailsPtr& cookie_details) {
+  for (size_t i = 0; i < cookie_details->count; ++i) {
+    EmitCookieWarningsAndMetricsOnce(rfh, cookie_details);
   }
 }
 

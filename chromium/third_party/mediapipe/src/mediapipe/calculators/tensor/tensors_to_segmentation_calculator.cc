@@ -173,7 +173,11 @@ class TensorsToSegmentationCalculator : public CalculatorBase {
 #if !MEDIAPIPE_DISABLE_GPU
   mediapipe::GlCalculatorHelper gpu_helper_;
   GLuint upsample_program_;
+  bool gpu_initialized_ = false;
 #if MEDIAPIPE_OPENGL_ES_VERSION >= MEDIAPIPE_OPENGL_ES_31
+  int cached_width_ = 0;
+  int cached_height_ = 0;
+  std::unique_ptr<tflite::gpu::gl::GlTexture> small_mask_texture_;
   std::unique_ptr<GlProgram> mask_program_31_;
 #else
   GLuint mask_program_20_;
@@ -203,7 +207,8 @@ absl::Status TensorsToSegmentationCalculator::GetContract(
 
   if (CanUseGpu()) {
 #if !MEDIAPIPE_DISABLE_GPU
-    MP_RETURN_IF_ERROR(mediapipe::GlCalculatorHelper::UpdateContract(cc));
+    MP_RETURN_IF_ERROR(mediapipe::GlCalculatorHelper::UpdateContract(
+        cc, /*request_gpu_as_optional=*/true));
 #if MEDIAPIPE_METAL_ENABLED
     MP_RETURN_IF_ERROR([MPPMetalHelper updateContract:cc]);
 #endif  // MEDIAPIPE_METAL_ENABLED
@@ -215,12 +220,9 @@ absl::Status TensorsToSegmentationCalculator::GetContract(
 
 absl::Status TensorsToSegmentationCalculator::Open(CalculatorContext* cc) {
   cc->SetOffset(TimestampDiff(0));
-  bool use_gpu = false;
 
   if (CanUseGpu()) {
 #if !MEDIAPIPE_DISABLE_GPU
-    use_gpu = true;
-    MP_RETURN_IF_ERROR(gpu_helper_.Open(cc));
 #if MEDIAPIPE_METAL_ENABLED
     metal_helper_ = [[MPPMetalHelper alloc] initWithCalculatorContext:cc];
     RET_CHECK(metal_helper_);
@@ -229,14 +231,6 @@ absl::Status TensorsToSegmentationCalculator::Open(CalculatorContext* cc) {
   }
 
   MP_RETURN_IF_ERROR(LoadOptions(cc));
-
-  if (use_gpu) {
-#if !MEDIAPIPE_DISABLE_GPU
-    MP_RETURN_IF_ERROR(InitGpu(cc));
-#else
-    RET_CHECK_FAIL() << "GPU processing disabled.";
-#endif  // !MEDIAPIPE_DISABLE_GPU
-  }
 
   return absl::OkStatus();
 }
@@ -264,7 +258,8 @@ absl::Status TensorsToSegmentationCalculator::Process(CalculatorContext* cc) {
   {
     RET_CHECK(!input_tensors.empty());
     RET_CHECK(input_tensors[0].element_type() == Tensor::ElementType::kFloat32);
-    ASSIGN_OR_RETURN(auto hwc, GetHwcFromDims(input_tensors[0].shape().dims));
+    MP_ASSIGN_OR_RETURN(auto hwc,
+                        GetHwcFromDims(input_tensors[0].shape().dims));
     int tensor_channels = std::get<2>(hwc);
     typedef mediapipe::TensorsToSegmentationCalculatorOptions Options;
     switch (options_.activation()) {
@@ -281,6 +276,15 @@ absl::Status TensorsToSegmentationCalculator::Process(CalculatorContext* cc) {
   }
 
   if (use_gpu) {
+#if !MEDIAPIPE_DISABLE_GPU
+    if (!gpu_initialized_) {
+      MP_RETURN_IF_ERROR(InitGpu(cc));
+      gpu_initialized_ = true;
+    }
+#else
+    RET_CHECK_FAIL() << "GPU processing disabled.";
+#endif  // !MEDIAPIPE_DISABLE_GPU
+
 #if !MEDIAPIPE_DISABLE_GPU
     MP_RETURN_IF_ERROR(gpu_helper_.RunInGlContext([this, cc]() -> absl::Status {
       MP_RETURN_IF_ERROR(ProcessGpu(cc));
@@ -302,11 +306,16 @@ absl::Status TensorsToSegmentationCalculator::Process(CalculatorContext* cc) {
 
 absl::Status TensorsToSegmentationCalculator::Close(CalculatorContext* cc) {
 #if !MEDIAPIPE_DISABLE_GPU
+  if (!gpu_initialized_) {
+    return absl::OkStatus();
+  }
+
   gpu_helper_.RunInGlContext([this] {
     if (upsample_program_) glDeleteProgram(upsample_program_);
     upsample_program_ = 0;
 #if MEDIAPIPE_OPENGL_ES_VERSION >= MEDIAPIPE_OPENGL_ES_31
     mask_program_31_.reset();
+    small_mask_texture_.reset();
 #else
     if (mask_program_20_) glDeleteProgram(mask_program_20_);
     mask_program_20_ = 0;
@@ -326,7 +335,7 @@ absl::Status TensorsToSegmentationCalculator::ProcessCpu(
   // Get input streams, and dimensions.
   const auto& input_tensors =
       cc->Inputs().Tag(kTensorsTag).Get<std::vector<Tensor>>();
-  ASSIGN_OR_RETURN(auto hwc, GetHwcFromDims(input_tensors[0].shape().dims));
+  MP_ASSIGN_OR_RETURN(auto hwc, GetHwcFromDims(input_tensors[0].shape().dims));
   auto [tensor_height, tensor_width, tensor_channels] = hwc;
   int output_width = tensor_width, output_height = tensor_height;
   if (cc->Inputs().HasTag(kOutputSizeTag)) {
@@ -437,7 +446,7 @@ absl::Status TensorsToSegmentationCalculator::ProcessGpu(
   // Get input streams, and dimensions.
   const auto& input_tensors =
       cc->Inputs().Tag(kTensorsTag).Get<std::vector<Tensor>>();
-  ASSIGN_OR_RETURN(auto hwc, GetHwcFromDims(input_tensors[0].shape().dims));
+  MP_ASSIGN_OR_RETURN(auto hwc, GetHwcFromDims(input_tensors[0].shape().dims));
   auto [tensor_height, tensor_width, tensor_channels] = hwc;
   int output_width = tensor_width, output_height = tensor_height;
   if (cc->Inputs().HasTag(kOutputSizeTag)) {
@@ -448,21 +457,24 @@ absl::Status TensorsToSegmentationCalculator::ProcessGpu(
   }
 
   // Create initial working mask texture.
-#if MEDIAPIPE_OPENGL_ES_VERSION >= MEDIAPIPE_OPENGL_ES_31
-  tflite::gpu::gl::GlTexture small_mask_texture;
-#else
+#if !(MEDIAPIPE_OPENGL_ES_VERSION >= MEDIAPIPE_OPENGL_ES_31)
   mediapipe::GlTexture small_mask_texture;
 #endif  // MEDIAPIPE_OPENGL_ES_VERSION >= MEDIAPIPE_OPENGL_ES_31
 
   // Run shader, process mask tensor.
 #if MEDIAPIPE_OPENGL_ES_VERSION >= MEDIAPIPE_OPENGL_ES_31
   {
-    MP_RETURN_IF_ERROR(CreateReadWriteRgbaImageTexture(
-        tflite::gpu::DataType::UINT8,  // GL_RGBA8
-        {tensor_width, tensor_height}, &small_mask_texture));
+    // Only recreate if the size has changed. See b/297809673 for more details.
+    if (tensor_width != cached_width_ || tensor_height != cached_height_) {
+      MP_RETURN_IF_ERROR(CreateReadWriteRgbaImageTexture(
+          tflite::gpu::DataType::UINT8,  // GL_RGBA8
+          {tensor_width, tensor_height}, small_mask_texture_.get()));
+      cached_width_ = tensor_width;
+      cached_height_ = tensor_height;
+    }
 
     const int output_index = 0;
-    glBindImageTexture(output_index, small_mask_texture.id(), 0, GL_FALSE, 0,
+    glBindImageTexture(output_index, small_mask_texture_->id(), 0, GL_FALSE, 0,
                        GL_WRITE_ONLY, GL_RGBA8);
 
     auto read_view = input_tensors[0].GetOpenGlBufferReadView();
@@ -547,7 +559,7 @@ absl::Status TensorsToSegmentationCalculator::ProcessGpu(
     gpu_helper_.BindFramebuffer(output_texture);
     glActiveTexture(GL_TEXTURE1);
 #if MEDIAPIPE_OPENGL_ES_VERSION >= MEDIAPIPE_OPENGL_ES_31
-    glBindTexture(GL_TEXTURE_2D, small_mask_texture.id());
+    glBindTexture(GL_TEXTURE_2D, small_mask_texture_->id());
 #else
     glBindTexture(GL_TEXTURE_2D, small_mask_texture.name());
 #endif  // MEDIAPIPE_OPENGL_ES_VERSION >= MEDIAPIPE_OPENGL_ES_31
@@ -627,6 +639,7 @@ absl::Status TensorsToSegmentationCalculator::LoadOptions(
 
 absl::Status TensorsToSegmentationCalculator::InitGpu(CalculatorContext* cc) {
 #if !MEDIAPIPE_DISABLE_GPU
+  MP_RETURN_IF_ERROR(gpu_helper_.Open(cc));
   MP_RETURN_IF_ERROR(gpu_helper_.RunInGlContext([this]() -> absl::Status {
   // A shader to process a segmentation tensor into an output mask.
   // Currently uses 4 channels for output, and sets R+A channels as mask value.
@@ -854,6 +867,7 @@ void main() {
     mask_program_31_ = absl::make_unique<GlProgram>();
     MP_RETURN_IF_ERROR(GlProgram::CreateWithShader(shader_without_previous,
                                                    mask_program_31_.get()));
+    small_mask_texture_ = absl::make_unique<tflite::gpu::gl::GlTexture>();
 #elif MEDIAPIPE_METAL_ENABLED
     id<MTLDevice> device = metal_helper_.mtlDevice;
     NSString* library_source =
@@ -890,6 +904,8 @@ void main() {
 
     return absl::OkStatus();
   }));
+
+  gpu_initialized_ = true;
 #endif  // !MEDIAPIPE_DISABLE_GPU
 
   return absl::OkStatus();

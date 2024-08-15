@@ -125,17 +125,15 @@ Study::CpuArchitecture GetCurrentCpuArchitecture() {
 // build, then the testing config should only be applied if the
 // "--enable-field-trial-config" switch is passed. For non-Chrome branded
 // builds, by default, the testing config is applied, unless the
-// "--disable-field-trial-config", "--force-fieldtrials", and/or
-// "--variations-server-url" switches are passed. It is however possible to
-// apply the testing config as well as specify additional field trials (using
-// "--force-fieldtrials") by using the "--enable-field-trial-config" switch.
+// "--disable-field-trial-config" and/or "--variations-server-url" switches are
+// passed. It is however possible to apply the testing config by using the
+// "--enable-field-trial-config" switch.
 bool ShouldUseFieldTrialTestingConfig(const base::CommandLine* command_line) {
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   return command_line->HasSwitch(switches::kEnableFieldTrialTestingConfig);
 #else
   return command_line->HasSwitch(switches::kEnableFieldTrialTestingConfig) ||
          (!command_line->HasSwitch(switches::kDisableFieldTrialTestingConfig) &&
-          !command_line->HasSwitch(::switches::kForceFieldTrials) &&
           !command_line->HasSwitch(switches::kVariationsServerURL));
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 }
@@ -338,8 +336,8 @@ VariationsFieldTrialCreatorBase::GetClientFilterableStateForVersion(
       std::make_unique<ClientFilterableState>(IsEnterpriseCallback,
                                               GoogleGroupsCallback);
   state->locale = application_locale_;
-  state->reference_date = ClientFilterableState::GetTimeForStudyDateChecks(
-      /*is_safe_seed=*/false, local_state());
+  state->reference_date = GetSeedStore()->GetTimeForStudyDateChecks(
+      /*is_safe_seed=*/false);
   state->version = version;
   state->os_version = ClientFilterableState::GetOSVersion();
   state->channel =
@@ -534,13 +532,11 @@ bool VariationsFieldTrialCreatorBase::HasSeedExpired(bool is_safe_seed) {
 
 bool VariationsFieldTrialCreatorBase::IsSeedForFutureMilestone(
     bool is_safe_seed) {
-  const std::string milestone_pref = is_safe_seed
-                                         ? prefs::kVariationsSafeSeedMilestone
-                                         : prefs::kVariationsSeedMilestone;
+  int seed_milestone = is_safe_seed ? GetSeedStore()->GetSafeSeedMilestone()
+                                    : GetSeedStore()->GetLatestMilestone();
 
   // The regular and safe seed milestone prefs were added in M97, so the prefs
   // are not populated for seeds stored before then.
-  int seed_milestone = local_state()->GetInteger(milestone_pref);
   if (!seed_milestone) {
     return false;
   }

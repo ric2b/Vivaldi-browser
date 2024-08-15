@@ -151,6 +151,14 @@ GPUDevice::GPUDevice(ExecutionContext* execution_context,
   DCHECK(dawn_device);
 
   WGPUSupportedLimits limits = {};
+  // Chain to get experimental subgroup limits, if device has experimental
+  // subgroups feature.
+  WGPUDawnExperimentalSubgroupLimits subgroupLimits = {};
+  subgroupLimits.chain.sType = WGPUSType_DawnExperimentalSubgroupLimits;
+  if (features_->has(V8GPUFeatureName::Enum::kChromiumExperimentalSubgroups)) {
+    limits.nextInChain = &subgroupLimits.chain;
+  }
+
   GetProcs().deviceGetLimits(GetHandle(), &limits);
   limits_ = MakeGarbageCollected<GPUSupportedLimits>(limits);
 
@@ -237,12 +245,6 @@ void GPUDevice::AddSingletonWarning(GPUSingletonWarning type) {
             "The key \"depth\" was included in a GPUExtent3D dictionary, which "
             "has no effect. It is likely that \"depthOrArrayLayers\" was "
             "intended instead.";
-        break;
-      case GPUSingletonWarning::kTimestampArray:
-        // TODO(dawn:1800): Remove after a deprecation period;
-        message =
-            "Specifying timestampWrites as an array is deprecated and will "
-            "soon be removed.";
         break;
       case GPUSingletonWarning::kCount:
         NOTREACHED();
@@ -453,11 +455,11 @@ void GPUDevice::OnCreateComputePipelineAsyncCallback(
 }
 
 GPUAdapter* GPUDevice::adapter() const {
-  return adapter_;
+  return adapter_.Get();
 }
 
 GPUSupportedFeatures* GPUDevice::features() const {
-  return features_;
+  return features_.Get();
 }
 
 ScriptPromise GPUDevice::lost(ScriptState* script_state) {
@@ -465,7 +467,7 @@ ScriptPromise GPUDevice::lost(ScriptState* script_state) {
 }
 
 GPUQueue* GPUDevice::queue() {
-  return queue_;
+  return queue_.Get();
 }
 
 bool GPUDevice::destroyed() const {
@@ -545,7 +547,8 @@ ScriptPromise GPUDevice::createRenderPipelineAsync(
   ScriptPromise promise = resolver->Promise();
 
   v8::Isolate* isolate = script_state->GetIsolate();
-  ExceptionState exception_state(isolate, ExceptionState::kExecutionContext,
+  ExceptionState exception_state(isolate,
+                                 ExceptionContextType::kOperationInvoke,
                                  "GPUDevice", "createRenderPipelineAsync");
   OwnedRenderPipelineDescriptor dawn_desc_info;
   ConvertToDawnType(isolate, this, descriptor, &dawn_desc_info,
@@ -613,14 +616,19 @@ GPURenderBundleEncoder* GPUDevice::createRenderBundleEncoder(
 
 GPUQuerySet* GPUDevice::createQuerySet(const GPUQuerySetDescriptor* descriptor,
                                        ExceptionState& exception_state) {
+  const V8GPUFeatureName::Enum kTimestampQuery =
+      V8GPUFeatureName::Enum::kTimestampQuery;
+  const V8GPUFeatureName::Enum kTimestampQueryInsidePasses =
+      V8GPUFeatureName::Enum::kChromiumExperimentalTimestampQueryInsidePasses;
   if (descriptor->type() == V8GPUQueryType::Enum::kTimestamp &&
-      !features_->has(V8GPUFeatureName::Enum::kTimestampQuery) &&
-      !features_->has(V8GPUFeatureName::Enum::kTimestampQueryInsidePasses)) {
-    exception_state.ThrowTypeError(String::Format(
-        "Use of 'timestamp' queries requires the 'timestamp-query' or "
-        "'timestamp-query-inside-passes' feature to "
-        "be enabled on %s.",
-        formattedLabel().c_str()));
+      !features_->has(kTimestampQuery) &&
+      !features_->has(kTimestampQueryInsidePasses)) {
+    exception_state.ThrowTypeError(
+        String::Format("Use of timestamp queries requires the '%s' or '%s' "
+                       "feature to be enabled on %s.",
+                       V8GPUFeatureName(kTimestampQuery).AsCStr(),
+                       V8GPUFeatureName(kTimestampQueryInsidePasses).AsCStr(),
+                       formattedLabel().c_str()));
     return nullptr;
   }
   return GPUQuerySet::Create(this, descriptor);

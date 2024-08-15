@@ -145,7 +145,7 @@ class FocusNavigation : public GarbageCollected<FocusNavigation> {
 
   Element* Owner() {
     if (slot_)
-      return slot_;
+      return slot_.Get();
 
     return FindOwner(*root_);
   }
@@ -177,7 +177,7 @@ class FocusNavigation : public GarbageCollected<FocusNavigation> {
   Element* FindOwner(ContainerNode& node) {
     auto result = owner_map_.find(&node);
     if (result != owner_map_.end())
-      return result->value;
+      return result->value.Get();
 
     // Fallback contents owner is set to the nearest ancestor slot node even if
     // the slot node have assigned nodes.
@@ -818,7 +818,14 @@ Element* FindFocusableElementAcrossFocusScopesBackward(
   while (IsOpenPopoverInvoker(found)) {
     ScopedFocusNavigation inner_scope =
         ScopedFocusNavigation::OwnedByPopoverInvoker(*found, owner_map);
-    found = FindFocusableElementRecursivelyBackward(inner_scope, owner_map);
+    // If no inner element is focusable, then focus should be on the current
+    // found popover invoker.
+    if (Element* inner_found =
+            FindFocusableElementRecursivelyBackward(inner_scope, owner_map)) {
+      found = inner_found;
+    } else {
+      break;
+    }
   }
 
   // If there's no focusable element to advance to, move up the focus scopes
@@ -1327,8 +1334,7 @@ Element* FocusController::NextFocusableElementForImeAndAutofill(
       return next_element;
     }
 
-    if (auto* select_element =
-            DynamicTo<HTMLSelectElement>(next_form_control_element)) {
+    if (IsA<HTMLSelectElement>(next_form_control_element)) {
       return next_element;
     }
   }

@@ -15,10 +15,12 @@
 #include "ash/shell_observer.h"
 #include "ash/system/eche/eche_icon_loading_indicator_view.h"
 #include "ash/system/screen_layout_observer.h"
+#include "ash/system/tray/system_tray_observer.h"
 #include "ash/system/tray/tray_background_view.h"
 #include "ash/webui/eche_app_ui/eche_connection_status_handler.h"
 #include "ash/webui/eche_app_ui/mojom/eche_app.mojom-shared.h"
 #include "ash/webui/eche_app_ui/mojom/eche_app.mojom.h"
+#include "base/functional/callback_forward.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/timer/timer.h"
@@ -67,6 +69,7 @@ class ASH_EXPORT EcheTray
       public SessionObserver,
       public ScreenLayoutObserver,
       public ShelfObserver,
+      public SystemTrayObserver,
       public TabletModeObserver,
       public KeyboardControllerObserver,
       public ShellObserver,
@@ -116,6 +119,7 @@ class ASH_EXPORT EcheTray
 
   using GracefulCloseCallback = base::OnceCallback<void()>;
   using GracefulGoBackCallback = base::RepeatingCallback<void()>;
+  using BubbleShownCallback = base::RepeatingCallback<void(AshWebView* view)>;
 
   explicit EcheTray(Shelf* shelf);
   EcheTray(const EcheTray&) = delete;
@@ -137,8 +141,6 @@ class ASH_EXPORT EcheTray
   TrayBubbleView* GetBubbleView() override;
   views::Widget* GetBubbleWidget() const override;
   void OnVirtualKeyboardVisibilityChanged() override;
-  void OnAnyBubbleVisibilityChanged(views::Widget* bubble_widget,
-                                    bool visible) override;
   bool CacheBubbleViewForHide() const override;
 
   // TrayBubbleView::Delegate:
@@ -157,6 +159,14 @@ class ASH_EXPORT EcheTray
   void OnConnectionStatusChanged(
       eche_app::mojom::ConnectionStatus connection_status) override;
   void OnRequestBackgroundConnectionAttempt() override;
+
+  // SystemTrayObserver:
+  void OnFocusLeavingSystemTray(bool reverse) override {}
+  void OnStatusAreaAnchoredBubbleVisibilityChanged(TrayBubbleView* tray_bubble,
+                                                   bool visible) override;
+
+  // Callback called when the eche icon or tray button is pressed.
+  void OnButtonPressed();
 
   // Sets the url that will be passed to the webview.
   // Setting a new value will cause the current bubble be destroyed.
@@ -186,6 +196,10 @@ class ASH_EXPORT EcheTray
   // `web_view.GoBack()` to go back the previous page.
   void SetGracefulGoBackCallback(
       GracefulGoBackCallback graceful_go_back_callback);
+
+  // Sets a callback that runs when the bubble is shown for the first time, and
+  // returns the webview.
+  void SetBubbleShownCallback(BubbleShownCallback bubble_shown_callback);
 
   views::Button* GetMinimizeButtonForTesting() const;
   views::Button* GetCloseButtonForTesting() const;
@@ -352,6 +366,7 @@ class ASH_EXPORT EcheTray
 
   GracefulCloseCallback graceful_close_callback_;
   GracefulGoBackCallback graceful_go_back_callback_;
+  BubbleShownCallback bubble_shown_callback_;
 
   // The unload timer to force close EcheTray in case unload error.
   std::unique_ptr<base::DelayTimer> unload_timer_;

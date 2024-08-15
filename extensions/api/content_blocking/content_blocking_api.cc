@@ -134,8 +134,8 @@ void UpdateVivaldiContentBlockingRuleSourceWithLoadedSource(
       rule_source.unsafe_adblock_metadata.license.spec();
   result->unsafe_adblock_metadata.version =
       rule_source.unsafe_adblock_metadata.version;
-  result->last_update = rule_source.last_update.ToJsTime();
-  result->next_fetch = rule_source.next_fetch.ToJsTime();
+  result->last_update = rule_source.last_update.InMillisecondsFSinceUnixEpoch();
+  result->next_fetch = rule_source.next_fetch.InMillisecondsFSinceUnixEpoch();
   result->is_fetching = rule_source.is_fetching;
   result->last_fetch_result =
       ToVivaldiContentBlockingFetchResult(rule_source.last_fetch_result);
@@ -719,7 +719,8 @@ ContentBlockingGetBlockedUrlsInfoFunction::RunWithService(
           blocked_tracker_info.tracker_info.emplace_back();
           blocked_tracker_info.tracker_info.back().source_id =
               source_to_info.first;
-          blocked_tracker_info.tracker_info.back().info = source_to_info.second.Clone();
+          blocked_tracker_info.tracker_info.back().info =
+              source_to_info.second.Clone();
         }
       }
 
@@ -761,8 +762,9 @@ ContentBlockingGetBlockedCountersFunction::RunWithService(
   counters.blocked_for_origin.ad_blocking = ToVivaldiBlockedCounter(
       reporter->GetBlockedForOrigin()[static_cast<size_t>(
           adblock_filter::RuleGroup::kAdBlockingRules)]);
-  return ArgumentList(
-      Results::Create(reporter->GetReportingStart().ToJsTime(), counters));
+  return ArgumentList(Results::Create(
+      reporter->GetReportingStart().InMillisecondsFSinceUnixEpoch(),
+      counters));
 }
 
 ExtensionFunction::ResponseValue

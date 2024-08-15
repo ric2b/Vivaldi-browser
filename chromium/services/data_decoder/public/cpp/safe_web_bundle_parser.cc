@@ -117,6 +117,16 @@ void SafeWebBundleParser::SetDisconnectCallback(base::OnceClosure callback) {
   disconnect_callback_ = std::move(callback);
 }
 
+void SafeWebBundleParser::Close(base::OnceClosure callback) {
+  if (disconnected_) {
+    std::move(callback).Run();
+  } else {
+    close_callback_ = std::move(callback);
+    parser_->Close(base::BindOnce(&SafeWebBundleParser::OnParserClosed,
+                                  base::Unretained(this)));
+  }
+}
+
 void SafeWebBundleParser::OnDisconnect() {
   disconnected_ = true;
   // Any of these callbacks could delete `this`, hence we need to make sure to
@@ -125,6 +135,7 @@ void SafeWebBundleParser::OnDisconnect() {
   auto metadata_callback = std::move(metadata_callback_);
   auto response_callbacks = std::exchange(response_callbacks_, {});
   auto disconnect_callback = std::move(disconnect_callback_);
+  auto close_callback = std::move(close_callback_);
 
   if (!integrity_block_callback.is_null()) {
     std::move(integrity_block_callback)
@@ -147,8 +158,12 @@ void SafeWebBundleParser::OnDisconnect() {
             web_package::mojom::BundleParseErrorType::kParserInternalError,
             kConnectionError));
   }
-  if (!disconnect_callback.is_null())
+  if (!close_callback.is_null()) {
+    std::move(close_callback).Run();
+  }
+  if (!disconnect_callback.is_null()) {
     std::move(disconnect_callback).Run();
+  }
 }
 
 void SafeWebBundleParser::OnIntegrityBlockParsed(
@@ -175,6 +190,11 @@ void SafeWebBundleParser::OnResponseParsed(
   auto callback = std::move(it->second);
   response_callbacks_.erase(it);
   std::move(callback).Run(std::move(response), std::move(error));
+}
+
+void SafeWebBundleParser::OnParserClosed() {
+  CHECK(!close_callback_.is_null());
+  std::move(close_callback_).Run();
 }
 
 }  // namespace data_decoder

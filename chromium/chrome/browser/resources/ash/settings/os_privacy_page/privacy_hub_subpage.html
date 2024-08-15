@@ -1,12 +1,16 @@
 <style include="settings-shared">
-    .list-item:not(:last-of-type) {
-      border-bottom: var(--cr-separator-line);
-    }
+  .list-item:not(:last-of-type) {
+    border-bottom: var(--cr-separator-line);
+  }
 
-    .list-frame {
-      padding-bottom: 8px;
-      padding-top: 8px;
-    }
+  .list-frame {
+    padding-bottom: 8px;
+    padding-top: 8px;
+  }
+
+  #microphoneSubpageLinkWrapper:hover {
+    background-color: var(--cr-hover-background-color);
+  }
 </style>
 
 <div id="camera">
@@ -17,7 +21,7 @@
       label="$i18n{cameraToggleTitle}"
       sub-label="$i18n{cameraToggleFallbackSubtext}"
       deep-link-focus-id$="[[Setting.kCameraOnOff]]"
-      disabled="[[isCameraListEmpty_]]"
+      disabled="[[shouldDisableCameraToggle_]]"
       on-change="onCameraToggleChanged_">
   </settings-toggle-button>
   </template>
@@ -28,7 +32,7 @@
       label="$i18n{cameraToggleTitle}"
       sub-label="$i18n{cameraToggleSubtext}"
       deep-link-focus-id$="[[Setting.kCameraOnOff]]"
-      disabled="[[isCameraListEmpty_]]"
+      disabled="[[shouldDisableCameraToggle_]]"
       on-change="onCameraToggleChanged_">
   </settings-toggle-button>
   </template>
@@ -68,6 +72,23 @@
         slot="more-actions">
       </cr-tooltip-icon>
     </settings-toggle-button>
+    <div class="list-frame">
+      <template is="dom-if" if="[[isMicListEmpty_]]" restamp>
+        <div id="noMic" class="list-item">
+          $i18n{noMicrophoneConnectedText}
+        </div>
+      </template>
+      <template is="dom-if" if="[[!isMicListEmpty_]]" restamp>
+        <template
+            id="micList"
+            is="dom-repeat"
+            items="[[microphonesConnected_]]">
+          <div class="list-item">
+            [[item]]
+          </div>
+        </template>
+      </template>
+    </div>
   </template>
   <template is="dom-if" if="[[showAppPermissions_]]">
     <div class="settings-box no-padding">
@@ -94,24 +115,24 @@
         </cr-icon-button>
       </div>
       <div class="separator"></div>
-      <cr-toggle id="microphoneToggle" class="margin-matches-padding">
-      </cr-toggle>
+      <div id="microphoneToggleWrapper">
+        <cr-toggle
+            id="microphoneToggle"
+            class="margin-matches-padding"
+            checked="{{prefs.ash.user.microphone_allowed.value}}"
+            disabled="[[shouldDisableMicrophoneToggle_]]">
+        </cr-toggle>
+      </div>
+      <paper-tooltip
+          id="microphoneToggleTooltip"
+          hidden="[[!microphoneHardwareToggleActive_]]"
+          aria-hidden="true"
+          for="microphoneToggleWrapper"
+          fit-to-visible-bounds>
+        $i18n{microphoneHwToggleTooltip}
+      </paper-tooltip>
     </div>
   </template>
-  <div class="list-frame">
-    <template is="dom-if" if="[[isMicListEmpty_]]" restamp>
-      <div id="noMic" class="list-item">
-        $i18n{noMicrophoneConnectedText}
-      </div>
-    </template>
-    <template is="dom-if" if="[[!isMicListEmpty_]]" restamp>
-      <template id="micList" is="dom-repeat" items="[[microphonesConnected_]]">
-        <div class="list-item">
-          [[item]]
-        </div>
-      </template>
-    </template>
-  </div>
 </div>
 
 <template is="dom-if" if="[[showSpeakOnMuteDetectionPage_]]" restamp>
@@ -126,17 +147,21 @@
   </settings-toggle-button>
 </template>
 
-<!-- Location toggle is not to be shown in dogfooded version of Privacy Hub -->
-<template is="dom-if" if="[[showPrivacyHubMVPPage_]]" restamp>
-  <settings-toggle-button
+<template is="dom-if" if="[[showPrivacyHubLocationControl_]]" restamp>
+  <cr-link-row
+      id="geolocationAreaLinkRow"
       class="hr"
-      pref="{{prefs.ash.user.geolocation_allowed}}"
-      id="geolocationToggle"
-      label="$i18n{geolocationToggleTitle}"
-      sub-label="$i18n{geolocationToggleDesc}"
+      on-click="onGeolocationAreaClick_"
       deep-link-focus-id$="[[Setting.kGeolocationOnOff]]"
-      learn-more-url="$i18n{geolocationToggleLearnMoreURL}">
-  </settings-toggle-button>
+      using-slotted-label>
+    <div slot="label">$i18n{geolocationAreaTitle}</div>
+    <div slot="sub-label">
+      <localized-link
+          localized-string="$i18n{geolocationAreaDescription}"
+          link-url="$i18n{geolocationAreaLearnMoreURL}">
+      </localized-link>
+    </div>
+  </cr-link-row>
 </template>
 
 <if expr="_google_chrome">
@@ -148,9 +173,8 @@
   </settings-metrics-consent-toggle-button>
 </if>
 
-<settings-toggle-button
+<settings-toggle-button id="contentRecommendationsToggle"
     class="hr"
-    id="suggested-content"
     pref="{{prefs.settings.suggested_content_enabled}}"
     label="$i18n{enableSuggestedContent}"
     sub-label="$i18n{enableSuggestedContentDesc}"

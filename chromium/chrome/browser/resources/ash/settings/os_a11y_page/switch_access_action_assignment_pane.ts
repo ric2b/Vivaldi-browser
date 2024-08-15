@@ -16,7 +16,7 @@ import '../os_settings_icons.html.js';
 
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
-import {assertNotReached} from 'chrome://resources/js/assert_ts.js';
+import {assertNotReached} from 'chrome://resources/js/assert.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getTemplate} from './switch_access_action_assignment_pane.html.js';
@@ -176,7 +176,7 @@ export class SettingsSwitchAccessActionAssignmentPaneElement extends
         SwitchAccessSubpageBrowserProxyImpl.getInstance();
   }
 
-  override connectedCallback() {
+  override connectedCallback(): void {
     super.connectedCallback();
 
     // Save all existing prefs.
@@ -205,7 +205,7 @@ export class SettingsSwitchAccessActionAssignmentPaneElement extends
     }
   }
 
-  override disconnectedCallback() {
+  override disconnectedCallback(): void {
     super.disconnectedCallback();
 
     this.switchAccessBrowserProxy_

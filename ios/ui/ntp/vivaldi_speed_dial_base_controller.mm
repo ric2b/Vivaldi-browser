@@ -28,15 +28,16 @@
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
-#import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
-#import "ios/chrome/browser/url_loading/url_loading_params.h"
-#import "ios/chrome/browser/url_loading/url_loading_util.h"
+#import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
+#import "ios/chrome/browser/url_loading/model/url_loading_params.h"
+#import "ios/chrome/browser/url_loading/model/url_loading_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmark_add_edit_folder_view_controller.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmark_add_edit_url_view_controller.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_constants.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/ntp/cells/vivaldi_speed_dial_container_cell.h"
 #import "ios/ui/ntp/top_menu/vivaldi_ntp_top_menu.h"
@@ -48,21 +49,23 @@
 #import "ios/ui/ntp/vivaldi_speed_dial_sorting_mode.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_view_controller.h"
 #import "ios/ui/ntp/vivaldi_start_page_prefs.h"
+#import "ios/ui/settings/appearance/vivaldi_theme_setting_prefs_helper.h"
+#import "ios/ui/settings/appearance/vivaldi_theme_setting_prefs.h"
 #import "ios/ui/thumbnail/vivaldi_thumbnail_service.h"
-#import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/web/public/web_state_observer_bridge.h"
 #import "ios/web/public/web_state.h"
 #import "prefs/vivaldi_pref_names.h"
 #import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
-
 using bookmarks::BookmarkModel;
 
 // Namespace
 namespace {
 // Cell Identifier for the container cell
 NSString* cellId = @"cellId";
+// Notification Identifier For Background Wallpaper
+NSString* vivaldiWallpaperUpdate = @"VivaldiBackgroundWallpaperUpdate";
 // Padding for the top scroll menu
 UIEdgeInsets topScrollMenuPadding = UIEdgeInsetsMake(0.f, 16.f, 0.f, 0.f);
 // Padding for the speed dial sorting button
@@ -104,7 +107,8 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
 // The view controller to present when pushing to add or edit item
 @property(nonatomic, strong)
   VivaldiBookmarkAddEditURLViewController* bookmarkURLAddEditorController;
-
+// The background Image for Speed Dial
+@property(nonatomic, strong) UIImageView* backgroundImageView;
 // FaviconLoader is a keyed service that uses LargeIconService to retrieve
 // favicon images.
 @property(nonatomic, assign) FaviconLoader* faviconLoader;
@@ -170,6 +174,7 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
 @synthesize descriptionSortAction = _descriptionSortAction;
 @synthesize dateSortAction = _dateSortAction;
 @synthesize emptySpeedDialView = _emptySpeedDialView;
+@synthesize backgroundImageView = _backgroundImageView;
 
 #pragma mark - INITIALIZER
 - (instancetype)initWithBrowser:(Browser*)browser {
@@ -198,6 +203,9 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
   _vivaldiThumbnailService = nullptr;
   self.mediator.consumer = nil;
   [self.mediator disconnect];
+  [[NSNotificationCenter defaultCenter] removeObserver: self
+                                        name: vivaldiWallpaperUpdate
+                                        object: nil];
 }
 
 #pragma mark - VIEW CONTROLLER LIFECYCLE
@@ -206,6 +214,32 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
   [self setUpUI];
   if (self.bookmarks->loaded()) {
     [self loadSpeedDialViews];
+  }
+  [self setupNotifications];
+}
+
+-(void)setupNotifications {
+  [[NSNotificationCenter defaultCenter] addObserver: self
+                                        selector: @selector(updateWallpaper)
+                                        name: vivaldiWallpaperUpdate
+                                        object: nil];
+}
+
+- (void)updateWallpaper {
+  //settting pref
+  [VivaldiThemeSettingPrefs setPrefService: _browserState->GetPrefs()];
+  //loading imagename from prefs
+  NSString *wallpaper = [VivaldiThemeSettingPrefsHelper getWallpaperName];
+  // Create and set the background image
+  UIImage *wallpaperImage = wallpaper ? [UIImage imageNamed: wallpaper] : nil;
+  if (wallpaperImage) {
+    __weak __typeof(self) weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      __strong __typeof(weakSelf) strongSelf = weakSelf;
+      if (strongSelf) {
+        strongSelf.backgroundImageView.image = wallpaperImage;
+      }
+    });
   }
 }
 
@@ -328,9 +362,12 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
 
   [bodyContainerView anchorTop:self.view.safeTopAnchor
                        leading:self.view.safeLeftAnchor
-                        bottom:self.view.safeBottomAnchor
+                        bottom:self.view.bottomAnchor
                       trailing:self.view.safeRightAnchor];
-
+  [self setupSpeedDialBackground];
+  self.backgroundImageView.contentMode = UIViewContentModeScaleAspectFill;
+  [bodyContainerView addSubview:self.backgroundImageView];
+  [self.backgroundImageView fillSuperview];
   UICollectionView* collectionView =
       [[UICollectionView alloc] initWithFrame:CGRectZero
                          collectionViewLayout:[self createLayout]];
@@ -351,6 +388,19 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
 
   [bodyContainerView addSubview:_collectionView];
   [_collectionView fillSuperview];
+}
+
+-(void)setupSpeedDialBackground {
+  // setting prefs
+  [VivaldiThemeSettingPrefs setPrefService: _browserState->GetPrefs()];
+  // Check for selected wallpaper in prefs
+  NSString *wallpaper = [VivaldiThemeSettingPrefsHelper getWallpaperName];
+  // Create and set the background image
+  UIImage *wallpaperImage = wallpaper ? [UIImage imageNamed:wallpaper] : nil;
+  self.backgroundImageView =
+        [[UIImageView alloc] initWithImage:wallpaperImage];
+  self.backgroundImageView.contentMode = UIViewContentModeScaleAspectFill;
+  [self.backgroundImageView fillSuperview];
 }
 
 - (UICollectionViewLayout*)createLayout {

@@ -9,15 +9,17 @@ import org.chromium.components.bookmarks.BookmarkId;
 
 /**
  * Observer interface to get notification for UI mode changes, bookmark changes, and other related
- * event that affects UI. All bookmark UI components are expected to implement this and
- * update themselves correctly on each event.
+ * event that affects UI. All bookmark UI components are expected to implement this and update
+ * themselves correctly on each event.
  */
 public /** Public to make accessible outside package for Vivaldi **/
 interface BookmarkUiObserver {
     /** Called when the entire UI is being destroyed and will be no longer in use. */
     default void onDestroy() {}
 
-    /** @see BookmarkDelegate#openFolder(BookmarkId) */
+    /**
+     * @see BookmarkDelegate#openFolder(BookmarkId)
+     */
     default void onFolderStateSet(BookmarkId folder) {}
 
     /** Called when the bookmark UI mode changes. */

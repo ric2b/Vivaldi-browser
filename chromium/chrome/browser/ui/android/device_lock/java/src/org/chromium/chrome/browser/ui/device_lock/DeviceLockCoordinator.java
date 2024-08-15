@@ -11,8 +11,9 @@ import android.view.View;
 
 import androidx.annotation.Nullable;
 
-import org.chromium.chrome.browser.device_reauth.DeviceAuthRequester;
+import org.chromium.chrome.browser.device_reauth.DeviceAuthSource;
 import org.chromium.chrome.browser.device_reauth.ReauthenticatorBridge;
+import org.chromium.components.browser_ui.device_lock.DeviceLockActivityLauncher;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
@@ -38,12 +39,16 @@ public class DeviceLockCoordinator {
          * The user has decided to dismiss the dialog without setting a device lock.
          */
         void onDeviceLockRefused();
+
+        /** Returns which source the user accessed the device lock UI from. */
+        @DeviceLockActivityLauncher.Source
+        String getSource();
     }
 
     private final DeviceLockMediator mMediator;
     private final DeviceLockView mView;
     private final WindowAndroid mWindowAndroid;
-    private final ReauthenticatorBridge mDeviceLockAuthenticatorBridge;
+    private final @Nullable ReauthenticatorBridge mDeviceLockAuthenticatorBridge;
     private final PropertyModelChangeProcessor mPropertyModelChangeProcessor;
 
     /**
@@ -57,13 +62,22 @@ public class DeviceLockCoordinator {
      */
     public DeviceLockCoordinator(Delegate delegate, WindowAndroid windowAndroid, Activity activity,
             @Nullable Account account) {
-        this(delegate, windowAndroid,
-                ReauthenticatorBridge.create(DeviceAuthRequester.DEVICE_LOCK_PAGE), activity,
-                account);
+        this(delegate, windowAndroid, createDeviceLockAuthenticatorBridge(), activity, account);
     }
 
-    protected DeviceLockCoordinator(Delegate delegate, WindowAndroid windowAndroid,
-            ReauthenticatorBridge deviceLockAuthenticatorBridge, Activity activity,
+    /**
+     * Constructs a coordinator for the Device Lock page.
+     *
+     * @param delegate The delegate invoked to interact with classes outside the module.
+     * @param windowAndroid Used to launch Intents with callbacks.
+     * @param deviceLockAuthenticatorBridge The {@link ReauthenticatorBridge} used to confirm
+     *         device lock credentials.
+     * @param activity The activity hosting this page.
+     * @param account The account that will be used for the reauthentication challenge, or null
+     *        if reauthentication is not needed.
+     */
+    public DeviceLockCoordinator(Delegate delegate, WindowAndroid windowAndroid,
+            @Nullable ReauthenticatorBridge deviceLockAuthenticatorBridge, Activity activity,
             @Nullable Account account) {
         mView = DeviceLockView.create(LayoutInflater.from(activity));
         mWindowAndroid = windowAndroid;
@@ -76,9 +90,18 @@ public class DeviceLockCoordinator {
     }
 
     /**
+     * Get a {@link ReauthenticatorBridge} for the Device Lock page.
+     */
+    public static ReauthenticatorBridge createDeviceLockAuthenticatorBridge() {
+        return ReauthenticatorBridge.create(DeviceAuthSource.DEVICE_LOCK_PAGE);
+    }
+
+    /**
      * Releases the resources used by the coordinator.
      */
     public void destroy() {
-        mPropertyModelChangeProcessor.destroy();
+        if (mPropertyModelChangeProcessor != null) {
+            mPropertyModelChangeProcessor.destroy();
+        }
     }
 }

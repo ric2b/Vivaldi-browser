@@ -85,8 +85,8 @@ void ViewPainter::PaintBoxDecorationBackground(const PaintInfo& paint_info) {
       !painting_background_in_contents_space &&
       layout_view_.FirstFragment().PaintProperties()->Scroll();
   bool is_represented_via_pseudo_elements = [this]() {
-    if (auto* transition = ViewTransitionUtils::GetActiveTransition(
-            layout_view_.GetDocument())) {
+    if (auto* transition =
+            ViewTransitionUtils::GetTransition(layout_view_.GetDocument())) {
       return transition->IsRepresentedViaPseudoElements(layout_view_);
     }
     return false;
@@ -219,8 +219,14 @@ void ViewPainter::PaintBoxDecorationBackground(const PaintInfo& paint_info) {
   // if this were immediately before the non-scrolling background.
   if (paints_scroll_hit_test) {
     DCHECK(!painting_background_in_contents_space);
+
+    // The root never fragments. In paged media page fragments are inserted
+    // under the LayoutView, but the LayoutView itself never fragments.
+    DCHECK(!layout_view_.IsFragmented());
+
     BoxPainter(layout_view_)
-        .RecordScrollHitTestData(paint_info, *background_client);
+        .RecordScrollHitTestData(paint_info, *background_client,
+                                 &layout_view_.FirstFragment());
   }
 }
 

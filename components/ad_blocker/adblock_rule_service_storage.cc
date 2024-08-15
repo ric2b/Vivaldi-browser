@@ -57,7 +57,7 @@ const char kBlockedReportingStartKey[] = "blocked-reporting-start";
 
 const char kPresetIdKey[] = "preset-id";
 
-const int kCurrentStorageVersion = 6;
+const int kCurrentStorageVersion = 7;
 
 const base::FilePath::CharType kSourcesFileName[] =
     FILE_PATH_LITERAL("AdBlockState");

@@ -88,9 +88,11 @@ class SupervisedUserRegionalURLFilterTest
   SupervisedUserRegionalURLFilterTest() {
     // TODO(crbug.com/1394910): Use HTTPS URLs in tests to avoid having to
     // disable this feature.
-    feature_list_.InitWithFeatures(GetEnabledFeatures(), GetDisabledFeatures());
-    supervision_mixin_.InitFeatures();
+    feature_list_.InitWithFeatures(
+        GetEnabledFeatures(),
+        /*disabled_features=*/{features::kHttpsUpgrades});
   }
+  ~SupervisedUserRegionalURLFilterTest() override { feature_list_.Reset(); }
 
  protected:
   class MockKidsChromeManagementClient : public KidsChromeManagementClient {
@@ -166,17 +168,18 @@ class SupervisedUserRegionalURLFilterTest
                                         OnWillCreateBrowserContextServices,
                                     base::Unretained(this)));
     request_monitor_subscription_ =
-        supervision_mixin_.embedded_test_server_setup_mixin()
-            .GetApiMock()
-            .Subscribe(base::BindRepeating(
+        supervision_mixin_.api_mock_setup_mixin().api_mock().Subscribe(
+            base::BindRepeating(
                 &SupervisedUserRegionalURLFilterTest::ClassifyUrlRequestMonitor,
                 base::Unretained(this)));
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
+    MixinBasedInProcessBrowserTest::SetUpCommandLine(command_line);
     command_line->AppendSwitchASCII(
         variations::switches::kVariationsOverrideCountry, kRegionCode);
-    MixinBasedInProcessBrowserTest::SetUpCommandLine(command_line);
+    // TODO(crbug.com/1491942): This fails with the field trial testing config.
+    command_line->AppendSwitch("disable-field-trial-config");
   }
 
   void OnWillCreateBrowserContextServices(content::BrowserContext* context) {
@@ -194,7 +197,7 @@ class SupervisedUserRegionalURLFilterTest
   // feature is enabled.
   bool ShouldUrlsBeClassified() const {
     if (GetSignInMode(GetParam()) !=
-        SupervisionMixin::SignInMode::kSupervised) {
+        supervised_user::SupervisionMixin::SignInMode::kSupervised) {
       return false;
     }
 
@@ -210,9 +213,8 @@ class SupervisedUserRegionalURLFilterTest
   base::test::ScopedFeatureList feature_list_;
   base::CallbackListSubscription create_services_subscription_;
   base::CallbackListSubscription request_monitor_subscription_;
-
  protected:
-  SupervisionMixin supervision_mixin_{
+  supervised_user::SupervisionMixin supervision_mixin_{
       mixin_host_,
       this,
       embedded_test_server(),
@@ -243,8 +245,8 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserRegionalURLFilterTest, RegionIsAdded) {
 
   if (ProtoFetcherEnabled(GetParam())) {
     if (number_of_expected_calls > 0) {
-      supervision_mixin_.embedded_test_server_setup_mixin()
-          .GetApiMock()
+      supervision_mixin_.api_mock_setup_mixin()
+          .api_mock()
           .QueueAllowedUrlClassification();
     }
     // Ignore all extra calls to other methods

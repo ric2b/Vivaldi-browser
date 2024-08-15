@@ -18,7 +18,6 @@
 #include <vector>
 
 #include "base/command_line.h"
-#include "base/feature_list.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
@@ -27,8 +26,8 @@
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/path_service.h"
+#include "base/strings/strcat_win.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/platform_thread.h"
@@ -63,14 +62,6 @@
 namespace shell_integration {
 
 namespace {
-
-BASE_FEATURE(kWin10UnattendedDefaultExportDerived,
-             "Win10UnattendedDefaultExportDerived",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-bool CanSetAsDefaultDirectly() {
-  return base::FeatureList::IsEnabled(kWin10UnattendedDefaultExportDerived);
-}
 
 // Helper function for GetAppId to generates profile id
 // from profile path. "profile_id" is composed of sanitized basenames of
@@ -357,13 +348,11 @@ class OpenSystemSettingsHelper {
   OpenSystemSettingsHelper(const wchar_t* const schemes[],
                            base::OnceClosure on_finished_callback)
       : on_finished_callback_(std::move(on_finished_callback)) {
-    static const wchar_t kUrlAssociationFormat[] =
-        L"SOFTWARE\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\"
-        L"%ls\\UserChoice";
-
     for (const wchar_t* const* scan = &schemes[0]; *scan != nullptr; ++scan) {
-      AddRegistryKeyWatcher(
-          base::StringPrintf(kUrlAssociationFormat, *scan).c_str());
+      AddRegistryKeyWatcher(base::StrCat({L"SOFTWARE\\Microsoft\\Windows\\Shell"
+                                          L"\\Associations\\UrlAssociations\\",
+                                          *scan, L"\\UserChoice"})
+                                .c_str());
     }
     // Only the watchers that were succesfully initialized are counted.
     registry_watcher_count_ = registry_key_watchers_.size();
@@ -456,7 +445,7 @@ class IsPinnedToTaskbarHelper {
   static void GetState(ResultCallback result_callback);
 
  private:
-  IsPinnedToTaskbarHelper(ResultCallback result_callback);
+  explicit IsPinnedToTaskbarHelper(ResultCallback result_callback);
 
   void OnConnectionError();
   void OnIsPinnedToTaskbarResult(bool succeeded, bool is_pinned_to_taskbar);
@@ -670,12 +659,8 @@ bool SetAsDefaultBrowser() {
   }
 
   // From UI currently we only allow setting default browser for current user.
-  if (!(CanSetAsDefaultDirectly()
-            ? ShellUtil::MakeChromeDefaultDirectly(
-                  ShellUtil::CURRENT_USER, chrome_exe,
-                  true /* elevate_if_not_admin */)
-            : ShellUtil::MakeChromeDefault(ShellUtil::CURRENT_USER, chrome_exe,
-                                           true /* elevate_if_not_admin */))) {
+  if (!ShellUtil::MakeChromeDefault(ShellUtil::CURRENT_USER, chrome_exe,
+                                    true /* elevate_if_not_admin */)) {
     LOG(ERROR) << "Chrome could not be set as default browser.";
     return false;
   }
@@ -760,10 +745,6 @@ DefaultWebClientSetPermission GetPlatformSpecificDefaultWebClientSetPermission(
     return SET_DEFAULT_NOT_ALLOWED;
   }
   if (ShellUtil::CanMakeChromeDefaultUnattended()) {
-    return SET_DEFAULT_UNATTENDED;
-  }
-  if (method == WebClientSetMethod::kDefaultBrowser &&
-      CanSetAsDefaultDirectly()) {
     return SET_DEFAULT_UNATTENDED;
   }
   // Setting the default web client generally requires user interaction in
@@ -930,9 +911,8 @@ int MigrateShortcutsInPathInternal(const base::FilePath& chrome_exe,
                                                 target_path.value())) {
       continue;
     }
-    base::CommandLine command_line(
-        base::CommandLine::FromString(base::StringPrintf(
-            L"\"%ls\" %ls", target_path.value().c_str(), arguments.c_str())));
+    base::CommandLine command_line(base::CommandLine::FromString(
+        base::StrCat({L"\"", target_path.value(), L"\" ", arguments})));
 
     // Get the expected AppId for this Chrome shortcut.
     std::wstring expected_app_id(

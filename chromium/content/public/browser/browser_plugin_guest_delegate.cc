@@ -7,7 +7,7 @@
 namespace content {
 
 std::unique_ptr<WebContents> BrowserPluginGuestDelegate::CreateNewGuestWindow(
-    const WebContents::CreateParams& create_params, int disposition) {
+    const WebContents::CreateParams& create_params) {
   NOTREACHED();
   return nullptr;
 }

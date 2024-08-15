@@ -12,7 +12,7 @@ import {strictQuery} from 'chrome://resources/ash/common/typescript_utils/strict
 import {getInstance as getAnnouncerInstance} from 'chrome://resources/cr_elements/cr_a11y_announcer/cr_a11y_announcer.js';
 import {CrToolbarSearchFieldElement} from 'chrome://resources/cr_elements/cr_toolbar/cr_toolbar_search_field.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
-import {assert} from 'chrome://resources/js/assert_ts.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {stringToMojoString16} from 'chrome://resources/js/mojo_type_util.js';
 import {IronDropdownElement} from 'chrome://resources/polymer/v3_0/iron-dropdown/iron-dropdown.js';
 import {IronListElement} from 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
@@ -21,6 +21,7 @@ import {afterNextRender, PolymerElement} from 'chrome://resources/polymer/v3_0/p
 
 import {SearchResultsAvailabilityObserverInterface, SearchResultsAvailabilityObserverReceiver} from '../../mojom-webui/ash/webui/shortcut_customization_ui/backend/search/search.mojom-webui.js';
 import {AcceleratorState, MojoSearchResult, ShortcutSearchHandlerInterface} from '../shortcut_types.js';
+import {isCustomizationAllowed} from '../shortcut_utils.js';
 
 import {getTemplate} from './search_box.html.js';
 import {SearchResultRowElement} from './search_result_row.js';
@@ -410,7 +411,18 @@ export class SearchBoxElement extends SearchBoxElementBase implements
     }
 
     this.spinnerActive = false;
-    this.searchResults = this.filterSearchResults(results);
+
+    /**
+     * Get the search results based on whether customization is allowed.
+     * If customization is allowed:
+     *   - Display all results.
+     *   - For accelerators that are disabled, display a 'No shortcut assigned'
+     * message.
+     * If customization is not allowed:
+     *   - Filter out the disabled accelerators from the search results.
+     */
+    this.searchResults =
+        isCustomizationAllowed() ? results : this.filterSearchResults(results);
 
     // In `this.fetchSearchResults`, we queried for a multiple of
     // MAX_NUM_RESULTS, so cap the size of the results here after filtering.
@@ -423,8 +435,9 @@ export class SearchBoxElement extends SearchBoxElementBase implements
 
   /**
    * Filter the given search results to hide accelerators and results that are
-   * disabled because their keys are unavailable. This filtering matches the
-   * behavior of the Shortcut app's main list of shortcuts.
+   * disabled because their keys are unavailable or they are disabled by user.
+   * This filtering matches the behavior of the Shortcut app's main list of
+   * shortcuts.
    * @param searchResults the search results to filter.
    * @returns the given search results with disabled keys and results with no
    *     keys filtered out.
@@ -434,12 +447,13 @@ export class SearchBoxElement extends SearchBoxElementBase implements
     return searchResults
         // Hide accelerators that are disabled because the keys are
         // unavailable.
-        .map(
-            result => ({
-              ...result,
-              acceleratorInfos: result.acceleratorInfos.filter(
-                  a => a.state !== AcceleratorState.kDisabledByUnavailableKeys),
-            }))
+        .map(result => ({
+               ...result,
+               acceleratorInfos: result.acceleratorInfos.filter(
+                   a => a.state !==
+                           AcceleratorState.kDisabledByUnavailableKeys &&
+                       a.state !== AcceleratorState.kDisabledByUser),
+             }))
         // Hide results that don't contain any accelerators.
         .filter(result => result.acceleratorInfos.length > 0);
   }

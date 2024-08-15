@@ -163,7 +163,7 @@ void OfferNotificationBubbleControllerImpl::OnPromoCodeButtonClicked() {
   promo_code_button_clicked_ = true;
 
   autofill_metrics::LogOfferNotificationBubblePromoCodeButtonClicked(
-      offer_.GetOfferType());
+      offer_.GetOfferType(), web_contents()->GetLastCommittedURL());
 }
 
 void OfferNotificationBubbleControllerImpl::ShowOfferNotificationIfApplicable(
@@ -191,7 +191,8 @@ void OfferNotificationBubbleControllerImpl::ShowOfferNotificationIfApplicable(
   HideBubbleAndClearTimestamp(/*should_show_icon=*/true);
 
   DCHECK(IsIconVisible());
-  autofill_metrics::LogPageLoadsWithOfferIconShown(offer->GetOfferType());
+  autofill_metrics::LogPageLoadsWithOfferIconShown(
+      offer->GetOfferType(), web_contents()->GetLastCommittedURL());
 
   if (card)
     card_ = *card;
@@ -265,7 +266,7 @@ void OfferNotificationBubbleControllerImpl::DoShowBubble() {
   if (!IsWebContentsActive())
     return;
 
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
+  Browser* browser = chrome::FindBrowserWithTab(web_contents());
   set_bubble_view(browser->window()
                       ->GetAutofillBubbleHandler()
                       ->ShowOfferNotificationBubble(web_contents(), this,
@@ -283,8 +284,9 @@ void OfferNotificationBubbleControllerImpl::DoShowBubble() {
   if (observer_for_testing_)
     observer_for_testing_->OnBubbleShown();
 
-  autofill_metrics::LogOfferNotificationBubbleOfferMetric(offer_.GetOfferType(),
-                                                          is_user_gesture_);
+  autofill_metrics::LogOfferNotificationBubbleOfferMetric(
+      offer_.GetOfferType(), is_user_gesture_,
+      web_contents()->GetLastCommittedURL());
 }
 
 bool OfferNotificationBubbleControllerImpl::IsWebContentsActive() {

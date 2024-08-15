@@ -18,11 +18,9 @@
 #include "components/autofill/core/browser/autofill_profile_import_process.h"
 #include "components/autofill/core/browser/form_data_importer_utils.h"
 #include "components/autofill/core/browser/form_structure.h"
-#include "components/autofill/core/browser/payments/credit_card_save_manager.h"
 #include "components/autofill/core/browser/payments/iban_save_manager.h"
 #include "components/autofill/core/browser/payments/local_card_migration_manager.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
-#include "components/autofill/core/browser/payments/upi_vpa_save_manager.h"
 #include "components/autofill/core/browser/payments/virtual_card_enrollment_manager.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -32,6 +30,7 @@ class SaveCardOfferObserver;
 namespace autofill {
 
 class AddressProfileSaveManager;
+class CreditCardSaveManager;
 
 // Manages logic for importing address profiles and credit card information from
 // web forms into the user's Autofill profile via the PersonalDataManager.
@@ -65,10 +64,6 @@ class FormDataImporter : public PersonalDataManagerObserver {
   FormDataImporter& operator=(const FormDataImporter&) = delete;
 
   ~FormDataImporter() override;
-
-  using CardGuid = base::StrongAlias<class CardGuidTag, std::string>;
-  using CardLastFourDigits =
-      base::StrongAlias<class CardLastFourDigitsTag, std::string>;
 
   // Imports the form data, submitted by the user, into
   // `personal_data_manager_`. If a new credit card was detected and
@@ -109,6 +104,10 @@ class FormDataImporter : public PersonalDataManagerObserver {
     return virtual_card_enrollment_manager_.get();
   }
 
+  CreditCardSaveManager* GetCreditCardSaveManager() {
+    return credit_card_save_manager_.get();
+  }
+
   void AddMultiStepImportCandidate(const AutofillProfile& profile,
                                    const ProfileImportMetadata& import_metadata,
                                    bool is_imported) {
@@ -143,33 +142,28 @@ class FormDataImporter : public PersonalDataManagerObserver {
   }
 
   // This should only set
-  // `card_identifier_if_non_interactive_authentication_flow_completed_` to a
+  // `card_record_type_if_non_interactive_authentication_flow_completed_` to a
   // value when there was an autofill with no interactive authentication,
-  // otherwise it should set to nullopt. If we are in the virtual card case,
-  // this will be set to the last four digits of the virtual card number.
-  // Otherwise, this will be set to the GUID of the card.
-  void SetCardIdentifierIfNonInteractiveAuthenticationFlowCompleted(
-      absl::optional<absl::variant<CardGuid, CardLastFourDigits>>
-          card_identifier_if_non_interactive_authentication_flow_completed);
-  const absl::optional<absl::variant<CardGuid, CardLastFourDigits>>&
-  GetCardIdentifierIfNonInteractiveAuthenticationFlowCompleted() const;
+  // otherwise it should set to nullopt.
+  void SetCardRecordTypeIfNonInteractiveAuthenticationFlowCompleted(
+      absl::optional<CreditCard::RecordType>
+          card_record_type_if_non_interactive_authentication_flow_completed_);
+  absl::optional<CreditCard::RecordType>
+  GetCardRecordTypeIfNonInteractiveAuthenticationFlowCompleted() const;
 
   bool ProcessExtractedCreditCardForTesting(
       const FormStructure& submitted_form,
       const absl::optional<CreditCard>& credit_card_import_candidate,
-      const absl::optional<std::string>& extracted_upi_id,
       bool payment_methods_autofill_enabled,
       bool is_credit_card_upstream_enabled) {
     return ProcessExtractedCreditCard(
-        submitted_form, credit_card_import_candidate, extracted_upi_id,
+        submitted_form, credit_card_import_candidate,
         payment_methods_autofill_enabled, is_credit_card_upstream_enabled);
   }
 
  protected:
   void set_credit_card_save_manager_for_testing(
-      std::unique_ptr<CreditCardSaveManager> credit_card_save_manager) {
-    credit_card_save_manager_ = std::move(credit_card_save_manager);
-  }
+      std::unique_ptr<CreditCardSaveManager> credit_card_save_manager);
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   void set_iban_save_manager_for_testing(
@@ -227,8 +221,6 @@ class FormDataImporter : public PersonalDataManagerObserver {
     // IBAN extracted from the form, which is a candidate for importing. Present
     // if an IBAN is found in the form.
     absl::optional<Iban> iban_import_candidate;
-    // Present if a UPI (Unified Payment Interface) ID is found in the form.
-    absl::optional<std::string> extracted_upi_id;
   };
 
   // Scans the given `form` for extractable Autofill data.
@@ -303,13 +295,11 @@ class FormDataImporter : public PersonalDataManagerObserver {
 
   // Tries to initiate the saving of the `extracted_credit_card` if applicable.
   // `submitted_form` is the form from which the card was
-  // imported. If a UPI id was found it is stored in `extracted_upi_id`.
-  // `is_credit_card_upstream_enabled` indicates if server card storage is
-  // enabled. Returns true if a save is initiated.
+  // imported. `is_credit_card_upstream_enabled` indicates if server card
+  // storage is enabled. Returns true if a save is initiated.
   bool ProcessExtractedCreditCard(
       const FormStructure& submitted_form,
       const absl::optional<CreditCard>& extracted_credit_card,
-      const absl::optional<std::string>& extracted_upi_id,
       bool payment_methods_autofill_enabled,
       bool is_credit_card_upstream_enabled);
 
@@ -325,22 +315,20 @@ class FormDataImporter : public PersonalDataManagerObserver {
   // Helper function which extracts the IBAN from the form structure.
   Iban ExtractIbanFromForm(const FormStructure& form);
 
-  // Go through the `form` fields and find a UPI ID to extract. The return value
-  // will be empty if no UPI ID was found.
-  absl::optional<std::string> ExtractUpiId(const FormStructure& form);
-
-  // Returns true if credit card upload or local save should be offered to user.
-  // `extracted_credit_card` is the credit card imported from the form if there
-  // is any. If no valid card was imported, it is set to nullopt. It might be
-  // set to a copy of a LOCAL_CARD or SERVER_CARD we have already saved if we
-  // were able to find a matching copy. |is_credit_card_upstream_enabled|
-  // denotes whether the user has credit card upload enabled. This function is
-  // used to prevent offering upload card save or local card save in situations
-  // where it would be invalid to offer them. For example, we should not offer
-  // to upload card if it is already a valid server card.
-  bool ShouldOfferUploadCardOrLocalCardSave(
+  // Returns true if credit card upload, local save, or cvc local save should be
+  // offered to user. `extracted_credit_card` is the credit card imported from
+  // the form if there is any. If no valid card was imported, it is set to
+  // nullopt. It might be set to a copy of a LOCAL_CARD or SERVER_CARD we have
+  // already saved if we were able to find a matching copy.
+  // |is_credit_card_upstream_enabled| denotes whether the user has credit card
+  // upload enabled. This function is used to prevent offering upload card save
+  // or local card save in situations where it would be invalid to offer them.
+  // For example, we should not offer to upload card if it is already a valid
+  // server card.
+  // TODO(crbug.com/1450749): Move to CreditCardSaveManger.
+  bool ShouldOfferCreditCardSave(
       const absl::optional<CreditCard>& extracted_credit_card,
-      bool is_credit_card_upload_enabled);
+      bool is_credit_card_upstream_enabled);
 
   // If the `profile`'s country is not empty, complements it with
   // `predicted_country_code`. To give users the opportunity to edit, this is
@@ -360,13 +348,6 @@ class FormDataImporter : public PersonalDataManagerObserver {
   // `kAutofillRemoveInaccessibleProfileValues` is enabled.
   void RemoveInaccessibleProfileValues(AutofillProfile& profile);
 
-  // Whether a dynamic change form is imported.
-  bool from_dynamic_change_form_ = false;
-
-  // Whether the form imported has non-focusable fields after user entered
-  // information into it.
-  bool has_non_focusable_field_ = false;
-
   // The associated autofill client. Weak reference.
   raw_ptr<AutofillClient> client_;
 
@@ -382,9 +363,6 @@ class FormDataImporter : public PersonalDataManagerObserver {
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   // Responsible for migrating locally saved credit cards to Google Pay.
   std::unique_ptr<LocalCardMigrationManager> local_card_migration_manager_;
-
-  // Responsible for managing UPI/VPA save flows.
-  std::unique_ptr<UpiVpaSaveManager> upi_vpa_save_manager_;
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 
   // The personal data manager, used to save and load personal data to/from the
@@ -413,15 +391,14 @@ class FormDataImporter : public PersonalDataManagerObserver {
   // Enables associating recently submitted forms with each other.
   FormAssociator form_associator_;
 
-  // Optional that will have a value when the most recent payments autofill flow
-  // had no interactive authentication. It will contain the GUID or last four
-  // digits of the card where the most recent non-interactive authentication has
-  // succeeded. If this is empty upon form submission, it implies that the most
-  // recent autofill had an interactive authentication. Set when
-  // `SetCardIdentifierIfNonInteractiveAuthenticationFlowCompleted()` is called,
-  // and cleared on page navigation.
-  absl::optional<absl::variant<CardGuid, CardLastFourDigits>>
-      card_identifier_if_non_interactive_authentication_flow_completed_;
+  // If the most recent payments autofill flow had a non-interactive
+  // authentication,
+  // `card_record_type_if_non_interactive_authentication_flow_completed_` will
+  // contain the record type of the card that had the non-interactive
+  // authentication, otherwise it will be nullopt. The reason we store a
+  // `CreditCard::RecordType` here instead of a boolean is for logging purposes.
+  absl::optional<CreditCard::RecordType>
+      card_record_type_if_non_interactive_authentication_flow_completed_;
 
   friend class AutofillMergeTest;
   friend class FormDataImporterTest;
@@ -431,7 +408,7 @@ class FormDataImporter : public PersonalDataManagerObserver {
   friend class SaveCardInfobarEGTestHelper;
   friend class ::SaveCardOfferObserver;
   FRIEND_TEST_ALL_PREFIXES(FormDataImporterNonParameterizedTest,
-                           ShouldOfferUploadCardOrLocalCardSave);
+                           ShouldOfferCreditCardSave);
 };
 
 }  // namespace autofill

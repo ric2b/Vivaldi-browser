@@ -354,8 +354,8 @@ void PasswordGenerationAgentTest::LoadHTMLWithUserGesture(const char* html) {
 WebElement PasswordGenerationAgentTest::GetElementById(
     base::StringPiece element_id) {
   WebDocument document = GetMainFrame()->GetDocument();
-  WebElement element = document.GetElementById(
-      blink::WebString::FromUTF8(element_id.data(), element_id.size()));
+  WebElement element =
+      document.GetElementById(blink::WebString::FromUTF8(element_id));
   CHECK(!element.IsNull());
   return element;
 }
@@ -435,8 +435,8 @@ void PasswordGenerationAgentTest::ExpectAttribute(
     const WebElement& element,
     base::StringPiece attribute,
     base::StringPiece expected_value) {
-  WebString actual_value = element.GetAttribute(
-      blink::WebString::FromUTF8(attribute.data(), attribute.size()));
+  WebString actual_value =
+      element.GetAttribute(blink::WebString::FromUTF8(attribute));
   ASSERT_FALSE(actual_value.IsNull());
   EXPECT_EQ(expected_value, actual_value.Ascii());
 }
@@ -995,6 +995,24 @@ TEST_F(PasswordGenerationAgentTest,
   LoadHTMLWithUserGesture(kAccountCreationFormHTML);
   SelectGenerationFallbackAndExpect(false);
 }
+
+// Test corner case when password field becomes readonly the moment you focus it
+// and later becomes normal again.
+TEST_F(PasswordGenerationAgentTest,
+       DesktopContextMenuManualGenerationOnReadonly) {
+  LoadHTMLWithUserGesture(kSigninFormHTML);
+  ExecuteJavaScriptForTests(
+      "document.getElementsByClassName('first_password')[0].setAttribute('"
+      "readonly', 'true');");
+  SimulateElementRightClick("password");
+
+  ExecuteJavaScriptForTests(
+      "document.getElementsByClassName('first_password')[0].removeAttribute('"
+      "readonly');");
+
+  SelectGenerationFallbackAndExpect(true);
+}
+
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 TEST_F(PasswordGenerationAgentTest, PresavingGeneratedPassword) {
@@ -1351,8 +1369,8 @@ TEST_F(PasswordGenerationAgentTest, GenerationAvailableByRendererIds) {
   // Simulate that the browser informs about eligible for generation form.
   // Check that generation is available only on new password field of this form.
   PasswordFormGenerationData generation_data;
-  generation_data.new_password_renderer_id = autofill::FieldRendererId(
-      password_elements[0].UniqueRendererFormControlId());
+  generation_data.new_password_renderer_id =
+      autofill::form_util::GetFieldRendererId(password_elements[0]);
 
   password_generation_->FoundFormEligibleForGeneration(generation_data);
   ExpectAutomaticGenerationAvailable(kPasswordElementsIds[0], kAvailable);
@@ -1361,8 +1379,8 @@ TEST_F(PasswordGenerationAgentTest, GenerationAvailableByRendererIds) {
 
   // Simulate that the browser informs about the second eligible for generation
   // form. Check that generation is available on both forms.
-  generation_data.new_password_renderer_id = autofill::FieldRendererId(
-      password_elements[2].UniqueRendererFormControlId());
+  generation_data.new_password_renderer_id =
+      autofill::form_util::GetFieldRendererId(password_elements[2]);
   password_generation_->FoundFormEligibleForGeneration(generation_data);
   ExpectAutomaticGenerationAvailable(kPasswordElementsIds[0], kAvailable);
   ExpectGenerationElementLostFocus(kPasswordElementsIds[1]);
@@ -1374,7 +1392,7 @@ TEST_F(PasswordGenerationAgentTest, SuggestionPreviewTest) {
   WebDocument document = GetMainFrame()->GetDocument();
   SetFoundFormEligibleForGeneration(password_generation_,
                                     GetMainFrame()->GetDocument(),
-                                    "first_password" /* new_passwod_id */,
+                                    "first_password" /* new_password_id */,
                                     "second_password" /* confirm_password_id*/);
   ExpectAutomaticGenerationAvailable("first_password", kAvailable);
 
@@ -1389,7 +1407,7 @@ TEST_F(PasswordGenerationAgentTest, SuggestionPreviewTest) {
   std::u16string password = u"random_password";
   password_generation_->PreviewGenerationSuggestion(password);
 
-  // Both password fields should have sugegsted values.
+  // Both password fields should have suggested values.
   EXPECT_EQ(password, first_password_element.SuggestedValue().Utf16());
   EXPECT_EQ(password, second_password_element.SuggestedValue().Utf16());
   EXPECT_EQ(first_password_element.GetAutofillState(),

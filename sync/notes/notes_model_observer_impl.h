@@ -10,8 +10,8 @@
 
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
-#include "notes/note_node.h"
-#include "notes/notes_model_observer.h"
+#include "components/notes/note_node.h"
+#include "components/notes/notes_model_observer.h"
 #include "url/gurl.h"
 
 namespace sync_pb {
@@ -26,13 +26,17 @@ namespace sync_notes {
 
 class SyncedNoteTracker;
 
+class NoteModelView;
+
 // Class for listening to local changes in the notes model and updating
 // metadata in SyncedNoteTracker, such that ultimately the processor exposes
 // those local changes to the sync engine.
 class NotesModelObserverImpl : public vivaldi::NotesModelObserver {
  public:
-  // |note_tracker_| must not be null and must outlive this object.
-  NotesModelObserverImpl(const base::RepeatingClosure& nudge_for_commit_closure,
+  // |note_model| and |note_tracker| must not be null and must outlive
+  // this object. Note that this class doesn't self register as observer.
+  NotesModelObserverImpl(NoteModelView* note_model,
+                         const base::RepeatingClosure& nudge_for_commit_closure,
                          base::OnceClosure on_notes_model_being_deleted_closure,
                          SyncedNoteTracker* note_tracker);
 
@@ -42,31 +46,31 @@ class NotesModelObserverImpl : public vivaldi::NotesModelObserver {
   ~NotesModelObserverImpl() override;
 
   //  vivaldi::NotesModelObserver:
-  void NotesModelLoaded(vivaldi::NotesModel* model,
+  void NotesModelLoaded(vivaldi::NotesModel* /*unused*/,
                         bool ids_reassigned) override;
-  void NotesModelBeingDeleted(vivaldi::NotesModel* model) override;
-  void NotesNodeMoved(vivaldi::NotesModel* model,
+  void NotesModelBeingDeleted(vivaldi::NotesModel* /*unused*/) override;
+  void NotesNodeMoved(vivaldi::NotesModel* /*unused*/,
                       const vivaldi::NoteNode* old_parent,
                       size_t old_index,
                       const vivaldi::NoteNode* new_parent,
                       size_t new_index) override;
-  void NotesNodeAdded(vivaldi::NotesModel* model,
+  void NotesNodeAdded(vivaldi::NotesModel* /*unused*/,
                       const vivaldi::NoteNode* parent,
                       size_t index) override;
-  void OnWillRemoveNotes(vivaldi::NotesModel* model,
+  void OnWillRemoveNotes(vivaldi::NotesModel* /*unused*/,
                          const vivaldi::NoteNode* parent,
                          size_t old_index,
                          const vivaldi::NoteNode* node) override;
-  void NotesNodeRemoved(vivaldi::NotesModel* model,
+  void NotesNodeRemoved(vivaldi::NotesModel* /*unused*/,
                         const vivaldi::NoteNode* parent,
                         size_t old_index,
                         const vivaldi::NoteNode* node) override;
-  void NotesNodeChanged(vivaldi::NotesModel* model,
+  void OnWillRemoveAllNotes(vivaldi::NotesModel* /*unused*/) override;
+  void NotesAllNodesRemoved(vivaldi::NotesModel* /*unused*/) override;
+  void NotesNodeChanged(vivaldi::NotesModel* /*unused*/,
                         const vivaldi::NoteNode* node) override;
-  void NotesNodeChildrenReordered(vivaldi::NotesModel* model,
+  void NotesNodeChildrenReordered(vivaldi::NotesModel* /*unused*/,
                                   const vivaldi::NoteNode* node) override;
-  void OnWillRemoveAllNotes(vivaldi::NotesModel* model) override;
-  void NotesAllNodesRemoved(vivaldi::NotesModel* model) override;
 
  private:
   syncer::UniquePosition ComputePosition(const vivaldi::NoteNode& parent,
@@ -88,15 +92,15 @@ class NotesModelObserverImpl : public vivaldi::NotesModelObserver {
   // right node's positions. At least one of |prev| and |next| must be valid.
   syncer::UniquePosition UpdateUniquePositionForNode(
       const vivaldi::NoteNode* node,
-      vivaldi::NotesModel* model,
       const syncer::UniquePosition& prev,
       const syncer::UniquePosition& next);
 
   // Updates unique positions for all children from |parent| starting from
   // |start_index| (must not be 0).
   void UpdateAllUniquePositionsStartingAt(const vivaldi::NoteNode* parent,
-                                          vivaldi::NotesModel* notes_model,
                                           size_t start_index);
+
+  const raw_ptr<NoteModelView> note_model_;
 
   // Points to the tracker owned by the processor. It keeps the mapping between
   // note nodes and corresponding sync server entities.

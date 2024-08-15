@@ -52,6 +52,12 @@ enum class PreloadingType {
   // NoState prefetch only supports the GET HTTP method and doesn't cache
   // resources with the no-store cache-control header.
   kNoStatePrefetch = 5,
+
+  // Link-Preview loads a page with prerendering infrastructures in a dedicated
+  // mini tab so that users can take a look at the content before visiting it.
+  // TODO(b:291867362): This is not used by the current implementation,
+  // but might be reused in the future.
+  kLinkPreview = 6,
 };
 
 // Defines various triggering mechanisms which triggers different preloading

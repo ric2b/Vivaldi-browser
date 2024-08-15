@@ -276,7 +276,7 @@ bool SpatialNavigationController::HandleEscapeKeyboardEvent(
 
 Element* SpatialNavigationController::GetInterestedElement() const {
   if (RuntimeEnabledFeatures::FocuslessSpatialNavigationEnabled())
-    return interest_element_;
+    return interest_element_.Get();
 
   Frame* frame = page_->GetFocusController().FocusedOrMainFrame();
   auto* local_frame = DynamicTo<LocalFrame>(frame);
@@ -430,7 +430,7 @@ Node* SpatialNavigationController::StartingNode() {
               DynamicTo<HTMLFrameOwnerElement>(interest_element_.Get()))
         return frame_owner->contentDocument();
 
-      return interest_element_;
+      return interest_element_.Get();
     }
 
     if (auto* main_local_frame = DynamicTo<LocalFrame>(page_->MainFrame()))

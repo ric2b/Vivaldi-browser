@@ -15,9 +15,7 @@ class TpmErrorView;
 // Controller for the tpm error screen.
 class TpmErrorScreen : public BaseScreen {
  public:
-
   explicit TpmErrorScreen(base::WeakPtr<TpmErrorView> view);
-
   TpmErrorScreen(const TpmErrorScreen&) = delete;
   TpmErrorScreen& operator=(const TpmErrorScreen&) = delete;
   ~TpmErrorScreen() override;

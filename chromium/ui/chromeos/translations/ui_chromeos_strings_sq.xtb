@@ -8,6 +8,7 @@
 <translation id="1056898198331236512">Paralajmërim</translation>
 <translation id="1060368002126861100">Për të hapur skedarët me <ph name="APP_NAME" />, në fillim zhvendosi në dosjen e skedarëve të Windows.</translation>
 <translation id="1062407476771304334">Zëvendëso</translation>
+<translation id="1119383441774809183">Shfaq mesazhet me tekst</translation>
 <translation id="1119447706177454957">Gabim i brendshëm</translation>
 <translation id="1120073797882051782">Hangul Romaja</translation>
 <translation id="112387589102719461">Anglisht (SHBA) me tastierën Programmer Dvorak</translation>
@@ -328,6 +329,7 @@
 <translation id="3619115746895587757">Kapuçino</translation>
 <translation id="3619593063686672873">Nuk ka video të fundit</translation>
 <translation id="3634507049637220048">Rrjeti <ph name="NETWORK_INDEX" /> nga <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, menaxhuar nga administratori yt, detaje</translation>
+<translation id="36451918667380448">Ofruesi i rrjetit celular është i kyçur. Kontakto me ofruesin për mbështetje.</translation>
 <translation id="3645233063072417428"><ph name="NUMBER_OF_ITEMS" /> artikuj janë zhvendosur.</translation>
 <translation id="3658269352872031728">U zgjodhën <ph name="SELECTED_FILE_COUNT" /> skedarë</translation>
 <translation id="3685122418104378273">Sinkronizimi i "Diskut të Google" është çaktivizuar si parazgjedhje kur përdor të dhënat celulare.</translation>
@@ -1013,6 +1015,7 @@
 <translation id="8698877009525468705">Ky skedar është konfidencial dhe objekt i kufizimeve nga politika e administratorit.</translation>
 <translation id="8712637175834984815">E kuptova</translation>
 <translation id="8713112442029511308">Maltisht</translation>
+<translation id="8714138378966541668">Kyçur nga ofruesi</translation>
 <translation id="8714406895390098252">Biçikleta</translation>
 <translation id="8719721339511222681"><ph name="ENTRY_NAME" /> u zgjodh.</translation>
 <translation id="872537912056138402">Kroatisht</translation>

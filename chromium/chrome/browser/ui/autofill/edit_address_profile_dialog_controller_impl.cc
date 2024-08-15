@@ -7,7 +7,7 @@
 
 #include "base/types/optional_util.h"
 #include "chrome/browser/ui/autofill/autofill_bubble_base.h"
-#include "chrome/browser/ui/autofill/autofill_bubble_handler.h"
+#include "chrome/browser/ui/autofill/edit_address_profile_view.h"
 #include "chrome/browser/ui/autofill/save_update_address_profile_bubble_controller_impl.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -35,13 +35,11 @@ void EditAddressProfileDialogControllerImpl::OfferEdit(
     const AutofillProfile& profile,
     const AutofillProfile* original_profile,
     const std::u16string& footer_message,
-    AutofillClient::AddressProfileSavePromptCallback
-        address_profile_save_prompt_callback,
-    base::OnceClosure on_cancel_callback,
+    AutofillClient::AddressProfileSavePromptCallback on_user_decision_callback,
     bool is_migration_to_account) {
   // Don't show the editor if it's already visible, and inform the backend.
   if (dialog_view_) {
-    std::move(address_profile_save_prompt_callback)
+    std::move(on_user_decision_callback)
         .Run(AutofillClient::SaveAddressProfileOfferUserDecision::kAutoDeclined,
              profile);
     return;
@@ -49,14 +47,15 @@ void EditAddressProfileDialogControllerImpl::OfferEdit(
   address_profile_to_edit_ = profile;
   original_profile_ = base::OptionalFromPtr(original_profile);
   footer_message_ = footer_message;
-  address_profile_save_prompt_callback_ =
-      std::move(address_profile_save_prompt_callback);
-  on_cancel_callback_ = std::move(on_cancel_callback);
+  on_user_decision_callback_ = std::move(on_user_decision_callback);
   is_migration_to_account_ = is_migration_to_account;
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
-  dialog_view_ = browser->window()
-                     ->GetAutofillBubbleHandler()
-                     ->ShowEditAddressProfileDialog(web_contents(), this);
+
+  if (view_factory_for_test_) {
+    dialog_view_ = view_factory_for_test_.Run(web_contents(), this);
+    return;
+  }
+
+  dialog_view_ = ShowEditAddressProfileDialogView(web_contents(), this);
 }
 
 std::u16string EditAddressProfileDialogControllerImpl::GetWindowTitle() const {
@@ -90,28 +89,10 @@ bool EditAddressProfileDialogControllerImpl::GetIsValidatable() const {
          is_migration_to_account_;
 }
 
-void EditAddressProfileDialogControllerImpl::OnUserDecision(
+void EditAddressProfileDialogControllerImpl::OnDialogClosed(
     AutofillClient::SaveAddressProfileOfferUserDecision decision,
-    const AutofillProfile& profile_with_edits) {
-  if (decision ==
-      AutofillClient::SaveAddressProfileOfferUserDecision::kEditAccepted) {
-    // If the user accepted the flow, save the changes directly.
-    std::move(address_profile_save_prompt_callback_)
-        .Run(decision, profile_with_edits);
-    return;
-  }
-  // Save callback must get invalidated to not get triggered in the destructor.
-  address_profile_save_prompt_callback_.Reset();
-  // If the user hits "Cancel", run the corresponding callback.
-  std::move(on_cancel_callback_).Run();
-}
-
-void EditAddressProfileDialogControllerImpl::OnDialogClosed() {
-  if (address_profile_save_prompt_callback_) {
-    OnUserDecision(
-        AutofillClient::SaveAddressProfileOfferUserDecision::kIgnored,
-        address_profile_to_edit_);
-  }
+    base::optional_ref<const AutofillProfile> profile_with_edits) {
+  std::move(on_user_decision_callback_).Run(decision, profile_with_edits);
   dialog_view_ = nullptr;
 }
 
@@ -124,6 +105,11 @@ void EditAddressProfileDialogControllerImpl::HideDialog() {
     dialog_view_->Hide();
     dialog_view_ = nullptr;
   }
+}
+
+void EditAddressProfileDialogControllerImpl::SetViewFactoryForTest(
+    EditAddressProfileViewTestingFactory factory) {
+  view_factory_for_test_ = std::move(factory);
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(EditAddressProfileDialogControllerImpl);

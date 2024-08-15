@@ -10,6 +10,7 @@
 #include <ostream>
 #include <string>
 
+#include "base/functional/callback_forward.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -117,6 +118,14 @@ class WaylandDataDragController : public WaylandDataDevice::DragDelegate,
 
   void DumpState(std::ostream& out) const;
 
+  // Sets a callback which is posted when data transfer steps are finished, ie:
+  // once per mime type and one more when the whole process ends, regardless it
+  // succeeded or not.
+  void set_data_transferred_callback_for_testing(
+      base::RepeatingCallback<void(const std::string&)> cb) {
+    data_transferred_callback_for_testing_ = cb;
+  }
+
  private:
   FRIEND_TEST_ALL_PREFIXES(WaylandDataDragControllerTest, ReceiveDrag);
   FRIEND_TEST_ALL_PREFIXES(WaylandDataDragControllerTest, StartDrag);
@@ -140,8 +149,9 @@ class WaylandDataDragController : public WaylandDataDevice::DragDelegate,
   const WaylandWindow* GetDragTarget() const override;
 
   // WaylandDataSource::Delegate:
-  void OnDataSourceFinish(bool completed) override;
-  void OnDataSourceSend(const std::string& mime_type,
+  void OnDataSourceFinish(WaylandDataSource* source, bool completed) override;
+  void OnDataSourceSend(WaylandDataSource* source,
+                        const std::string& mime_type,
                         std::string* contents) override;
 
   // WaylandWindowObserver:
@@ -188,6 +198,8 @@ class WaylandDataDragController : public WaylandDataDevice::DragDelegate,
   static void OnDragSurfaceFrame(void* data,
                                  struct wl_callback* callback,
                                  uint32_t time);
+
+  void RunDataTransferredCallbackForTesting(const std::string& mime_type = {});
 
   const raw_ptr<WaylandConnection> connection_;
   const raw_ptr<WaylandDataDeviceManager> data_device_manager_;
@@ -253,6 +265,9 @@ class WaylandDataDragController : public WaylandDataDevice::DragDelegate,
   raw_ptr<WaylandWindow> pointer_grabber_for_window_drag_ = nullptr;
 
   std::unique_ptr<ScopedEventDispatcher> nested_dispatcher_;
+
+  base::RepeatingCallback<void(const std::string&)>
+      data_transferred_callback_for_testing_;
 
   base::WeakPtrFactory<WaylandDataDragController> weak_factory_{this};
 };

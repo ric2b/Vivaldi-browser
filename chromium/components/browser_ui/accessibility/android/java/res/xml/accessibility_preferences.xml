@@ -11,14 +11,29 @@ found in the LICENSE file.
         android:key="ui_scale"
         android:selectable="false" />
 
+    <Preference
+        android:key="reset_ui_scale"
+        android:title="@string/prefs_vivaldi_reset_ui_scale"
+        android:summary="@string/prefs_vivaldi_reset_ui_scale_summary"/>
+
+
     <org.chromium.components.browser_ui.accessibility.TextScalePreference
         android:key="text_scale"
         android:title="@string/font_size"
         android:selectable="false" />
 
+    <Preference
+        android:key="reset_zoom"
+        android:title="@string/prefs_vivaldi_reset_zoom"
+        android:summary="@string/prefs_vivaldi_reset_zoom_summary"/>
+
     <org.chromium.components.browser_ui.accessibility.PageZoomPreference
         android:key="page_zoom_default_zoom"
         android:selectable="false" />
+
+    <Preference
+        android:key="zoom_info"
+        android:title="@string/zoom_info_preference_title"/>
 
     <org.chromium.components.browser_ui.settings.ChromeSwitchPreference
         android:key="page_zoom_always_show"

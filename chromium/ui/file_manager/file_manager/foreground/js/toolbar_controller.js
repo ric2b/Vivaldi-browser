@@ -5,10 +5,14 @@
 import {assert, assertInstanceof} from 'chrome://resources/ash/common/assert.js';
 
 import {queryRequiredElement, queryRequiredExactlyOne} from '../../common/js/dom_utils.js';
-import {str, strf, util} from '../../common/js/util.js';
+import {isNonModifiable} from '../../common/js/entry_utils.js';
+import {isCrosComponentsEnabled, isDriveFsBulkPinningEnabled} from '../../common/js/flags.js';
+import {str, strf} from '../../common/js/translations.js';
+import {canBulkPinningCloudPanelShow} from '../../common/js/util.js';
 import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
 import {FileOperationManager} from '../../externs/background/file_operation_manager.js';
 import {State} from '../../externs/ts/state.js';
+// @ts-ignore: error TS6133: 'Store' is declared but its value is never read.
 import {Store} from '../../externs/ts/store.js';
 import {VolumeManager} from '../../externs/volume_manager.js';
 import {getStore} from '../../state/store.js';
@@ -43,110 +47,116 @@ export class ToolbarController {
       toolbar, navigationList, listContainer, selectionHandler, directoryModel,
       volumeManager, fileOperationManager, a11y) {
     /**
-     * @private {!HTMLElement}
+     * @private @type {!HTMLElement}
      * @const
      */
     this.toolbar_ = toolbar;
 
     /**
-     * @private {!HTMLElement}
+     * @private @type {!HTMLElement}
      * @const
      */
     this.cancelSelectionButton_ =
         queryRequiredElement('#cancel-selection-button', this.toolbar_);
 
     /**
-     * @private {!HTMLElement}
+     * @private @type {!HTMLElement}
      * @const
      */
     this.cancelSelectionButtonWrapper_ =
         queryRequiredElement('#cancel-selection-button-wrapper', this.toolbar_);
 
     /**
-     * @private {!HTMLElement}
+     * @private @type {!HTMLElement}
      * @const
      */
     this.filesSelectedLabel_ =
         queryRequiredElement('#files-selected-label', this.toolbar_);
 
     /**
-     * @private {!HTMLElement}
+     * @private @type {!HTMLElement}
      * @const
      */
     this.deleteButton_ = queryRequiredElement('#delete-button', this.toolbar_);
 
     /**
-     * @private {!HTMLElement}
+     * @private @type {!HTMLElement}
      * @const
      */
     this.moveToTrashButton_ =
         queryRequiredElement('#move-to-trash-button', this.toolbar_);
 
     /**
-     * @private {!HTMLElement}
+     * @private @type {!HTMLElement}
      * @const
      */
     this.restoreFromTrashButton_ =
         queryRequiredElement('#restore-from-trash-button', this.toolbar_);
 
     /**
-     * @private {!HTMLElement}
+     * @private @type {!HTMLElement}
      * @const
      */
     this.sharesheetButton_ =
         queryRequiredElement('#sharesheet-button', this.toolbar_);
 
     /**
-     * @private {!HTMLElement}
+     * @private @type {!HTMLElement}
      * @const
      */
     this.readOnlyIndicator_ =
         queryRequiredElement('#read-only-indicator', this.toolbar_);
 
     /**
-     * @private {!HTMLElement}
+     * @private @type {!HTMLElement}
      * @const
      */
     this.pinnedToggleWrapper_ =
         queryRequiredElement('#pinned-toggle-wrapper', this.toolbar_);
 
     /**
-     * @private {HTMLElement}
+     * @private @type {HTMLElement}
      * @const
      */
+    // @ts-ignore: error TS2339: Property 'pinnedToggle_' does not exist on type
+    // 'ToolbarController'.
     this.pinnedToggle_;
 
     /**
-     * @private {HTMLElement}
+     * @private @type {HTMLElement}
      * @const
      */
+    // @ts-ignore: error TS2339: Property 'pinnedToggleJelly_' does not exist on
+    // type 'ToolbarController'.
     this.pinnedToggleJelly_;
 
+    // @ts-ignore: error TS2339: Property 'pinnedToggleJelly_' does not exist on
+    // type 'ToolbarController'.
     [this.pinnedToggle_, this.pinnedToggleJelly_] = queryRequiredExactlyOne(
         ['#pinned-toggle', '#pinned-toggle-jelly'], this.toolbar_);
 
     /**
-     * @private {!HTMLElement}
+     * @private @type {!HTMLElement}
      * @const
      */
     this.cloudButton_ = queryRequiredElement('#cloud-button', this.toolbar_);
 
     /**
-     * @private {!HTMLElement}
+     * @private @type {!HTMLElement}
      * @const
      */
     this.cloudStatusIcon_ = queryRequiredElement(
         '#cloud-button > xf-icon[slot="suffix-icon"]', this.toolbar_);
 
     /**
-     * @private {!HTMLElement}
+     * @private @type {!HTMLElement}
      * @const
      */
     this.cloudButtonIcon_ = queryRequiredElement(
         '#cloud-button > xf-icon[slot="prefix-icon"]', this.toolbar_);
 
     /**
-     * @private {!Command}
+     * @private @type {!Command}
      * @const
      */
     this.deleteCommand_ = assertInstanceof(
@@ -164,7 +174,7 @@ export class ToolbarController {
         Command);
 
     /**
-     * @private {!Command}
+     * @private @type {!Command}
      * @const
      */
     this.restoreFromTrashCommand_ = assertInstanceof(
@@ -173,7 +183,7 @@ export class ToolbarController {
         Command);
 
     /**
-     * @private {!Command}
+     * @private @type {!Command}
      * @const
      */
     this.emptyTrashCommand_ = assertInstanceof(
@@ -182,7 +192,7 @@ export class ToolbarController {
         Command);
 
     /**
-     * @private {!Command}
+     * @private @type {!Command}
      * @const
      */
     this.refreshCommand_ = assertInstanceof(
@@ -191,7 +201,7 @@ export class ToolbarController {
         Command);
 
     /**
-     * @private {!Command}
+     * @private @type {!Command}
      * @const
      */
     this.newFolderCommand_ = assertInstanceof(
@@ -200,7 +210,7 @@ export class ToolbarController {
         Command);
 
     /**
-     * @private {!Command}
+     * @private @type {!Command}
      * @const
      */
     this.invokeSharesheetCommand_ = assertInstanceof(
@@ -209,7 +219,7 @@ export class ToolbarController {
         Command);
 
     /**
-     * @private {!Command}
+     * @private @type {!Command}
      * @const
      */
     this.togglePinnedCommand_ = assertInstanceof(
@@ -218,49 +228,49 @@ export class ToolbarController {
         Command);
 
     /**
-     * @private {!HTMLElement}
+     * @private @type {!HTMLElement}
      * @const
      */
     this.navigationList_ = navigationList;
 
     /**
-     * @private {!ListContainer}
+     * @private @type {!ListContainer}
      * @const
      */
     this.listContainer_ = listContainer;
 
     /**
-     * @private {!FileSelectionHandler}
+     * @private @type {!FileSelectionHandler}
      * @const
      */
     this.selectionHandler_ = selectionHandler;
 
     /**
-     * @private {!DirectoryModel}
+     * @private @type {!DirectoryModel}
      * @const
      */
     this.directoryModel_ = directoryModel;
 
     /**
-     * @private {!VolumeManager}
+     * @private @type {!VolumeManager}
      * @const
      */
     this.volumeManager_ = volumeManager;
 
     /**
-     * @private {!FileOperationManager}
+     * @private @type {!FileOperationManager}
      * @const
      */
     this.fileOperationManager_ = fileOperationManager;
 
     /**
-     * @private {!A11yAnnounce}
+     * @private @type {!A11yAnnounce}
      * @const
      */
     this.a11y_ = a11y;
 
     /**
-     * @private {!Store}
+     * @private @type {!Store}
      */
     this.store_ = getStore();
     this.store_.subscribe(this);
@@ -294,11 +304,13 @@ export class ToolbarController {
     this.sharesheetButton_.addEventListener(
         'click', this.onSharesheetButtonClicked_.bind(this));
 
-    if (util.isDriveFsBulkPinningEnabled()) {
+    if (isDriveFsBulkPinningEnabled()) {
       const cloudPanel = queryRequiredElement('xf-cloud-panel');
       this.cloudButton_.addEventListener('click', () => {
         this.cloudButton_.toggleAttribute('menu-shown', true);
         this.cloudButton_.toggleAttribute('aria-expanded', true);
+        // @ts-ignore: error TS2339: Property 'showAt' does not exist on type
+        // 'HTMLElement'.
         cloudPanel.showAt(this.cloudButton_);
       });
       cloudPanel.addEventListener(XfCloudPanel.events.PANEL_CLOSED, () => {
@@ -324,6 +336,8 @@ export class ToolbarController {
     this.togglePinnedCommand_.addEventListener(
         'hiddenChange', this.updatePinnedToggle_.bind(this));
 
+    // @ts-ignore: error TS2339: Property 'pinnedToggle_' does not exist on type
+    // 'ToolbarController'.
     (this.pinnedToggleJelly_ || this.pinnedToggle_)
         .addEventListener('change', this.onPinnedToggleChanged_.bind(this));
 
@@ -335,6 +349,7 @@ export class ToolbarController {
    * Updates toolbar's UI elements which are related to current directory.
    * @private
    */
+  // @ts-ignore: error TS7006: Parameter 'event' implicitly has an 'any' type.
   updateCurrentDirectoryButtons_(event) {
     this.updateRefreshCommand_();
 
@@ -355,18 +370,16 @@ export class ToolbarController {
           locationInfo.rootType !== VolumeManagerCommon.RootType.CROSTINI &&
           locationInfo.rootType !== VolumeManagerCommon.RootType.GUEST_OS);
 
-    if (util.isSearchV2Enabled()) {
-      const newDirectory = event.newDirEntry;
-      if (newDirectory) {
-        const locationInfo = this.volumeManager_.getLocationInfo(newDirectory);
-        const bodyClassList =
-            this.filesSelectedLabel_.ownerDocument.body.classList;
-        if (locationInfo &&
-            locationInfo.rootType === VolumeManagerCommon.RootType.TRASH) {
-          bodyClassList.add('check-select-v1');
-        } else {
-          bodyClassList.remove('check-select-v1');
-        }
+    const newDirectory = event.newDirEntry;
+    if (newDirectory) {
+      const locationInfo = this.volumeManager_.getLocationInfo(newDirectory);
+      const bodyClassList =
+          this.filesSelectedLabel_.ownerDocument.body.classList;
+      if (locationInfo &&
+          locationInfo.rootType === VolumeManagerCommon.RootType.TRASH) {
+        bodyClassList.add('check-select-v1');
+      } else {
+        bodyClassList.remove('check-select-v1');
       }
     }
   }
@@ -403,6 +416,8 @@ export class ToolbarController {
         text = strf('MANY_ENTRIES_SELECTED', selection.totalCount);
       }
     }
+    // @ts-ignore: error TS2322: Type 'string | undefined' is not assignable to
+    // type 'string | null'.
     this.filesSelectedLabel_.textContent = text;
 
     // Update visibility of the delete and move to trash buttons.
@@ -411,7 +426,7 @@ export class ToolbarController {
          !this.directoryModel_.canDeleteEntries() ||
          selection.hasReadOnlyEntry() ||
          selection.entries.some(
-             entry => util.isNonModifiable(this.volumeManager_, entry)));
+             entry => isNonModifiable(this.volumeManager_, entry)));
     // Show 'Move to Trash' rather than 'Delete' if possible. The
     // `moveToTrashCommand` needs to be set to hidden to ensure the
     // `canExecuteChange` invokes the `hiddenChange` event in the case where
@@ -443,9 +458,7 @@ export class ToolbarController {
           /** @type {!FileListSelectionModel} */
           (this.directoryModel_.getFileListSelection()).getCheckSelectMode()) {
         bodyClassList.toggle('check-select');
-        if (!util.isSearchV2Enabled()) {
-          bodyClassList.toggle('check-select-v1');
-        }
+        bodyClassList.toggle('check-select-v1');
       }
     }
   }
@@ -495,6 +508,7 @@ export class ToolbarController {
    */
   onSharesheetButtonClicked_() {
     this.sharesheetButton_.setAttribute('menu-shown', '');
+    // @ts-ignore: error TS6133: 'e' is declared but its value is never read.
     this.toolbar_.ownerDocument.body.addEventListener('focusin', (e) => {
       this.sharesheetButton_.removeAttribute('menu-shown');
     }, {once: true});
@@ -509,11 +523,19 @@ export class ToolbarController {
   /** @private */
   updatePinnedToggle_() {
     this.pinnedToggleWrapper_.hidden = this.togglePinnedCommand_.hidden;
-    if (util.isCrosComponentsEnabled()) {
+    if (isCrosComponentsEnabled()) {
+      // @ts-ignore: error TS2339: Property 'pinnedToggleJelly_' does not exist
+      // on type 'ToolbarController'.
       this.pinnedToggleJelly_.selected = this.togglePinnedCommand_.checked;
+      // @ts-ignore: error TS2339: Property 'pinnedToggleJelly_' does not exist
+      // on type 'ToolbarController'.
       this.pinnedToggleJelly_.disabled = this.togglePinnedCommand_.disabled;
     } else {
+      // @ts-ignore: error TS2339: Property 'pinnedToggle_' does not exist on
+      // type 'ToolbarController'.
       this.pinnedToggle_.checked = this.togglePinnedCommand_.checked;
+      // @ts-ignore: error TS2339: Property 'pinnedToggle_' does not exist on
+      // type 'ToolbarController'.
       this.pinnedToggle_.disabled = this.togglePinnedCommand_.disabled;
     }
   }
@@ -524,8 +546,12 @@ export class ToolbarController {
 
     // Optimistally update the command's properties so we get notified if they
     // change back.
-    this.togglePinnedCommand_.checked = util.isCrosComponentsEnabled() ?
+    this.togglePinnedCommand_.checked = isCrosComponentsEnabled() ?
+        // @ts-ignore: error TS2339: Property 'pinnedToggleJelly_' does not
+        // exist on type 'ToolbarController'.
         this.pinnedToggleJelly_.selected :
+        // @ts-ignore: error TS2339: Property 'pinnedToggle_' does not exist on
+        // type 'ToolbarController'.
         this.pinnedToggle_.checked;
   }
 
@@ -560,12 +586,13 @@ export class ToolbarController {
     // If the bulk pinning preference is enabled, the user should not be able to
     // toggle items offline.
     if (this.bulkPinningPref_ !== bulkPinningPref) {
+      // @ts-ignore: error TS2322: Type 'boolean | undefined' is not assignable
+      // to type 'boolean | null'.
       this.bulkPinningPref_ = bulkPinningPref;
       this.togglePinnedCommand_.canExecuteChange(
           this.listContainer_.currentList);
     }
-    if (!util.canBulkPinningCloudPanelShow(
-            bulkPinning?.stage, bulkPinningPref)) {
+    if (!canBulkPinningCloudPanelShow(bulkPinning?.stage, bulkPinningPref)) {
       this.cloudButton_.hidden = true;
       return;
     }

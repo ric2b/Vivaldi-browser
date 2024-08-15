@@ -15,6 +15,7 @@
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/dynamic_type_util.h"
+#import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
 
@@ -149,10 +150,12 @@ constexpr NSString* const kAllSetRight = @"set_up_list_all_set_right";
 
   [_itemsStack layoutIfNeeded];
   _itemsStack.accessibilityElements = @[ allSetView ];
+  _expandButton = nil;
+  NSArray<UIView*>* itemsStackSubviews = _itemsStack.arrangedSubviews;
   __weak __typeof(_itemsStack) weakItemsStack = _itemsStack;
   [UIView animateWithDuration:kAllSetAnimationDuration.InSecondsF()
       animations:^{
-        for (UIView* view in weakItemsStack.arrangedSubviews) {
+        for (UIView* view in itemsStackSubviews) {
           view.alpha = 0;
           view.hidden = YES;
           // Constrain the old item view's position so that it doesn't move
@@ -176,7 +179,7 @@ constexpr NSString* const kAllSetRight = @"set_up_list_all_set_right";
         }
       }
       completion:^(BOOL finished) {
-        for (UIView* view in weakItemsStack.arrangedSubviews) {
+        for (UIView* view in itemsStackSubviews) {
           if (view != allSetView) {
             [view removeFromSuperview];
           }
@@ -437,7 +440,9 @@ constexpr NSString* const kAllSetRight = @"set_up_list_all_set_right";
   _expandButton.accessibilityLabel =
       l10n_util::GetNSString(IDS_IOS_SET_UP_LIST_COLLAPSE);
 
-  int index = 2;
+  // Insert new items just before the expand button.
+  NSUInteger index = [_itemsStack.arrangedSubviews indexOfObject:_expandButton];
+  CHECK(index != NSNotFound);
   for (SetUpListItemView* item in items) {
     item.alpha = 0;
     item.hidden = YES;

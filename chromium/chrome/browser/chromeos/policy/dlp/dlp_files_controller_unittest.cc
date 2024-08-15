@@ -6,16 +6,19 @@
 
 #include "base/files/file_util.h"
 #include "base/path_service.h"
+#include "base/process/process_handle.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/mock_callback.h"
+#include "base/test/protobuf_matchers.h"
 #include "base/test/test_future.h"
 #include "chrome/browser/chromeos/policy/dlp/test/dlp_files_test_base.h"
-#include "chrome/browser/enterprise/data_controls/component.h"
 #include "chrome/common/chrome_paths_lacros.h"
 #include "chromeos/dbus/dlp/dlp_client.h"
-#include "components/reporting/util/test_util.h"
+#include "components/enterprise/data_controls/component.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+using ::base::EqualsProto;
 
 namespace policy {
 
@@ -121,11 +124,17 @@ TEST_F(DlpFilesControllerTest, LocalFileCopyTest) {
 
   ::dlp::RequestFileAccessResponse access_response;
   access_response.set_allowed(true);
-  EXPECT_CALL(request_file_access_call,
-              Run(testing::Property(
-                      &::dlp::RequestFileAccessRequest::destination_component,
-                      ::dlp::DlpComponent::SYSTEM),
-                  base::test::IsNotNullCallback()))
+  EXPECT_CALL(
+      request_file_access_call,
+      Run(testing::AllOf(
+              testing::Property(
+                  &::dlp::RequestFileAccessRequest::destination_component,
+                  ::dlp::DlpComponent::SYSTEM),
+              testing::Property(&::dlp::RequestFileAccessRequest::process_id,
+                                base::GetCurrentProcId()),
+              testing::Property(&::dlp::RequestFileAccessRequest::files_paths,
+                                testing::ElementsAre(src_file.value()))),
+          base::test::IsNotNullCallback()))
       .WillOnce(
           base::test::RunOnceCallback<1>(access_response, base::ScopedFD()));
   chromeos::DlpClient::Get()->GetTestInterface()->SetRequestFileAccessMock(
@@ -214,6 +223,51 @@ TEST_F(DlpFilesControllerTest, CopyEmptyMetadataTest) {
   EXPECT_TRUE(file_access_future.Get()->is_allowed());
 }
 
+TEST_F(DlpFilesControllerTest, CopyNoMetadataTest) {
+  base::FilePath src_file = my_files_dir_.Append(FILE_PATH_LITERAL("test"));
+  base::File(src_file, base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE)
+      .Flush();
+
+  base::FilePath dest_file = my_files_dir_.Append(FILE_PATH_LITERAL("dest"));
+
+  auto source = storage::FileSystemURL::CreateForTest(
+      kTestStorageKey, storage::kFileSystemTypeLocal, src_file);
+
+  auto destination = storage::FileSystemURL::CreateForTest(
+      kTestStorageKey, storage::kFileSystemTypeLocal, dest_file);
+
+  base::MockRepeatingCallback<void(
+      const ::dlp::GetFilesSourcesRequest,
+      chromeos::DlpClient::GetFilesSourcesCallback)>
+      get_files_source_call;
+
+  ::dlp::GetFilesSourcesResponse response;
+
+  ::dlp::GetFilesSourcesRequest request;
+  request.add_files_paths(src_file.value());
+
+  EXPECT_CALL(get_files_source_call,
+              Run(EqualsProto(request), base::test::IsNotNullCallback()))
+      .WillOnce(base::test::RunOnceCallback<1>(response));
+
+  chromeos::DlpClient::Get()->GetTestInterface()->SetGetFilesSourceMock(
+      get_files_source_call.Get());
+
+  base::MockRepeatingCallback<void(
+      ::dlp::RequestFileAccessRequest,
+      chromeos::DlpClient::RequestFileAccessCallback)>
+      request_file_access_call;
+
+  EXPECT_CALL(request_file_access_call, Run).Times(0);
+  base::test::TestFuture<std::unique_ptr<file_access::ScopedFileAccess>>
+      file_access_future;
+
+  ASSERT_TRUE(files_controller_);
+  files_controller_->RequestCopyAccess(source, destination,
+                                       file_access_future.GetCallback());
+  EXPECT_TRUE(file_access_future.Get()->is_allowed());
+}
+
 TEST_F(DlpFilesControllerTest, CopyNoClientTest) {
   base::FilePath src_file = my_files_dir_.Append(FILE_PATH_LITERAL("test"));
   base::File(src_file, base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE)
@@ -271,11 +325,17 @@ TEST_F(DlpFilesControllerTest, FileCopyToExternalAllowTest) {
 
   ::dlp::RequestFileAccessResponse access_response;
   access_response.set_allowed(true);
-  EXPECT_CALL(request_file_access_call,
-              Run(testing::Property(
-                      &::dlp::RequestFileAccessRequest::destination_component,
-                      ::dlp::DlpComponent::GOOGLE_DRIVE),
-                  base::test::IsNotNullCallback()))
+  EXPECT_CALL(
+      request_file_access_call,
+      Run(testing::AllOf(
+              testing::Property(
+                  &::dlp::RequestFileAccessRequest::destination_component,
+                  ::dlp::DlpComponent::GOOGLE_DRIVE),
+              testing::Property(&::dlp::RequestFileAccessRequest::process_id,
+                                base::GetCurrentProcId()),
+              testing::Property(&::dlp::RequestFileAccessRequest::files_paths,
+                                testing::ElementsAre(src_file.value()))),
+          base::test::IsNotNullCallback()))
       .WillOnce(
           base::test::RunOnceCallback<1>(access_response, base::ScopedFD()));
 
@@ -313,11 +373,17 @@ TEST_F(DlpFilesControllerTest, FileCopyToExternalDenyTest) {
 
   ::dlp::RequestFileAccessResponse access_response;
   access_response.set_allowed(false);
-  EXPECT_CALL(request_file_access_call,
-              Run(testing::Property(
-                      &::dlp::RequestFileAccessRequest::destination_component,
-                      ::dlp::DlpComponent::GOOGLE_DRIVE),
-                  base::test::IsNotNullCallback()))
+  EXPECT_CALL(
+      request_file_access_call,
+      Run(testing::AllOf(
+              testing::Property(
+                  &::dlp::RequestFileAccessRequest::destination_component,
+                  ::dlp::DlpComponent::GOOGLE_DRIVE),
+              testing::Property(&::dlp::RequestFileAccessRequest::process_id,
+                                base::GetCurrentProcId()),
+              testing::Property(&::dlp::RequestFileAccessRequest::files_paths,
+                                testing::ElementsAre(src_file.value()))),
+          base::test::IsNotNullCallback()))
       .WillOnce(
           base::test::RunOnceCallback<1>(access_response, base::ScopedFD()));
 

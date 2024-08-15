@@ -16,6 +16,12 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "url/origin.h"
 
+#if BUILDFLAG(IS_IOS)
+namespace web {
+class BrowserState;
+}
+#endif
+
 namespace adblock_filter {
 class RuleManager;
 class KnownRuleSourcesHandler;
@@ -24,7 +30,10 @@ class CosmeticFilter;
 
 class RuleService : public KeyedService {
  public:
-  enum IndexBuildResult { kBuildSuccess = 0, kTooManyAllowRules = 1, };
+  enum IndexBuildResult {
+    kBuildSuccess = 0,
+    kTooManyAllowRules = 1,
+  };
 
   class Observer : public base::CheckedObserver {
    public:
@@ -51,13 +60,16 @@ class RuleService : public KeyedService {
 
   virtual bool IsApplyingIosRules(RuleGroup group) = 0;
 
+#if BUILDFLAG(IS_IOS)
+  virtual void SetIncognitoBrowserState(web::BrowserState* browser_state) = 0;
+#endif
+
   // Gets the checksum of the index used for fast-finding of the rules.
-  // This will be an empty string until an index gets built for the first time.
-  // If it remains empty or becomes empty later on, this means saving the index
-  // to disk is failing.
-  // On iOS, this gives the checksum for the organized rules instead, which
-  // are just the rules from all lists put together in a way that overcomes
-  // some of the limitations of WebKit
+  // This will be an empty string until an index gets built for the first
+  // time. If it remains empty or becomes empty later on, this means saving
+  // the index to disk is failing. On iOS, this gives the checksum for the
+  // organized rules instead, which are just the rules from all lists put
+  // together in a way that overcomes some of the limitations of WebKit
   virtual std::string GetRulesIndexChecksum(RuleGroup group) = 0;
 
   // This is currently only meaningful on iOS where the rules organizer can

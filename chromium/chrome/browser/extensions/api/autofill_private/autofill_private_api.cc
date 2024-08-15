@@ -14,7 +14,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/uuid.h"
 #include "base/values.h"
-#include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/autofill_private/autofill_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -39,7 +38,7 @@
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/signin/public/identity_manager/account_info.h"
-#include "components/strings/grit/components_chromium_strings.h"
+#include "components/strings/grit/components_branded_strings.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_function.h"
@@ -61,6 +60,7 @@ using autofill::autofill_metrics::MandatoryReauthOptInOrOutSource;
 namespace {
 
 static const char kSettingsOrigin[] = "Chrome settings";
+static const char kErrorCardDataUnavailable[] = "Credit card data unavailable";
 static const char kErrorDataUnavailable[] = "Autofill data unavailable.";
 static const char kErrorDeviceAuthUnavailable[] = "Device auth is unvailable";
 
@@ -80,7 +80,7 @@ base::Value::Dict AddressUiComponentAsValueMap(
     const autofill::AutofillAddressUIComponent& address_ui_component) {
   base::Value::Dict info;
   info.Set(kFieldNameKey, address_ui_component.name);
-  info.Set(kFieldTypeKey, FieldTypeToStringPiece(address_ui_component.field));
+  info.Set(kFieldTypeKey, FieldTypeToStringView(address_ui_component.field));
   info.Set(kFieldLengthKey,
            address_ui_component.length_hint ==
                autofill::AutofillAddressUIComponent::HINT_LONG);
@@ -108,13 +108,6 @@ autofill::AutofillProfile CreateNewAutofillProfile(
       personal_data->IsEligibleForAddressAccountStorage()
           ? autofill::AutofillProfile::Source::kAccount
           : autofill::AutofillProfile::Source::kLocalOrSyncable;
-
-  if (base::FeatureList::IsEnabled(
-          autofill::features::test::
-              kAutofillCreateAccountProfilesFromSettings)) {
-    // Note: overriding address profile source only if test feature is enabled.
-    source = autofill::AutofillProfile::Source::kAccount;
-  }
   if (country_code && !personal_data->IsCountryEligibleForAccountStorage(
                           country_code.value())) {
     // Note: addresses from unsupported countries can't be saved in account.
@@ -122,7 +115,12 @@ autofill::AutofillProfile CreateNewAutofillProfile(
     // filtering.
     source = autofill::AutofillProfile::Source::kLocalOrSyncable;
   }
-  return autofill::AutofillProfile(source);
+
+  AddressCountryCode address_country_code =
+      country_code.has_value()
+          ? AddressCountryCode(std::string(*country_code))
+          : autofill::i18n_model_definition::kLegacyHierarchyCountryCode;
+  return autofill::AutofillProfile(source, address_country_code);
 }
 
 }  // namespace
@@ -133,11 +131,17 @@ namespace extensions {
 // AutofillPrivateGetAccountInfoFunction
 
 ExtensionFunction::ResponseAction AutofillPrivateGetAccountInfoFunction::Run() {
-  autofill::PersonalDataManager* personal_data =
-      autofill::PersonalDataManagerFactory::GetForProfile(
-          Profile::FromBrowserContext(browser_context()));
+  autofill::ContentAutofillClient* client =
+      autofill::ContentAutofillClient::FromWebContents(GetSenderWebContents());
+  if (!client) {
+    return RespondNow(Error(kErrorDataUnavailable));
+  }
 
-  DCHECK(personal_data && personal_data->IsDataLoaded());
+  autofill::PersonalDataManager* personal_data =
+      client->GetPersonalDataManager();
+  if (!personal_data || !personal_data->IsDataLoaded()) {
+    return RespondNow(Error(kErrorDataUnavailable));
+  }
 
   absl::optional<api::autofill_private::AccountInfo> account_info =
       autofill_util::GetAccountInfo(*personal_data);
@@ -158,9 +162,14 @@ ExtensionFunction::ResponseAction AutofillPrivateSaveAddressFunction::Run() {
       api::autofill_private::SaveAddress::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(parameters);
 
+  autofill::ContentAutofillClient* client =
+      autofill::ContentAutofillClient::FromWebContents(GetSenderWebContents());
+  if (!client) {
+    return RespondNow(Error(kErrorDataUnavailable));
+  }
+
   autofill::PersonalDataManager* personal_data =
-      autofill::PersonalDataManagerFactory::GetForProfile(
-          Profile::FromBrowserContext(browser_context()));
+      client->GetPersonalDataManager();
   if (!personal_data || !personal_data->IsDataLoaded())
     return RespondNow(Error(kErrorDataUnavailable));
 
@@ -222,12 +231,18 @@ ExtensionFunction::ResponseAction AutofillPrivateSaveAddressFunction::Run() {
 // AutofillPrivateGetCountryListFunction
 
 ExtensionFunction::ResponseAction AutofillPrivateGetCountryListFunction::Run() {
+  autofill::ContentAutofillClient* client =
+      autofill::ContentAutofillClient::FromWebContents(GetSenderWebContents());
+  if (!client) {
+    return RespondNow(Error(kErrorDataUnavailable));
+  }
+
+  // If `personal_data` is not available, then don't do anything.
   autofill::PersonalDataManager* personal_data =
-      autofill::PersonalDataManagerFactory::GetForProfile(
-          Profile::FromBrowserContext(browser_context()));
+      client->GetPersonalDataManager();
 
   // Return an empty list if data is not loaded.
-  if (!(personal_data && personal_data->IsDataLoaded())) {
+  if (!personal_data || !personal_data->IsDataLoaded()) {
     autofill_util::CountryEntryList empty_list;
     return RespondNow(ArgumentList(
         api::autofill_private::GetCountryList::Results::Create(empty_list)));
@@ -281,11 +296,17 @@ AutofillPrivateGetAddressComponentsFunction::Run() {
 // AutofillPrivateGetAddressListFunction
 
 ExtensionFunction::ResponseAction AutofillPrivateGetAddressListFunction::Run() {
-  autofill::PersonalDataManager* personal_data =
-      autofill::PersonalDataManagerFactory::GetForProfile(
-          Profile::FromBrowserContext(browser_context()));
+  autofill::ContentAutofillClient* client =
+      autofill::ContentAutofillClient::FromWebContents(GetSenderWebContents());
+  if (!client) {
+    return RespondNow(Error(kErrorDataUnavailable));
+  }
 
-  DCHECK(personal_data && personal_data->IsDataLoaded());
+  autofill::PersonalDataManager* personal_data =
+      client->GetPersonalDataManager();
+  if (!personal_data || !personal_data->IsDataLoaded()) {
+    return RespondNow(Error(kErrorDataUnavailable));
+  }
 
   autofill_util::AddressEntryList address_list =
       autofill_util::GenerateAddressList(*personal_data);
@@ -301,12 +322,16 @@ ExtensionFunction::ResponseAction AutofillPrivateSaveCreditCardFunction::Run() {
       api::autofill_private::SaveCreditCard::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(parameters);
 
+  autofill::ContentAutofillClient* client =
+      autofill::ContentAutofillClient::FromWebContents(GetSenderWebContents());
+  if (!client) {
+    return RespondNow(Error(kErrorDataUnavailable));
+  }
+  // If `personal_data` is not available, then don't do anything.
   autofill::PersonalDataManager* personal_data =
-      autofill::PersonalDataManagerFactory::GetForProfile(
-          Profile::FromBrowserContext(browser_context()));
+      client->GetPersonalDataManager();
   if (!personal_data || !personal_data->IsDataLoaded())
     return RespondNow(Error(kErrorDataUnavailable));
-
   api::autofill_private::CreditCardEntry* card = &parameters->card;
 
   // If a card guid is specified, get a copy of the card identified by it.
@@ -349,6 +374,10 @@ ExtensionFunction::ResponseAction AutofillPrivateSaveCreditCardFunction::Run() {
     credit_card.SetNickname(base::UTF8ToUTF16(*card->nickname));
   }
 
+  if (card->cvc) {
+    credit_card.set_cvc(base::UTF8ToUTF16(*card->cvc));
+  }
+
   if (use_existing_card) {
     // Only updates when the card info changes.
     if (existing_card && existing_card->Compare(credit_card) == 0)
@@ -371,7 +400,6 @@ ExtensionFunction::ResponseAction AutofillPrivateSaveCreditCardFunction::Run() {
           base::UserMetricsAction("AutofillCreditCardsAddedWithNickname"));
     }
   }
-
   return RespondNow(NoArguments());
 }
 
@@ -383,18 +411,21 @@ ExtensionFunction::ResponseAction AutofillPrivateRemoveEntryFunction::Run() {
       api::autofill_private::RemoveEntry::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(parameters);
 
+  autofill::ContentAutofillClient* client =
+      autofill::ContentAutofillClient::FromWebContents(GetSenderWebContents());
+  if (!client) {
+    return RespondNow(Error(kErrorDataUnavailable));
+  }
+  // If `personal_data` is not available, then don't do anything.
   autofill::PersonalDataManager* personal_data =
-      autofill::PersonalDataManagerFactory::GetForProfile(
-          Profile::FromBrowserContext(browser_context()));
+      client->GetPersonalDataManager();
   if (!personal_data || !personal_data->IsDataLoaded())
     return RespondNow(Error(kErrorDataUnavailable));
 
   if (personal_data->GetIbanByGUID(parameters->guid)) {
     base::RecordAction(base::UserMetricsAction("AutofillIbanDeleted"));
   }
-
   personal_data->RemoveByGUID(parameters->guid);
-
   return RespondNow(NoArguments());
 }
 
@@ -406,9 +437,15 @@ ExtensionFunction::ResponseAction AutofillPrivateMaskCreditCardFunction::Run() {
       api::autofill_private::MaskCreditCard::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(parameters);
 
+  autofill::ContentAutofillClient* client =
+      autofill::ContentAutofillClient::FromWebContents(GetSenderWebContents());
+  if (!client) {
+    return RespondNow(Error(kErrorDataUnavailable));
+  }
+
+  // If `personal_data` is not available, then don't do anything.
   autofill::PersonalDataManager* personal_data =
-      autofill::PersonalDataManagerFactory::GetForProfile(
-          Profile::FromBrowserContext(browser_context()));
+      client->GetPersonalDataManager();
   if (!personal_data || !personal_data->IsDataLoaded())
     return RespondNow(Error(kErrorDataUnavailable));
 
@@ -422,11 +459,17 @@ ExtensionFunction::ResponseAction AutofillPrivateMaskCreditCardFunction::Run() {
 
 ExtensionFunction::ResponseAction
 AutofillPrivateGetCreditCardListFunction::Run() {
-  autofill::PersonalDataManager* personal_data =
-      autofill::PersonalDataManagerFactory::GetForProfile(
-          Profile::FromBrowserContext(browser_context()));
+  autofill::ContentAutofillClient* client =
+      autofill::ContentAutofillClient::FromWebContents(GetSenderWebContents());
+  if (!client) {
+    return RespondNow(Error(kErrorDataUnavailable));
+  }
 
-  DCHECK(personal_data && personal_data->IsDataLoaded());
+  autofill::PersonalDataManager* personal_data =
+      client->GetPersonalDataManager();
+  if (!personal_data || !personal_data->IsDataLoaded()) {
+    return RespondNow(Error(kErrorDataUnavailable));
+  }
 
   autofill_util::CreditCardEntryList credit_card_list =
       autofill_util::GenerateCreditCardList(*personal_data);
@@ -440,9 +483,15 @@ AutofillPrivateGetCreditCardListFunction::Run() {
 
 ExtensionFunction::ResponseAction
 AutofillPrivateMigrateCreditCardsFunction::Run() {
+  autofill::ContentAutofillClient* client =
+      autofill::ContentAutofillClient::FromWebContents(GetSenderWebContents());
+  if (!client) {
+    return RespondNow(Error(kErrorDataUnavailable));
+  }
+
+  // If `personal_data` is not available, then don't do anything.
   autofill::PersonalDataManager* personal_data =
-      autofill::PersonalDataManagerFactory::GetForProfile(
-          Profile::FromBrowserContext(browser_context()));
+      client->GetPersonalDataManager();
   if (!personal_data || !personal_data->IsDataLoaded())
     return RespondNow(Error(kErrorDataUnavailable));
 
@@ -481,10 +530,15 @@ AutofillPrivateMigrateCreditCardsFunction::Run() {
 
 ExtensionFunction::ResponseAction
 AutofillPrivateLogServerCardLinkClickedFunction::Run() {
-  autofill::PersonalDataManager* personal_data =
-      autofill::PersonalDataManagerFactory::GetForProfile(
-          Profile::FromBrowserContext(browser_context()));
+  autofill::ContentAutofillClient* client =
+      autofill::ContentAutofillClient::FromWebContents(GetSenderWebContents());
+  if (!client) {
+    return RespondNow(Error(kErrorDataUnavailable));
+  }
 
+  // If `personal_data` is not available, then don't do anything.
+  autofill::PersonalDataManager* personal_data =
+      client->GetPersonalDataManager();
   if (!personal_data || !personal_data->IsDataLoaded())
     return RespondNow(Error(kErrorDataUnavailable));
 
@@ -526,50 +580,59 @@ ExtensionFunction::ResponseAction AutofillPrivateSaveIbanFunction::Run() {
       api::autofill_private::SaveIban::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(parameters);
 
+  autofill::ContentAutofillClient* client =
+      autofill::ContentAutofillClient::FromWebContents(GetSenderWebContents());
+  if (!client) {
+    return RespondNow(Error(kErrorDataUnavailable));
+  }
+
+  // If `personal_data` is not available, then don't do anything.
   autofill::PersonalDataManager* personal_data =
-      autofill::PersonalDataManagerFactory::GetForProfile(
-          Profile::FromBrowserContext(browser_context()));
+      client->GetPersonalDataManager();
   if (!personal_data || !personal_data->IsDataLoaded())
     return RespondNow(Error(kErrorDataUnavailable));
 
   api::autofill_private::IbanEntry* iban_entry = &parameters->iban;
-  DCHECK(iban_entry->value);
+  CHECK(iban_entry->value);
+
+  const autofill::Iban* existing_iban = nullptr;
 
   // The IBAN guid is specified if the user tries to update an existing IBAN via
-  // the Chrome payment settings page. Otherwise, leaving it blank creates a new
-  // IBAN.
-  std::string guid = iban_entry->guid ? *iban_entry->guid : "";
-  const autofill::Iban* existing_iban = nullptr;
-  if (!guid.empty()) {
-    existing_iban = personal_data->GetIbanByGUID(guid);
-    if (!existing_iban)
-      return RespondNow(Error(kErrorDataUnavailable));
+  // the Chrome payment settings page.
+  if (iban_entry->guid.has_value() && !iban_entry->guid->empty()) {
+    existing_iban = personal_data->GetIbanByGUID(*iban_entry->guid);
+    CHECK(existing_iban);
   }
-  autofill::Iban iban =
-      existing_iban
-          ? *existing_iban
-          : autofill::Iban(base::Uuid::GenerateRandomV4().AsLowercaseString());
 
-  iban.SetRawInfo(autofill::IBAN_VALUE, base::UTF8ToUTF16(*iban_entry->value));
+  autofill::Iban iban_to_write =
+      existing_iban ? *existing_iban : autofill::Iban();
 
-  if (iban_entry->nickname)
-    iban.set_nickname(base::UTF8ToUTF16(*iban_entry->nickname));
+  iban_to_write.SetRawInfo(autofill::IBAN_VALUE,
+                           base::UTF8ToUTF16(*iban_entry->value));
 
-  if (guid.empty()) {
-    personal_data->AddIban(iban);
+  if (iban_entry->nickname) {
+    iban_to_write.set_nickname(base::UTF8ToUTF16(*iban_entry->nickname));
+  }
+
+  // Add a new IBAN and return if this is not an update.
+  if (!existing_iban) {
+    personal_data->AddIban(iban_to_write);
     base::RecordAction(base::UserMetricsAction("AutofillIbanAdded"));
-    if (!iban.nickname().empty()) {
+    if (!iban_to_write.nickname().empty()) {
       base::RecordAction(
           base::UserMetricsAction("AutofillIbanAddedWithNickname"));
     }
     return RespondNow(NoArguments());
   }
 
-  if (existing_iban->Compare(iban) != 0) {
-    personal_data->UpdateIban(iban);
+  // This is an existing IBAN. Update the database entry in case anything has
+  // changed.
+  if (existing_iban->Compare(iban_to_write) != 0) {
+    bool nickname_changed =
+        existing_iban->nickname() != iban_to_write.nickname();
+    personal_data->UpdateIban(iban_to_write);
     base::RecordAction(base::UserMetricsAction("AutofillIbanEdited"));
-    // Record when nickname is updated.
-    if (existing_iban->nickname() != iban.nickname()) {
+    if (nickname_changed) {
       base::RecordAction(
           base::UserMetricsAction("AutofillIbanEditedWithNickname"));
     }
@@ -582,11 +645,17 @@ ExtensionFunction::ResponseAction AutofillPrivateSaveIbanFunction::Run() {
 // AutofillPrivateGetIbanListFunction
 
 ExtensionFunction::ResponseAction AutofillPrivateGetIbanListFunction::Run() {
-  autofill::PersonalDataManager* personal_data =
-      autofill::PersonalDataManagerFactory::GetForProfile(
-          Profile::FromBrowserContext(browser_context()));
+  autofill::ContentAutofillClient* client =
+      autofill::ContentAutofillClient::FromWebContents(GetSenderWebContents());
+  if (!client) {
+    return RespondNow(Error(kErrorDataUnavailable));
+  }
 
-  DCHECK(personal_data && personal_data->IsDataLoaded());
+  autofill::PersonalDataManager* personal_data =
+      client->GetPersonalDataManager();
+  if (!personal_data || !personal_data->IsDataLoaded()) {
+    return RespondNow(Error(kErrorDataUnavailable));
+  }
 
   autofill_util::IbanEntryList iban_list =
       autofill_util::GenerateIbanList(*personal_data);
@@ -613,10 +682,14 @@ ExtensionFunction::ResponseAction AutofillPrivateAddVirtualCardFunction::Run() {
       api::autofill_private::AddVirtualCard::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(parameters);
 
-  // Get the PersonalDataManager to retrieve the card based on the id.
+  autofill::ContentAutofillClient* client =
+      autofill::ContentAutofillClient::FromWebContents(GetSenderWebContents());
+  if (!client) {
+    return RespondNow(Error(kErrorDataUnavailable));
+  }
+
   autofill::PersonalDataManager* personal_data_manager =
-      autofill::PersonalDataManagerFactory::GetForProfile(
-          Profile::FromBrowserContext(browser_context()));
+      client->GetPersonalDataManager();
   if (!personal_data_manager || !personal_data_manager->IsDataLoaded())
     return RespondNow(Error(kErrorDataUnavailable));
 
@@ -653,10 +726,14 @@ AutofillPrivateRemoveVirtualCardFunction::Run() {
       api::autofill_private::RemoveVirtualCard::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(parameters);
 
-  // Get the PersonalDataManager to retrieve the card based on the id.
+  autofill::ContentAutofillClient* client =
+      autofill::ContentAutofillClient::FromWebContents(GetSenderWebContents());
+  if (!client) {
+    return RespondNow(Error(kErrorDataUnavailable));
+  }
+
   autofill::PersonalDataManager* personal_data_manager =
-      autofill::PersonalDataManagerFactory::GetForProfile(
-          Profile::FromBrowserContext(browser_context()));
+      client->GetPersonalDataManager();
   if (!personal_data_manager || !personal_data_manager->IsDataLoaded())
     return RespondNow(Error(kErrorDataUnavailable));
 
@@ -691,15 +768,11 @@ AutofillPrivateRemoveVirtualCardFunction::Run() {
 ExtensionFunction::ResponseAction
 AutofillPrivateAuthenticateUserAndFlipMandatoryAuthToggleFunction::Run() {
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-  // If `client` is not available, then don't do anything.
   autofill::ContentAutofillClient* client =
       autofill::ContentAutofillClient::FromWebContents(GetSenderWebContents());
   if (!client) {
-    return RespondNow(Error(kErrorDeviceAuthUnavailable));
+    return RespondNow(Error(kErrorDataUnavailable));
   }
-
-  const std::u16string message =
-      l10n_util::GetStringUTF16(IDS_PAYMENTS_AUTOFILL_MANDATORY_REAUTH_PROMPT);
 
   // If `personal_data_manager` is not available or `IsDataLoaded` is false,
   // then don't do anything.
@@ -723,7 +796,7 @@ AutofillPrivateAuthenticateUserAndFlipMandatoryAuthToggleFunction::Run() {
       !personal_data_manager->IsPaymentMethodsMandatoryReauthEnabled(),
       MandatoryReauthAuthenticationFlowEvent::kFlowStarted);
   client->GetOrCreatePaymentsMandatoryReauthManager()->AuthenticateWithMessage(
-      message,
+      l10n_util::GetStringUTF16(IDS_PAYMENTS_AUTOFILL_MANDATORY_REAUTH_PROMPT),
       base::BindOnce(
           &AutofillPrivateAuthenticateUserAndFlipMandatoryAuthToggleFunction::
               UpdateMandatoryAuthTogglePref,
@@ -749,8 +822,6 @@ void AutofillPrivateAuthenticateUserAndFlipMandatoryAuthToggleFunction::
   CHECK(client);
   autofill::PersonalDataManager* personal_data_manager =
       client->GetPersonalDataManager();
-  // This function is not called in incognito mode and therefore a
-  // PersonalDataManager should always exist.
   CHECK(personal_data_manager);
 
   // `opt_in` bool denotes whether the user is trying to opt in or out of the
@@ -772,64 +843,87 @@ void AutofillPrivateAuthenticateUserAndFlipMandatoryAuthToggleFunction::
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// AutofillPrivateAuthenticateUserToEditLocalCardFunction
+// AutofillPrivateGetLocalCardFunction
 
-ExtensionFunction::ResponseAction
-AutofillPrivateAuthenticateUserToEditLocalCardFunction::Run() {
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-  // If `client` is not available, then don't do anything.
+ExtensionFunction::ResponseAction AutofillPrivateGetLocalCardFunction::Run() {
   autofill::ContentAutofillClient* client =
       autofill::ContentAutofillClient::FromWebContents(GetSenderWebContents());
   if (!client) {
-    return RespondNow(Error(kErrorDeviceAuthUnavailable));
+    return RespondNow(Error(kErrorDataUnavailable));
   }
 
-  // If `personal_data_manager` is not available, then don't do anything.
   autofill::PersonalDataManager* personal_data_manager =
       client->GetPersonalDataManager();
   if (!personal_data_manager || !personal_data_manager->IsDataLoaded()) {
     return RespondNow(Error(kErrorDataUnavailable));
   }
   if (personal_data_manager->IsPaymentMethodsMandatoryReauthEnabled()) {
-    const std::u16string message = l10n_util::GetStringUTF16(
-        IDS_PAYMENTS_AUTOFILL_EDIT_CARD_MANDATORY_REAUTH_PROMPT);
-
     base::RecordAction(base::UserMetricsAction(
         "PaymentsUserAuthTriggeredToShowEditLocalCardDialog"));
     LogMandatoryReauthSettingsPageEditCardEvent(
         MandatoryReauthAuthenticationFlowEvent::kFlowStarted);
-    // Based on the result of the auth, we will be asynchronously returning if
-    // the user can edit the local card.
+
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+    // Based on the result of the auth, we will be asynchronously returning the
+    // card if the user can edit the local card.
     client->GetOrCreatePaymentsMandatoryReauthManager()
         ->AuthenticateWithMessage(
-            message,
+            l10n_util::GetStringUTF16(
+                IDS_PAYMENTS_AUTOFILL_EDIT_CARD_MANDATORY_REAUTH_PROMPT),
             base::BindOnce(
-                &AutofillPrivateAuthenticateUserToEditLocalCardFunction::
-                    CanShowEditDialogForLocalCard,
-                this));
-
-    // Due to async nature of AuthenticateWithMessage() on mandatory re-auth
-    // manager we use the below check to make sure we have a `Respond` captured.
-    // If we didn't have this check, then we would show the edit card dialog box
-    // even before the user successfully completes the auth.
-    return did_respond() ? AlreadyResponded() : RespondLater();
+                &AutofillPrivateGetLocalCardFunction::OnReauthFinished, this));
+#else
+    // This Autofill private API is only available on desktop systems and
+    // IsPaymentMethodsMandatoryReauthEnabled() ensures that it's only enabled
+    // for MacOS and Windows.
+    NOTREACHED_NORETURN();
+#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+  } else {
+    ReturnCreditCard();
   }
-#endif
-  return RespondNow(WithArguments(true));
+  // Due to async nature of AuthenticateWithMessage() on mandatory re-auth
+  // manager and delayed return on ReturnCreditCard(), we use the below check to
+  // make sure we have a `Respond` captured. If we didn't have this check, then
+  // we would show the edit card dialog box even before the user successfully
+  // completes the auth.
+  return did_respond() ? AlreadyResponded() : RespondLater();
 }
 
-// Return the auth result for showing the edit card dialog for local card. We
-// also log whether the auth was successful or not.
-void AutofillPrivateAuthenticateUserToEditLocalCardFunction::
-    CanShowEditDialogForLocalCard(bool can_show) {
-  LogMandatoryReauthSettingsPageEditCardEvent(
-      can_show ? MandatoryReauthAuthenticationFlowEvent::kFlowSucceeded
-               : MandatoryReauthAuthenticationFlowEvent::kFlowFailed);
-  if (can_show) {
-    base::RecordAction(base::UserMetricsAction(
-        "PaymentsUserAuthSuccessfulToShowEditLocalCardDialog"));
+// This is triggered after the reauth is completed and a local card may be
+// returned based on the auth result. We also log whether the auth was
+// successful or not.
+void AutofillPrivateGetLocalCardFunction::OnReauthFinished(bool can_retrieve) {
+  if (!can_retrieve) {
+    LogMandatoryReauthSettingsPageEditCardEvent(
+        MandatoryReauthAuthenticationFlowEvent::kFlowFailed);
+    Respond(NoArguments());
+    return;
   }
-  Respond(WithArguments(can_show));
+  base::RecordAction(base::UserMetricsAction(
+      "PaymentsUserAuthSuccessfulToShowEditLocalCardDialog"));
+  LogMandatoryReauthSettingsPageEditCardEvent(
+      MandatoryReauthAuthenticationFlowEvent::kFlowSucceeded);
+  ReturnCreditCard();
+}
+
+void AutofillPrivateGetLocalCardFunction::ReturnCreditCard() {
+  autofill::ContentAutofillClient* client =
+      autofill::ContentAutofillClient::FromWebContents(GetSenderWebContents());
+  CHECK(client);
+  autofill::PersonalDataManager* personal_data_manager =
+      client->GetPersonalDataManager();
+  CHECK(personal_data_manager);
+
+  absl::optional<autofill_private::GetLocalCard::Params> parameters =
+      autofill_private::GetLocalCard::Params::Create(args());
+  if (auto* card_from_guid =
+          personal_data_manager->GetCreditCardByGUID(parameters->guid)) {
+    return Respond(ArgumentList(autofill_private::GetLocalCard::Results::Create(
+        autofill_util::CreditCardToCreditCardEntry(
+            *card_from_guid, *personal_data_manager,
+            /*mask_local_cards=*/false))));
+  }
+  return Respond(Error(kErrorCardDataUnavailable));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -841,8 +935,8 @@ AutofillPrivateCheckIfDeviceAuthAvailableFunction::Run() {
   autofill::ContentAutofillClient* client =
       autofill::ContentAutofillClient::FromWebContents(GetSenderWebContents());
   if (client) {
-    return RespondNow(WithArguments(
-        autofill::IsDeviceAuthAvailable(client->GetDeviceAuthenticator())));
+    return RespondNow(WithArguments(autofill::IsDeviceAuthAvailable(
+        client->GetDeviceAuthenticator().get())));
   }
 #endif  // BUILDFLAG (IS_MAC) || BUILDFLAG(IS_WIN)
   return RespondNow(Error(kErrorDeviceAuthUnavailable));

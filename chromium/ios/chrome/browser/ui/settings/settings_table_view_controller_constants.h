@@ -43,6 +43,7 @@ typedef NS_ENUM(NSInteger, SettingsItemType) {
   SettingsItemTypePrivacy,
   SettingsItemTypeLanguageSettings,
   SettingsItemTypeContentSettings,
+  SettingsItemTypeDownloadsSettings,
   SettingsItemTypeBandwidth,
   SettingsItemTypeAboutChrome,
   SettingsItemTypeMemoryDebugging,
@@ -58,6 +59,7 @@ typedef NS_ENUM(NSInteger, SettingsItemType) {
   // Vivaldi
   SettingsItemTypeVivaldiSyncSettings,
   SettingsItemTypeVivaldiTabsSettings,
+  SettingsItemTypeAppearanceSettings,
   SettingsItemTypeVivaldiStartPageLayoutSettings,
   SettingsItemTypeVivaldiATBSettings,
   SettingsItemTypeAppIconSettings,
@@ -120,6 +122,9 @@ extern NSString* const kSettingsLanguagesCellId;
 
 // The accessibility identifier of the Content Settings cell.
 extern NSString* const kSettingsContentSettingsCellId;
+
+// The accessibility identifier of the Downloads Settings cell.
+extern NSString* const kSettingsDownloadsSettingsCellId;
 
 // The accessibility identifier of the Bandwidth cell.
 extern NSString* const kSettingsBandwidthCellId;
@@ -192,5 +197,8 @@ extern NSString* const kSettingsMoveInactiveTabsCellId;
 
 // The accessibility identifier of the tab pickup settings cell.
 extern NSString* const kSettingsTabPickupCellId;
+
+// The accessibility identifier of the Privacy Guide settings cell.
+extern NSString* const kSettingsPrivacyGuideCellId;
 
 #endif  // IOS_CHROME_BROWSER_UI_SETTINGS_SETTINGS_TABLE_VIEW_CONTROLLER_CONSTANTS_H_

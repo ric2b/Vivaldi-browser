@@ -61,7 +61,6 @@ public class ToolbarButtonInProductHelpController
     private final ActivityLifecycleDispatcher mLifecycleDispatcher;
     private final AppMenuPropertiesDelegate mAppMenuPropertiesDelegate;
     private final ScreenshotMonitor mScreenshotMonitor;
-    private final Handler mHandler = new Handler();
     private final View mMenuButtonAnchorView;
     private final View mSecurityIconAnchorView;
     private final AppMenuHandler mAppMenuHandler;
@@ -93,50 +92,58 @@ public class ToolbarButtonInProductHelpController
         mMenuButtonAnchorView = menuButtonAnchorView;
         mSecurityIconAnchorView = securityIconAnchorView;
         mIsInOverviewModeSupplier = isInOverviewModeSupplier;
-        mUserEducationHelper = new UserEducationHelper(mActivity, mHandler);
+        mUserEducationHelper = new UserEducationHelper(mActivity, new Handler());
         mScreenshotMonitor = new ScreenshotMonitorImpl(this, mActivity);
         mLifecycleDispatcher = lifecycleDispatcher;
         mLifecycleDispatcher.register(this);
         mCurrentTabSupplier = tabSupplier;
-        mPageLoadObserver = new CurrentTabObserver(tabSupplier, new EmptyTabObserver() {
-            @Override
-            public void onPageLoadFinished(Tab tab, GURL url) {
-                // Part of scroll jank investigation http://crbug.com/1311003. Will remove
-                // TraceEvent after the investigation is complete.
-                try (TraceEvent te = TraceEvent.scoped(
-                             "ToolbarButtonInProductHelpController::onPageLoadFinished")) {
-                    if (tab.isShowingErrorPage()) {
-                        handleIPHForErrorPageShown(tab);
-                        return;
-                    }
+        mPageLoadObserver =
+                new CurrentTabObserver(
+                        tabSupplier,
+                        new EmptyTabObserver() {
+                            @Override
+                            public void onPageLoadFinished(Tab tab, GURL url) {
+                                // Part of scroll jank investigation http://crbug.com/1311003. Will
+                                // remove TraceEvent after the investigation is complete.
+                                try (TraceEvent te =
+                                        TraceEvent.scoped(
+                                                "ToolbarButtonInProductHelpController::onPageLoadFinished")) {
+                                    if (tab.isShowingErrorPage()) {
+                                        handleIPHForErrorPageShown(tab);
+                                        return;
+                                    }
 
-                    handleIPHForSuccessfulPageLoad(tab);
-                }
-            }
+                                    handleIPHForSuccessfulPageLoad(tab);
+                                }
+                            }
 
-            private void handleIPHForSuccessfulPageLoad(final Tab tab) {
-                showDownloadPageTextBubble(tab, FeatureConstants.DOWNLOAD_PAGE_FEATURE);
-                showTranslateMenuButtonTextBubble(tab);
-                showPriceTrackingIPH(tab);
-            }
+                            private void handleIPHForSuccessfulPageLoad(final Tab tab) {
+                                showDownloadPageTextBubble(
+                                        tab, FeatureConstants.DOWNLOAD_PAGE_FEATURE);
+                                showTranslateMenuButtonTextBubble(tab);
+                                showPriceTrackingIPH(tab);
+                            }
 
-            private void handleIPHForErrorPageShown(Tab tab) {
-                if (DeviceFormFactor.isWindowOnTablet(mWindowAndroid)) {
-                    return;
-                }
+                            private void handleIPHForErrorPageShown(Tab tab) {
+                                if (DeviceFormFactor.isWindowOnTablet(mWindowAndroid)) {
+                                    return;
+                                }
 
-                OfflinePageBridge bridge = OfflinePageBridge.getForProfile(
-                        Profile.fromWebContents(tab.getWebContents()));
-                if (bridge == null
-                        || !bridge.isShowingDownloadButtonInErrorPage(tab.getWebContents())) {
-                    return;
-                }
+                                OfflinePageBridge bridge =
+                                        OfflinePageBridge.getForProfile(tab.getProfile());
+                                if (bridge == null
+                                        || !bridge.isShowingDownloadButtonInErrorPage(
+                                                tab.getWebContents())) {
+                                    return;
+                                }
 
-                Tracker tracker = TrackerFactory.getTrackerForProfile(
-                        Profile.fromWebContents(tab.getWebContents()));
-                tracker.notifyEvent(EventConstants.USER_HAS_SEEN_DINO);
-            }
-        }, /*swapCallback=*/null);
+                                Tracker tracker =
+                                        TrackerFactory.getTrackerForProfile(
+                                                Profile.fromWebContents(tab.getWebContents()));
+                                tracker.notifyEvent(EventConstants.USER_HAS_SEEN_DINO);
+                            }
+                        },
+                        /* swapCallback= */ null);
 
         FeatureNotificationUtils.registerIPHCallback(
                 FeatureType.INCOGNITO_TAB, this::showIncognitoTabIPH);
@@ -153,7 +160,9 @@ public class ToolbarButtonInProductHelpController
      * @param tab The tab currently being displayed to the user.
      */
     private void showPriceTrackingIPH(Tab tab) {
-        if (!ShoppingFeatures.isShoppingListEligible()
+        if (tab == null || tab.getWebContents() == null) return;
+
+        if (!ShoppingFeatures.isShoppingListEligible(tab.getProfile())
                 || !PowerBookmarkUtils.isPriceTrackingEligible(tab)
                 || AdaptiveToolbarFeatures.isContextualPageActionUiEnabled()) {
             return;

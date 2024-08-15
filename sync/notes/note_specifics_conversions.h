@@ -13,7 +13,6 @@
 #include "components/sync/protocol/notes_specifics.pb.h"
 
 namespace vivaldi {
-class NotesModel;
 class NoteNode;
 }  // namespace vivaldi
 
@@ -29,6 +28,8 @@ struct EntityData;
 
 namespace sync_notes {
 
+class NoteModelView;
+
 // Canonicalize |node_title| similar to legacy client's implementation by
 // truncating and the appending ' ' in some cases.
 std::string FullTitleToLegacyCanonicalizedTitle(const std::string& node_title);
@@ -38,7 +39,7 @@ bool IsNoteEntityReuploadNeeded(const syncer::EntityData& remote_entity_data);
 
 sync_pb::EntitySpecifics CreateSpecificsFromNoteNode(
     const vivaldi::NoteNode* node,
-    vivaldi::NotesModel* model,
+    NoteModelView* model,
     const sync_pb::UniquePosition& unique_position);
 
 // Creates a note node under the given parent node from the given specifics.
@@ -48,13 +49,13 @@ const vivaldi::NoteNode* CreateNoteNodeFromSpecifics(
     const sync_pb::NotesSpecifics& specifics,
     const vivaldi::NoteNode* parent,
     size_t index,
-    vivaldi::NotesModel* model);
+    NoteModelView* model);
 
 // Updates the note node |node| with the data in |specifics|. Callers must
 // verify that |specifics| passes the IsValidNotesSpecifics().
 void UpdateNoteNodeFromSpecifics(const sync_pb::NotesSpecifics& specifics,
                                  const vivaldi::NoteNode* node,
-                                 vivaldi::NotesModel* model);
+                                 NoteModelView* model);
 
 // Convnience function that returns NotesSpecifics::NORMAL,
 // NotesSpecifics::SEPARATOR or NotesSpecifics::FOLDER based on whether the
@@ -69,7 +70,7 @@ sync_pb::NotesSpecifics::VivaldiSpecialNotesType GetProtoTypeFromNoteNode(
 // the newly created node, and the original node gets deleted.
 const vivaldi::NoteNode* ReplaceNoteNodeUuid(const vivaldi::NoteNode* node,
                                              const base::Uuid& guid,
-                                             vivaldi::NotesModel* model);
+                                             NoteModelView* model);
 
 // Checks if a note specifics represents a valid note. Valid specifics must not
 // be empty, non-folders must contains a valid url, and all keys in the

@@ -10,13 +10,14 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/layout/ng/exclusions/ng_exclusion_space.h"
-#include "third_party/blink/renderer/core/layout/ng/flex/ng_flex_data.h"
-#include "third_party/blink/renderer/core/layout/ng/geometry/ng_bfc_offset.h"
-#include "third_party/blink/renderer/core/layout/ng/geometry/ng_margin_strut.h"
-#include "third_party/blink/renderer/core/layout/ng/grid/layout_ng_grid.h"
+#include "third_party/blink/renderer/core/layout/exclusions/exclusion_space.h"
+#include "third_party/blink/renderer/core/layout/flex/devtools_flex_info.h"
+#include "third_party/blink/renderer/core/layout/geometry/bfc_offset.h"
+#include "third_party/blink/renderer/core/layout/geometry/margin_strut.h"
+#include "third_party/blink/renderer/core/layout/grid/layout_grid.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_block_node.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_break_appeal.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_constraint_space.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_early_break.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_floats_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_fragment.h"
@@ -30,11 +31,11 @@
 
 namespace blink {
 
+class ExclusionSpace;
+class LineBoxFragmentBuilder;
 class NGBoxFragmentBuilder;
 class NGColumnSpannerPath;
-class NGExclusionSpace;
 class NGFragmentBuilder;
-class NGLineBoxFragmentBuilder;
 
 // The NGLayoutResult stores the resulting data from layout. This includes
 // geometry information in form of a NGPhysicalFragment, which is kept around
@@ -69,16 +70,14 @@ class CORE_EXPORT NGLayoutResult final
   // Same as Clone(), but uses the "post-layout" fragments to ensure
   // fragment-tree consistency.
   static const NGLayoutResult* CloneWithPostLayoutFragments(
-      const NGLayoutResult& other,
-      const absl::optional<PhysicalRect> updated_layout_overflow =
-          absl::nullopt);
+      const NGLayoutResult& other);
 
   // Create a copy of NGLayoutResult with |BfcBlockOffset| replaced by the given
   // parameter. Note, when |bfc_block_offset| is |nullopt|, |BfcBlockOffset| is
   // still replaced with |nullopt|.
   NGLayoutResult(const NGLayoutResult& other,
                  const NGConstraintSpace& new_space,
-                 const NGMarginStrut& new_end_margin_strut,
+                 const MarginStrut& new_end_margin_strut,
                  LayoutUnit bfc_line_offset,
                  absl::optional<LayoutUnit> bfc_block_offset,
                  LayoutUnit block_offset_delta);
@@ -164,7 +163,7 @@ class CORE_EXPORT NGLayoutResult final
   // Returns the absolutized inset property values in the parent's writing mode.
   // Not necessarily the insets of the actual box in the container, but matches
   // the result of the `getComputedStyle()` JavaScript API.
-  const NGBoxStrut& OutOfFlowInsetsForGetComputedStyle() const {
+  const BoxStrut& OutOfFlowInsetsForGetComputedStyle() const {
     CHECK(bitfields_.has_oof_insets_for_get_computed_style);
     return oof_insets_for_get_computed_style_;
   }
@@ -188,11 +187,20 @@ class CORE_EXPORT NGLayoutResult final
                       : nullptr;
   }
 
+  bool NeedsAnchorPositionScrollAdjustmentInX() const {
+    return rare_data_ &&
+           rare_data_->needs_anchor_position_scroll_adjustment_in_x();
+  }
+  bool NeedsAnchorPositionScrollAdjustmentInY() const {
+    return rare_data_ &&
+           rare_data_->needs_anchor_position_scroll_adjustment_in_y();
+  }
+
   // Get the path to the column spanner (if any) that interrupted column layout.
   const NGColumnSpannerPath* ColumnSpannerPath() const {
     if (rare_data_) {
       if (const RareData::BlockData* data = rare_data_->GetBlockData())
-        return data->column_spanner_path;
+        return data->column_spanner_path.Get();
     }
     return nullptr;
   }
@@ -213,16 +221,16 @@ class CORE_EXPORT NGLayoutResult final
     if (!rare_data_) {
       return nullptr;
     }
-    return rare_data_->early_break;
+    return rare_data_->early_break.Get();
   }
 
-  const NGExclusionSpace& ExclusionSpace() const {
+  const ExclusionSpace& GetExclusionSpace() const {
     if (bitfields_.has_rare_data_exclusion_space) {
       DCHECK(rare_data_);
       return rare_data_->exclusion_space;
     }
 
-    return space_.ExclusionSpace();
+    return space_.GetExclusionSpace();
   }
 
   EStatus Status() const { return static_cast<EStatus>(bitfields_.status); }
@@ -274,8 +282,8 @@ class CORE_EXPORT NGLayoutResult final
     return BfcBlockOffset();
   }
 
-  const NGMarginStrut EndMarginStrut() const {
-    return rare_data_ ? rare_data_->end_margin_strut : NGMarginStrut();
+  const MarginStrut EndMarginStrut() const {
+    return rare_data_ ? rare_data_->end_margin_strut : MarginStrut();
   }
 
   // Get the intrinsic block-size of the fragment. This is the block-size the
@@ -383,7 +391,7 @@ class CORE_EXPORT NGLayoutResult final
     return data ? data->table_column_count : 0;
   }
 
-  const NGGridLayoutData* GridLayoutData() const {
+  const GridLayoutData* GetGridLayoutData() const {
     if (!rare_data_) {
       return nullptr;
     }
@@ -484,7 +492,7 @@ class CORE_EXPORT NGLayoutResult final
     friend class NGOutOfFlowLayoutPart;
 
     void SetOutOfFlowInsetsForGetComputedStyle(
-        const NGBoxStrut& insets,
+        const BoxStrut& insets,
         bool can_use_out_of_flow_positioned_first_tier_cache) {
       // OOF-positioned nodes *must* always have an initial BFC-offset.
       DCHECK(layout_result_->physical_fragment_->IsOutOfFlowPositioned());
@@ -514,8 +522,21 @@ class CORE_EXPORT NGLayoutResult final
       }
     }
 
+    void SetNeedsScrollAdjustment(bool needs_scroll_adjustment_in_x,
+                                  bool needs_scroll_adjustment_in_y) {
+      if (!needs_scroll_adjustment_in_x && !needs_scroll_adjustment_in_y) {
+        return;
+      }
+      layout_result_->EnsureRareData()
+          ->set_needs_anchor_position_scroll_adjustment_in_x(
+              needs_scroll_adjustment_in_x);
+      layout_result_->EnsureRareData()
+          ->set_needs_anchor_position_scroll_adjustment_in_y(
+              needs_scroll_adjustment_in_y);
+    }
+
     void SetPositionFallbackResult(
-        wtf_size_t fallback_index,
+        absl::optional<wtf_size_t> fallback_index,
         const Vector<NonOverflowingScrollRange>& non_overflowing_ranges) {
       layout_result_->EnsureRareData()->SetPositionFallbackResult(
           fallback_index, non_overflowing_ranges);
@@ -572,21 +593,20 @@ class CORE_EXPORT NGLayoutResult final
                  const NGPhysicalFragment* physical_fragment,
                  NGBoxFragmentBuilder*);
 
-  using NGLineBoxFragmentBuilderPassKey =
-      base::PassKey<NGLineBoxFragmentBuilder>;
+  using LineBoxFragmentBuilderPassKey = base::PassKey<LineBoxFragmentBuilder>;
   // This constructor requires a non-null fragment and sets a success status.
-  NGLayoutResult(NGLineBoxFragmentBuilderPassKey,
+  NGLayoutResult(LineBoxFragmentBuilderPassKey,
                  const NGPhysicalFragment* physical_fragment,
-                 NGLineBoxFragmentBuilder*);
+                 LineBoxFragmentBuilder*);
 
   void Trace(Visitor*) const;
 
  private:
   friend class MutableForOutOfFlow;
 
-  static NGExclusionSpace MergeExclusionSpaces(
+  static ExclusionSpace MergeExclusionSpaces(
       const NGLayoutResult& other,
-      const NGExclusionSpace& new_input_exclusion_space,
+      const ExclusionSpace& new_input_exclusion_space,
       LayoutUnit bfc_line_offset,
       LayoutUnit block_offset_delta);
 
@@ -613,8 +633,12 @@ class CORE_EXPORT NGLayoutResult final
         LineBoxBfcBlockOffsetIsSetFlag::DefineNextValue<bool, 1>;
     using OutOfFlowPositionedOffsetIsSetFlag =
         PositionFallbackResultIsSetFlag::DefineNextValue<bool, 1>;
+    using NeedsAnchorPositionScrollAdjustmentInXFlag =
+        OutOfFlowPositionedOffsetIsSetFlag::DefineNextValue<bool, 1>;
+    using NeedsAnchorPositionScrollAdjustmentInYFlag =
+        NeedsAnchorPositionScrollAdjustmentInXFlag::DefineNextValue<bool, 1>;
     using DataUnionTypeValue =
-        OutOfFlowPositionedOffsetIsSetFlag::DefineNextValue<uint8_t, 3>;
+        NeedsAnchorPositionScrollAdjustmentInYFlag::DefineNextValue<uint8_t, 3>;
 
     struct BlockData {
       GC_PLUGIN_IGNORE("crbug.com/1146383")
@@ -635,10 +659,10 @@ class CORE_EXPORT NGLayoutResult final
       GridData() = default;
       GridData(const GridData& other) {
         grid_layout_data =
-            std::make_unique<NGGridLayoutData>(*other.grid_layout_data);
+            std::make_unique<GridLayoutData>(*other.grid_layout_data);
       }
 
-      std::unique_ptr<const NGGridLayoutData> grid_layout_data;
+      std::unique_ptr<const GridLayoutData> grid_layout_data;
     };
 
     struct LineData {
@@ -677,6 +701,22 @@ class CORE_EXPORT NGLayoutResult final
 
     void set_oof_positioned_offset_is_set(bool flag) {
       return bit_field.set<OutOfFlowPositionedOffsetIsSetFlag>(flag);
+    }
+
+    bool needs_anchor_position_scroll_adjustment_in_x() const {
+      return bit_field.get<NeedsAnchorPositionScrollAdjustmentInXFlag>();
+    }
+
+    void set_needs_anchor_position_scroll_adjustment_in_x(bool flag) {
+      return bit_field.set<NeedsAnchorPositionScrollAdjustmentInXFlag>(flag);
+    }
+
+    bool needs_anchor_position_scroll_adjustment_in_y() const {
+      return bit_field.get<NeedsAnchorPositionScrollAdjustmentInYFlag>();
+    }
+
+    void set_needs_anchor_position_scroll_adjustment_in_y(bool flag) {
+      return bit_field.set<NeedsAnchorPositionScrollAdjustmentInYFlag>(flag);
     }
 
     DataUnionType data_union_type() const {
@@ -825,16 +865,13 @@ class CORE_EXPORT NGLayoutResult final
     }
 
     void SetPositionFallbackResult(
-        wtf_size_t fallback_index,
+        absl::optional<wtf_size_t> fallback_index,
         const Vector<NonOverflowingScrollRange>& non_overflowing_ranges) {
       position_fallback_index = fallback_index;
       position_fallback_non_overflowing_ranges = non_overflowing_ranges;
       set_position_fallback_result_is_set(true);
     }
     absl::optional<wtf_size_t> PositionFallbackIndex() const {
-      if (!position_fallback_result_is_set()) {
-        return absl::nullopt;
-      }
       return position_fallback_index;
     }
     const Vector<NonOverflowingScrollRange>*
@@ -857,7 +894,7 @@ class CORE_EXPORT NGLayoutResult final
     void Trace(Visitor* visitor) const;
 
     Member<const NGEarlyBreak> early_break;
-    NGMarginStrut end_margin_strut;
+    MarginStrut end_margin_strut;
     union {
       // Only set in the initial column balancing layout pass, when we have no
       // clue what the column block-size is going to be.
@@ -872,7 +909,7 @@ class CORE_EXPORT NGLayoutResult final
       LayoutUnit minimal_space_shortage = kIndefiniteSize;
     };
     LayoutUnit block_size_for_fragmentation = kIndefiniteSize;
-    NGExclusionSpace exclusion_space;
+    ExclusionSpace exclusion_space;
     scoped_refptr<SerializedScriptValue> custom_layout_data;
 
     LayoutUnit annotation_overflow;
@@ -883,8 +920,9 @@ class CORE_EXPORT NGLayoutResult final
     // Only valid if line_box_bfc_block_offset_is_set
     LayoutUnit line_box_bfc_block_offset;
 
+    absl::optional<wtf_size_t> position_fallback_index;
+
     // Only valid if position_fallback_result_is_set
-    wtf_size_t position_fallback_index;
     Vector<NonOverflowingScrollRange> position_fallback_non_overflowing_ranges;
 
     // Only valid if oof_positioned_offset_is_set
@@ -986,11 +1024,11 @@ class CORE_EXPORT NGLayoutResult final
   // *always* the initial value.
   Member<RareData> rare_data_;
   union {
-    NGBfcOffset bfc_offset_;
+    BfcOffset bfc_offset_;
     // This is the absolutized inset property values of an OOF-positioned object
     // in its parent's writing-mode. This is set by the |NGOutOfFlowLayoutPart|
     // while generating this layout result.
-    NGBoxStrut oof_insets_for_get_computed_style_;
+    BoxStrut oof_insets_for_get_computed_style_;
   };
 
   LayoutUnit intrinsic_block_size_;

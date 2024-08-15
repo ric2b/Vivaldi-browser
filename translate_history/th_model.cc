@@ -185,7 +185,8 @@ bool TH_Model::Remove(const std::vector<std::string>& ids) {
 }
 
 void TH_Model::Reset(double ms_since_epoch) {
-  base::Time remove_since = base::Time::FromJsTime(ms_since_epoch);
+  base::Time remove_since =
+      base::Time::FromMillisecondsSinceUnixEpoch(ms_since_epoch);
 
   if (ms_since_epoch == 0) {
     if (list_->size() > 0) {

@@ -171,7 +171,8 @@ class MEDIA_GPU_EXPORT H264Decoder : public AcceleratedVideoDecoder {
     // later. This method has a default implementation that returns
     // kNotSupported.
     virtual Status SetStream(base::span<const uint8_t> stream,
-                             const DecryptConfig* decrypt_config);
+                             const DecryptConfig* decrypt_config,
+                             uint64_t secure_handle);
 
     // Notifies whether or not the current platform requires reference lists.
     // In general, implementations don't need it.
@@ -238,9 +239,7 @@ class MEDIA_GPU_EXPORT H264Decoder : public AcceleratedVideoDecoder {
   };
 
   // Process H264 stream structures.
-  bool ProcessSPS(int sps_id,
-                  bool* need_new_buffers,
-                  bool* color_space_changed);
+  bool ProcessSPS(int sps_id, bool* need_new_buffers);
 
   // Processes a CENCv1 encrypted slice header and fills in |curr_slice_hdr_|
   // with the relevant parsed fields.
@@ -347,6 +346,10 @@ class MEDIA_GPU_EXPORT H264Decoder : public AcceleratedVideoDecoder {
 
   // Decrypting config for the most recent data passed to SetStream().
   std::unique_ptr<DecryptConfig> current_decrypt_config_;
+
+  // Secure handle to pass through to the accelerator when doing secure playback
+  // on ARM.
+  uint64_t secure_handle_ = 0;
 
   // Keep track of when SetStream() is called so that
   // H264Accelerator::SetStream() can be called.

@@ -91,8 +91,16 @@ template("tweak_info_plist") {
              "--vivaldi-build",
              vivaldi_global_build_number,
              "--vivaldi-release-kind",
-             VIVALDI_RELEASE_KIND,
           ]
+      if (defined(test_ios_app_as_final) && test_ios_app_as_final) {
+        args += [
+          "vivaldi_final"
+        ]
+      } else {
+        args += [
+          VIVALDI_RELEASE_KIND
+        ]
+      }
     }
     deps = _deps
   }

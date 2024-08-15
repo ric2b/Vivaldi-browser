@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/barrier_closure.h"
+#include "base/check_is_test.h"
 #include "base/containers/contains.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
@@ -67,9 +68,6 @@
 #include "components/supervised_user/core/common/buildflags.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/notification_details.h"
-#include "content/public/browser/notification_service.h"
-#include "content/public/browser/notification_source.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/storage_partition.h"
@@ -94,7 +92,6 @@
 #include "extensions/browser/path_util.h"
 #include "extensions/browser/permissions_manager.h"
 #include "extensions/browser/process_manager_factory.h"
-#include "extensions/browser/renderer_startup_helper.h"
 #include "extensions/browser/ui_util.h"
 #include "extensions/browser/updater/extension_downloader_types.h"
 #include "extensions/browser/warning_service.h"
@@ -103,7 +100,6 @@
 #include "extensions/common/extension_features.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/feature_switch.h"
-#include "extensions/common/features/feature_developer_mode_only.h"
 #include "extensions/common/install_warning.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_constants.h"
@@ -1092,10 +1088,10 @@ DeveloperPrivateUpdateProfileConfigurationFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   const developer::ProfileConfigurationUpdate& update = params->update;
-  Profile* profile = Profile::FromBrowserContext(browser_context());
 
-  PrefService* prefs = profile->GetPrefs();
   if (update.in_developer_mode) {
+    Profile* profile = Profile::FromBrowserContext(browser_context());
+
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
     supervised_user::SupervisedUserService* service =
         SupervisedUserServiceFactory::GetForProfile(profile);
@@ -1104,13 +1100,7 @@ DeveloperPrivateUpdateProfileConfigurationFunction::Run() {
     }
 #endif
 
-    prefs->SetBoolean(prefs::kExtensionsUIDeveloperMode,
-                      *update.in_developer_mode);
-    SetCurrentDeveloperMode(util::GetBrowserContextId(browser_context()),
-                            *update.in_developer_mode);
-
-    RendererStartupHelperFactory::GetForBrowserContext(browser_context())
-        ->OnDeveloperModeChanged(*update.in_developer_mode);
+    util::SetDeveloperModeForProfile(profile, *update.in_developer_mode);
   }
 
   return RespondNow(NoArguments());
@@ -2077,7 +2067,7 @@ DeveloperPrivateOpenDevToolsFunction::Run() {
   }
 
   // Once we open the inspector, we focus on the appropriate tab...
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+  Browser* browser = chrome::FindBrowserWithTab(web_contents);
 
   // ... but some pages (popups and apps) don't have tabs, and some (background
   // pages) don't have an associated browser. For these, the inspector opens in
@@ -2184,9 +2174,8 @@ ExtensionFunction::ResponseAction DeveloperPrivateShowOptionsFunction::Run() {
   if (!web_contents)
     return RespondNow(Error(kCouldNotFindWebContentsError));
 
-  ExtensionTabUtil::OpenOptionsPage(
-      extension,
-      chrome::FindBrowserWithWebContents(web_contents));
+  ExtensionTabUtil::OpenOptionsPage(extension,
+                                    chrome::FindBrowserWithTab(web_contents));
   return RespondNow(NoArguments());
 }
 
@@ -2712,16 +2701,24 @@ DeveloperPrivateRemoveMultipleExtensionsFunction::Run() {
   if (accept_bubble_for_testing_.has_value()) {
     if (*accept_bubble_for_testing_) {
       OnDialogAccepted();
-      return AlreadyResponded();
+    } else {
+      OnDialogCancelled();
     }
-    return RespondNow(NoArguments());
+    return AlreadyResponded();
   }
 
-  Browser* browser = chrome::FindBrowserWithWebContents(GetSenderWebContents());
-  CHECK(browser);
+  gfx::NativeWindow parent;
+  if (!GetSenderWebContents()) {
+    CHECK_IS_TEST();
+    parent = nullptr;
+  } else {
+    parent = chrome::FindBrowserWithTab(GetSenderWebContents())
+                 ->window()
+                 ->GetNativeWindow();
+  }
 
   ShowExtensionMultipleUninstallDialog(
-      browser->profile(), browser->window()->GetNativeWindow(), extension_ids_,
+      profile_, parent, extension_ids_,
       base::BindOnce(
           &DeveloperPrivateRemoveMultipleExtensionsFunction::OnDialogAccepted,
           this),

@@ -8,7 +8,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/webui_url_constants.h"
-#include "chrome/grit/browser_resources.h"
 #include "chrome/grit/feedback_resources.h"
 #include "chrome/grit/feedback_resources_map.h"
 #include "chrome/grit/generated_resources.h"
@@ -23,20 +22,6 @@
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-namespace {
-
-// Jelly colors should only be considered enabled when jelly styling is
-// enabled for Feedback on ChromeOS.
-bool IsJellyColorsEnabled() {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  return ash::features::IsJellyEnabledForOsFeedback();
-#else
-  return false;
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-}
-
-}  // namespace
 
 void AddStringResources(content::WebUIDataSource* source,
                         const Profile* profile) {
@@ -78,6 +63,11 @@ void AddStringResources(content::WebUIDataSource* source,
 
   source->AddLocalizedStrings(kStrings);
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+  // Jelly colors should only be considered enabled when jelly styling is
+  // enabled for Feedback on ChromeOS.
+  source->AddBoolean("isJellyEnabledForOsFeedback",
+                     ash::features::IsJellyEnabledForOsFeedback());
+
   source->AddLocalizedString("mayBeSharedWithPartnerNote",
                              IDS_FEEDBACK_TOOL_MAY_BE_SHARED_NOTE);
   source->AddLocalizedString(
@@ -89,8 +79,6 @@ void AddStringResources(content::WebUIDataSource* source,
   source->AddLocalizedString("sysInfo",
                              IDS_FEEDBACK_INCLUDE_SYSTEM_INFORMATION_CHKBOX);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-  source->AddBoolean("isJellyEnabledForOsFeedback", IsJellyColorsEnabled());
 }
 
 void CreateAndAddFeedbackHTMLSource(Profile* profile) {
@@ -99,10 +87,6 @@ void CreateAndAddFeedbackHTMLSource(Profile* profile) {
   source->AddResourcePaths(
       base::make_span(kFeedbackResources, kFeedbackResourcesSize));
   source->AddResourcePath("", IDR_FEEDBACK_HTML_DEFAULT_HTML);
-
-  // Register the CSS file from chrome://system manually as that style is
-  // re-used by chrome://feedback/html/sys_info.html.
-  source->AddResourcePath("css/about_sys.css", IDR_ABOUT_SYS_CSS);
 
   source->UseStringsJs();
 
@@ -122,7 +106,7 @@ bool FeedbackUI::IsFeedbackEnabled(Profile* profile) {
 void FeedbackUI::BindInterface(
     mojo::PendingReceiver<color_change_listener::mojom::PageHandler> receiver) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  DCHECK(IsJellyColorsEnabled());
+  DCHECK(ash::features::IsJellyEnabledForOsFeedback());
   color_provider_handler_ = std::make_unique<ui::ColorChangeHandler>(
       web_ui()->GetWebContents(), std::move(receiver));
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)

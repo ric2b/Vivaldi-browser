@@ -39,9 +39,13 @@ class VivaldiContextMenu;
 
 class ContextMenuPostitionDelegate {
  public:
+  virtual bool CanSetPosition() const;
   virtual void SetPosition(gfx::Rect* menu_bounds,
                            const gfx::Rect& monitor_bounds,
                            const gfx::Rect& anchor_bounds) const {}
+  virtual void ExecuteIfPersistent(int command_id,
+                                   int event_flags,
+                                   bool* success) {}
 };
 
 class ContextMenuController : public ui::SimpleMenuModel::Delegate,
@@ -79,13 +83,19 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
   void MenuClosed(ui::SimpleMenuModel* source) override;
 
   // ContextMenuPostitionDelegate
+  bool CanSetPosition() const override;
   void SetPosition(gfx::Rect* menu_bounds,
                    const gfx::Rect& monitor_bounds,
                    const gfx::Rect& anchor_bounds) const override;
+  void ExecuteIfPersistent(int command_id,
+                           int event_flags,
+                           bool* success) override;
 
   // VivaldiRenderViewContextMenu::Delegate
   void OnDestroyed(VivaldiRenderViewContextMenu* menu) override;
   bool GetShowShortcuts() override;
+
+  bool IsCommandIdPersistent(int command_id) const;
 
  private:
   void InitModel();
@@ -127,6 +137,7 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
   IdToStringMap id_to_url_map_;
   IdToBoolMap id_to_checked_map_;
   IdToBoolMap id_to_enabled_map_;
+  IdToBoolMap id_to_persistent_map_;
   IdToAcceleratorMap id_to_accelerator_map_;
   bool show_shortcuts_ = true;
   IdToStringMap id_to_action_map_;

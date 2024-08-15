@@ -66,10 +66,11 @@ import android.text.TextUtils;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.core.content.ContextCompat;
+import androidx.fragment.app.FragmentActivity;
 
 import org.chromium.base.Log;
 import org.chromium.build.BuildConfig;
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.vivaldi.browser.oem_extensions.lynkco.OemLynkcoDistractionDialog;
 import org.vivaldi.browser.oem_extensions.lynkco.OemLynkcoExtensions;
 import org.vivaldi.browser.oem_extensions.lynkco.OemLynkcoExtensions.DriverDistractionObserver;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
@@ -80,6 +81,7 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
  */
 public class ChromeBaseAppCompatActivity extends AppCompatActivity
         implements NightModeStateProvider.Observer, ModalDialogManagerHolder {
+
     /**
      * Chrome in automotive needs a persistent back button toolbar above all activities because
      * AAOS/cars do not have a built in back button. This is implemented differently in each
@@ -123,7 +125,7 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
     private LinkedHashSet<Integer> mThemeResIds = new LinkedHashSet<>();
     private ServiceTracingProxyProvider mServiceTracingProxyProvider;
 
-    private SharedPreferencesManager.Observer mPreferenceObserver;
+    private SharedPreferences.OnSharedPreferenceChangeListener mPrefsListener;
 
     // Vivaldi OEM (Lynk&Co)
     private static final String TAG = "OemLynkco";
@@ -134,8 +136,11 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
                         Log.d(TAG, "onActivityResult: " + result);
                     });
 
-    DriverDistractionObserver mDriverDistractionObserver;
+    private DriverDistractionObserver mDriverDistractionObserver;
+    private boolean mDriverDistracted;
     private OemLynkcoExtensions.ShutdownObserver mShutdownObserver;
+    private OemLynkcoDistractionDialog mDDDialog;
+    private FragmentActivity mFragmentActivity;
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -172,12 +177,13 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
         if (applyOverrides(newBase, config)) applyOverrideConfiguration(config);
 
         // Vivaldi
-        mPreferenceObserver = key -> {
+        mPrefsListener = (sharedPrefs, key) -> {
             if (TextUtils.equals(key, VivaldiPreferences.UI_SCALE_VALUE)) {
                 if (!isFinishing()) recreate();
             }
         };
-        VivaldiPreferences.getSharedPreferencesManager().addObserver(mPreferenceObserver);
+        ContextUtils.getAppSharedPreferences()
+                .registerOnSharedPreferenceChangeListener(mPrefsListener);
     }
 
     @Override
@@ -199,6 +205,7 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
         if (BuildConfig.IS_OEM_LYNKCO_BUILD) {
             OemLynkcoExtensions.getInstance().initialize(this);
             requestAllPermissions();
+            mFragmentActivity = this;
             enableDriverDistractionAndShutdownHandling();
         }
     }
@@ -210,15 +217,6 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
             mModalDialogManagerSupplier.get().destroy();
             mModalDialogManagerSupplier.set(null);
         }
-        // Vivaldi
-        if (BuildConfig.IS_OEM_LYNKCO_BUILD) {
-            OemLynkcoExtensions.getInstance()
-                    .removeDriverDistractionObserver(mDriverDistractionObserver);
-            mDriverDistractionObserver = null;
-            OemLynkcoExtensions.getInstance().removeShutdownObserver(mShutdownObserver);
-            mShutdownObserver = null;
-        }
-        VivaldiPreferences.getSharedPreferencesManager().removeObserver(mPreferenceObserver);
         super.onDestroy();
     }
 
@@ -378,7 +376,10 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
         if (BuildInfo.getInstance().isAutomotive
                 && getAutomotiveToolbarImplementation()
                         == AutomotiveToolbarImplementation.WITH_ACTION_BAR) {
-            setTheme(R.style.ThemeOverlay_BrowserUI_Automotive_PersistentBackButtonToolbar);
+            int automotiveOverlay =
+                    R.style.ThemeOverlay_BrowserUI_Automotive_PersistentBackButtonToolbar;
+            getTheme().applyStyle(automotiveOverlay, /* force= */ true);
+            mThemeResIds.add(automotiveOverlay);
         }
     }
 
@@ -501,6 +502,10 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
                 && getSupportActionBar() != null) {
             getSupportActionBar().setHomeActionContentDescription(R.string.back);
         }
+
+        if (BuildConfig.IS_OEM_LYNKCO_BUILD)
+            resetDriverDistraction();
+
         super.onResume();
     }
 
@@ -562,27 +567,51 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
     // Vivaldi OEM (Lynk&Co)
     private void enableDriverDistractionAndShutdownHandling() {
         assert BuildConfig.IS_OEM_LYNKCO_BUILD;
+        assert mFragmentActivity != null;
+
+        mDDDialog = new OemLynkcoDistractionDialog();
+        mDDDialog.initDialog();
+
+        mDriverDistracted = OemLynkcoExtensions.getInstance().isDriverDistracted();
+        if (mDriverDistracted) {
+            Log.d(TAG, "enableDriverDistractionAndShutdownHandling: show DD dialog");
+            mDDDialog.show(mFragmentActivity.getSupportFragmentManager(), null);
+        }
+
+        mDriverDistractionObserver = null;
         mDriverDistractionObserver = new DriverDistractionObserver() {
             @Override
             public void onDriverDistracted(boolean distracted) {
                 Log.d(TAG, "onDriverDistracted: " + distracted);
+                // Avoid triggering dialog twice
+                if (distracted == mDriverDistracted) return;
+                mDriverDistracted = distracted;
                 if (distracted) {
-                    mStartForResult.launch(OemLynkcoExtensions.getInstance()
-                            .createDriverDistractionIntent(getBaseContext()));
+                    Log.d(TAG, "onDriverDistracted: show DD dialog");
+                    mDDDialog.show(mFragmentActivity.getSupportFragmentManager(), null);
+                } else {
+                    Log.d(TAG, "onDriverDistracted: dismiss DD dialog");
+                    mDDDialog.dismissAllowingStateLoss();
                 }
             }
         };
+
         OemLynkcoExtensions.getInstance().enableShutdownManager();
+        mShutdownObserver = null;
         mShutdownObserver = new OemLynkcoExtensions.ShutdownObserver() {
             @Override
             public void onShutdown() {
                 Log.d(TAG, "onShutdown");
-                finishAffinity();
+                ApplicationLifetime.terminate(false);
             }
         };
-        OemLynkcoExtensions.getInstance()
-                .addDriverDistractionObserver(mDriverDistractionObserver);
-        OemLynkcoExtensions.getInstance().addShutdownObserver(mShutdownObserver);
+        OemLynkcoExtensions.getInstance().setShutdownObserver(mShutdownObserver);
+    }
+
+    public void resetDriverDistraction() {
+        assert BuildConfig.IS_OEM_LYNKCO_BUILD;
+        OemLynkcoExtensions.getInstance().addDriverDistractionObserver(mDriverDistractionObserver);
+        OemLynkcoExtensions.getInstance().enableDriverDistraction();
     }
 
     // Vivaldi OEM (Lynk&Co)
@@ -603,7 +632,6 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
     protected void onStart() {
         super.onStart();
         if (BuildConfig.IS_OEM_LYNKCO_BUILD) {
-            OemLynkcoExtensions.getInstance().enableDriverDistraction();
             OemLynkcoExtensions.getInstance().enableShutdownManager();
         }
     }
@@ -611,10 +639,12 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
     // Vivaldi OEM (Lynk&Co)
     @Override
     protected void onStop() {
+        super.onStop();
         if (BuildConfig.IS_OEM_LYNKCO_BUILD) {
+            OemLynkcoExtensions.getInstance()
+                    .removeDriverDistractionObserver(mDriverDistractionObserver);
             OemLynkcoExtensions.getInstance().disableDriverDistraction();
             OemLynkcoExtensions.getInstance().disableShutdownManager();
         }
-        super.onStop();
     }
 }

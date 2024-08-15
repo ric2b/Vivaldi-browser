@@ -122,7 +122,7 @@
           objectForInfoDictionaryKey:@"KSChannelChromeScheme"]);
   if (!scheme)
     return NO;
-  return [scheme isEqualToString:@"vivaldi_final"];
+  return [scheme isEqualToString:@"vivaldi-final"];
 }
 
 + (BOOL)isValidDomain:(NSString* _Nonnull)urlString {

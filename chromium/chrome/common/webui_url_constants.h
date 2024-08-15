@@ -54,6 +54,7 @@ extern const char kChromeUIChromeURLsHost[];
 extern const char kChromeUIChromeURLsURL[];
 extern const char kChromeUIComponentsHost[];
 extern const char kChromeUIComponentsUrl[];
+extern const char kChromeUIComposeHost[];
 extern const char kChromeUIConflictsHost[];
 extern const char kChromeUIConstrainedHTMLTestURL[];
 extern const char kChromeUIContentSettingsURL[];
@@ -76,6 +77,8 @@ extern const char kChromeUIDeviceLogUrl[];
 extern const char kChromeUIDevUiLoaderURL[];
 extern const char kChromeUIDiceWebSigninInterceptHost[];
 extern const char kChromeUIDiceWebSigninInterceptURL[];
+extern const char kChromeUIDiceWebSigninInterceptChromeSigninURL[];
+extern const char kChromeUIDiceWebSigninInterceptChromeSigninSubPage[];
 extern const char kChromeUIDownloadInternalsHost[];
 extern const char kChromeUIDownloadsHost[];
 extern const char kChromeUIDownloadsURL[];
@@ -118,8 +121,6 @@ extern const char kChromeUIInspectURL[];
 extern const char kChromeUIInternalsHost[];
 extern const char kChromeUIInterstitialHost[];
 extern const char kChromeUIInterstitialURL[];
-extern const char kChromeUIInvalidationsHost[];
-extern const char kChromeUIInvalidationsUrl[];
 extern const char kChromeUIKillHost[];
 extern const char kChromeUILauncherInternalsHost[];
 extern const char kChromeUILauncherInternalsURL[];
@@ -151,6 +152,9 @@ extern const char kChromeUIOmniboxHost[];
 extern const char kChromeUIOmniboxURL[];
 extern const char kChromeUIOmniboxPopupHost[];
 extern const char kChromeUIOmniboxPopupURL[];
+#if !BUILDFLAG(IS_ANDROID)
+extern const char kChromeUIOnDeviceInternalsHost[];
+#endif
 extern const char kChromeUISuggestInternalsHost[];
 extern const char kChromeUISuggestInternalsURL[];
 #if BUILDFLAG(IS_CHROMEOS)
@@ -163,6 +167,8 @@ extern const char kChromeUIPasswordManagerURL[];
 extern const char kChromeUIPasswordManagerCheckupURL[];
 extern const char kChromeUIPasswordManagerSettingsURL[];
 extern const char kChromeUIPerformanceSettingsURL[];
+extern const char kChromeUIPerformanceSidePanelHost[];
+extern const char kChromeUIPerformanceSidePanelURL[];
 extern const char kChromeUIPolicyHost[];
 extern const char kChromeUIPolicyURL[];
 extern const char kChromeUIPolicyTestURL[];
@@ -369,8 +375,6 @@ extern const char kChromeUISmbCredentialsHost[];
 extern const char kChromeUISmbCredentialsURL[];
 extern const char kChromeUISmbShareHost[];
 extern const char kChromeUISmbShareURL[];
-extern const char kChromeUIStatusAreaInternalsURL[];
-extern const char kChromeUIStatusAreaInternalsHost[];
 extern const char kChromeUISysInternalsHost[];
 extern const char kChromeUISysInternalsUrl[];
 extern const char kChromeUIUntrustedCroshHost[];
@@ -385,6 +389,8 @@ extern const char kChromeUIVcTrayTesterURL[];
 extern const char kChromeUIVcTrayTesterHost[];
 extern const char kChromeUIVmHost[];
 extern const char kChromeUIVmUrl[];
+extern const char kChromeUIWebAppInstallDialogHost[];
+extern const char kChromeUIWebAppInstallDialogURL[];
 
 // Returns true if this web UI is part of the "system UI". Generally this is
 // UI that opens in a window (not a browser tab) and that on other operating
@@ -395,6 +401,8 @@ bool IsSystemWebUIHost(base::StringPiece host);
 
 #if BUILDFLAG(IS_CHROMEOS)
 extern const char kChromeUIAppDisabledHost[];
+extern const char kChromeUIDlpInternalsHost[];
+extern const char kChromeUIDlpInternalsURL[];
 extern const char kChromeUIGpuURL[];
 extern const char kChromeUIHistogramsURL[];
 extern const char kChromeUIKerberosInBrowserHost[];
@@ -405,7 +413,6 @@ extern const char kChromeUINotifGeneratorURL[];
 extern const char kChromeUIOSSettingsHost[];
 extern const char kChromeUIOSSettingsURL[];
 extern const char kChromeUISystemURL[];
-extern const char kOsUIAboutURL[];
 extern const char kOsUIComponentsURL[];
 extern const char kOsUIConnectivityDiagnosticsAppURL[];
 extern const char kOsUIDeviceLogURL[];
@@ -520,6 +527,7 @@ extern const char kAutofillSubPage[];
 extern const char kClearBrowserDataSubPage[];
 extern const char kContentSettingsSubPage[];
 extern const char kAllSitesSettingsSubpage[];
+extern const char kOnDeviceSiteDataSubpage[];
 extern const char kCookieSettingsSubPage[];
 extern const char kDownloadsSubPage[];
 extern const char kHandlerSettingsSubPage[];
@@ -541,6 +549,7 @@ extern const char kResetSubPage[];
 extern const char kResetProfileSettingsSubPage[];
 extern const char kSafeBrowsingEnhancedProtectionSubPage[];
 extern const char kSafetyCheckSubPage[];
+extern const char kSafetyHubSubPage[];
 extern const char kSearchSubPage[];
 extern const char kSearchEnginesSubPage[];
 extern const char kSignOutSubPage[];
@@ -555,6 +564,10 @@ extern const char kPrivacySandboxSubPage[];
 #if !BUILDFLAG(IS_ANDROID)
 extern const char kAdPrivacySubPagePath[];
 extern const char kPrivacySandboxSubPagePath[];
+extern const char kPerformanceSubPagePath[];
+extern const char kPreloadingSubPagePath[];
+extern const char kTrackingProtectionSubPagePath[];
+extern const char kCookiesSubPagePath[];
 #endif
 
 #if BUILDFLAG(IS_WIN)

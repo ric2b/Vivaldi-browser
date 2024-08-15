@@ -9,12 +9,10 @@
 
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
-#include "base/test/mock_callback.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/views/autofill/popup/test_popup_row_strategy.h"
 #include "chrome/test/views/chrome_views_test_base.h"
 #include "components/autofill/core/common/aliases.h"
-#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -25,16 +23,11 @@
 #include "ui/views/background.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/style/typography.h"
+#include "ui/views/style/typography_provider.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_utils.h"
 
-using testing::StrictMock;
-
 namespace autofill {
-
-namespace {
-constexpr gfx::Point kOutOfBounds{1000, 1000};
-}  // namespace
 
 class PopupCellViewTest : public ChromeViewsTestBase {
  public:
@@ -68,11 +61,8 @@ class PopupCellViewTest : public ChromeViewsTestBase {
         views::PaintInfo::CreateRootPaintInfo(canvas_painter.context(), size));
   }
 
-  std::unique_ptr<PopupCellView> CreatePopupCellView(
-      bool should_ignore_mouse_observed_outside_item_bounds_check = false) {
-    return views::Builder<PopupCellView>(
-               std::make_unique<PopupCellView>(
-                   should_ignore_mouse_observed_outside_item_bounds_check))
+  std::unique_ptr<PopupCellView> CreatePopupCellView() {
+    return views::Builder<PopupCellView>(std::make_unique<PopupCellView>())
         .SetAccessibilityDelegate(std::make_unique<TestAccessibilityDelegate>())
         .Build();
   }
@@ -104,9 +94,7 @@ TEST_F(PopupCellViewTest, SetSelectedUpdatesBackground) {
   // The unselected background.
   EXPECT_FALSE(view().GetSelected());
   views::Background* background = view().GetBackground();
-  ASSERT_TRUE(background);
-  EXPECT_EQ(background->get_color(),
-            view().GetColorProvider()->GetColor(ui::kColorDropdownBackground));
+  ASSERT_FALSE(background);
 
   view().SetSelected(true);
   EXPECT_TRUE(view().GetSelected());
@@ -114,19 +102,6 @@ TEST_F(PopupCellViewTest, SetSelectedUpdatesBackground) {
   ASSERT_TRUE(background);
   EXPECT_EQ(background->get_color(), view().GetColorProvider()->GetColor(
                                          ui::kColorDropdownBackgroundSelected));
-}
-
-TEST_F(PopupCellViewTest, Tooltip) {
-  constexpr char16_t kTooltip[] = u"Sample tooltip";
-
-  ShowView(views::Builder<PopupCellView>(CreatePopupCellView())
-               .SetTooltipText(kTooltip)
-               .Build());
-  EXPECT_EQ(view().GetTooltipText(), kTooltip);
-
-  // The method derived form `views::View` responds properly, too.
-  const views::View& cell_as_view = view();
-  EXPECT_EQ(cell_as_view.GetTooltipText(gfx::Point()), kTooltip);
 }
 
 TEST_F(PopupCellViewTest, SetSelectedUpdatesTrackedLabels) {
@@ -144,11 +119,12 @@ TEST_F(PopupCellViewTest, SetSelectedUpdatesTrackedLabels) {
 
   auto get_expected_color = [](views::Label& label, int style) {
     return label.GetColorProvider()->GetColor(
-        views::style::GetColorId(label.GetTextContext(), style));
+        views::TypographyProvider::Get().GetColorId(label.GetTextContext(),
+                                                    style));
   };
 
   // The unselected state.
-  EXPECT_FALSE(view().IsHighlighted());
+  EXPECT_FALSE(view().GetSelected());
   EXPECT_EQ(tracked_label->GetEnabledColor(),
             get_expected_color(*tracked_label, tracked_label->GetTextStyle()));
   EXPECT_EQ(
@@ -157,7 +133,7 @@ TEST_F(PopupCellViewTest, SetSelectedUpdatesTrackedLabels) {
 
   // // On select updates only the tracked label's style.
   view().SetSelected(true);
-  EXPECT_TRUE(view().IsHighlighted());
+  EXPECT_TRUE(view().GetSelected());
   EXPECT_NE(
       tracked_label->GetEnabledColor(),
       get_expected_color(*tracked_label, untracked_label->GetTextStyle()));
@@ -166,112 +142,6 @@ TEST_F(PopupCellViewTest, SetSelectedUpdatesTrackedLabels) {
   EXPECT_EQ(
       untracked_label->GetEnabledColor(),
       get_expected_color(*untracked_label, untracked_label->GetTextStyle()));
-
-  view().SetSelected(false);
-  view().SetPermanentlyHighlighted(true);
-  EXPECT_TRUE(view().IsHighlighted());
-}
-
-TEST_F(PopupCellViewTest, MouseEvents) {
-  std::unique_ptr<PopupCellView> cell = CreatePopupCellView();
-  views::Label* label =
-      cell->AddChildView(std::make_unique<views::Label>(u"Label text"));
-  ShowView(std::move(cell));
-
-  StrictMock<base::MockCallback<base::RepeatingClosure>> enter_callback;
-  StrictMock<base::MockCallback<base::RepeatingClosure>> exit_callback;
-  StrictMock<base::MockCallback<PopupCellView::OnAcceptedCallback>>
-      accept_callback;
-
-  generator().MoveMouseTo(kOutOfBounds);
-  ASSERT_FALSE(view().IsMouseHovered());
-  generator().MoveMouseTo(label->GetBoundsInScreen().CenterPoint());
-  ASSERT_TRUE(view().IsMouseHovered());
-  generator().ClickLeftButton();
-  generator().MoveMouseTo(kOutOfBounds);
-  ASSERT_FALSE(view().IsMouseHovered());
-  Paint();
-
-  view().SetOnEnteredCallback(enter_callback.Get());
-  view().SetOnExitedCallback(exit_callback.Get());
-  view().SetOnAcceptedCallback(accept_callback.Get());
-  EXPECT_CALL(enter_callback, Run);
-  generator().MoveMouseTo(label->GetBoundsInScreen().CenterPoint());
-  EXPECT_CALL(accept_callback, Run);
-  generator().ClickLeftButton();
-  EXPECT_CALL(exit_callback, Run);
-  generator().MoveMouseTo(kOutOfBounds);
-}
-
-// Gestures are not supported on MacOS.
-#if !BUILDFLAG(IS_MAC)
-TEST_F(PopupCellViewTest, GestureEvents) {
-  std::unique_ptr<PopupCellView> cell =
-      views::Builder<PopupCellView>(CreatePopupCellView())
-          .SetAccessibilityDelegate(
-              std::make_unique<TestAccessibilityDelegate>())
-          .Build();
-  views::Label* label =
-      cell->AddChildView(std::make_unique<views::Label>(u"Label text"));
-  ShowView(std::move(cell));
-
-  StrictMock<base::MockCallback<base::RepeatingClosure>> enter_callback;
-  StrictMock<base::MockCallback<base::RepeatingClosure>> exit_callback;
-  StrictMock<base::MockCallback<PopupCellView::OnAcceptedCallback>>
-      accept_callback;
-
-  view().SetOnEnteredCallback(enter_callback.Get());
-  view().SetOnExitedCallback(exit_callback.Get());
-  view().SetOnAcceptedCallback(accept_callback.Get());
-
-  EXPECT_CALL(enter_callback, Run);
-  EXPECT_CALL(accept_callback, Run);
-  generator().GestureTapAt(label->GetBoundsInScreen().CenterPoint());
-}
-#endif  // !BUILDFLAG(IS_MAC)
-
-TEST_F(PopupCellViewTest,
-       ShouldIgnoreMouseObservedOutsideItemBoundsCheckIsFalse_IgnoreClick) {
-  std::unique_ptr<PopupCellView> cell = CreatePopupCellView(
-      /*should_ignore_mouse_observed_outside_item_bounds_check=*/false);
-  views::Label* label =
-      cell->AddChildView(std::make_unique<views::Label>(u"Label text"));
-  ShowView(std::move(cell));
-
-  StrictMock<base::MockCallback<PopupCellView::OnAcceptedCallback>>
-      accept_callback;
-
-  view().SetOnAcceptedCallback(accept_callback.Get());
-  generator().MoveMouseTo(label->GetBoundsInScreen().CenterPoint());
-  Paint();
-  // No OnAccept callback is run.
-  generator().ClickLeftButton();
-
-  generator().MoveMouseTo(kOutOfBounds);
-  Paint();
-  generator().MoveMouseTo(label->GetBoundsInScreen().CenterPoint());
-  // If the mouse has been outside before, the accept click is passed through.
-  EXPECT_CALL(accept_callback, Run);
-  generator().ClickLeftButton();
-}
-
-TEST_F(PopupCellViewTest,
-       ShouldIgnoreMouseObservedOutsideItemBoundsCheckIsTrue_DoNotIgnoreClick) {
-  std::unique_ptr<PopupCellView> cell = CreatePopupCellView(
-      /*should_ignore_mouse_observed_outside_item_bounds_check=*/true);
-  views::Label* label =
-      cell->AddChildView(std::make_unique<views::Label>(u"Label text"));
-  ShowView(std::move(cell));
-
-  StrictMock<base::MockCallback<PopupCellView::OnAcceptedCallback>>
-      accept_callback;
-
-  view().SetOnAcceptedCallback(accept_callback.Get());
-  generator().MoveMouseTo(label->GetBoundsInScreen().CenterPoint());
-  Paint();
-  // OnAccept callback is run.
-  EXPECT_CALL(accept_callback, Run);
-  generator().ClickLeftButton();
 }
 
 }  // namespace autofill

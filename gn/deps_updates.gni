@@ -20,7 +20,6 @@ if (!is_ios) {
   import("//vivaldi/importer/deps_updates.gni")
   import("//vivaldi/installer/deps_updates.gni")
   import("//vivaldi/menus/deps_updates.gni")
-  import("//vivaldi/notes/deps_updates.gni")
   import("//vivaldi/prefs/deps_updates.gni")
   import("//vivaldi/proxy/deps_updates.gni")
   import("//vivaldi/renderer/deps_updates.gni")
@@ -102,8 +101,8 @@ if (!is_ios) {
         "//vivaldi/extraparts",
         "//vivaldi/calendar",
         "//vivaldi/menus",
-        "//vivaldi/notes",
-        "//vivaldi/notes:browser",
+        "//vivaldi/components/notes",
+        "//vivaldi/components/notes:browser",
         "//vivaldi/importer",
         "//vivaldi/sessions",
         "//vivaldi/sync:browser",
@@ -124,7 +123,6 @@ if (!is_ios) {
       }
       deps += [
         "//vivaldi/components/translate/renderer:renderer",
-        "//vivaldi/notes",
         "//vivaldi/prefs:prefs_files_generated",
       ]
     }

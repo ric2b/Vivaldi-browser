@@ -71,7 +71,7 @@
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/webui_url_constants.h"
-#include "chromeos/ash/components/drivefs/drivefs_pin_manager.h"
+#include "chromeos/ash/components/drivefs/drivefs_pinning_manager.h"
 #include "chromeos/ash/components/settings/timezone_settings.h"
 #include "components/account_id/account_id.h"
 #include "components/drive/drive_pref_names.h"
@@ -241,7 +241,7 @@ FileManagerPrivateGetPreferencesFunction::Run() {
                          !drive_integration_service->mount_failed();
   result.drive_sync_enabled_on_metered_network =
       !service->GetBoolean(drive::prefs::kDisableDriveOverCellular);
-  if (drive::util::IsDriveFsBulkPinningEnabled(profile)) {
+  if (drive::util::IsDriveFsBulkPinningAvailable(profile)) {
     result.drive_fs_bulk_pinning_enabled =
         service->GetBoolean(drive::prefs::kDriveFsBulkPinningEnabled);
   }
@@ -262,9 +262,11 @@ FileManagerPrivateGetPreferencesFunction::Run() {
   }
   result.folder_shortcuts = folder_shortcuts;
   result.office_file_moved_one_drive =
-      service->GetTime(prefs::kOfficeFileMovedToOneDrive).ToJsTime();
+      service->GetTime(prefs::kOfficeFileMovedToOneDrive)
+          .InMillisecondsFSinceUnixEpoch();
   result.office_file_moved_google_drive =
-      service->GetTime(prefs::kOfficeFileMovedToGoogleDrive).ToJsTime();
+      service->GetTime(prefs::kOfficeFileMovedToGoogleDrive)
+          .InMillisecondsFSinceUnixEpoch();
 
   return RespondNow(WithArguments(result.ToValue()));
 }
@@ -284,7 +286,7 @@ FileManagerPrivateSetPreferencesFunction::Run() {
     service->SetBoolean(drive::prefs::kDisableDriveOverCellular,
                         !drive_sync_enabled_on_metered_network);
   }
-  if (drive::util::IsDriveFsBulkPinningEnabled(profile) &&
+  if (drive::util::IsDriveFsBulkPinningAvailable(profile) &&
       params->change_info.drive_fs_bulk_pinning_enabled) {
     service->SetBoolean(drive::prefs::kDriveFsBulkPinningEnabled,
                         *params->change_info.drive_fs_bulk_pinning_enabled);
@@ -1015,7 +1017,7 @@ FileManagerPrivateInternalGetRecentFilesFunction::Run() {
     model->SetScanTimeout(base::Milliseconds(3000));
   }
   model->GetRecentFiles(
-      file_system_context.get(), source_url(), file_type,
+      file_system_context.get(), source_url(), params->query, file_type,
       params->invalidate_cache,
       base::BindOnce(
           &FileManagerPrivateInternalGetRecentFilesFunction::OnGetRecentFiles,

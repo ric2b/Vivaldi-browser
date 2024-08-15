@@ -84,6 +84,7 @@ ci.builder(
         category = "linux asan",
         short_name = "dbg",
     ),
+    contact_team_email = "chrome-sanitizer-builder-owners@google.com",
     reclient_jobs = 250,
 )
 
@@ -114,6 +115,7 @@ ci.builder(
         category = "linux asan|x64 v8-ARM",
         short_name = "dbg",
     ),
+    contact_team_email = "v8-infra@google.com",
 )
 
 ci.builder(
@@ -142,6 +144,7 @@ ci.builder(
         category = "linux asan",
         short_name = "rel",
     ),
+    contact_team_email = "chrome-sanitizer-builder-owners@google.com",
     reclient_jobs = 250,
 )
 
@@ -172,6 +175,7 @@ ci.builder(
         category = "linux asan|x64 v8-ARM",
         short_name = "rel",
     ),
+    contact_team_email = "v8-infra@google.com",
 )
 
 ci.builder(
@@ -214,6 +218,7 @@ ci.builder(
         category = "centipede",
         short_name = "centipede",
     ),
+    contact_team_email = "chrome-deet-core@google.com",
 )
 
 ci.builder(
@@ -243,6 +248,7 @@ ci.builder(
         category = "linux asan|x64 v8-ARM",
         short_name = "med",
     ),
+    contact_team_email = "v8-infra@google.com",
 )
 
 ci.builder(
@@ -274,6 +280,7 @@ ci.builder(
     console_view_entry = consoles.console_view_entry(
         category = "cros asan",
     ),
+    contact_team_email = "chrome-sanitizer-builder-owners@google.com",
     reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
 )
 
@@ -305,6 +312,7 @@ ci.builder(
         category = "linux msan",
         short_name = "org",
     ),
+    contact_team_email = "chrome-sanitizer-builder-owners@google.com",
     reclient_jobs = 250,
 )
 
@@ -336,6 +344,7 @@ ci.builder(
         category = "linux msan",
         short_name = "rel",
     ),
+    contact_team_email = "chrome-sanitizer-builder-owners@google.com",
     reclient_jobs = 250,
 )
 
@@ -368,6 +377,7 @@ ci.builder(
         category = "mac asan",
         short_name = "rel",
     ),
+    contact_team_email = "chrome-sanitizer-builder-owners@google.com",
 )
 
 ci.builder(
@@ -428,6 +438,7 @@ ci.builder(
         category = "linux tsan",
         short_name = "dbg",
     ),
+    contact_team_email = "chrome-sanitizer-builder-owners@google.com",
     reclient_jobs = 250,
 )
 
@@ -458,6 +469,7 @@ ci.builder(
         category = "linux tsan",
         short_name = "rel",
     ),
+    contact_team_email = "chrome-sanitizer-builder-owners@google.com",
     reclient_jobs = 250,
 )
 
@@ -484,6 +496,7 @@ ci.builder(
         category = "linux UBSan",
         short_name = "rel",
     ),
+    contact_team_email = "chrome-sanitizer-builder-owners@google.com",
     reclient_jobs = 250,
 )
 
@@ -511,6 +524,7 @@ ci.builder(
         category = "linux UBSan",
         short_name = "vpt",
     ),
+    contact_team_email = "chrome-sanitizer-builder-owners@google.com",
     reclient_jobs = 250,
 )
 
@@ -542,6 +556,7 @@ ci.builder(
         category = "win asan",
         short_name = "rel",
     ),
+    contact_team_email = "chrome-sanitizer-builder-owners@google.com",
     reclient_jobs = reclient.jobs.LOW_JOBS_FOR_CI,
 )
 
@@ -573,6 +588,7 @@ ci.builder(
         category = "win asan",
         short_name = "med",
     ),
+    contact_team_email = "chrome-sanitizer-builder-owners@google.com",
     reclient_jobs = reclient.jobs.LOW_JOBS_FOR_CI,
 )
 
@@ -586,6 +602,7 @@ ci.builder(
         category = "libfuzz",
         short_name = "chromeos-asan",
     ),
+    contact_team_email = "chrome-deet-core@google.com",
     execution_timeout = 4 * time.hour,
     reclient_jobs = reclient.jobs.LOW_JOBS_FOR_CI,
 )
@@ -599,6 +616,7 @@ ci.builder(
         category = "libfuzz",
         short_name = "ios",
     ),
+    contact_team_email = "chrome-deet-core@google.com",
     execution_timeout = 4 * time.hour,
     xcode = xcode.x14main,
 )
@@ -613,6 +631,8 @@ ci.builder(
         category = "libfuzz",
         short_name = "linux",
     ),
+    contact_team_email = "chrome-deet-core@google.com",
+    execution_timeout = 4 * time.hour,
     reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
 )
 
@@ -627,6 +647,7 @@ ci.builder(
         category = "libfuzz",
         short_name = "linux-dbg",
     ),
+    contact_team_email = "chrome-deet-core@google.com",
     execution_timeout = 4 * time.hour,
     reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
 )
@@ -642,6 +663,7 @@ ci.builder(
         category = "libfuzz",
         short_name = "linux-msan",
     ),
+    contact_team_email = "chrome-deet-core@google.com",
     reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
 )
 
@@ -657,6 +679,7 @@ ci.builder(
         category = "libfuzz",
         short_name = "linux-ubsan",
     ),
+    contact_team_email = "chrome-deet-core@google.com",
     execution_timeout = 5 * time.hour,
     reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
 )
@@ -671,6 +694,7 @@ ci.builder(
         category = "libfuzz",
         short_name = "arm64",
     ),
+    contact_team_email = "v8-infra@google.com",
 )
 
 ci.builder(
@@ -683,6 +707,7 @@ ci.builder(
         category = "libfuzz",
         short_name = "arm64-dbg",
     ),
+    contact_team_email = "v8-infra@google.com",
 )
 
 ci.builder(
@@ -695,6 +720,7 @@ ci.builder(
         category = "libfuzz",
         short_name = "linux32",
     ),
+    contact_team_email = "chrome-deet-core@google.com",
     reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
 )
 
@@ -708,6 +734,7 @@ ci.builder(
         category = "libfuzz",
         short_name = "arm",
     ),
+    contact_team_email = "v8-infra@google.com",
     reclient_jobs = reclient.jobs.DEFAULT,
 )
 
@@ -721,6 +748,7 @@ ci.builder(
         category = "libfuzz",
         short_name = "arm-dbg",
     ),
+    contact_team_email = "v8-infra@google.com",
 )
 
 ci.builder(
@@ -732,6 +760,7 @@ ci.builder(
         category = "libfuzz",
         short_name = "mac-asan",
     ),
+    contact_team_email = "chrome-deet-core@google.com",
     execution_timeout = 4 * time.hour,
 )
 
@@ -746,6 +775,7 @@ ci.builder(
         category = "libfuzz",
         short_name = "win-asan",
     ),
+    contact_team_email = "chrome-deet-core@google.com",
     # crbug.com/1175182: Temporarily increase timeout
     # crbug.com/1372531: Increase timeout again
     execution_timeout = 6 * time.hour,

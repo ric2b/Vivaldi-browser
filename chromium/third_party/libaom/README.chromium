@@ -1,9 +1,8 @@
 Name: Alliance for Open Media Video Codec
 Short Name: libaom
 URL: https://aomedia.googlesource.com/aom/
-Version: 0
-Date: Monday August 28 2023
-Revision: 5f8db64abce68a3698fb732697ae50880bc9cac4
+Version: N/A
+Revision: 1dbe1c7fae2456f91ccc79fecb919e9ffea0727a
 CPEPrefix: cpe:/a:aomedia:aomedia:3.6.1
 License: BSD
 License File: source/libaom/LICENSE
@@ -41,7 +40,7 @@ after running roll_dep.py.
      ./cmake_update.sh
 
    This will also update this file with the new revision.
-   Update 'Version' and 'CPEPrefix' in this file if necessary.
+   Update 'Revision' and 'CPEPrefix' in this file if necessary.
 
 3. Amend the commit created by the first step:
 

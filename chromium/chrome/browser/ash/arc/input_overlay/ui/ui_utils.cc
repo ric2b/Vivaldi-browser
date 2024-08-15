@@ -4,6 +4,10 @@
 
 #include "chrome/browser/ash/arc/input_overlay/ui/ui_utils.h"
 
+#include "ash/public/cpp/shelf_config.h"
+#include "ash/public/cpp/shelf_types.h"
+#include "ash/root_window_controller.h"
+#include "ash/shelf/shelf.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ash/arc/input_overlay/constants.h"
@@ -129,20 +133,29 @@ std::u16string GetDisplayTextAccessibleName(const std::u16string& text) {
   }
 }
 
-int GetIndexOfActionName(const std::vector<std::u16string>& action_names,
-                         const std::u16string& action_name) {
-  auto it = std::find(action_names.begin(), action_names.end(), action_name);
-  return it == action_names.end() ? -1 : it - action_names.begin();
-}
+gfx::Rect CalculateAvailableBounds(aura::Window* root_window) {
+  DCHECK(root_window->IsRootWindow());
 
-std::u16string GetActionNameAtIndex(
-    const std::vector<std::u16string>& action_names,
-    int index) {
-  if (index < 0 || index >= static_cast<int>(action_names.size())) {
-    // TODO(b/274690042): Replace placeholder text with localized strings.
-    return u"Unassigned";
+  auto* shelf = ash::RootWindowController::ForWindow(root_window)->shelf();
+  DCHECK(shelf);
+  if (!shelf->IsVisible()) {
+    return root_window->bounds();
   }
-  return action_names[index];
+
+  int x = 0, y = 0;
+  int width = root_window->bounds().width();
+  int height = root_window->bounds().height();
+  const int shelf_size = ash::ShelfConfig::Get()->shelf_size();
+  if (shelf->alignment() == ash::ShelfAlignment::kLeft) {
+    x += shelf_size;
+    width -= shelf_size;
+  } else if (shelf->alignment() == ash::ShelfAlignment::kRight) {
+    width -= shelf_size;
+  } else {
+    // Include `kBottom` and `kBottomLocked`. Shelf has no alignment on top.
+    height -= shelf_size;
+  }
+  return gfx::Rect(x, y, width, height);
 }
 
 }  // namespace arc::input_overlay

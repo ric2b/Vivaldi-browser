@@ -11,18 +11,18 @@
 #include <unordered_set>
 #include <utility>
 
-#include "base/uuid.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/ranges/algorithm.h"
 #include "base/trace_event/trace_event.h"
+#include "base/uuid.h"
+#include "components/notes/note_node.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/model/conflict_resolution.h"
 #include "components/sync/protocol/entity_metadata.pb.h"
 #include "components/sync/protocol/unique_position.pb.h"
-#include "notes/note_node.h"
-#include "notes/notes_model.h"
+#include "sync/notes/note_model_view.h"
 #include "sync/notes/note_specifics_conversions.h"
 #include "sync/notes/synced_note_tracker_entity.h"
 
@@ -136,7 +136,7 @@ base::Uuid GetParentUuidInUpdate(const syncer::EntityData& update_entity) {
 void ApplyRemoteUpdate(const syncer::UpdateResponseData& update,
                        const SyncedNoteTrackerEntity* tracked_entity,
                        const SyncedNoteTrackerEntity* new_parent_tracked_entity,
-                       vivaldi::NotesModel* model,
+                       NoteModelView* model,
                        SyncedNoteTracker* tracker) {
   const syncer::EntityData& update_entity = update.entity;
   DCHECK(!update_entity.is_deleted());
@@ -187,7 +187,7 @@ void ApplyRemoteUpdate(const syncer::UpdateResponseData& update,
 }  // namespace
 
 NoteRemoteUpdatesHandler::NoteRemoteUpdatesHandler(
-    vivaldi::NotesModel* notes_model,
+    NoteModelView* notes_model,
     SyncedNoteTracker* note_tracker)
     : notes_model_(notes_model), note_tracker_(note_tracker) {
   DCHECK(notes_model);

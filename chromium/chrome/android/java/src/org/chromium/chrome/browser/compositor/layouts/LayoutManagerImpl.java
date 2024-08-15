@@ -84,7 +84,6 @@ import java.util.Map;
 
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.night_mode.GlobalNightModeStateProviderHolder;
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
@@ -323,7 +322,6 @@ public class LayoutManagerImpl
         mTopUiThemeColorProvider = topUiThemeColorProvider;
         mContext = host.getContext();
 
-        // clang-format off
         // Overlays are ordered back (closest to the web content) to front.
         Class[] overlayOrder = new Class[] {
                 HistoryNavigationCoordinator.getSceneOverlayClass(),
@@ -349,7 +347,6 @@ public class LayoutManagerImpl
                     ContextualSearchPanel.class
             };
         }
-        // clang-format on
 
         for (int i = 0; i < overlayOrder.length; i++) mOverlayOrderMap.put(overlayOrder[i], i);
 
@@ -1031,11 +1028,6 @@ public class LayoutManagerImpl
     public void startHiding(int nextTabId, boolean hintAtTabSelection) {
         requestUpdate();
         if (hintAtTabSelection) {
-            // TODO(crbug.com/1108496): Remove after migrates to LayoutStateObserver.
-            for (SceneChangeObserver observer : mSceneChangeObservers) {
-                observer.onTabSelectionHinted(nextTabId);
-            }
-
             for (LayoutStateObserver observer : mLayoutObservers) {
                 observer.onTabSelectionHinted(nextTabId);
             }

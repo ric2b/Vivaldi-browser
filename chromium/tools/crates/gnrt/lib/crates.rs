@@ -18,6 +18,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use anyhow::Context;
 use log::{error, warn};
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -285,17 +286,28 @@ pub struct CrateFiles {
     /// may contain .rs files as well that are part of other crates and which
     /// may be include()'d or used through module paths.
     pub inputs: Vec<PathBuf>,
+    /// Like `sources` but for the crate's build script.
+    pub build_script_sources: Vec<PathBuf>,
+    /// Like `inputs` but for the crate's build script.
+    pub build_script_inputs: Vec<PathBuf>,
 }
 
 impl CrateFiles {
     fn new() -> Self {
-        Self { sources: vec![], inputs: vec![] }
+        Self {
+            sources: vec![],
+            inputs: vec![],
+            build_script_sources: vec![],
+            build_script_inputs: vec![],
+        }
     }
 
     /// Sorts the CrateFiles for a deterministic output.
     fn sort(&mut self) {
         self.sources.sort_unstable();
         self.inputs.sort_unstable();
+        self.build_script_sources.sort_unstable();
+        self.build_script_inputs.sort_unstable();
     }
 }
 
@@ -315,7 +327,7 @@ pub struct ThirdPartySource {
 
 impl ThirdPartySource {
     /// Collects set of vendored crates on disk.
-    pub fn new(crates_path: &Path) -> io::Result<Self> {
+    pub fn new(crates_path: &Path) -> anyhow::Result<Self> {
         let mut crate_versions = HashMap::<String, Vec<Version>>::new();
         let mut all_crate_files = HashMap::new();
 
@@ -433,7 +445,7 @@ pub fn std_crate_path(id: &VendoredCrate) -> PathBuf {
 pub fn collect_std_crate_files<'a>(
     p: &deps::Package,
     config: &BuildConfig,
-) -> io::Result<(VendoredCrate, CrateFiles)> {
+) -> anyhow::Result<(VendoredCrate, CrateFiles)> {
     // We only look at lib targets here because these are stdlib targets, and thus
     // we only are building the libs. We're not building bins even if they existed.
     let lib_target = p.lib_target.as_ref().expect("dependency had no lib target");
@@ -444,6 +456,10 @@ pub fn collect_std_crate_files<'a>(
         crate_config.iter().flat_map(|crate_config| &crate_config.extra_src_roots);
     let extra_input_roots =
         crate_config.iter().flat_map(|crate_config| &crate_config.extra_input_roots);
+    let extra_build_script_src_roots =
+        crate_config.iter().flat_map(|crate_config| &crate_config.extra_build_script_src_roots);
+    let extra_build_script_input_roots =
+        crate_config.iter().flat_map(|crate_config| &crate_config.extra_build_script_input_roots);
 
     let mut files = CrateFiles::new();
     recurse_crate_files(&root_dir, &mut |filepath| {
@@ -457,6 +473,24 @@ pub fn collect_std_crate_files<'a>(
     for path in extra_input_roots {
         recurse_crate_files(&root_dir.to_owned().join(path), &mut |filepath| {
             collect_crate_file(&mut files, CollectCrateFiles::ExternalInputsOnly, filepath)
+        })?;
+    }
+    for path in extra_build_script_src_roots {
+        recurse_crate_files(&root_dir.to_owned().join(path), &mut |filepath| {
+            collect_crate_file(
+                &mut files,
+                CollectCrateFiles::BuildScriptExternalSourcesAndInputs,
+                filepath,
+            )
+        })?;
+    }
+    for path in extra_build_script_input_roots {
+        recurse_crate_files(&root_dir.to_owned().join(path), &mut |filepath| {
+            collect_crate_file(
+                &mut files,
+                CollectCrateFiles::BuildScriptExternalInputsOnly,
+                filepath,
+            )
         })?;
     }
     files.sort();
@@ -521,31 +555,47 @@ enum CollectCrateFiles {
     ExternalSourcesAndInputs,
     /// Like ExternalSourcesAndInputs but excludes .rs files.
     ExternalInputsOnly,
+    /// Like `ExternalSourcesAndInputs` but for build scripts.
+    BuildScriptExternalSourcesAndInputs,
+    /// Like `ExternalInputsOnly` but for build scripts.
+    BuildScriptExternalInputsOnly,
 }
 
 // Adds a `filepath` to `CrateFiles` depending on the type of file and the
 // `mode` of collection.
-fn collect_crate_file(files: &mut CrateFiles, mode: CollectCrateFiles, filepath: PathBuf) {
+fn collect_crate_file(files: &mut CrateFiles, mode: CollectCrateFiles, filepath: &Path) {
     match filepath.extension().map(std::ffi::OsStr::to_str).flatten() {
         Some("rs") => match mode {
-            CollectCrateFiles::Internal => files.sources.push(filepath),
-            CollectCrateFiles::ExternalSourcesAndInputs => files.inputs.push(filepath),
+            CollectCrateFiles::Internal => files.sources.push(filepath.to_owned()),
+            CollectCrateFiles::ExternalSourcesAndInputs => files.inputs.push(filepath.to_owned()),
             CollectCrateFiles::ExternalInputsOnly => (),
+            CollectCrateFiles::BuildScriptExternalSourcesAndInputs => {
+                files.build_script_inputs.push(filepath.to_owned())
+            }
+            CollectCrateFiles::BuildScriptExternalInputsOnly => (),
         },
         // md: Markdown files are commonly include!()'d into source code as docs.
         // h: cxxbridge_cmd include!()'s its .h file into it.
-        Some("md") | Some("h") => files.inputs.push(filepath),
+        Some("md") | Some("h") => match mode {
+            CollectCrateFiles::Internal
+            | CollectCrateFiles::ExternalSourcesAndInputs
+            | CollectCrateFiles::ExternalInputsOnly => files.inputs.push(filepath.to_owned()),
+            CollectCrateFiles::BuildScriptExternalSourcesAndInputs
+            | CollectCrateFiles::BuildScriptExternalInputsOnly => {
+                files.build_script_inputs.push(filepath.to_owned())
+            }
+        },
         _ => (),
     };
 }
 
-// Recursively visits all files under `dir` and calls `f` on each one.
-fn recurse_crate_files(dir: &Path, f: &mut dyn FnMut(PathBuf)) -> io::Result<()> {
-    fn recurse(dir: &Path, root: &Path, f: &mut dyn FnMut(PathBuf)) -> io::Result<()> {
-        'each_dir_entry: for r in std::fs::read_dir(dir)? {
-            let entry = r?;
-            let path = entry.path();
-            let is_dir = entry.metadata()?.is_dir();
+// Recursively visits all files under `path` and calls `f` on each one.
+//
+// The `path` may be a single file or a directory.
+fn recurse_crate_files(path: &Path, f: &mut dyn FnMut(&Path)) -> anyhow::Result<()> {
+    fn recurse(path: &Path, root: &Path, f: &mut dyn FnMut(&Path)) -> anyhow::Result<()> {
+        let meta = std::fs::metadata(path).with_context(|| format!("missing path {:?}", path))?;
+        if !meta.is_dir() {
             // Working locally can produce files in tree that should not be considered, and
             // which are not part of the git repository.
             //
@@ -559,14 +609,20 @@ fn recurse_crate_files(dir: &Path, f: &mut dyn FnMut(PathBuf)) -> io::Result<()>
             const SKIP_PREFIXES: [&str; 3] = [".devcontainer", ".vscode", "target"];
             for skip in SKIP_PREFIXES {
                 if path.starts_with(root.join(Path::new(skip))) {
-                    continue 'each_dir_entry;
+                    return Ok(());
                 }
             }
-            if is_dir { recurse(&path, root, f)? } else { f(path) }
+            f(path)
+        } else {
+            for r in std::fs::read_dir(path).with_context(|| format!("dir at {:?}", path))? {
+                let entry = r?;
+                let path = entry.path();
+                recurse(&path, root, f)?;
+            }
         }
         Ok(())
     }
-    recurse(dir, dir, f)
+    recurse(path, path, f)
 }
 
 /// Get a crate's ID and parsed manifest from its path. Returns `Ok(None)` if

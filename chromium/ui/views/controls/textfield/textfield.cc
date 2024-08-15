@@ -70,6 +70,8 @@
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/painter.h"
 #include "ui/views/style/platform_style.h"
+#include "ui/views/style/typography.h"
+#include "ui/views/style/typography_provider.h"
 #include "ui/views/views_delegate.h"
 #include "ui/views/views_features.h"
 #include "ui/views/widget/widget.h"
@@ -81,6 +83,7 @@
 
 #if BUILDFLAG(IS_LINUX)
 #include "ui/base/ime/linux/text_edit_command_auralinux.h"
+#include "ui/base/ime/text_input_flags.h"
 #include "ui/linux/linux_ui.h"
 #endif
 
@@ -234,6 +237,7 @@ Textfield::Textfield()
       selection_controller_(this) {
   set_context_menu_controller(this);
   set_drag_controller(this);
+  GetViewAccessibility().set_needs_ax_tree_manager(true);
   auto cursor_view = std::make_unique<View>();
   cursor_view->SetPaintToLayer(ui::LAYER_SOLID_COLOR);
   cursor_view->GetViewAccessibility().OverrideIsIgnored(true);
@@ -411,8 +415,9 @@ bool Textfield::HasSelection(bool primary_only) const {
 }
 
 SkColor Textfield::GetTextColor() const {
-  return text_color_.value_or(GetColorProvider()->GetColor(
-      style::GetColorId(style::CONTEXT_TEXTFIELD, GetTextStyle())));
+  return text_color_.value_or(
+      GetColorProvider()->GetColor(TypographyProvider::Get().GetColorId(
+          style::CONTEXT_TEXTFIELD, GetTextStyle())));
 }
 
 void Textfield::SetTextColor(SkColor color) {
@@ -746,7 +751,8 @@ bool Textfield::OnKeyPressed(const ui::KeyEvent& event) {
   auto* linux_ui = ui::LinuxUi::instance();
   std::vector<ui::TextEditCommandAuraLinux> commands;
   if (!handled && linux_ui &&
-      linux_ui->GetTextEditCommandsForEvent(event, &commands)) {
+      linux_ui->GetTextEditCommandsForEvent(event, ui::TEXT_INPUT_FLAG_NONE,
+                                            &commands)) {
     for (const auto& command : commands) {
       if (IsTextEditCommandEnabled(command.command())) {
         ExecuteTextEditCommand(command.command());
@@ -928,7 +934,8 @@ bool Textfield::SkipDefaultKeyEventProcessing(const ui::KeyEvent& event) {
   // Skip any accelerator handling that conflicts with custom keybindings.
   auto* linux_ui = ui::LinuxUi::instance();
   std::vector<ui::TextEditCommandAuraLinux> commands;
-  if (linux_ui && linux_ui->GetTextEditCommandsForEvent(event, &commands)) {
+  if (linux_ui && linux_ui->GetTextEditCommandsForEvent(
+                      event, ui::TEXT_INPUT_FLAG_NONE, &commands)) {
     const auto is_enabled = [this](const auto& command) {
       return IsTextEditCommandEnabled(command.command());
     };
@@ -1030,6 +1037,11 @@ void Textfield::GetAccessibleNodeData(ui::AXNodeData* node_data) {
     if (GetReadOnly())
       node_data->SetRestriction(ax::mojom::Restriction::kReadOnly);
   }
+  node_data->AddIntAttribute(
+      ax::mojom::IntAttribute::kTextDirection,
+      static_cast<int32_t>(GetTextDirection() == base::i18n::RIGHT_TO_LEFT
+                               ? ax::mojom::WritingDirection::kRtl
+                               : ax::mojom::WritingDirection::kLtr));
   if (text_input_type_ == ui::TEXT_INPUT_TYPE_PASSWORD) {
     node_data->AddState(ax::mojom::State::kProtected);
     node_data->SetValue(std::u16string(
@@ -2591,12 +2603,18 @@ void Textfield::UpdateDefaultBorder() {
 }
 
 void Textfield::UpdateSelectionTextColor() {
+  if (!GetWidget()) {
+    return;
+  }
   GetRenderText()->set_selection_color(GetSelectionTextColor());
   OnPropertyChanged(&model_ + kTextfieldSelectionTextColor,
                     kPropertyEffectsPaint);
 }
 
 void Textfield::UpdateSelectionBackgroundColor() {
+  if (!GetWidget()) {
+    return;
+  }
   GetRenderText()->set_selection_background_focused_color(
       GetSelectionBackgroundColor());
   OnPropertyChanged(&model_ + kTextfieldSelectionBackgroundColor,
@@ -2675,7 +2693,7 @@ void Textfield::PaintTextAndCursor(gfx::Canvas* canvas) {
     canvas->DrawStringRectWithFlags(
         GetPlaceholderText(), placeholder_font_list_.value_or(GetFontList()),
         placeholder_text_color_.value_or(
-            GetColorProvider()->GetColor(style::GetColorId(
+            GetColorProvider()->GetColor(TypographyProvider::Get().GetColorId(
                 style::CONTEXT_TEXTFIELD_PLACEHOLDER,
                 GetInvalid() ? style::STYLE_INVALID : style::STYLE_PRIMARY))),
         render_text->display_rect(), placeholder_text_draw_flags);

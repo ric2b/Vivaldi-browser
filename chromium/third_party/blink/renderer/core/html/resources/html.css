@@ -522,6 +522,10 @@ input[type="url" i] {
   padding-inline: 2px;
 }
 
+input[type="tel" i] {
+  direction: ltr;
+}
+
 input::-webkit-inner-spin-button {
     appearance: auto;
     display: inline-block;
@@ -592,6 +596,12 @@ input[type="password" i]::-internal-input-suggested.reveal-password {
     -webkit-text-security: none;
 }
 
+input[type="password" i]::-internal-input-suggested.fade-out-password {
+    width: fit-content;
+    -webkit-mask: linear-gradient(to right, #000 50%, #0000);
+    mask: linear-gradient(to right, #000 50%, #0000);
+}
+
 input[type="password" i]::-internal-reveal {
   width: 1.3em;
   height: 1.3em;
@@ -613,6 +623,12 @@ input[type="password" i]::-internal-reveal:hover,
 input[type="password" i]::-internal-reveal:focus {
   border-radius: 1px;
   cursor: pointer;
+}
+
+input[type="password" i]::-internal-strong {
+  color: rgb(66, 133, 244);
+  font-family: roboto;
+  -webkit-text-security: none;
 }
 
 input[type="hidden" i], input[type="image" i], input[type="file" i] {
@@ -911,6 +927,14 @@ input[type="week" i][readonly]::-webkit-clear-button,
 input[type="week" i][readonly]::-webkit-inner-spin-button,
 input[readonly]::-webkit-calendar-picker-indicator {
     visibility: hidden;
+}
+
+/* Form controls that measure the inline size without doing actual layout
+   need to disable `text-autospace`, if their content can be affected by
+   the property. crbug.com/1484863 */
+input[type="date" i], input[type="datetime-local" i], input[type="month" i],
+input[type="week" i], select {
+    text-autospace: no-autospace !important;
 }
 
 select {

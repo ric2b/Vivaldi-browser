@@ -10,7 +10,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
 #include "chrome/app/chrome_command_ids.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -485,8 +484,7 @@ IN_PROC_BROWSER_TEST_F(ViewSourceTest,
   EXPECT_TRUE(request->trusted_params->isolation_info.IsEqualForTesting(
       net::IsolationInfo::Create(net::IsolationInfo::RequestType::kMainFrame,
                                  origin, origin,
-                                 net::SiteForCookies::FromOrigin(origin),
-                                 std::set<net::SchemefulSite>())));
+                                 net::SiteForCookies::FromOrigin(origin))));
 }
 
 class ViewSourceWithSplitCacheTest

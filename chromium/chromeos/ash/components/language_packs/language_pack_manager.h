@@ -6,11 +6,13 @@
 #define CHROMEOS_ASH_COMPONENTS_LANGUAGE_PACKS_LANGUAGE_PACK_MANAGER_H_
 
 #include <string>
+#include <string_view>
 
 #include "base/containers/flat_map.h"
 #include "base/functional/callback.h"
 #include "base/no_destructor.h"
 #include "base/observer_list.h"
+#include "base/scoped_observation.h"
 #include "base/strings/strcat.h"
 #include "chromeos/ash/components/dbus/dlcservice/dlcservice_client.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -90,6 +92,9 @@ struct PackResult {
   // If there is any error in the operation that is requested, it is indicated
   // here.
   ErrorCode operation_error;
+
+  // The feature ID of the pack.
+  std::string feature_id;
 
   // The resolved language code that this Pack is associated with.
   // Often this field matches the locale requested by the client, but due to
@@ -227,9 +232,6 @@ class LanguagePackManager : public DlcserviceClient::Observer {
   // Removes an observer from the observer list.
   void RemoveObserver(Observer* observer);
 
-  // Must be called before using the class.
-  void Initialize();
-
   // Testing only: called to free up resources since this object should never
   // be destroyed.
   void ResetForTesting();
@@ -248,9 +250,13 @@ class LanguagePackManager : public DlcserviceClient::Observer {
   void OnDlcStateChanged(const dlcservice::DlcState& dlc_state) override;
 
   // Notification method called upon change of DLCs state.
-  void NotifyPackStateChanged(const dlcservice::DlcState& dlc_state);
+  void NotifyPackStateChanged(std::string_view feature_id,
+                              std::string_view locale,
+                              const dlcservice::DlcState& dlc_state);
 
   base::ObserverList<Observer> observers_;
+  base::ScopedObservation<DlcserviceClient, DlcserviceClient::Observer> obs_{
+      this};
 };
 
 }  // namespace ash::language_packs

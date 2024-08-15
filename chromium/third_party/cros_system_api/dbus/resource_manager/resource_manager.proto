@@ -1,0 +1,44 @@
+// Copyright 2023 The ChromiumOS Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+syntax = "proto3";
+
+option optimize_for = LITE_RUNTIME;
+
+package resource_manager;
+
+option go_package = "chromiumos/system_api/resource_manager_proto";
+
+message ReportBackgroundProcesses {
+  // The component reporting the background processes.
+  enum Component {
+    ASH = 0;
+    LACROS = 1;
+  }
+  Component component = 1;
+
+  // The list of the background processes.
+  repeated int32 pids = 2;
+}
+
+// The browser types.
+enum BrowserType {
+  ASH = 0;
+  LACROS = 1;
+}
+
+message ReportBrowserProcesses {
+  // The browser type reporting the process lists.
+  BrowserType browser_type = 1;
+
+  // Potential extension to Process:
+  //   u64 last_visible_time
+  message Process {
+    int32 pid = 1;
+    bool protected = 2;
+    bool visible = 3;
+    bool focused = 4;
+  }
+  repeated Process processes = 2;
+}

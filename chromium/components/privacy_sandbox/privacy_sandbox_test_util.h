@@ -15,6 +15,7 @@
 #include "components/privacy_sandbox/privacy_sandbox_attestations/privacy_sandbox_attestations.h"
 #include "components/privacy_sandbox/privacy_sandbox_prefs.h"
 #include "components/privacy_sandbox/privacy_sandbox_settings.h"
+#include "components/privacy_sandbox/tpcd_experiment_eligibility.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "url/origin.h"
@@ -87,6 +88,32 @@ class MockPrivacySandboxSettingsDelegate
     });
   }
 
+  void SetUpIsCookieDeprecationExperimentEligibleResponse(bool eligible) {
+    ON_CALL(*this, IsCookieDeprecationExperimentEligible).WillByDefault([=]() {
+      return eligible;
+    });
+  }
+
+  void SetUpGetCookieDeprecationExperimentCurrentEligibility(
+      privacy_sandbox::TpcdExperimentEligibility::Reason eligibility_reason) {
+    ON_CALL(*this, GetCookieDeprecationExperimentCurrentEligibility)
+        .WillByDefault([=]() {
+          return privacy_sandbox::TpcdExperimentEligibility(eligibility_reason);
+        });
+  }
+
+  void SetUpIsCookieDeprecationLabelAllowedResponse(bool allowed) {
+    ON_CALL(*this, IsCookieDeprecationLabelAllowed).WillByDefault([=]() {
+      return allowed;
+    });
+  }
+
+  void SetUpAreThirdPartyCookiesBlockedByCookieDeprecationExperimentResponse(
+      bool result) {
+    ON_CALL(*this, AreThirdPartyCookiesBlockedByCookieDeprecationExperiment)
+        .WillByDefault([=]() { return result; });
+  }
+
   MOCK_METHOD(bool, IsPrivacySandboxRestricted, (), (const, override));
   MOCK_METHOD(bool,
               IsPrivacySandboxCurrentlyUnrestricted,
@@ -96,6 +123,19 @@ class MockPrivacySandboxSettingsDelegate
   MOCK_METHOD(bool, IsIncognitoProfile, (), (const, override));
   MOCK_METHOD(bool, HasAppropriateTopicsConsent, (), (const, override));
   MOCK_METHOD(bool, IsSubjectToM1NoticeRestricted, (), (const, override));
+  MOCK_METHOD(bool,
+              IsCookieDeprecationExperimentEligible,
+              (),
+              (const, override));
+  MOCK_METHOD(privacy_sandbox::TpcdExperimentEligibility,
+              GetCookieDeprecationExperimentCurrentEligibility,
+              (),
+              (const, override));
+  MOCK_METHOD(bool, IsCookieDeprecationLabelAllowed, (), (const, override));
+  MOCK_METHOD(bool,
+              AreThirdPartyCookiesBlockedByCookieDeprecationExperiment,
+              (),
+              (const, override));
 };
 
 // A declarative test case is a collection of key value pairs, which each define
@@ -194,6 +234,7 @@ enum class OutputKey {
   kIsFledgeSellAllowedMetric = 44,
   kIsFledgeBuyAllowedMetric = 45,
   kIsCookieDeprecationLabelAllowedForContext = 46,
+  kIsPrivateAggregationDebugModeAllowed = 47,
 };
 
 // To allow multiple input keys to map to the same value, without having to

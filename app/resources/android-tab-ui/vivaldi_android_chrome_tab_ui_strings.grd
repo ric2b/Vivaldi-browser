@@ -116,6 +116,18 @@
   </translations>
   <release seq="1">
     <messages fallback_to_english="true">
+      <!-- Close All Tabs Dialog Strings -->
+      <message name="IDS_CLOSE_ALL_TABS_DIALOG_MESSAGE_WITH_INCOGNITO_TABS" desc="When users click the menu item 'Close all tabs' in tab switcher, a dialog will pop up and this text is the message of the dialog. If there are any private tabs opened this message would warn users that those private tabs would be lost.">
+      {INCOGNITO_TABS_COUNT, plural,
+        =1 {You can find your closed tabs in Recent tabs under the Vivaldi main menu. Your private tab won't be available.}
+        other {You can find your closed tabs in Recent tabs under the Vivaldi main menu. Your # private tabs won't be available.}}
+      </message>
+      <message name="IDS_CLOSE_ALL_TABS_DIALOG_TITLE_INCOGNITO" desc="When users click the menu item 'Close all tabs' in tab switcher, a dialog will pop up and this text is the title of the dialog.">
+        Close all private tabs?
+      </message>
+      <message name="IDS_CLOSE_ALL_TABS_DIALOG_MESSAGE_INCOGNITO" desc="When users click the menu item 'Close all tabs' in tab switcher, a dialog will pop up and this text is the message of the dialog.">
+        Your activity in these private tabs will be removed from this device
+      </message>
     </messages>
   </release>
 </grit>

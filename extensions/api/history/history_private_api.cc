@@ -22,12 +22,12 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/browser/url_database.h"
+#include "components/sync/protocol/history_delete_directive_specifics.pb.h"
 #include "db/vivaldi_history_types.h"
 #include "extensions/schema/history_private.h"
 #include "extensions/tools/vivaldi_tools.h"
 
 using vivaldi::GetTime;
-using vivaldi::MilliSecondsFromTime;
 
 namespace extensions {
 
@@ -251,13 +251,15 @@ HistoryPrivateItem GetHistoryAndVisitItem(const history::URLResult& row,
     // If the row has visitTime, id is not unique. Caused by grouping.
     history_item.id = row.id();
   } else {
-    history_item.id = std::to_string(MilliSecondsFromTime(row.visit_time()));
+    history_item.id =
+        std::to_string(row.visit_time().InMillisecondsFSinceUnixEpoch());
   }
   history_item.is_bookmarked = bookmark_model->IsBookmarked(row.url());
-  history_item.visit_time = double(MilliSecondsFromTime(row.visit_time()));
+  history_item.visit_time = row.visit_time().InMillisecondsFSinceUnixEpoch();
   history_item.url = row.url().spec();
   history_item.title = base::UTF16ToUTF8(row.title());
-  history_item.last_visit_time = MilliSecondsFromTime(row.last_visit());
+  history_item.last_visit_time =
+      row.last_visit().InMillisecondsFSinceUnixEpoch();
   history_item.typed_count = row.typed_count();
   history_item.visit_count = row.visit_count();
 
@@ -288,11 +290,7 @@ ExtensionFunction::ResponseAction HistoryPrivateDeleteVisitsFunction::Run() {
   if (!ValidateUrl(params->details.url, &url, &error))
     return RespondNow(Error(error));
 
-  base::Time start_time = GetTime(params->details.start_time);
-  base::Time end_time = GetTime(params->details.end_time);
-
-  std::set<GURL> restrict_urls;
-  restrict_urls.insert(url);
+  base::Time time = GetTime(params->details.time);
 
   history::HistoryService* hs = GetFunctionCallerHistoryService(*this);
   if (!hs) {
@@ -300,8 +298,26 @@ ExtensionFunction::ResponseAction HistoryPrivateDeleteVisitsFunction::Run() {
     return RespondNow(NoArguments());
   }
 
-  hs->ExpireHistoryBetween(
-      restrict_urls, start_time, end_time, true,
+  // This implementation is copied from BrowsingHistoryService::RemoveVisits
+  std::vector<history::ExpireHistoryArgs> expire_list(1);
+  expire_list.back().urls.insert(url);
+  expire_list.back().SetTimeRangeForOneDay(time);
+
+  sync_pb::HistoryDeleteDirectiveSpecifics delete_directive;
+  sync_pb::GlobalIdDirective* global_id_directive =
+      delete_directive.mutable_global_id_directive();
+  global_id_directive->add_global_id(time.ToInternalValue());
+  global_id_directive->set_start_time_usec(
+      (expire_list.back().begin_time - base::Time::UnixEpoch())
+          .InMicroseconds());
+  base::Time end_time =
+      std::min(expire_list.back().end_time, base::Time::Now());
+  global_id_directive->set_end_time_usec(
+      (end_time - base::Time::UnixEpoch()).InMicroseconds() - 1);
+
+  hs->ProcessLocalDeleteDirective(delete_directive);
+  hs->ExpireHistory(
+      expire_list,
       base::BindOnce(&HistoryPrivateDeleteVisitsFunction::DeleteVisitComplete,
                      this),
       &task_tracker_);
@@ -370,7 +386,7 @@ std::unique_ptr<HistoryPrivateItem> GetVisitsItem(
   history_item->protocol = visit.url.spec();
   history_item->address = visit.url.host();
   history_item->title = base::UTF16ToUTF8(visit.title);
-  history_item->visit_time = double(MilliSecondsFromTime(visit.visit_time));
+  history_item->visit_time = visit.visit_time.InMillisecondsFSinceUnixEpoch();
   history_item->is_bookmarked = bookmark_model->IsBookmarked(visit.url);
   history_item->date_key = base::StringPrintf(
       "%04d-%02d-%02d", exploded.year, exploded.month, exploded.day_of_month);
@@ -444,9 +460,8 @@ ExtensionFunction::ResponseAction HistoryPrivateGetTypedHistoryFunction::Run() {
     LOG(ERROR) << "Unable to open database.";
     return RespondNow(NoArguments());
   }
-  hs->InMemoryDatabase()
-    ->GetVivaldiTypedHistory(params->query, prefix_keyword_id,
-                             params->max_results, &results);
+  hs->InMemoryDatabase()->GetVivaldiTypedHistory(
+      params->query, prefix_keyword_id, params->max_results, &results);
 
   std::vector<vivaldi::history_private::TypedHistoryItem> response;
   for (const auto& result : results) {
@@ -461,28 +476,6 @@ ExtensionFunction::ResponseAction HistoryPrivateGetTypedHistoryFunction::Run() {
 
   return RespondNow(ArgumentList(
       vivaldi::history_private::GetTypedHistory::Results::Create(response)));
-}
-
-ExtensionFunction::ResponseAction
-HistoryPrivateMigrateOldTypedUrlFunction::Run() {
-  absl::optional<vivaldi::history_private::MigrateOldTypedUrl::Params> params(
-      vivaldi::history_private::MigrateOldTypedUrl::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params);
-
-  history::HistoryService* hs = GetFunctionCallerHistoryService(*this);
-  if (!hs) {
-    NOTREACHED();
-    return RespondNow(NoArguments());
-  }
-
-  hs->AddPage(
-      GURL(params->url), base::Time::FromJsTime(params->time), 0, 0,
-      GURL(), history::RedirectList(),
-      HistoryPrivateAPI::PrivateHistoryTransitionToUiTransition(
-          params->transition_type),
-      history::SOURCE_BROWSED, false);
-
-  return RespondNow(NoArguments());
 }
 
 ExtensionFunction::ResponseAction
@@ -514,8 +507,8 @@ HistoryPrivateGetDetailedHistoryFunction::Run() {
 
   hs->QueryDetailedHistoryWStatement(
       sql_statement, search_text, max_hits,
-      base::BindOnce(
-        &HistoryPrivateGetDetailedHistoryFunction::SearchComplete, this),
+      base::BindOnce(&HistoryPrivateGetDetailedHistoryFunction::SearchComplete,
+                     this),
       &task_tracker_);
   return RespondLater();
 }
@@ -525,23 +518,25 @@ void HistoryPrivateGetDetailedHistoryFunction::SearchComplete(
   std::vector<vivaldi::history_private::DetailedHistoryItem> response;
   for (const auto& result : results) {
     vivaldi::history_private::DetailedHistoryItem item;
-    bool has_chain_start = ui::PAGE_TRANSITION_CHAIN_START &
-                        ui::PageTransitionGetQualifier(result.transition_type);
+    bool has_chain_start =
+        ui::PAGE_TRANSITION_CHAIN_START &
+        ui::PageTransitionGetQualifier(result.transition_type);
     bool has_chain_end = ui::PAGE_TRANSITION_CHAIN_END &
-                        ui::PageTransitionGetQualifier(result.transition_type);
+                         ui::PageTransitionGetQualifier(result.transition_type);
 
     item.id.assign(result.id);
     item.url.assign(result.url.spec());
     item.title.assign(result.title);
-    item.last_visit_time = MilliSecondsFromTime(result.last_visit_time);
+    item.last_visit_time =
+        result.last_visit_time.InMillisecondsFSinceUnixEpoch();
     item.visit_count = result.visit_count;
     item.typed_count = result.typed_count;
     item.is_bookmarked = result.is_bookmarked;
     item.transition_type =
-      HistoryPrivateAPI::UiTransitionToPrivateHistoryTransition(
-        result.transition_type);
+        HistoryPrivateAPI::UiTransitionToPrivateHistoryTransition(
+            result.transition_type);
     item.is_redirect = ui::PageTransitionIsRedirect(result.transition_type) &&
-                        !(has_chain_start || has_chain_end);
+                       !(has_chain_start || has_chain_end);
 
     response.push_back(std::move(item));
   }

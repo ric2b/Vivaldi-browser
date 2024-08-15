@@ -17,16 +17,10 @@
 
 namespace feed {
 
-BASE_DECLARE_FEATURE(kInterestFeedContentSuggestions);
 BASE_DECLARE_FEATURE(kInterestFeedV2);
 BASE_DECLARE_FEATURE(kInterestFeedV2Autoplay);
 BASE_DECLARE_FEATURE(kInterestFeedV2Hearts);
 BASE_DECLARE_FEATURE(kInterestFeedV2Scrolling);
-
-extern const base::FeatureParam<std::string> kDisableTriggerTypes;
-extern const base::FeatureParam<int> kTimeoutDurationSeconds;
-extern const base::FeatureParam<bool> kThrottleBackgroundFetches;
-extern const base::FeatureParam<bool> kOnlySetLastRefreshAttemptOnSuccess;
 
 // Feature that allows the client to automatically dismiss the notice card based
 // on the clicks and views on the notice card.
@@ -93,6 +87,8 @@ extern const base::FeatureParam<bool> kWebUiDisableContentSecurityPolicy;
 
 std::string GetFeedReferrerUrl();
 
+bool IsCormorantEnabledForLocale(std::string country);
+
 // Personalize feed for unsigned users.
 BASE_DECLARE_FEATURE(kPersonalizeFeedUnsignedUsers);
 
@@ -133,9 +129,6 @@ BASE_DECLARE_FEATURE(kFeedPerformanceStudy);
 // When enabled, allows the server to unilaterally alter capabilities sent
 // by the client, primarily to retroactively work around bugs.
 BASE_DECLARE_FEATURE(kSyntheticCapabilities);
-
-// Feature that enables Cormorant for users.
-BASE_DECLARE_FEATURE(kCormorant);
 
 // Feature that enables reporting feed user interaction reliability.
 BASE_DECLARE_FEATURE(kFeedUserInteractionReliabilityReport);

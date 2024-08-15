@@ -9,9 +9,11 @@
 #include <string>
 
 #include "base/containers/flat_set.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/values_test_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "components/aggregation_service/features.h"
 #include "components/attribution_reporting/source_type.mojom.h"
 #include "content/browser/aggregation_service/aggregatable_report.h"
 #include "content/browser/aggregation_service/aggregation_service_test_utils.h"
@@ -209,6 +211,7 @@ TEST(AttributionReportTest, ReportBody_DebugKeys) {
                       SourceBuilder(base::Time::UnixEpoch())
                           .SetSourceEventId(100)
                           .SetDebugKey(test_case.source_debug_key)
+                          .SetDebugCookieSet(true)
                           .SetRandomizedResponseRate(0.2)
                           .BuildStored())
             .SetTriggerData(5)
@@ -226,9 +229,8 @@ TEST(AttributionReportTest, ReportBody_Aggregatable) {
   })json");
 
   AttributionReport report =
-      ReportBuilder(
-          AttributionInfoBuilder().Build(),
-          SourceBuilder(base::Time::FromJavaTime(1234483200000)).BuildStored())
+      ReportBuilder(AttributionInfoBuilder().Build(),
+                    SourceBuilder().BuildStored())
           .SetAggregatableHistogramContributions(
               {AggregatableHistogramContribution(/*key=*/1, /*value=*/2)})
           .BuildAggregatableAttribution();
@@ -263,7 +265,13 @@ TEST(AttributionReportTest, PopulateAdditionalHeaders) {
 }
 
 TEST(AttributionReportTest, NullAggregatableReport) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeatureWithParameters(
+      ::aggregation_service::kAggregationServiceMultipleCloudProviders,
+      {{"aws_cloud", "https://aws.example.test"}});
+
   base::Value::Dict expected = base::test::ParseJsonDict(R"json({
+    "aggregation_coordinator_origin":"https://aws.example.test",
     "aggregation_service_payloads": [{
       "key_id": "key",
       "payload": "ABCD1234"

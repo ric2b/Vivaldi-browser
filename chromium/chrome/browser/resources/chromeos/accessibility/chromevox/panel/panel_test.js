@@ -25,7 +25,7 @@ ChromeVoxPanelTest = class extends ChromeVoxPanelTestBase {
           'ChromeVoxRange', '/chromevox/background/chromevox_range.js'),
       importModule(
           'CommandHandlerInterface',
-          '/chromevox/background/command_handler_interface.js'),
+          '/chromevox/background/input/command_handler_interface.js'),
       importModule('EventSource', '/chromevox/background/event_source.js'),
       importModule('EventSourceType', '/chromevox/common/event_source_type.js'),
       importModule(
@@ -82,19 +82,6 @@ ChromeVoxPanelTest = class extends ChromeVoxPanelTestBase {
       evt.target.value = query;
       this.getPanel().instance.menuManager_.onSearchBarQuery(evt);
     }.bind(this);
-  }
-
-  async waitForMenu(menuMsg) {
-    const menuManager = this.getPanel().instance.menuManager_;
-
-    // Menu and menu item updates occur in a different js context, so tests need
-    // to wait until an update has been made.
-    return new Promise(
-        resolve =>
-            this.addCallbackPostMethod(menuManager, 'activateMenu', () => {
-              assertEquals(menuMsg, menuManager.activeMenu_.menuMsg);
-              resolve();
-            }, () => true));
   }
 
   assertActiveMenuItem(menuMsg, menuItemTitle, opt_menuItemShortcut) {

@@ -7,8 +7,9 @@ import '//resources/cr_elements/chromeos/cros_color_overrides.css.js';
 
 import {CrInputElement} from 'chrome://resources/cr_elements/cr_input/cr_input.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
-import {assertInstanceof, assertNotReached} from 'chrome://resources/js/assert_ts.js';
+import {assertInstanceof, assertNotReached} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
+import {PasswordComplexity, PasswordFactorEditor} from 'chrome://resources/mojo/chromeos/ash/services/auth_factor_config/public/mojom/auth_factor_config.mojom-webui.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getTemplate} from './set_local_password_input.html.js';
@@ -96,12 +97,12 @@ export class SetLocalPasswordInputElement extends
     };
   }
 
-  public value: string|null;
+  value: string|null;
 
   private firstInputValidity_: null|FirstInputValidity;
   private confirmInputValidity_: null|ConfirmInputValidity;
 
-  public locale: string;
+  locale: string;
 
   constructor() {
     super();
@@ -124,7 +125,7 @@ export class SetLocalPasswordInputElement extends
   }
 
   // See comment at the |locale| attribute for why this is here.
-  public i18nUpdateLocale(): void {
+  i18nUpdateLocale(): void {
     this.locale = loadTimeData.getString('app_locale');
   }
 
@@ -139,15 +140,26 @@ export class SetLocalPasswordInputElement extends
     }
 
     const value = this.$.firstInput.value;
-    // TODO(b/297331703): Replace this check by a call into a validation method
-    // implemented in the browser process.
-    const graphemeNum = [...new Intl.Segmenter().segment(value)].length;
-    if (graphemeNum < 8) {
-      this.firstInputValidity_ = FirstInputValidity.TOO_SHORT;
+    const {complexity} =
+        await PasswordFactorEditor.getRemote().checkLocalPasswordComplexity(
+            value);
+
+    // Abort validation if the user has changed the input value while we were
+    // waiting for the async function call above to return.
+    if (value !== this.$.firstInput.value) {
       return;
     }
 
-    this.firstInputValidity_ = FirstInputValidity.OK;
+    switch (complexity) {
+      case PasswordComplexity.kOk:
+        this.firstInputValidity_ = FirstInputValidity.OK;
+        break;
+      case PasswordComplexity.kTooShort:
+        this.firstInputValidity_ = FirstInputValidity.TOO_SHORT;
+        break;
+      default:
+        assertNotReached();
+    }
   }
 
   private validateConfirmInput(): void {
@@ -166,7 +178,7 @@ export class SetLocalPasswordInputElement extends
     this.confirmInputValidity_ = ConfirmInputValidity.OK;
   }
 
-  public async validate(): Promise<void> {
+  async validate(): Promise<void> {
     await this.validateFirstInput();
     if (this.showFirstInputError()) {
       this.$.firstInput.focus();
@@ -180,7 +192,7 @@ export class SetLocalPasswordInputElement extends
     }
   }
 
-  public reset(): void {
+  reset(): void {
     this.$.firstInput.value = '';
     this.$.confirmInput.value = '';
     this.firstInputValidity_ = null;

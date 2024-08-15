@@ -69,8 +69,14 @@ CompanionPageHandler::CompanionPageHandler(
                               GetProfile()->GetPrefs())) {
   identity_manager_observation_.Observe(
       IdentityManagerFactory::GetForProfile(GetProfile()));
-  // TODO(crbug.com/1476887): Observe PCO similarly.
   consent_helper_observation_.Observe(consent_helper_.get());
+  if (base::FeatureList::IsEnabled(features::kCompanionEnablePageContent)) {
+    pref_change_registrar_.Init(GetProfile()->GetPrefs());
+    pref_change_registrar_.Add(
+        unified_consent::prefs::kPageContentCollectionEnabled,
+        base::BindRepeating(&CompanionPageHandler::OnPageContentPrefChanged,
+                            base::Unretained(this)));
+  }
   if (visual_search::features::IsVisualSearchSuggestionsEnabled()) {
     visual_search_host_ =
         std::make_unique<visual_search::VisualSearchClassifierHost>(
@@ -110,6 +116,10 @@ void CompanionPageHandler::OnUrlKeyedDataCollectionConsentStateChanged(
   NotifyURLChanged(/*is_full_reload=*/true);
 }
 
+void CompanionPageHandler::OnPageContentPrefChanged() {
+  NotifyURLChanged(/*is_full_reload=*/true);
+}
+
 void CompanionPageHandler::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->IsInPrimaryMainFrame() ||
@@ -135,16 +145,10 @@ void CompanionPageHandler::DidFinishNavigation(
   ukm::SourceId ukm_source_id =
       web_contents()->GetPrimaryMainFrame()->GetPageUkmSourceId();
   metrics_logger_ = std::make_unique<CompanionMetricsLogger>(ukm_source_id);
-  auto* tab_helper =
-      companion::CompanionTabHelper::FromWebContents(web_contents());
-  auto open_trigger = tab_helper->GetAndResetMostRecentSidePanelOpenTrigger();
-  if (open_trigger.has_value()) {
-    metrics_logger_->RecordOpenTrigger(open_trigger);
-  }
 
   // Only notify the companion UI the page changed if we can share
-  // information about the page by user consent.
-  if (!IsUserPermittedToSharePageInfoWithCompanion(GetProfile()->GetPrefs())) {
+  // information about the page URL by user consent.
+  if (!IsUserPermittedToSharePageURLWithCompanion(GetProfile()->GetPrefs())) {
     return;
   }
   NotifyURLChanged(/*is_full_reload=*/false);
@@ -305,7 +309,7 @@ bool CompanionPageHandler::OnSearchTextQuery() {
   }
 
   GURL page_url;
-  if (IsUserPermittedToSharePageInfoWithCompanion(GetProfile()->GetPrefs())) {
+  if (IsUserPermittedToSharePageURLWithCompanion(GetProfile()->GetPrefs())) {
     page_url = web_contents()->GetVisibleURL();
   }
 

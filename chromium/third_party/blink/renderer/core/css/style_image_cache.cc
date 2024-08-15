@@ -27,7 +27,8 @@ StyleFetchedImage* StyleImageCache::CacheStyleImage(
 
   auto result = fetched_image_map_.insert(key, nullptr);
 
-  if (result.is_new_entry || !result.stored_value->value) {
+  if (result.is_new_entry || !result.stored_value->value ||
+      result.stored_value->value->ErrorOccurred()) {
     result.stored_value->value = MakeGarbageCollected<StyleFetchedImage>(
         ImageResourceContent::Fetch(params, document.Fetcher()), document,
         params.GetImageRequestBehavior() ==
@@ -36,7 +37,7 @@ StyleFetchedImage* StyleImageCache::CacheStyleImage(
         override_image_resolution);
   }
 
-  return result.stored_value->value;
+  return result.stored_value->value.Get();
 }
 
 void StyleImageCache::Trace(Visitor* visitor) const {

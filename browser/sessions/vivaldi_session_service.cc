@@ -14,9 +14,9 @@
 #include "base/files/file.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
+#include "base/json/json_reader.h"
 #include "base/strings/utf_string_conversions.h"
 #include "browser/sessions/vivaldi_session_utils.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/resource_coordinator/lifecycle_unit_state.mojom-shared.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit.h"
@@ -26,6 +26,7 @@
 #include "chrome/browser/ui/browser_tabrestore.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "components/datasource/vivaldi_image_store.h"
 #include "components/sessions/content/content_serialized_navigation_builder.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/sessions/core/session_service_commands.h"
@@ -65,6 +66,36 @@ struct FileHeader {
   int32_t signature;
   int32_t version;
 };
+
+struct TabDescriptor {
+  TabDescriptor(content::WebContents* tab, int index_in_window, bool is_pinned) :
+    tab(tab), index_in_window(index_in_window), is_pinned(is_pinned)
+  {}
+  content::WebContents* tab;
+  int index_in_window;
+  bool is_pinned;
+};
+
+std::vector<TabDescriptor> CollectTabs(Browser* browser,
+                                       const std::vector<int>& ids) {
+  std::vector<TabDescriptor> res;
+  TabStripModel* tab_strip = browser->tab_strip_model();
+  for (int i = 0; i < tab_strip->count(); ++i) {
+    content::WebContents* tab = tab_strip->GetWebContentsAt(i);
+    DCHECK(tab);
+    if (!ids.empty()) {
+      int id = extensions::ExtensionTabUtil::GetTabId(tab);
+      for (unsigned j = 0; j < ids.size(); j++) {  // FIXME: O(n^2)
+        if (ids.at(j) == id) {
+          res.push_back(TabDescriptor(tab, j, tab_strip->IsTabPinned(i)));
+        }
+      }
+    } else {
+      res.push_back(TabDescriptor(tab, i, tab_strip->IsTabPinned(i)));
+    }
+  }
+  return res;
+}
 
 }  // namespace
 
@@ -302,10 +333,12 @@ void VivaldiSessionService::BuildCommandsForTab(const SessionID& window_id,
         session_id, extensions_tab_helper->GetExtensionAppId()));
   }
 #endif
+
   if (!tab->GetVivExtData().empty()) {
-    ScheduleCommand(
-        sessions::CreateSetVivExtDataCommand(session_id, tab->GetVivExtData()));
+    ScheduleCommand(sessions::CreateSetVivExtDataCommand(session_id,
+          tab->GetVivExtData()));
   }
+
   const blink::UserAgentOverride& ua_override = tab->GetUserAgentOverride();
   if (!ua_override.ua_string_override.empty()) {
     ScheduleCommand(sessions::CreateSetTabUserAgentOverrideCommand(
@@ -415,9 +448,47 @@ void VivaldiSessionService::SetCommandsForTab(const sessions::SessionTab& tab) {
       tab_id, tab.session_storage_persistent_id));
 }
 
+std::vector<std::string>
+VivaldiSessionService::CollectThumbnailUrls(Browser* browser,
+    const std::vector<int>& ids)
+{
+  auto tabs = CollectTabs(browser, ids);
+
+  std::vector<std::string> thubnail_urls;
+  for (auto &tab_descr: tabs) {
+    auto *tab = tab_descr.tab;
+    if (tab->GetVivExtData().empty()) {
+      continue;
+    }
+
+    const std::string viv_ext_data = tab->GetVivExtData();
+    absl::optional<base::Value> json =
+      base::JSONReader::Read(viv_ext_data, base::JSON_PARSE_RFC);
+
+    if (json && json->is_dict()) {
+      std::string * thumbnail = json->GetDict().FindString("thumbnail");
+      if (thumbnail) {
+        thubnail_urls.push_back(*thumbnail);
+      }
+    }
+  }
+  return thubnail_urls;
+}
+
+void VivaldiSessionService::BuildCommandsForTabs(Browser* browser,
+    const std::vector<int>& ids) {
+  auto tabs = CollectTabs(browser, ids);
+  for (auto &tab: tabs) {
+    BuildCommandsForTab(browser->session_id(), tab.tab, tab.index_in_window,
+        tab.is_pinned);
+  }
+}
+
 // Based on SessionService::BuildCommandsForBrowser
-void VivaldiSessionService::BuildCommandsForBrowser(Browser* browser,
-                                                    std::vector<int>& ids) {
+void VivaldiSessionService::BuildCommandsForBrowser(
+    Browser* browser,
+    const std::vector<int>& ids,
+    const vivaldi_image_store::Batch& batch) {
   DCHECK(browser);
   DCHECK(browser->session_id().id());
 
@@ -436,25 +507,22 @@ void VivaldiSessionService::BuildCommandsForBrowser(Browser* browser,
     ScheduleCommand(sessions::CreateSetWindowVivExtDataCommand(
         browser->session_id(), browser->viv_ext_data()));
   }
-  TabStripModel* tab_strip = browser->tab_strip_model();
-  for (int i = 0; i < tab_strip->count(); ++i) {
-    content::WebContents* tab = tab_strip->GetWebContentsAt(i);
-    DCHECK(tab);
-    if (!ids.empty()) {
-      int id = extensions::ExtensionTabUtil::GetTabId(tab);
-      for (unsigned j = 0; j < ids.size(); j++) {
-        if (ids.at(j) == id) {
-          BuildCommandsForTab(browser->session_id(), tab, j,
-                              tab_strip->IsTabPinned(i));
-        }
-      }
-    } else {
-      BuildCommandsForTab(browser->session_id(), tab, i,
-                          tab_strip->IsTabPinned(i));
-    }
-  }
+
+  BuildCommandsForTabs(browser, ids);
+
   ScheduleCommand(sessions::CreateSetSelectedTabInWindowCommand(
       browser->session_id(), browser->tab_strip_model()->active_index()));
+
+  for (auto& item : batch) {
+    if (item.state != vivaldi_image_store::BatchItemState::kOk ||
+        item.data.empty()) {
+      LOG(INFO) << "Invalid thumbnail in batch: " << item.url;
+      continue;
+    }
+    ScheduleCommand(sessions::CreateVivCreateThumbnailCommand(
+        int(item.format), reinterpret_cast<const char*>(item.data.data()),
+        item.data.size()));
+  }
 }
 
 int VivaldiSessionService::Load(const base::FilePath& path,
@@ -467,11 +535,40 @@ int VivaldiSessionService::Load(const base::FilePath& path,
   if (!current_session_file_->IsValid())
     return sessions::kErrorLoadFailure;
 
-  std::vector<std::unique_ptr<sessions::SessionCommand>> commands;
+  std::vector<std::unique_ptr<sessions::SessionCommand>> cmds;
   std::vector<std::unique_ptr<sessions::SessionWindow>> valid_windows;
   SessionID active_window_id = SessionID::InvalidValue();
 
-  if (Read(current_session_file_.get(), &commands)) {
+  if (Read(current_session_file_.get(), &cmds)) {
+    std::vector<std::unique_ptr<sessions::SessionCommand>> commands;
+    for (auto &item: cmds) {
+      if (item->id() == sessions::GetVivCreateThumbnailCommandId()) {
+        std::unique_ptr<base::Pickle> pickle(item->PayloadAsPickle());
+        base::PickleIterator iterator(*pickle);
+        int format;
+        if (!iterator.ReadInt(&format)) {
+          continue;
+        }
+
+        const char *data{};
+        size_t len = 0;
+
+        if (!iterator.ReadData(&data, &len)) {
+          continue;
+        }
+
+        scoped_refptr<base::RefCountedMemory> image_data =
+          base::MakeRefCounted<base::RefCountedBytes>(
+              reinterpret_cast<const unsigned char*>(data), len);
+
+        VivaldiImageStore::ImagePlace place;
+        VivaldiImageStore::StoreImage(profile_.get(), std::move(place),
+            vivaldi_image_store::ImageFormat(format), image_data, base::DoNothing());
+        continue;
+      }
+      commands.push_back(std::move(item));
+    }
+
     sessions::RestoreSessionFromCommands(commands, &valid_windows,
                                          &active_window_id);
     RemoveUnusedRestoreWindows(&valid_windows);

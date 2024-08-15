@@ -15,10 +15,10 @@ import android.text.style.ForegroundColorSpan;
 import android.util.AttributeSet;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.CompoundButton.OnCheckedChangeListener;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.RelativeLayout;
 import android.widget.TextView;
 
 import androidx.annotation.IdRes;
@@ -48,7 +48,7 @@ public class LegacyIncognitoDescriptionView
     private LinearLayout mBulletpointsContainer;
     private TextView mLearnMore;
     private TextView[] mParagraphs;
-    private RelativeLayout mCookieControlsCard;
+    private ViewGroup mCookieControlsCard;
     private SwitchCompat mCookieControlsToggle;
     private ImageView mCookieControlsManagedIcon;
     private TextView mCookieControlsTitle;
@@ -72,16 +72,19 @@ public class LegacyIncognitoDescriptionView
 
     @Override
     public void setCookieControlsToggleOnCheckedChangeListener(OnCheckedChangeListener listener) {
+        if (!findCookieControlElements()) return;
         mCookieControlsToggle.setOnCheckedChangeListener(listener);
     }
 
     @Override
     public void setCookieControlsToggle(boolean enabled) {
+        if (!findCookieControlElements()) return;
         mCookieControlsToggle.setChecked(enabled);
     }
 
     @Override
     public void setCookieControlsIconOnclickListener(OnClickListener listener) {
+        if (!findCookieControlElements()) return;
         mCookieControlsManagedIcon.setOnClickListener(listener);
     }
 
@@ -102,11 +105,6 @@ public class LegacyIncognitoDescriptionView
         mParagraphs = new TextView[] {mSubtitle, findViewById(R.id.new_tab_incognito_features),
                 findViewById(R.id.new_tab_incognito_warning)};
         mBulletpointsContainer = findViewById(R.id.new_tab_incognito_bulletpoints_container);
-        mCookieControlsCard = findViewById(R.id.cookie_controls_card);
-        mCookieControlsToggle = findViewById(R.id.cookie_controls_card_toggle);
-        mCookieControlsManagedIcon = findViewById(R.id.cookie_controls_card_managed_icon);
-        mCookieControlsTitle = findViewById(R.id.cookie_controls_card_title);
-        mCookieControlsSubtitle = findViewById(R.id.cookie_controls_card_subtitle);
 
         adjustView();
     }
@@ -123,6 +121,12 @@ public class LegacyIncognitoDescriptionView
         }
 
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+    }
+
+    @Override
+    public void formatTrackingProtectionText(Context context, View layout) {
+        IncognitoDescriptionView.super.formatTrackingProtectionText(context, layout);
+        adjustCookieControlsCard();
     }
 
     private void adjustView() {
@@ -317,6 +321,12 @@ public class LegacyIncognitoDescriptionView
 
     /** Adjust the Cookie Controls Card. */
     private void adjustCookieControlsCard() {
+        mCookieControlsCard = findViewById(R.id.cookie_controls_card);
+        if (mCookieControlsCard == null) {
+            mCookieControlsCard = findViewById(R.id.tracking_protection_card);
+        }
+        // Still null - not inflated yet.
+        if (mCookieControlsCard == null) return;
         if (mWidthDp <= WIDE_LAYOUT_THRESHOLD_DP) {
             // Portrait
             mCookieControlsCard.getLayoutParams().width = LinearLayout.LayoutParams.MATCH_PARENT;
@@ -328,6 +338,9 @@ public class LegacyIncognitoDescriptionView
 
     @Override
     public void setCookieControlsEnforcement(@CookieControlsEnforcement int enforcement) {
+        // No cookie controls toggle on the page.
+        if (!findCookieControlElements()) return;
+
         boolean enforced = enforcement != CookieControlsEnforcement.NO_ENFORCEMENT;
         mCookieControlsToggle.setEnabled(!enforced);
         mCookieControlsManagedIcon.setVisibility(enforced ? View.VISIBLE : View.GONE);
@@ -361,5 +374,15 @@ public class LegacyIncognitoDescriptionView
         subtitleText.append("\n");
         subtitleText.append(addition);
         mCookieControlsSubtitle.setText(subtitleText.toString());
+    }
+
+    /** Finds the 3PC controls and returns true if they exist. */
+    private boolean findCookieControlElements() {
+        mCookieControlsToggle = findViewById(R.id.cookie_controls_card_toggle);
+        if (mCookieControlsToggle == null) return false;
+        mCookieControlsManagedIcon = findViewById(R.id.cookie_controls_card_managed_icon);
+        mCookieControlsTitle = findViewById(R.id.cookie_controls_card_title);
+        mCookieControlsSubtitle = findViewById(R.id.cookie_controls_card_subtitle);
+        return true;
     }
 }

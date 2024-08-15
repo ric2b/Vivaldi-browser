@@ -9,6 +9,7 @@
 #import "base/i18n/rtl.h"
 #import "base/ios/ios_util.h"
 #import "base/strings/sys_string_conversions.h"
+#import "ios/chrome/browser/ntp/home/features.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/shared/ui/elements/fade_truncating_label.h"
@@ -32,6 +33,7 @@
 #import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+#import "ios/ui/ntp/vivaldi_ntp_constants.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
 #import "ios/ui/settings/vivaldi_settings_constants.h"
 
@@ -412,12 +414,16 @@ UIImage* DefaultFaviconImage() {
 
   if (IsVivaldiRunning()) {
     _backgroundImageView.hidden = YES;
-    tabViewBackground.backgroundColor = selected ?
-      [UIColor colorNamed: vTabViewSelectedBackgroundColor] :
-      [UIColor colorNamed: vTabViewNotSelectedBackgroundColor];
     if (_incognitoStyle) {
-      tabViewBackground.layer.borderColor = [UIColor blackColor].CGColor;
+      tabViewBackground.backgroundColor = selected ?
+          [UIColor colorNamed: vPrivateModeToolbarBackgroundColor]  :
+          [UIColor colorNamed: vPrivateModeTabSelectedBackgroundColor];
+      tabViewBackground.layer.borderColor =
+        [UIColor colorNamed:vPrivateNTPBackgroundColor].CGColor;
     } else {
+      tabViewBackground.backgroundColor = selected ?
+        [UIColor colorNamed: vTabViewSelectedBackgroundColor] :
+        [UIColor colorNamed: vTabViewNotSelectedBackgroundColor];
       tabViewBackground.layer.borderColor =
         [UIColor colorNamed:vTabStripDefaultBackgroundColor].CGColor;
     }
@@ -458,16 +464,19 @@ UIImage* DefaultFaviconImage() {
   [_titleLabel setAccessibilityValue:(selected ? @"active" : @"inactive")];
 
   if (IsVivaldiRunning()) {
-    _closeButton.tintColor =
-      selected ? [UIColor colorNamed: vTabViewSelectedTintColor] :
-                 [UIColor colorNamed: vTabViewNotSelectedTintColor];
-    _faviconView.tintColor =
-      selected ? [UIColor colorNamed: vTabViewSelectedTintColor] :
-                 [UIColor colorNamed: vTabViewNotSelectedTintColor];
-    _titleLabel.textColor =
-      selected ? [UIColor colorNamed: vTabViewSelectedTintColor] :
-                 [UIColor colorNamed: vTabViewNotSelectedTintColor];
-  } // End Vivaldi
+      UIColor *tintColor;
+      if (_incognitoStyle) {
+        tintColor = selected ? UIColor.whiteColor :
+          [UIColor colorNamed: vTabViewNotSelectedTintColor];
+      } else {
+        tintColor = selected ? [UIColor colorNamed: vTabViewSelectedTintColor] :
+          [UIColor colorNamed: vTabViewNotSelectedTintColor];
+      }
+      _closeButton.tintColor = tintColor;
+      _faviconView.tintColor = tintColor;
+      _titleLabel.textColor = tintColor;
+  }
+ // End Vivaldi
 
 }
 

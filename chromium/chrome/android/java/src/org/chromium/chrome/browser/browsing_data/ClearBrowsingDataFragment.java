@@ -13,6 +13,9 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.text.SpannableString;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
@@ -34,6 +37,9 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browsing_data.BrowsingDataCounterBridge.BrowsingDataCounterCallback;
 import org.chromium.chrome.browser.browsing_data.TimePeriodUtils.TimePeriodSpinnerOption;
+import org.chromium.chrome.browser.feedback.FragmentHelpAndFeedbackLauncher;
+import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncher;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.historyreport.AppIndexingReporter;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.preferences.Pref;
@@ -48,6 +54,7 @@ import org.chromium.components.browser_ui.settings.ClickableSpansTextMessagePref
 import org.chromium.components.browser_ui.settings.CustomDividerFragment;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.browser_ui.settings.SpinnerPreference;
+import org.chromium.components.browser_ui.util.TraceEventVectorDrawableCompat;
 import org.chromium.components.browsing_data.DeleteBrowsingDataAction;
 import org.chromium.components.signin.GAIAServiceType;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
@@ -76,7 +83,7 @@ public abstract class ClearBrowsingDataFragment extends PreferenceFragmentCompat
         implements BrowsingDataBridge.OnClearBrowsingDataListener,
                    Preference.OnPreferenceClickListener, Preference.OnPreferenceChangeListener,
                    SignOutDialogCoordinator.Listener, SigninManager.SignInStateObserver,
-                   CustomDividerFragment, ProfileDependentSetting {
+                   CustomDividerFragment, ProfileDependentSetting, FragmentHelpAndFeedbackLauncher {
     static final String FETCHER_SUPPLIED_FROM_OUTSIDE =
             "ClearBrowsingDataFetcherSuppliedFromOutside";
 
@@ -215,6 +222,7 @@ public abstract class ClearBrowsingDataFragment extends PreferenceFragmentCompat
     private ProgressDialog mProgressDialog;
     private Item[] mItems;
     private ClearBrowsingDataFetcher mFetcher;
+    private HelpAndFeedbackLauncher mHelpAndFeedbackLauncher;
 
     // This is the dialog we show to the user that lets them 'uncheck' (or exclude) the above
     // important domains from being cleared.
@@ -614,6 +622,8 @@ public abstract class ClearBrowsingDataFragment extends PreferenceFragmentCompat
         updateSignOutOfChromeText();
 
         mSigninManager.addSignInStateObserver(this);
+
+        setHasOptionsMenu(true);
     }
 
     @Override
@@ -698,7 +708,11 @@ public abstract class ClearBrowsingDataFragment extends PreferenceFragmentCompat
 
     @VisibleForTesting
     SpannableString buildSignOutOfChromeText() {
-        return SpanApplier.applySpans(getContext().getString(R.string.sign_out_of_chrome_link),
+        int signOutOfChromeStringId = getClearBrowsingDataTabType() == ClearBrowsingDataTab.ADVANCED
+                        && ChromeFeatureList.isEnabled(ChromeFeatureList.QUICK_DELETE_FOR_ANDROID)
+                ? R.string.sign_out_of_chrome_link_advanced
+                : R.string.sign_out_of_chrome_link;
+        return SpanApplier.applySpans(getContext().getString(signOutOfChromeStringId),
                 new SpanInfo("<link1>", "</link1>",
                         new NoUnderlineClickableSpan(
                                 requireContext(), createSignOutOfChromeCallback())));
@@ -811,5 +825,30 @@ public abstract class ClearBrowsingDataFragment extends PreferenceFragmentCompat
     @Override
     public void onSignOutAllowedChanged() {
         updateSignOutOfChromeText();
+    }
+
+    @Override
+    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
+        menu.clear();
+        MenuItem help =
+                menu.add(Menu.NONE, R.id.menu_id_targeted_help, Menu.NONE, R.string.menu_help);
+        help.setIcon(TraceEventVectorDrawableCompat.create(
+                getResources(), R.drawable.ic_help_and_feedback, getActivity().getTheme()));
+        help.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == R.id.menu_id_targeted_help) {
+            mHelpAndFeedbackLauncher.show(
+                    getActivity(), getString(R.string.help_context_clear_browsing_data), null);
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    public void setHelpAndFeedbackLauncher(HelpAndFeedbackLauncher helpAndFeedbackLauncher) {
+        mHelpAndFeedbackLauncher = helpAndFeedbackLauncher;
     }
 }

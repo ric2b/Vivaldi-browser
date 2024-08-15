@@ -6,10 +6,11 @@ package org.chromium.components.search_engines;
 
 import androidx.annotation.Nullable;
 
+import org.jni_zero.CalledByNative;
+import org.jni_zero.NativeMethods;
+
 import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.url.GURL;
@@ -420,6 +421,16 @@ public class TemplateUrlService {
                 mNativeTemplateUrlServiceAndroid, TemplateUrlService.this);
     }
 
+    /**
+     * Whether the device is from an EEA country. This is consistent with countries which are
+     * eligible for the EEA default search engine choice prompt. "Default country: or "country at
+     * install" are used for SearchEngineChoiceCountry. It might be different than what LocaleUtils
+     * returns.
+     */
+    public boolean isEeaChoiceCountry() {
+        return TemplateUrlServiceJni.get().isEeaChoiceCountry(mNativeTemplateUrlServiceAndroid);
+    }
+
     @NativeMethods
     public interface Natives {
         void load(long nativeTemplateUrlServiceAndroid, TemplateUrlService caller);
@@ -463,10 +474,15 @@ public class TemplateUrlService {
                 long nativeTemplateUrlServiceAndroid, TemplateUrlService caller);
         String[] getImageUrlAndPostContent(
                 long nativeTemplateUrlServiceAndroid, TemplateUrlService caller);
+
+        boolean isEeaChoiceCountry(long nativeTemplateUrlServiceAndroid);
+
         void vivaldiSetDefaultOverride(long nativeTemplateUrlServiceAndroid,
                 TemplateUrlService caller, String selectedKeyword);
         void vivaldiResetDefaultOverride(long nativeTemplateUrlServiceAndroid,
                 TemplateUrlService caller);
+        TemplateUrl vivaldiGetDefaultSearchEngine(long nativeTemplateUrlServiceAndroid,
+                                                  TemplateUrlService caller, int type);
     }
 
     public void vivaldiSetSearchEngineOverride(String selectedKeyword) {
@@ -479,6 +495,12 @@ public class TemplateUrlService {
         ThreadUtils.assertOnUiThread();
         TemplateUrlServiceJni.get().vivaldiResetDefaultOverride(
                 mNativeTemplateUrlServiceAndroid, TemplateUrlService.this);
+    }
+
+    public @Nullable TemplateUrl vivaldiGetDefaultSearchEngine(DefaultSearchType type) {
+        if (!isLoaded()) return null;
+        return TemplateUrlServiceJni.get().vivaldiGetDefaultSearchEngine(
+                mNativeTemplateUrlServiceAndroid, TemplateUrlService.this, type.ordinal());
     }
 
     @CalledByNative

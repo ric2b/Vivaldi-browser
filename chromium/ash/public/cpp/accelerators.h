@@ -41,10 +41,6 @@ ASH_PUBLIC_EXPORT extern const size_t kAcceleratorDataLength;
 // Accelerators that are enabled/disabled with new accelerator mapping.
 // crbug.com/1067269
 ASH_PUBLIC_EXPORT extern const AcceleratorData
-    kEnableWithNewMappingAcceleratorData[];
-ASH_PUBLIC_EXPORT extern const size_t
-    kEnableWithNewMappingAcceleratorDataLength;
-ASH_PUBLIC_EXPORT extern const AcceleratorData
     kDisableWithNewMappingAcceleratorData[];
 ASH_PUBLIC_EXPORT extern const size_t
     kDisableWithNewMappingAcceleratorDataLength;
@@ -66,12 +62,6 @@ ASH_PUBLIC_EXPORT extern const AcceleratorData
     kEnableWithSameAppWindowCycleAcceleratorData[];
 ASH_PUBLIC_EXPORT extern const size_t
     kEnableWithSameAppWindowCycleAcceleratorDataLength;
-
-// Accelerators that are enabled with the floating windows feature.
-ASH_PUBLIC_EXPORT extern const AcceleratorData
-    kEnableWithFloatWindowAcceleratorData[];
-ASH_PUBLIC_EXPORT extern const size_t
-    kEnableWithFloatWindowAcceleratorDataLength;
 
 // Accelerators that are enabled with the game dashboard feature.
 ASH_PUBLIC_EXPORT extern const AcceleratorData

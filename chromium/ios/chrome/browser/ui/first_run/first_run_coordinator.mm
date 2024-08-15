@@ -25,6 +25,8 @@
 #import "ios/public/provider/chrome/browser/signin/choice_api.h"
 
 // Vivaldi
+#import <AVFoundation/AVFoundation.h>
+
 #import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager.h"
@@ -221,6 +223,10 @@
 
 #pragma mark: - VIVALDI
 - (void)presentOnboarding {
+  // Alter audio session
+  [self modifyAudioSession];
+
+  // Initiate the onboarding pages
   self.onboardingActionsBridge = [[VivaldiOnboardingActionsBridge alloc] init];
   UIViewController *onboardingVC =
       [self.onboardingActionsBridge makeViewController];
@@ -292,7 +298,31 @@
 
     WriteFirstRunSentinel();
     [self.delegate didFinishPresentingScreens];
+
+    [self restoreAudioSession];
   }
+}
+
+// Makes sure audio from other apps are not interrupted when onboarding page is
+// presented
+- (void)modifyAudioSession {
+  AVAudioSession *audioSession = [AVAudioSession sharedInstance];
+  // Set the audio session category for onboarding
+  [audioSession setCategory:AVAudioSessionCategoryPlayback
+                withOptions:AVAudioSessionCategoryOptionMixWithOthers
+                      error:nil];
+  [audioSession setActive:YES error:nil];
+}
+
+- (void)restoreAudioSession {
+  AVAudioSession *audioSession = [AVAudioSession sharedInstance];
+
+  [audioSession setActive:NO
+            withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
+                    error:nil];
+  [audioSession setCategory:AVAudioSessionCategoryAmbient error:nil];
+  [audioSession setMode:AVAudioSessionModeDefault error:nil];
+  [audioSession setActive:YES error:nil];
 }
 
 #pragma mark - ModalPageCommands

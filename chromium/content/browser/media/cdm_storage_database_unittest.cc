@@ -28,7 +28,6 @@ const std::vector<uint8_t> kPopulatedFileValue = {1, 2, 3};
 
 class CdmStorageDatabaseTest : public testing::Test {
  public:
-  using CdmStorageHostOpenError = CdmStorageHost::CdmStorageHostOpenError;
   CdmStorageDatabaseTest() = default;
   ~CdmStorageDatabaseTest() override = default;
 
@@ -72,7 +71,7 @@ class CdmStorageDatabaseValidPathTest : public CdmStorageDatabaseTest {
   void SetUp() override {
     ASSERT_TRUE(profile_path_.CreateUniqueTempDir());
     const base::FilePath cdm_storage_path =
-        profile_path_.GetPath().AppendASCII("CdmStorage.db");
+        profile_path_.GetPath().Append(kCdmStorageDatabaseFileName);
     SetUpDatabase(cdm_storage_path);
   }
 
@@ -83,18 +82,18 @@ class CdmStorageDatabaseValidPathTest : public CdmStorageDatabaseTest {
 };
 
 TEST_F(CdmStorageDatabaseInvalidOpenTest, EnsureOpenFails) {
-  auto error = cdm_storage_database_->EnsureOpenForTesting();
+  auto error = cdm_storage_database_->EnsureOpen();
 
   // The database cannot be opened in a temporary directory, as it requires to
   // be opened at a file, thus we get an SQL open error. We return this as a
   // `kDatabaseOpenError`.
-  EXPECT_EQ(error, CdmStorageHostOpenError::kDatabaseOpenError);
+  EXPECT_EQ(error, CdmStorageOpenError::kDatabaseOpenError);
 }
 
 TEST_F(CdmStorageDatabaseInMemoryTest, EnsureOpenWithoutErrors) {
-  auto error = cdm_storage_database_->EnsureOpenForTesting();
+  auto error = cdm_storage_database_->EnsureOpen();
 
-  EXPECT_EQ(error, CdmStorageHostOpenError::kOk);
+  EXPECT_EQ(error, CdmStorageOpenError::kOk);
 }
 
 TEST_F(CdmStorageDatabaseInMemoryTest, FileManipulation) {
@@ -124,9 +123,9 @@ TEST_F(CdmStorageDatabaseInMemoryTest, DeleteDatabase) {
 
   EXPECT_TRUE(cdm_storage_database_->ClearDatabase());
 
-  auto error = cdm_storage_database_->EnsureOpenForTesting();
+  auto error = cdm_storage_database_->EnsureOpen();
 
-  EXPECT_EQ(error, CdmStorageHostOpenError::kOk);
+  EXPECT_EQ(error, CdmStorageOpenError::kOk);
 
   EXPECT_TRUE(
       cdm_storage_database_->ReadFile(kTestStorageKey, kCdmType, kFileName)
@@ -158,8 +157,7 @@ TEST_F(CdmStorageDatabaseInMemoryTest, DeleteForStorageKey) {
                                             kFileNameTwo),
             kPopulatedFileValue);
 
-  EXPECT_TRUE(cdm_storage_database_->DeleteDataForStorageKey(kTestStorageKey,
-                                                             kCdmType));
+  EXPECT_TRUE(cdm_storage_database_->DeleteDataForStorageKey(kTestStorageKey));
 
   // Expect that for the storage key, all of the file content returned is empty.
   EXPECT_TRUE(
@@ -185,8 +183,7 @@ TEST_F(CdmStorageDatabaseInMemoryTest, DeleteForStorageKeyWithNoData) {
 
   // Even if there is no data for the storage key, the SQL statement should
   // still run properly.
-  EXPECT_TRUE(cdm_storage_database_->DeleteDataForStorageKey(kTestStorageKey,
-                                                             kCdmType));
+  EXPECT_TRUE(cdm_storage_database_->DeleteDataForStorageKey(kTestStorageKey));
 
   EXPECT_TRUE(
       cdm_storage_database_->ReadFile(kTestStorageKey, kCdmType, kFileName)
@@ -194,9 +191,9 @@ TEST_F(CdmStorageDatabaseInMemoryTest, DeleteForStorageKeyWithNoData) {
 }
 
 TEST_F(CdmStorageDatabaseValidPathTest, EnsureOpenWithoutErrors) {
-  auto error = cdm_storage_database_->EnsureOpenForTesting();
+  auto error = cdm_storage_database_->EnsureOpen();
 
-  EXPECT_EQ(error, CdmStorageHostOpenError::kOk);
+  EXPECT_EQ(error, CdmStorageOpenError::kOk);
 }
 
 TEST_F(CdmStorageDatabaseValidPathTest, FileManipulation) {
@@ -226,9 +223,9 @@ TEST_F(CdmStorageDatabaseValidPathTest, DeleteDatabase) {
 
   EXPECT_TRUE(cdm_storage_database_->ClearDatabase());
 
-  auto error = cdm_storage_database_->EnsureOpenForTesting();
+  auto error = cdm_storage_database_->EnsureOpen();
 
-  EXPECT_EQ(error, CdmStorageHostOpenError::kOk);
+  EXPECT_EQ(error, CdmStorageOpenError::kOk);
 
   EXPECT_TRUE(
       cdm_storage_database_->ReadFile(kTestStorageKey, kCdmType, kFileName)
@@ -260,8 +257,7 @@ TEST_F(CdmStorageDatabaseValidPathTest, DeleteForStorageKey) {
                                             kFileNameTwo),
             kPopulatedFileValue);
 
-  EXPECT_TRUE(cdm_storage_database_->DeleteDataForStorageKey(kTestStorageKey,
-                                                             kCdmType));
+  EXPECT_TRUE(cdm_storage_database_->DeleteDataForStorageKey(kTestStorageKey));
 
   // Expect that for the storage key, all of the file content returned is empty.
   EXPECT_TRUE(
@@ -287,8 +283,7 @@ TEST_F(CdmStorageDatabaseValidPathTest, DeleteForStorageKeyWithNoData) {
 
   // Even if there is no data for the storage key, the SQL statement should
   // still run properly.
-  EXPECT_TRUE(cdm_storage_database_->DeleteDataForStorageKey(kTestStorageKey,
-                                                             kCdmType));
+  EXPECT_TRUE(cdm_storage_database_->DeleteDataForStorageKey(kTestStorageKey));
 
   EXPECT_TRUE(
       cdm_storage_database_->ReadFile(kTestStorageKey, kCdmType, kFileName)

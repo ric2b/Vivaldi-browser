@@ -24,6 +24,7 @@ component("crash_keys") {
     "crash_keys.h",
   ]
   deps = [ "//base" ]
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
   defines = [ "IS_NETWORK_CPP_CRASH_KEYS_IMPL" ]
 }
 
@@ -132,8 +133,6 @@ component("cpp") {
     "spki_hash_set.h",
     "supports_loading_mode/supports_loading_mode_parser.cc",
     "supports_loading_mode/supports_loading_mode_parser.h",
-    "thread_delegate.cc",
-    "thread_delegate.h",
     "timing_allow_origin_parser.cc",
     "timing_allow_origin_parser.h",
     "trust_token_http_headers.cc",
@@ -184,6 +183,7 @@ component("cpp") {
     "//base",
     "//build:chromeos_buildflags",
     "//components/link_header_util",
+    "//components/miracle_parameter/common",
     "//components/prefs",
     "//ipc",
     "//services/proxy_resolver/public/mojom",
@@ -213,6 +213,7 @@ component("ip_address_mojom_support") {
     "//net",
     "//services/network/public/mojom:mojom_ip_address_shared",
   ]
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
   defines = [ "IS_NETWORK_CPP_IP_ADDRESS_IMPL" ]
 }
 
@@ -228,6 +229,7 @@ component("host_resolver_mojom_support") {
     "//net",
     "//services/network/public/mojom:mojom_host_resolver_shared",
   ]
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
   defines = [ "IS_NETWORK_CPP_HOST_RESOLVER_IMPL" ]
 }
 
@@ -243,6 +245,7 @@ component("cookies_mojom_support") {
     "//net",
     "//services/network/public/mojom:cookies_mojom_shared",
   ]
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
   defines = [ "IS_NETWORK_CPP_COOKIES_IMPL" ]
 }
 
@@ -261,6 +264,7 @@ component("network_param_mojom_support") {
     "//url/ipc:url_ipc",
     "//url/mojom:url_mojom_origin",
   ]
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
   defines = [ "IS_NETWORK_CPP_NETWORK_PARAM_IMPL" ]
 }
 
@@ -278,6 +282,7 @@ component("proxy_config_mojom_support") {
     "//net",
     "//services/network/public/mojom:mojom_proxy_config_shared",
   ]
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
   defines = [ "IS_NETWORK_CPP_PROXY_CONFIG_IMPL" ]
 }
 
@@ -292,6 +297,7 @@ component("structured_headers_mojom_support") {
     "//net",
     "//services/network/public/mojom:mojom_structured_headers_shared",
   ]
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
   defines = [ "IS_NETWORK_CPP_STRUCTURED_HEADERS_IMPL" ]
 }
 
@@ -311,6 +317,8 @@ component("cross_origin_embedder_policy") {
     "//services/network/public/mojom:url_loader_base_shared",
   ]
 
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
+
   defines = [ "IS_NETWORK_CPP_CROSS_ORIGIN_IMPL" ]
 }
 
@@ -323,6 +331,7 @@ component("attribution") {
     "trigger_verification.h",
   ]
   deps = [ "//base" ]
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
   defines = [ "IS_NETWORK_CPP_ATTRIBUTION_IMPL" ]
 }
 
@@ -340,6 +349,7 @@ component("attribution_traits") {
     "//base",
     "//services/network/public/mojom:mojom_attribution_shared",
   ]
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
   defines = [ "IS_NETWORK_CPP_ATTRIBUTION_MOJOM_TRAITS_IMPL" ]
 }
 
@@ -355,6 +365,7 @@ component("schemeful_site_mojom_support") {
     "//services/network/public/mojom:mojom_schemeful_site_shared",
     "//url/mojom:url_mojom_origin",
   ]
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
   defines = [ "IS_NETWORK_CPP_SCHEMEFUL_IMPL" ]
 }
 
@@ -371,6 +382,7 @@ component("first_party_sets_mojom_support") {
     "//net",
     "//services/network/public/mojom:mojom_first_party_sets_shared",
   ]
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
   defines = [ "IS_FIRST_PARTY_SETS_MOJOM_TRAITS_IMPL" ]
 }
 
@@ -390,8 +402,6 @@ component("cpp_base") {
     "cross_origin_opener_policy_mojom_traits.h",
     "data_element.cc",
     "data_element.h",
-    "http_raw_request_response_info.cc",
-    "http_raw_request_response_info.h",
     "http_request_headers_mojom_traits.cc",
     "http_request_headers_mojom_traits.h",
     "isolation_info_mojom_traits.cc",
@@ -560,6 +570,7 @@ source_set("tests") {
     "network_connection_tracker_unittest.cc",
     "network_isolation_key_mojom_traits_unittest.cc",
     "network_mojom_traits_unittest.cc",
+    "network_param_mojom_traits_unittest.cc",
     "network_quality_tracker_unittest.cc",
     "optional_trust_token_params_unittest.cc",
     "origin_agent_cluster_parser_unittest.cc",
@@ -593,9 +604,6 @@ source_set("tests") {
 
   if (is_linux) {
     sources += [ "network_interface_change_listener_mojom_traits_unittest.cc" ]
-  }
-  if (is_android) {
-    sources += [ "system_dns_config_observer_mojom_traits_unittest.cc" ]
   }
 
   deps = [
@@ -640,5 +648,13 @@ fuzzer_test("client_hints_fuzzer") {
     ":cpp",
     "//base",
     "//base:i18n",
+  ]
+}
+
+fuzzer_test("variants_header_fuzzer") {
+  sources = [ "variants_header_fuzzer.cc" ]
+  deps = [
+    ":cpp",
+    "//services/network/public/mojom:url_loader_base",
   ]
 }

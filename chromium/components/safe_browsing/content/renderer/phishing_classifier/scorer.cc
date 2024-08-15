@@ -438,13 +438,38 @@ std::unique_ptr<Scorer> Scorer::CreateScorerWithImageEmbeddingModel(
   return scorer;
 }
 
+void Scorer::AttachImageEmbeddingModel(base::File image_embedding_model) {
+  if (image_embedding_model.IsValid()) {
+    if (!image_embedding_model_.Initialize(std::move(image_embedding_model))) {
+      RecordScorerCreationStatus(
+          SCORER_FAIL_FLATBUFFER_INVALID_IMAGE_EMBEDDING_TFLITE_MODEL);
+      return;
+    }
+  }
+}
+
 double Scorer::ComputeRuleScore(const flat::ClientSideModel_::Rule* rule,
                                 const FeatureMap& features) const {
+  if (!rule->feature()) {
+    return rule->weight();
+  }
+
+  // If the feature vector exists but there are no hashes, the weight will be 0
+  // ultimately, so we return here.
+  if (!flatbuffer_model_->hashes()) {
+    return 0.0;
+  }
+
   const std::unordered_map<std::string, double>& feature_map =
       features.features();
   double rule_score = 1.0;
   for (int32_t feature : *rule->feature()) {
     const flat::Hash* hash = flatbuffer_model_->hashes()->Get(feature);
+
+    if (!hash->data()) {
+      return 0.0;
+    }
+
     std::string hash_str(reinterpret_cast<const char*>(hash->data()->Data()),
                          hash->data()->size());
     const auto it = feature_map.find(hash_str);
@@ -461,8 +486,11 @@ double Scorer::ComputeRuleScore(const flat::ClientSideModel_::Rule* rule,
 
 double Scorer::ComputeScore(const FeatureMap& features) const {
   double logodds = 0.0;
-  for (const flat::ClientSideModel_::Rule* rule : *flatbuffer_model_->rule()) {
-    logodds += ComputeRuleScore(rule, features);
+  if (flatbuffer_model_ && flatbuffer_model_->rule()) {
+    for (const flat::ClientSideModel_::Rule* rule :
+         *flatbuffer_model_->rule()) {
+      logodds += ComputeRuleScore(rule, features);
+    }
   }
   return LogOdds2Prob(logodds);
 }

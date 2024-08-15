@@ -401,6 +401,10 @@ interface NetworkService {
   // enabled.
   EnableDataUseUpdates(bool enable);
 
+  // Set IPv6 reachability override. When `reachability_override` is true, the
+  // DNS stack queries AAAA record even when the IPv6 reachability probe fails.
+  SetIPv6ReachabilityOverride(bool reachability_override);
+
   // Set the GssapiLibraryLoadObserver for this network service.
   // Will only be notified once unless the observer is set again.
   // TODO(crbug.com/1474362): remove this observer once GSSAPI is brokered
@@ -408,13 +412,4 @@ interface NetworkService {
   [EnableIf=is_linux]
   SetGssapiLibraryLoadObserver(
     pending_remote<GssapiLibraryLoadObserver> gssapi_library_load_observer);
-};
-
-// Service that tests new process overhead on Android.
-// TODO(http://crbug.com/1395707): Remove this once
-// --disable-features=NetworkServiceInProcess2 is launched stable.
-[EnableIf=is_android, ServiceSandbox=sandbox.mojom.Sandbox.kNetwork]
-interface EmptyNetworkService {
-  // Test function to check if the service is available. Returns same `value`.
-  Ping(int32 value) => (int32 value);
 };

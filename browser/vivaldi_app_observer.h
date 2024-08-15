@@ -3,8 +3,6 @@
 #ifndef BROWSER_VIVALDI_APP_OBSERVER_H_
 #define BROWSER_VIVALDI_APP_OBSERVER_H_
 
-#import <Cocoa/Cocoa.h>
-
 #include "chrome/browser/ui/browser.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 
@@ -26,7 +24,7 @@ class VivaldiAppObserver : public extensions::BrowserContextKeyedAPI {
   // content::BrowserContext.
   static VivaldiAppObserver* Get(content::BrowserContext* browser_context);
 
-  void SetCommand(NSInteger tag, Browser* browser);
+  void SetCommand(int tag, Browser* browser);
 
   // Called by VivaldiBrowserWindowCocoa when the window has been shown.
   void OnWindowShown(VivaldiBrowserWindow* window, bool was_hidden);
@@ -39,7 +37,7 @@ class VivaldiAppObserver : public extensions::BrowserContextKeyedAPI {
   static const bool kServiceIsNULLWhileTesting = true;
   static const bool kServiceRedirectedInIncognito = true;
 
-  NSInteger tag_ = 0;
+  int tag_ = 0;
   Browser* browser_ = nullptr;
   content::BrowserContext* browser_context_;
 };

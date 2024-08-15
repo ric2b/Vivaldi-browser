@@ -22,7 +22,6 @@ using contact::ContactPropertyNameEnum;
 using contact::ContactService;
 using contact::ContactServiceFactory;
 using vivaldi::GetTime;
-using vivaldi::MilliSecondsFromTime;
 
 namespace extensions {
 
@@ -85,7 +84,7 @@ PostalAddress GetPostalAddress(const contact::PostalAddressRow& row) {
   PostalAddress postaladdress;
   postaladdress.id = base::NumberToString(row.postal_address_id());
   postaladdress.postal_address = base::UTF16ToUTF8(row.postal_address());
-  postaladdress.type =row.type();
+  postaladdress.type = row.type();
 
   return postaladdress;
 }
@@ -94,7 +93,7 @@ Contact GetContact(const contact::ContactRow& row) {
   Contact contact;
   contact.id = base::NumberToString(row.contact_id());
   contact.name = base::UTF16ToUTF8(row.name());
-  contact.birthday = MilliSecondsFromTime(row.birthday());
+  contact.birthday = row.birthday().InMillisecondsFSinceUnixEpoch();
   contact.note = base::UTF16ToUTF8(row.note());
   contact.trusted = row.trusted();
   contact.avatar_url = base::UTF16ToUTF8(row.avatar_url());
@@ -152,7 +151,8 @@ contact::ContactRow GetContactRow(
   }
 
   if (contact.generated_from_sent_mail.has_value()) {
-    contactRow.set_generated_from_sent_mail(contact.generated_from_sent_mail.value());
+    contactRow.set_generated_from_sent_mail(
+        contact.generated_from_sent_mail.value());
   }
 
   if (contact.trusted.has_value()) {
@@ -256,7 +256,7 @@ std::unique_ptr<Contact> CreateVivaldiContact(
 
   contact->id = base::NumberToString(contact_res.contact_id());
   contact->name = base::UTF16ToUTF8(contact_res.name());
-  contact->birthday = MilliSecondsFromTime(contact_res.birthday());
+  contact->birthday = contact_res.birthday().InMillisecondsFSinceUnixEpoch();
   contact->note = base::UTF16ToUTF8(contact_res.note());
   contact->avatar_url = base::UTF16ToUTF8(contact_res.avatar_url());
   contact->separator = contact_res.separator();
@@ -374,7 +374,8 @@ ExtensionFunction::ResponseAction ContactsUpdateFunction::Run() {
   }
 
   if (params->changes.avatar_url.has_value()) {
-    updated_contact.avatar_url = base::UTF8ToUTF16(params->changes.avatar_url.value());
+    updated_contact.avatar_url =
+        base::UTF8ToUTF16(params->changes.avatar_url.value());
     updated_contact.updateFields |= contact::AVATAR_URL;
   }
 
@@ -669,7 +670,8 @@ ExtensionFunction::ResponseAction ContactsAddEmailAddressFunction::Run() {
 
   if (params->email_to_add.email_address.has_value()) {
     std::u16string email_address;
-    email_address = base::UTF8ToUTF16(params->email_to_add.email_address.value());
+    email_address =
+        base::UTF8ToUTF16(params->email_to_add.email_address.value());
     add_email.set_email_address(email_address);
   }
 
@@ -773,7 +775,8 @@ ExtensionFunction::ResponseAction ContactsUpdateEmailAddressFunction::Run() {
 
   if (params->email_to_update.email_address.has_value()) {
     std::u16string email_address;
-    email_address = base::UTF8ToUTF16(params->email_to_update.email_address.value());
+    email_address =
+        base::UTF8ToUTF16(params->email_to_update.email_address.value());
     updated_email.set_email_address(email_address);
   }
 

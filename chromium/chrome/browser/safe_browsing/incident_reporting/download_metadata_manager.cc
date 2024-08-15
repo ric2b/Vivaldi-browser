@@ -200,6 +200,7 @@ class DownloadMetadataManager::ManagerContext
   void OnDownloadUpdated(download::DownloadItem* download) override;
   void OnDownloadOpened(download::DownloadItem* download) override;
   void OnDownloadRemoved(download::DownloadItem* download) override;
+  void OnDownloadDestroyed(download::DownloadItem* download) override;
 
  private:
   enum State {
@@ -466,10 +467,17 @@ void DownloadMetadataManager::ManagerContext::OnDownloadOpened(
 
 void DownloadMetadataManager::ManagerContext::OnDownloadRemoved(
     download::DownloadItem* download) {
+  download->RemoveObserver(this);
+
   if (state_ != LOAD_COMPLETE)
     pending_items_[download->GetId()].removed = true;
   else if (HasMetadataFor(download))
     RemoveMetadata();
+}
+
+void DownloadMetadataManager::ManagerContext::OnDownloadDestroyed(
+    download::DownloadItem* download) {
+  download->RemoveObserver(this);
 }
 
 DownloadMetadataManager::ManagerContext::~ManagerContext() {
@@ -495,7 +503,7 @@ void DownloadMetadataManager::ManagerContext::CommitRequest(
   download_metadata_->mutable_download()->set_allocated_download(
       request.release());
   download_metadata_->mutable_download()->set_download_time_msec(
-      item->GetEndTime().ToJavaTime());
+      item->GetEndTime().InMillisecondsSinceUnixEpoch());
   // Persist it.
   WriteMetadata();
   // Run callbacks (only present in case of a transition to LOAD_COMPLETE).
@@ -599,7 +607,7 @@ void DownloadMetadataManager::ManagerContext::OnMetadataReady(
 void DownloadMetadataManager::ManagerContext::UpdateLastOpenedTime(
     const base::Time& last_opened_time) {
   download_metadata_->mutable_download()->set_open_time_msec(
-      last_opened_time.ToJavaTime());
+      last_opened_time.InMillisecondsSinceUnixEpoch());
   WriteMetadata();
 }
 

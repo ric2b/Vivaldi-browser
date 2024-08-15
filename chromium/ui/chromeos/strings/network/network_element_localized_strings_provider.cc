@@ -10,6 +10,7 @@
 #include "build/build_config.h"
 #include "chromeos/ash/components/login/login_state/login_state.h"
 #include "chromeos/ash/components/network/network_connection_handler.h"
+#include "chromeos/ash/components/network/policy_util.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "components/login/localized_values_builder.h"
 #include "components/strings/grit/components_strings.h"
@@ -144,6 +145,8 @@ constexpr webui::LocalizedString kElementLocalizedStrings[] = {
     {"networkIconLabelConnecting", IDS_NETWORK_ICON_LABEL_CONNECTING},
     {"networkIconLabelNotConnected", IDS_NETWORK_ICON_LABEL_NOT_CONNECTED},
     {"networkIconLabelSignalStrength", IDS_NETWORK_ICON_LABEL_SIGNAL_STRENGTH},
+    {"networkListItemUpdatedCellularSimCardCarrierLocked",
+     IDS_NETWORK_LIST_UPDATED_CELLULAR_SIM_CARD_CARRIER_LOCKED},
 };
 
 }  //  namespace
@@ -364,11 +367,20 @@ void AddDetailsLocalizedStrings(content::WebUIDataSource* html_source) {
       {"apnDetailIpTypeIpv6", IDS_SETTINGS_APN_DIALOG_IP_TYPE_IPV6},
       {"apnDetailIpTypeIpv4_Ipv6", IDS_SETTINGS_APN_DIALOG_IP_TYPE_IPV4_IPV6},
       {"apnAutoDetected", IDS_SETTINGS_APN_AUTO_DETECTED},
+      {"apnNameModem", IDS_SETTINGS_APN_NAME_MODEM},
       {"apnWarningPromptForDisableRemove",
        IDS_SETTINGS_APN_WARNING_PROMPT_FOR_DISABLE_REMOVE},
       {"apnWarningPromptForEnable", IDS_SETTINGS_APN_WARNING_PROMPT_FOR_ENABLE},
       {"apnDetailDialogAdd", IDS_SETTINGS_APN_DIALOG_ADD},
       {"apnDetailDialogSave", IDS_SETTINGS_APN_DIALOG_SAVE},
+      {"apnDetailDialogA11yAddEnabled",
+       IDS_SETTINGS_APN_DIALOG_A11Y_ADD_ENABLED},
+      {"apnDetailDialogA11ySaveEnabled",
+       IDS_SETTINGS_APN_DIALOG_A11Y_SAVE_ENABLED},
+      {"apnDetailDialogA11yAddDisabled",
+       IDS_SETTINGS_APN_DIALOG_A11Y_ADD_DISABLED},
+      {"apnDetailDialogA11ySaveDisabled",
+       IDS_SETTINGS_APN_DIALOG_A11Y_SAVE_DISABLED},
       {"apnDetailDialogCancel", IDS_SETTINGS_APN_DIALOG_CANCEL},
       {"apnDetailDialogDone", IDS_SETTINGS_APN_DIALOG_DONE},
       {"hidePassword", IDS_SETTINGS_PASSWORD_HIDE},
@@ -506,6 +518,8 @@ void AddDetailsLocalizedStrings(content::WebUIDataSource* html_source) {
 
   html_source->AddBoolean("isApnRevampEnabled",
                           ash::features::IsApnRevampEnabled());
+  html_source->AddBoolean("isCellularCarrierLockEnabled",
+                          ash::features::IsCellularCarrierLockEnabled());
 }
 
 void AddConfigLocalizedStrings(content::WebUIDataSource* html_source) {
@@ -549,6 +563,10 @@ void AddConfigLocalizedStrings(content::WebUIDataSource* html_source) {
   html_source->AddBoolean(
       "eapDefaultCasWithoutSubjectVerificationAllowed",
       ash::features::IsEapDefaultCasWithoutSubjectVerificationAllowed());
+
+  html_source->AddBoolean(
+      "ephemeralNetworkPoliciesEnabled",
+      ash::policy_util::AreEphemeralNetworkPoliciesEnabled());
 }
 
 void AddErrorLocalizedStrings(content::WebUIDataSource* html_source) {

@@ -21,10 +21,11 @@
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/translate/partial_translate_bubble_model.h"
 #include "chrome/common/buildflags.h"
+#include "components/user_education/common/feature_promo_controller.h"
 #include "ui/base/interaction/element_identifier.h"
 
 #if !BUILDFLAG(IS_ANDROID)
-#include "chrome/browser/apps/intent_helper/apps_navigation_types.h"
+#include "chrome/browser/apps/link_capturing/intent_picker_info.h"
 #endif  //  !BUILDFLAG(IS_ANDROID)
 
 class LocationBarTesting;
@@ -107,6 +108,8 @@ class TestBrowserWindow : public BrowserWindow {
   void Maximize() override {}
   void Minimize() override {}
   void Restore() override {}
+  void SetCanResizeFromWebAPI(absl::optional<bool> can_resize) override {}
+  bool GetCanResize() override;
   bool ShouldHideUIForFullscreen() const override;
   bool IsFullscreen() const override;
   bool IsFullscreenBubbleVisible() const override;
@@ -239,28 +242,19 @@ class TestBrowserWindow : public BrowserWindow {
 
   user_education::FeaturePromoController* GetFeaturePromoController() override;
   bool IsFeaturePromoActive(const base::Feature& iph_feature) const override;
-  bool MaybeShowFeaturePromo(
-      const base::Feature& iph_feature,
-      user_education::FeaturePromoController::BubbleCloseCallback
-          close_callback = base::DoNothing(),
-      user_education::FeaturePromoSpecification::FormatParameters body_params =
-          user_education::FeaturePromoSpecification::NoSubstitution(),
-      user_education::FeaturePromoSpecification::FormatParameters title_params =
-          user_education::FeaturePromoSpecification::NoSubstitution()) override;
+  user_education::FeaturePromoResult CanShowFeaturePromo(
+      const base::Feature& iph_feature) const override;
+  user_education::FeaturePromoResult MaybeShowFeaturePromo(
+      user_education::FeaturePromoParams params) override;
   bool MaybeShowStartupFeaturePromo(
+      user_education::FeaturePromoParams params) override;
+  bool CloseFeaturePromo(
       const base::Feature& iph_feature,
-      user_education::FeaturePromoController::StartupPromoCallback
-          promo_callback = base::DoNothing(),
-      user_education::FeaturePromoController::BubbleCloseCallback
-          close_callback = base::DoNothing(),
-      user_education::FeaturePromoSpecification::FormatParameters body_params =
-          user_education::FeaturePromoSpecification::NoSubstitution(),
-      user_education::FeaturePromoSpecification::FormatParameters title_params =
-          user_education::FeaturePromoSpecification::NoSubstitution()) override;
-  bool CloseFeaturePromo(const base::Feature& iph_feature) override;
+      user_education::FeaturePromoCloseReason close_reason) override;
   user_education::FeaturePromoHandle CloseFeaturePromoAndContinue(
       const base::Feature& iph_feature) override;
   void NotifyFeatureEngagementEvent(const char* event_name) override;
+  void NotifyPromoFeatureUsed(const base::Feature& iph_feature) override;
 
   // Sets the controller returned by GetFeaturePromoController().
   // Deletes the existing one, if any.

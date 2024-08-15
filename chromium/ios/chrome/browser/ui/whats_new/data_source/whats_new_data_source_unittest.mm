@@ -12,7 +12,7 @@
 #import "base/test/scoped_feature_list.h"
 #import "ios/chrome/browser/ui/whats_new/data_source/whats_new_item.h"
 #import "ios/chrome/browser/ui/whats_new/whats_new_util.h"
-#import "ios/chrome/grit/ios_chromium_strings.h"
+#import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "testing/platform_test.h"
 #import "ui/base/l10n/l10n_util_mac.h"
@@ -23,7 +23,7 @@ using WhatsNewDataSourceTest = PlatformTest;
 
 base::FilePath GetTestDataPath() {
   base::FilePath test_path;
-  EXPECT_TRUE(base::PathService::Get(base::DIR_SOURCE_ROOT, &test_path));
+  EXPECT_TRUE(base::PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, &test_path));
   test_path = test_path.Append(FILE_PATH_LITERAL("whats_new"));
   test_path = test_path.Append(FILE_PATH_LITERAL("test"));
   test_path = test_path.Append(FILE_PATH_LITERAL("data"));
@@ -123,9 +123,7 @@ TEST_F(WhatsNewDataSourceTest, TestChromeTipEntries) {
       isEqualToString:l10n_util::GetNSString(
                           IDS_IOS_WHATS_NEW_CHROME_TIP_CHROME_DEFAULT_STEP_2)]);
   EXPECT_TRUE([item.primaryActionTitle
-      isEqualToString:
-          l10n_util::GetNSString(
-              IDS_IOS_WHATS_NEW_CHROME_TIP_CHROME_DEFAULT_BUTTON_TITLE)]);
+      isEqualToString:l10n_util::GetNSString(IDS_IOS_OPEN_IOS_SETTINGS)]);
 }
 
 // Test that WhatsNewItem M116 is constructed correctly from a valid entry in
@@ -173,6 +171,5 @@ TEST_F(WhatsNewDataSourceTest, TestConstructionOfWhatsNewItemM116) {
           l10n_util::GetNSString(
               IDS_IOS_WHATS_NEW_INCOGNITO_TABS_FROM_OTHER_APPS_STEP_3)]);
   EXPECT_TRUE([item.primaryActionTitle
-      isEqualToString:l10n_util::GetNSString(
-                          IDS_IOS_WHATS_NEW_GOT_TO_SETTINGS_BUTTON_TITLE)]);
+      isEqualToString:l10n_util::GetNSString(IDS_IOS_OPEN_IOS_SETTINGS)]);
 }

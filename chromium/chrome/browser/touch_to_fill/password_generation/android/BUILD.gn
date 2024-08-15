@@ -11,6 +11,8 @@ source_set("public") {
     "//chrome/browser/autofill:autofill",
     "//chrome/browser/password_manager/android:password_generation_utils",
     "//components/password_manager/content/browser:browser",
+    "//components/password_manager/core/browser:browser",
+    "//components/prefs:prefs",
     "//content/public/browser",
   ]
 
@@ -31,6 +33,7 @@ source_set("android") {
   deps = [
     "//chrome/browser/touch_to_fill/password_generation/android/internal:jni",
     "//components/password_manager/core/common:features",
+    "//components/prefs:prefs",
     "//content/public/browser",
     "//ui/android:android",
     "//ui/gfx:native_widget_types",
@@ -70,4 +73,19 @@ source_set("unit_tests") {
   ]
 
   sources = [ "touch_to_fill_password_generation_controller_unittest.cc" ]
+}
+
+android_library("test_support_java") {
+  testonly = true
+  resources_package =
+      "org.chromium.chrome.browser.touch_to_fill.password_generation"
+
+  sources = [ "java/src/org/chromium/chrome/browser/touch_to_fill/password_generation/TouchToFillPasswordGenerationTestHelper.java" ]
+
+  deps = [
+    "//base:base_java",
+    "//chrome/browser/touch_to_fill/password_generation/android/internal:java_resources",
+    "//third_party/android_deps:espresso_java",
+    "//third_party/hamcrest:hamcrest_java",
+  ]
 }

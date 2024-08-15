@@ -4,6 +4,7 @@
 
 import("//build/config/android/rules.gni")
 import("//testing/test.gni")
+import("//third_party/jni_zero/jni_zero.gni")
 
 generate_jni("jni_sample_header") {
   sources = [
@@ -20,8 +21,8 @@ android_library("jni_sample_java") {
   ]
 
   deps = [
-    "//base:jni_java",
     "//build/android:build_java",
+    "//third_party/jni_zero:jni_zero_java",
   ]
 }
 

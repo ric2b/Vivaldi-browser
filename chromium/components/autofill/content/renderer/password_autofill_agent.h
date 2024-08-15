@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/types/strong_alias.h"
 #include "build/build_config.h"
@@ -118,11 +119,12 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
 
   ~PasswordAutofillAgent() override;
 
+  // Must be called prior to calling other methods.
+  void Init(AutofillAgent* autofill_agent);
+
   void BindPendingReceiver(
       mojo::PendingAssociatedReceiver<mojom::PasswordAutofillAgent>
           pending_receiver);
-
-  void SetAutofillAgent(AutofillAgent* autofill_agent);
 
   void SetPasswordGenerationAgent(PasswordGenerationAgent* generation_agent);
 
@@ -414,9 +416,6 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // only one value per |PasswordAutofillAgent| instance.
   void LogPrefilledUsernameFillOutcome(PrefilledUsernameFillOutcome outcome);
 
-  // Helper function called when form submission is successful.
-  void FireSubmissionIfFormDisappear(mojom::SubmissionIndicatorEvent event);
-
   void OnFrameDetached();
 
   void HidePopup();
@@ -520,9 +519,10 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // Records the username typed before suggestions preview.
   std::u16string username_query_prefix_;
 
-  base::WeakPtr<AutofillAgent> autofill_agent_;
+  raw_ptr<AutofillAgent> autofill_agent_;
 
-  PasswordGenerationAgent* password_generation_agent_;  // Weak reference.
+  raw_ptr<PasswordGenerationAgent, ExperimentalRenderer>
+      password_generation_agent_;  // Weak reference.
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   PagePasswordsAnalyser page_passwords_analyser_;

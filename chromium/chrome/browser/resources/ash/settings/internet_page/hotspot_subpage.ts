@@ -84,7 +84,7 @@ export class SettingsHotspotSubpageElement extends
   private isHotspotToggleOn_: boolean;
   private autoDisableVirtualPref_: chrome.settingsPrivate.PrefObject<boolean>;
 
-  override currentRouteChanged(route: Route, _oldRoute?: Route) {
+  override currentRouteChanged(route: Route, _oldRoute?: Route): void {
     // Does not apply to this page.
     if (route !== routes.HOTSPOT_DETAIL) {
       return;
@@ -119,8 +119,7 @@ export class SettingsHotspotSubpageElement extends
     if (this.hotspotInfo.allowStatus !== HotspotAllowStatus.kAllowed) {
       return true;
     }
-    return this.hotspotInfo.state === HotspotState.kEnabling ||
-        this.hotspotInfo.state === HotspotState.kDisabling;
+    return this.hotspotInfo.state === HotspotState.kDisabling;
   }
 
   private getOnOffString_(): string {
@@ -159,6 +158,11 @@ export class SettingsHotspotSubpageElement extends
     return ssid || '';
   }
 
+  private hideConnectedDeviceCount_(): boolean {
+    return this.hotspotInfo?.state !== HotspotState.kEnabled &&
+        this.hotspotInfo?.state !== HotspotState.kDisabling;
+  }
+
   private getHotspotConnectedDeviceCount_(clientCount: number|
                                           undefined): number {
     return clientCount || 0;
@@ -169,7 +173,7 @@ export class SettingsHotspotSubpageElement extends
     return !!hotspotInfo?.config;
   }
 
-  private onHotspotConfigureClick_() {
+  private onHotspotConfigureClick_(): void {
     const event = new CustomEvent('show-hotspot-config-dialog', {
       bubbles: true,
       composed: true,

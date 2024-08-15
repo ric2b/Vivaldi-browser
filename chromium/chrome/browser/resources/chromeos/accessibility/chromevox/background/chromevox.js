@@ -17,6 +17,7 @@ import {BrailleInterface} from './braille/braille_interface.js';
 import {ChromeVoxState} from './chromevox_state.js';
 import {TtsInterface} from './tts_interface.js';
 
+/** A central access point for the different modes of output. */
 export const ChromeVox = {
   /** @type {BrailleInterface} */
   braille: null,
@@ -33,12 +34,10 @@ BridgeHelper.registerHandler(
     cells => Promise.resolve(ChromeVox.braille?.backTranslate(cells)));
 
 BridgeHelper.registerHandler(
-    BridgeConstants.Braille.TARGET,
-    BridgeConstants.Braille.Action.ENABLE_COMMAND_HANDLER, async enable => {
+    BridgeConstants.Braille.TARGET, BridgeConstants.Braille.Action.SET_BYPASS,
+    async bypass => {
       await ChromeVoxState.ready();
-      if (BrailleCommandHandler.instance) {
-        BrailleCommandHandler.setEnabled(enable);
-      }
+      BrailleCommandHandler.setBypass(bypass);
     });
 
 BridgeHelper.registerHandler(

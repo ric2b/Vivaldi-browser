@@ -16,6 +16,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/scalable_iph/scalable_iph_factory.h"
+#include "chrome/browser/scalable_iph/scalable_iph_factory_impl.h"
 #include "chrome/browser/ui/browser.h"
 #include "chromeos/ash/components/scalable_iph/scalable_iph.h"
 #include "chromeos/ash/components/scalable_iph/scalable_iph_constants.h"
@@ -73,7 +74,8 @@ void ScalableIphBrowserTestBase::SetUp() {
   subscription_ =
       BrowserContextDependencyManager::GetInstance()
           ->RegisterCreateServicesCallbackForTesting(base::BindRepeating(
-              &ScalableIphBrowserTestBase::SetTestingFactories));
+              &ScalableIphBrowserTestBase::SetTestingFactories,
+              enable_mock_tracker_));
 
   CustomizableTestEnvBrowserTestBase::SetUp();
 }
@@ -86,6 +88,43 @@ void ScalableIphBrowserTestBase::SetUpOnMainThread() {
   // is not available before it.
   CustomizableTestEnvBrowserTestBase::SetUpOnMainThread();
 
+  // If user session type is `kRegularWithOobe`, Chrome enters post login OOBE
+  // screens after a login. It means that there won't be `ScalableIph` as
+  // `ScalableIph` starts after post login OOBE screens. We have to wait the
+  // initialization of `ScalableIph` before setting up mocks.
+  if (test_environment().user_session_type() ==
+      CustomizableTestEnvBrowserTestBase::UserSessionType::kRegularWithOobe) {
+    return;
+  }
+
+  // If we don't intend to enforce ScalableIph setup (i.e. the user profile
+  // doesn't qualify for ScalableIph), do not set up mocks as ScalableIph
+  // should not be available for the profile.
+  if (!setup_scalable_iph_) {
+    return;
+  }
+
+  CHECK(enable_scalable_iph_)
+      << "ScalableIph feature flag must be intended to be enabled to set up "
+         "fakes and mocks of ScalableIph";
+
+  SetUpMocks();
+}
+
+void ScalableIphBrowserTestBase::TearDownOnMainThread() {
+  // We are going to release references to mock objects below. Verify the
+  // expectations in advance to have a predictable behavior.
+  testing::Mock::VerifyAndClearExpectations(mock_tracker_);
+  mock_tracker_ = nullptr;
+  testing::Mock::VerifyAndClearExpectations(mock_delegate_);
+  mock_delegate_ = nullptr;
+
+  InProcessBrowserTest::TearDownOnMainThread();
+}
+
+void ScalableIphBrowserTestBase::SetUpMocks() {
+  CHECK(!mock_delegate_) << "Mocks have already been set up.";
+
   // Do not access profile via `browser()` as a browser might not be created if
   // session type is WithOobe.
   Profile* profile = ProfileManager::GetActiveUserProfile();
@@ -96,21 +135,28 @@ void ScalableIphBrowserTestBase::SetUpOnMainThread() {
          "at a login time. We check the behavior by confirming creation of a "
          "delegate.";
 
-  mock_tracker_ = static_cast<feature_engagement::test::MockTracker*>(
-      feature_engagement::TrackerFactory::GetForBrowserContext(profile));
-  CHECK(mock_tracker_)
-      << "mock_tracker_ must be non-nullptr. GetForBrowserContext should "
-         "create one via CreateMockTracker if it does not exist.";
+  if (enable_mock_tracker_) {
+    mock_tracker_ = static_cast<feature_engagement::test::MockTracker*>(
+        feature_engagement::TrackerFactory::GetForBrowserContext(profile));
+    CHECK(mock_tracker_)
+        << "mock_tracker_ must be non-nullptr. GetForBrowserContext should "
+           "create one via CreateMockTracker if it does not exist.";
 
-  ON_CALL(*mock_tracker_, AddOnInitializedCallback)
-      .WillByDefault(
-          [](feature_engagement::Tracker::OnInitializedCallback callback) {
-            std::move(callback).Run(true);
-          });
+    ON_CALL(*mock_tracker_, AddOnInitializedCallback)
+        .WillByDefault(
+            [](feature_engagement::Tracker::OnInitializedCallback callback) {
+              std::move(callback).Run(true);
+            });
 
-  ON_CALL(*mock_tracker_, IsInitialized).WillByDefault(testing::Return(true));
+    ON_CALL(*mock_tracker_, IsInitialized).WillByDefault(testing::Return(true));
+  }
 
-  CHECK(ScalableIphFactory::GetInstance()->has_delegate_factory_for_testing())
+  // The static cast is necessary to access the delegate functions declared in
+  // the `ScalableIphFactoryImpl` class.
+  ScalableIphFactoryImpl* scalable_iph_factory =
+      static_cast<ScalableIphFactoryImpl*>(ScalableIphFactory::GetInstance());
+  CHECK(scalable_iph_factory);
+  CHECK(scalable_iph_factory->has_delegate_factory_for_testing())
       << "This test uses MockScalableIphDelegate. A factory for testing must "
          "be set.";
   scalable_iph::ScalableIph* scalable_iph =
@@ -130,29 +176,22 @@ void ScalableIphBrowserTestBase::SetUpOnMainThread() {
   CHECK(mock_delegate_);
 }
 
-void ScalableIphBrowserTestBase::TearDownOnMainThread() {
-  // We are going to release references to mock objects below. Verify the
-  // expectations in advance to have a predictable behavior.
-  testing::Mock::VerifyAndClearExpectations(mock_tracker_);
-  mock_tracker_ = nullptr;
-  testing::Mock::VerifyAndClearExpectations(mock_delegate_);
-  mock_delegate_ = nullptr;
-
-  InProcessBrowserTest::TearDownOnMainThread();
-}
-
 void ScalableIphBrowserTestBase::InitializeScopedFeatureList() {
   base::FieldTrialParams params;
   AppendVersionNumber(params);
   AppendFakeUiParamsNotification(params);
   base::test::FeatureRefAndParams test_config(kScalableIphTest, params);
 
-  base::test::FeatureRefAndParams scalable_iph_feature(
-      ash::features::kScalableIph, {});
-
-  std::vector<base::test::FeatureRefAndParams> enabled_features(
-      {scalable_iph_feature, test_config});
+  std::vector<base::test::FeatureRefAndParams> enabled_features({test_config});
   std::vector<base::test::FeatureRef> disabled_features;
+
+  if (enable_scalable_iph_) {
+    enabled_features.push_back(
+        base::test::FeatureRefAndParams(ash::features::kScalableIph, {}));
+  } else {
+    disabled_features.push_back(
+        base::test::FeatureRef(ash::features::kScalableIph));
+  }
 
   if (enable_scalable_iph_debug_) {
     enabled_features.push_back(
@@ -259,6 +298,9 @@ bool ScalableIphBrowserTestBase::IsMockDelegateCreatedFor(Profile* profile) {
 
 void ScalableIphBrowserTestBase::EnableTestIphFeatures(
     const std::vector<const base::Feature*> test_iph_features) {
+  CHECK(mock_delegate_)
+      << "To enable a test iph feature, mocks have to be set up.";
+
   const base::flat_set<const base::Feature*> test_iph_features_set(
       test_iph_features.begin(), test_iph_features.end());
   ON_CALL(*mock_tracker(), ShouldTriggerHelpUI)
@@ -323,12 +365,18 @@ void ScalableIphBrowserTestBase::AddOnlineNetwork() {
 
 // static
 void ScalableIphBrowserTestBase::SetTestingFactories(
+    bool enable_mock_tracker,
     content::BrowserContext* browser_context) {
-  feature_engagement::TrackerFactory::GetInstance()->SetTestingFactory(
-      browser_context,
-      base::BindRepeating(&ScalableIphBrowserTestBase::CreateMockTracker));
+  if (enable_mock_tracker) {
+    feature_engagement::TrackerFactory::GetInstance()->SetTestingFactory(
+        browser_context,
+        base::BindRepeating(&ScalableIphBrowserTestBase::CreateMockTracker));
+  }
 
-  ScalableIphFactory* scalable_iph_factory = ScalableIphFactory::GetInstance();
+  // The static cast is necessary to access the delegate functions declared in
+  // the `ScalableIphFactoryImpl` class.
+  ScalableIphFactoryImpl* scalable_iph_factory =
+      static_cast<ScalableIphFactoryImpl*>(ScalableIphFactory::GetInstance());
   CHECK(scalable_iph_factory);
 
   // This method can be called more than once for a single browser context.
@@ -351,14 +399,16 @@ std::unique_ptr<KeyedService> ScalableIphBrowserTestBase::CreateMockTracker(
 
 // static
 std::unique_ptr<scalable_iph::ScalableIphDelegate>
-ScalableIphBrowserTestBase::CreateMockDelegate(Profile* profile) {
+ScalableIphBrowserTestBase::CreateMockDelegate(Profile* profile,
+                                               scalable_iph::Logger* logger) {
   std::pair<std::set<std::string>::iterator, bool> result =
       mock_delegate_created_.insert(profile->GetProfileUserName());
   CHECK(result.second) << "Delegate is created twice for a profile";
 
   std::unique_ptr<test::MockScalableIphDelegate> delegate =
       std::make_unique<test::MockScalableIphDelegate>();
-  delegate->SetDelegate(std::make_unique<ScalableIphDelegateImpl>(profile));
+  delegate->SetDelegate(
+      std::make_unique<ScalableIphDelegateImpl>(profile, logger));
 
   // Fake behaviors of observers must be set at an early stage as those methods
   // are called from constructors, i.e. Set up phases of test fixtures.

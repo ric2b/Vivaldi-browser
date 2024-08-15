@@ -12,6 +12,7 @@
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
@@ -176,7 +177,7 @@ class FrameFetchContext : public blink::ResourceFetchContext {
   }
 
  private:
-  blink::WebLocalFrame* frame_;
+  raw_ptr<blink::WebLocalFrame, ExperimentalRenderer> frame_;
 };
 
 // Obtains the media ContextProvider and calls the given callback on the same
@@ -501,8 +502,9 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
       std::move(compositor_worker_task_runner),
       render_thread->compositor_task_runner(),
       std::move(video_frame_compositor_task_runner),
-      base::BindRepeating(&v8::Isolate::AdjustAmountOfExternalAllocatedMemory,
-                          base::Unretained(blink::MainThreadIsolate())),
+      base::BindRepeating(
+          &v8::Isolate::AdjustAmountOfExternalAllocatedMemory,
+          base::Unretained(web_frame->GetAgentGroupScheduler()->Isolate())),
       initial_cdm, request_routing_token_cb_, media_observer,
       enable_instant_source_buffer_gc, embedded_media_experience_enabled,
       std::move(metrics_provider),

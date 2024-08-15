@@ -123,8 +123,11 @@ const CGFloat kSymbolToolbarPointSize = 24;
                                                kSymbolToolbarPointSize)];
 
   if (IsVivaldiRunning()) {
-    UIImage* menuImage = [UIImage imageNamed:vToolbarMenu];
-    toolsMenuButton = [[ToolbarButton alloc] initWithImage:menuImage];
+    BOOL isIncognito = self.style == ToolbarStyle::kIncognito;
+    UIImage *menuImage = [UIImage imageNamed:vToolbarMenu];
+    UIImage *templateImage = [menuImage imageWithRenderingMode:isIncognito ?
+      UIImageRenderingModeAlwaysTemplate : UIImageRenderingModeAlwaysOriginal];
+    toolsMenuButton = [[ToolbarButton alloc] initWithImage:templateImage];
   } // End Vivaldi
 
   SetA11yLabelAndUiAutomationName(toolsMenuButton, IDS_IOS_TOOLBAR_SETTINGS,
@@ -323,6 +326,7 @@ const CGFloat kSymbolToolbarPointSize = 24;
 }
 
 - (ToolbarButton*)shieldButton {
+  BOOL isIncognito = self.style == ToolbarStyle::kIncognito;
   UIImage* shieldImage = [UIImage imageNamed:vATBShieldNone];
   ToolbarButton* shieldButton =
     [[ToolbarButton alloc]
@@ -335,7 +339,8 @@ const CGFloat kSymbolToolbarPointSize = 24;
          forControlEvents:UIControlEventTouchUpInside];
   shieldButton.visibilityMask =
     self.visibilityConfiguration.toolsMenuButtonVisibility;
-  shieldButton.tintColor = UIColor.vTopToolbarTintColor;
+  shieldButton.tintColor = isIncognito ?
+    UIColor.whiteColor : UIColor.vTopToolbarTintColor;
   return shieldButton;
 }
 

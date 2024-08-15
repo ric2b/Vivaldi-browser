@@ -10,7 +10,7 @@ import {OncMojo} from 'chrome://resources/ash/common/network/onc_mojo.js';
 import {CrosNetworkConfigRemote, SecurityType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
 import {NetworkType, OncSource} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {FakeNetworkConfig} from 'chrome://test/chromeos/fake_network_config_mojom.js';
+import {FakeNetworkConfig} from 'chrome://webui-test/chromeos/fake_network_config_mojom.js';
 
 suite('network-config', function() {
   let networkConfig;
@@ -54,9 +54,9 @@ suite('network-config', function() {
 
   function flushAsync() {
     flush();
-    return new Promise(resolve => {
-      networkConfig.async(resolve);
-    });
+
+    // Use setTimeout to wait for the next macrotask.
+    return new Promise(resolve => setTimeout(resolve));
   }
 
   /**
@@ -98,6 +98,14 @@ suite('network-config', function() {
       networkConfig.shareDefault = false;
     }
 
+    async function setUserCreatedNetworkConfigurationsAreEphemeral() {
+      const globalPolicy = {
+        userCreatedNetworkConfigurationsAreEphemeral: true,
+      };
+      mojoApi_.setGlobalPolicy(globalPolicy);
+      await flushAsync();
+    }
+
     test('New Config: Login or guest', function() {
       // Insecure networks are always shared so test a secure config.
       setNetworkType(NetworkType.kWiFi, SecurityType.kWepPsk);
@@ -110,6 +118,54 @@ suite('network-config', function() {
         assertTrue(share.checked);
       });
     });
+
+    test(
+        'New Config: Login or guest ephemeral user network configs',
+        async function() {
+          loadTimeData.overrideValues({
+            'ephemeralNetworkPoliciesEnabled': true,
+          });
+
+          // Insecure networks are always shared so test a secure config.
+          setUserCreatedNetworkConfigurationsAreEphemeral();
+          setNetworkType(NetworkType.kWiFi, SecurityType.kWepPsk);
+          setLoginOrGuest();
+          initNetworkConfig();
+
+          await flushAsync();
+
+          assertFalse(!!networkConfig.$$('#share'));
+
+          const shareEphemeralDisabled =
+              networkConfig.$$('#shareEphemeralDisabled');
+          assertTrue(!!shareEphemeralDisabled);
+          assertFalse(shareEphemeralDisabled.checked);
+          assertTrue(!!shareEphemeralDisabled.shadowRoot.querySelector(
+              'cr-policy-network-indicator-mojo'));
+
+          // Still, as we're on the login screen, the network config should be
+          // persisted in the shared profile.
+          assertTrue(networkConfig.shareNetwork_);
+        });
+
+    test(
+        'New Config: Login or guest disabled ephemeral user network configs',
+        async function() {
+          loadTimeData.overrideValues({
+            'ephemeralNetworkPoliciesEnabled': false,
+          });
+
+          // Insecure networks are always shared so test a secure config.
+          setUserCreatedNetworkConfigurationsAreEphemeral();
+          setNetworkType(NetworkType.kWiFi, SecurityType.kWepPsk);
+          setLoginOrGuest();
+          initNetworkConfig();
+
+          await flushAsync();
+
+          assertTrue(!!networkConfig.$$('#share'));
+          assertFalse(!!networkConfig.$$('#shareEphemeralDisabled'));
+        });
 
     test('New Config: Kiosk', function() {
       // Insecure networks are always shared so test a secure config.
@@ -146,6 +202,56 @@ suite('network-config', function() {
         assertFalse(share.disabled);
         assertFalse(share.checked);
       });
+    });
+
+    test('New Config: Authenticated, Secure, ephemeral', async function() {
+      loadTimeData.overrideValues({
+        'ephemeralNetworkPoliciesEnabled': true,
+      });
+      setUserCreatedNetworkConfigurationsAreEphemeral();
+      setNetworkType(NetworkType.kWiFi, SecurityType.kWepPsk);
+      setAuthenticated();
+      initNetworkConfig();
+
+      await flushAsync();
+
+      assertFalse(!!networkConfig.$$('#share'));
+
+      const shareEphemeralDisabled =
+          networkConfig.$$('#shareEphemeralDisabled');
+      assertTrue(!!shareEphemeralDisabled);
+      assertFalse(shareEphemeralDisabled.checked);
+      assertTrue(!!shareEphemeralDisabled.shadowRoot.querySelector(
+          'cr-policy-network-indicator-mojo'));
+
+      // When creating an secure wifi config in a user session, it should be
+      // persisted in the user's profile.
+      assertFalse(networkConfig.shareNetwork_);
+    });
+
+    test('New Config: Authenticated, Not secure, ephemeral', async function() {
+      loadTimeData.overrideValues({
+        'ephemeralNetworkPoliciesEnabled': true,
+      });
+      setUserCreatedNetworkConfigurationsAreEphemeral();
+      setNetworkType(NetworkType.kWiFi);
+      setAuthenticated();
+      initNetworkConfig();
+
+      await flushAsync();
+
+      assertFalse(!!networkConfig.$$('#share'));
+
+      const shareEphemeralDisabled =
+          networkConfig.$$('#shareEphemeralDisabled');
+      assertTrue(!!shareEphemeralDisabled);
+      assertFalse(shareEphemeralDisabled.checked);
+      assertTrue(!!shareEphemeralDisabled.shadowRoot.querySelector(
+          'cr-policy-network-indicator-mojo'));
+
+      // When creating an insecure wifi config in a user session, it is
+      // persisted in the shared profile by default.
+      assertTrue(networkConfig.shareNetwork_);
     });
 
     test(

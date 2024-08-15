@@ -3,8 +3,11 @@
 // found in the LICENSE file.
 
 #include <cstdint>
+#include <string>
 
 #include "base/json/json_reader.h"
+#include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/values.h"
@@ -35,8 +38,6 @@ namespace {
 
 using ::testing::UnorderedPointwise;
 
-enum class PrefState { kDefault, kDisabled, kEnabled };
-
 const char* kHostA = "a.test";
 const char* kHostB = "b.test";
 const char* kHostC = "c.test";
@@ -44,7 +45,12 @@ const char* kHostD = "d.test";
 
 class EnabledPolicyBrowsertest
     : public PolicyTest,
-      public ::testing::WithParamInterface<std::tuple<bool, PrefState>> {
+      public ::testing::WithParamInterface<std::tuple<
+          bool,                       // Feature Enabled
+          PolicyTest::BooleanPolicy,  // FirstPartySetsEnabled Policy State
+          PolicyTest::BooleanPolicy,  // RelatedWebsiteSetsEnabled Policy State
+          const char*                 // Overrides Policy
+          >> {
  public:
   EnabledPolicyBrowsertest()
       : https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {
@@ -92,12 +98,21 @@ class EnabledPolicyBrowsertest
     PolicyTest::SetUpInProcessBrowserTestFixture();
     if (absl::optional<std::string> policy = GetOverridesPolicy();
         policy.has_value()) {
-      SetPolicyValue(policy::key::kFirstPartySetsOverrides,
+      SetPolicyValue(GetOverridesPolicyName(),
                      base::JSONReader::Read(policy.value()));
     }
-    if (GetPrefState() != PrefState::kDefault) {
+
+    if (GetInitialFirstPartySetPolicyState() !=
+        PolicyTest::BooleanPolicy::kNotConfigured) {
       SetPolicyValue(policy::key::kFirstPartySetsEnabled,
-                     base::Value(GetPrefState() == PrefState::kEnabled));
+                     base::Value(GetInitialFirstPartySetPolicyState() ==
+                                 PolicyTest::BooleanPolicy::kTrue));
+    }
+    if (GetInitialRelatedWebsiteSetPolicyState() !=
+        PolicyTest::BooleanPolicy::kNotConfigured) {
+      SetPolicyValue(policy::key::kRelatedWebsiteSetsEnabled,
+                     base::Value(GetInitialRelatedWebsiteSetPolicyState() ==
+                                 PolicyTest::BooleanPolicy::kTrue));
     }
 
     provider_.UpdateChromePolicy(policies_);
@@ -109,7 +124,7 @@ class EnabledPolicyBrowsertest
       // Only append this switch when the First-Party Sets base::Feature is
       // enabled.
       command_line->AppendSwitchASCII(
-          network::switches::kUseFirstPartySet,
+          network::switches::kUseRelatedWebsiteSet,
           base::StringPrintf(
               R"({"primary": "https://%s",)"
               R"("associatedSites": ["https://%s","https://%s"]})",
@@ -132,17 +147,25 @@ class EnabledPolicyBrowsertest
     return absl::nullopt;
   }
 
-  // Sets the state of the First-Party Sets enabled preference.
-  void SetEnabledPolicyState(bool enabled) {
-    SetPolicyValue(policy::key::kFirstPartySetsEnabled, base::Value(enabled));
+  // Sets the state of the RelatedWebsiteSetsEnabled Policy to
+  // `relatedWebsiteSetsEnabled`. Once the RelatedWebsiteSetsEnabled Policy's
+  // state is set, the FirstPartySetsEnabled Policy's state is not used anymore,
+  // so we're intentionally setting it's state to `!relatedWebsiteSetsEnabled`,
+  // and tests should still pass.
+  void SetEnabledPolicyStates(bool relatedWebsiteSetsEnabled) {
+    SetPolicyValue(policy::key::kRelatedWebsiteSetsEnabled,
+                   base::Value(relatedWebsiteSetsEnabled));
+    SetPolicyValue(policy::key::kFirstPartySetsEnabled,
+                   base::Value(!relatedWebsiteSetsEnabled));
 
     provider_.UpdateChromePolicy(policies_);
   }
 
-  // Returns whether or not First-Party Sets was enabled at the start of the
-  // test. This does not account for calls to `SetEnabledPolicyState`.
-  bool IsFirstPartySetsEnabledInitially() {
-    return IsFeatureEnabled() && GetPrefState() != PrefState::kDisabled;
+  // Returns whether or not Related Website Sets (fka First-Party Sets) was
+  // enabled at the start of the test. This does not account for calls to
+  // `SetEnabledPolicyStates`.
+  bool IsRelatedWebsiteSetsEnabledInitially() {
+    return IsFeatureEnabled() && IsPrefEnabledInitially();
   }
 
   void NavigateToPageWithFrame(const std::string& host) {
@@ -156,8 +179,8 @@ class EnabledPolicyBrowsertest
     EXPECT_TRUE(NavigateIframeToURL(web_contents, "test", url));
   }
 
-  bool AreSitesInSameFirstPartySet(const std::string& first_host,
-                                   const std::string& second_host) {
+  bool AreSitesInSameRelatedWebsiteSet(const std::string& first_host,
+                                       const std::string& second_host) {
     NavigateToPageWithFrame(first_host);
     NavigateFrameTo(https_server_.GetURL(second_host, "/empty.html"));
 
@@ -165,7 +188,27 @@ class EnabledPolicyBrowsertest
   }
 
   bool IsFeatureEnabled() { return std::get<0>(GetParam()); }
-  PrefState GetPrefState() { return std::get<1>(GetParam()); }
+  PolicyTest::BooleanPolicy GetInitialFirstPartySetPolicyState() {
+    return std::get<1>(GetParam());
+  }
+  PolicyTest::BooleanPolicy GetInitialRelatedWebsiteSetPolicyState() {
+    return std::get<2>(GetParam());
+  }
+  const char* GetOverridesPolicyName() { return std::get<3>(GetParam()); }
+
+  // If the RelatedWebsiteSetEnabled policy is unset
+  // SimpleDeprecatingPolicyHandler falls back to the FirstPartySetEnabled
+  // policy so we infer the Pref's state accordingly.
+  bool IsPrefEnabledInitially() {
+    if (GetInitialRelatedWebsiteSetPolicyState() ==
+        PolicyTest::BooleanPolicy::kNotConfigured) {
+      return GetInitialFirstPartySetPolicyState() !=
+             PolicyTest::BooleanPolicy::kFalse;
+    }
+
+    return GetInitialRelatedWebsiteSetPolicyState() !=
+           PolicyTest::BooleanPolicy::kFalse;
+  }
 
  private:
   void SetPolicyValue(const char* key, absl::optional<base::Value> value) {
@@ -182,38 +225,85 @@ class EnabledPolicyBrowsertest
   PolicyMap policies_;
 };
 
+// Generates test names containing params for easier debugging.
+std::string TestNameGenerator(
+    const testing::TestParamInfo<EnabledPolicyBrowsertest::ParamType>& info) {
+  std::string name = base::NumberToString(info.index);
+
+  bool is_feature_enabled = std::get<0>(info.param);
+  if (is_feature_enabled) {
+    base::StrAppend(&name, {"_Enabled"});
+  } else {
+    base::StrAppend(&name, {"_Disabled"});
+  }
+
+  auto policy_state_to_string =
+      [](PolicyTest::BooleanPolicy state) -> std::string {
+    switch (state) {
+      case PolicyTest::BooleanPolicy::kNotConfigured:
+        return "NotConfigured";
+      case PolicyTest::BooleanPolicy::kFalse:
+        return "False";
+      case PolicyTest::BooleanPolicy::kTrue:
+        return "True";
+    }
+  };
+
+  PolicyTest::BooleanPolicy first_party_sets_policy_state =
+      std::get<1>(info.param);
+  base::StrAppend(&name,
+                  {"_", policy_state_to_string(first_party_sets_policy_state)});
+
+  PolicyTest::BooleanPolicy related_website_sets_policy_state =
+      std::get<2>(info.param);
+  base::StrAppend(
+      &name, {"_", policy_state_to_string(related_website_sets_policy_state)});
+
+  const char* override_policy_name = std::get<3>(info.param);
+  base::StrAppend(&name, {"_", override_policy_name});
+
+  return name;
+}
+
 IN_PROC_BROWSER_TEST_P(EnabledPolicyBrowsertest, ToggleFeature_Memberships) {
-  const bool feature_enabled = IsFeatureEnabled();
-  const bool pref_initially_enabled = GetPrefState() != PrefState::kDisabled;
+  EXPECT_EQ(IsFeatureEnabled() && IsPrefEnabledInitially(),
+            AreSitesInSameRelatedWebsiteSet(kHostA, kHostC));
+  EXPECT_EQ(IsFeatureEnabled() && IsPrefEnabledInitially(),
+            AreSitesInSameRelatedWebsiteSet(kHostA, kHostB));
 
-  EXPECT_EQ(feature_enabled && pref_initially_enabled,
-            AreSitesInSameFirstPartySet(kHostA, kHostC));
-  EXPECT_EQ(feature_enabled && pref_initially_enabled,
-            AreSitesInSameFirstPartySet(kHostA, kHostB));
+  SetEnabledPolicyStates(!IsPrefEnabledInitially());
 
-  SetEnabledPolicyState(!pref_initially_enabled);
-
-  EXPECT_EQ(feature_enabled && !pref_initially_enabled,
-            AreSitesInSameFirstPartySet(kHostA, kHostC));
-  EXPECT_EQ(feature_enabled && !pref_initially_enabled,
-            AreSitesInSameFirstPartySet(kHostA, kHostB));
+  EXPECT_EQ(IsFeatureEnabled() && !IsPrefEnabledInitially(),
+            AreSitesInSameRelatedWebsiteSet(kHostA, kHostC));
+  EXPECT_EQ(IsFeatureEnabled() && !IsPrefEnabledInitially(),
+            AreSitesInSameRelatedWebsiteSet(kHostA, kHostB));
 }
 
 IN_PROC_BROWSER_TEST_P(EnabledPolicyBrowsertest, ToggleFeature_NonMemberships) {
-  EXPECT_FALSE(AreSitesInSameFirstPartySet(kHostD, kHostA));
-  const bool pref_initially_enabled = GetPrefState() != PrefState::kDisabled;
-  SetEnabledPolicyState(!pref_initially_enabled);
+  EXPECT_FALSE(AreSitesInSameRelatedWebsiteSet(kHostD, kHostA));
+  SetEnabledPolicyStates(!IsPrefEnabledInitially());
 
-  EXPECT_FALSE(AreSitesInSameFirstPartySet(kHostD, kHostA));
+  EXPECT_FALSE(AreSitesInSameRelatedWebsiteSet(kHostD, kHostA));
 }
 
 INSTANTIATE_TEST_SUITE_P(
     FirstPartySets,
     EnabledPolicyBrowsertest,
-    ::testing::Combine(::testing::Bool(),
-                       ::testing::Values(PrefState::kDefault,
-                                         PrefState::kDisabled,
-                                         PrefState::kEnabled)));
+    ::testing::Combine(
+        ::testing::Bool(),  // Feature Enabled
+        ::testing::Values(
+            PolicyTest::BooleanPolicy::kNotConfigured,
+            PolicyTest::BooleanPolicy::kFalse,
+            PolicyTest::BooleanPolicy::kTrue),  // FirstPartySetsEnabled
+        ::testing::Values(
+            PolicyTest::BooleanPolicy::kNotConfigured,
+            PolicyTest::BooleanPolicy::kFalse,
+            PolicyTest::BooleanPolicy::kTrue),  // RelatedWebsiteSetsEnabled
+        ::testing::Values(
+            policy::key::kFirstPartySetsOverrides,
+            policy::key::kRelatedWebsiteSetsOverrides)  // Overrides Policy
+        ),
+    TestNameGenerator);
 
 class OverridesPolicyEmptyBrowsertest : public EnabledPolicyBrowsertest {
  public:
@@ -223,24 +313,35 @@ class OverridesPolicyEmptyBrowsertest : public EnabledPolicyBrowsertest {
 };
 
 IN_PROC_BROWSER_TEST_P(OverridesPolicyEmptyBrowsertest, CheckMemberships) {
-  // The initial First-Party Sets were:
+  // The initial Related Website Sets were:
   // {primary: A, associatedSites: [B, C]}
   //
-  // After the Overrides policy is applied, the expected First-Party Sets are:
-  // {primary: A, associatedSites: [B, C]} (unchanged)
-  EXPECT_EQ(IsFirstPartySetsEnabledInitially(),
-            AreSitesInSameFirstPartySet(kHostC, kHostA));
-  EXPECT_EQ(IsFirstPartySetsEnabledInitially(),
-            AreSitesInSameFirstPartySet(kHostB, kHostA));
+  // After the Overrides policy is applied, the expected Related Website Sets
+  // are: {primary: A, associatedSites: [B, C]} (unchanged)
+  EXPECT_EQ(IsRelatedWebsiteSetsEnabledInitially(),
+            AreSitesInSameRelatedWebsiteSet(kHostC, kHostA));
+  EXPECT_EQ(IsRelatedWebsiteSetsEnabledInitially(),
+            AreSitesInSameRelatedWebsiteSet(kHostB, kHostA));
 }
 
 INSTANTIATE_TEST_SUITE_P(
     FirstPartySets,
     OverridesPolicyEmptyBrowsertest,
-    ::testing::Combine(::testing::Bool(),
-                       ::testing::Values(PrefState::kDefault,
-                                         PrefState::kDisabled,
-                                         PrefState::kEnabled)));
+    ::testing::Combine(
+        ::testing::Bool(),  // Feature Enabled
+        ::testing::Values(
+            PolicyTest::BooleanPolicy::kNotConfigured,
+            PolicyTest::BooleanPolicy::kFalse,
+            PolicyTest::BooleanPolicy::kTrue),  // FirstPartySetsEnabled
+        ::testing::Values(
+            PolicyTest::BooleanPolicy::kNotConfigured,
+            PolicyTest::BooleanPolicy::kFalse,
+            PolicyTest::BooleanPolicy::kTrue),  // RelatedWebsiteSetsEnabled
+        ::testing::Values(
+            policy::key::kFirstPartySetsOverrides,
+            policy::key::kRelatedWebsiteSetsOverrides)  // Overrides Policy
+        ),
+    TestNameGenerator);
 
 class OverridesPolicyReplacementBrowsertest : public EnabledPolicyBrowsertest {
  public:
@@ -261,25 +362,36 @@ class OverridesPolicyReplacementBrowsertest : public EnabledPolicyBrowsertest {
 
 IN_PROC_BROWSER_TEST_P(OverridesPolicyReplacementBrowsertest,
                        CheckMemberships) {
-  // The initial First-Party Sets were:
+  // The initial Related Website Sets were:
   // {primary: A, associatedSites: [B, C]}
   //
-  // After the Overrides policy is applied, the expected First-Party Sets are:
-  // {primary: D, associatedSites: [A, B]}
-  EXPECT_EQ(IsFirstPartySetsEnabledInitially(),
-            AreSitesInSameFirstPartySet(kHostA, kHostB));
-  EXPECT_EQ(IsFirstPartySetsEnabledInitially(),
-            AreSitesInSameFirstPartySet(kHostA, kHostD));
-  EXPECT_FALSE(AreSitesInSameFirstPartySet(kHostA, kHostC));
+  // After the Overrides policy is applied, the expected Related Website Sets
+  // are: {primary: D, associatedSites: [A, B]}
+  EXPECT_EQ(IsRelatedWebsiteSetsEnabledInitially(),
+            AreSitesInSameRelatedWebsiteSet(kHostA, kHostB));
+  EXPECT_EQ(IsRelatedWebsiteSetsEnabledInitially(),
+            AreSitesInSameRelatedWebsiteSet(kHostA, kHostD));
+  EXPECT_FALSE(AreSitesInSameRelatedWebsiteSet(kHostA, kHostC));
 }
 
 INSTANTIATE_TEST_SUITE_P(
     FirstPartySets,
     OverridesPolicyReplacementBrowsertest,
-    ::testing::Combine(::testing::Bool(),
-                       ::testing::Values(PrefState::kDefault,
-                                         PrefState::kDisabled,
-                                         PrefState::kEnabled)));
+    ::testing::Combine(
+        ::testing::Bool(),  // Feature Enabled
+        ::testing::Values(
+            PolicyTest::BooleanPolicy::kNotConfigured,
+            PolicyTest::BooleanPolicy::kFalse,
+            PolicyTest::BooleanPolicy::kTrue),  // FirstPartySetsEnabled
+        ::testing::Values(
+            PolicyTest::BooleanPolicy::kNotConfigured,
+            PolicyTest::BooleanPolicy::kFalse,
+            PolicyTest::BooleanPolicy::kTrue),  // RelatedWebsiteSetsEnabled
+        ::testing::Values(
+            policy::key::kFirstPartySetsOverrides,
+            policy::key::kRelatedWebsiteSetsOverrides)  // Overrides Policy
+        ),
+    TestNameGenerator);
 
 class OverridesPolicyAdditionBrowsertest : public EnabledPolicyBrowsertest {
  public:
@@ -299,26 +411,37 @@ class OverridesPolicyAdditionBrowsertest : public EnabledPolicyBrowsertest {
 };
 
 IN_PROC_BROWSER_TEST_P(OverridesPolicyAdditionBrowsertest, CheckMemberships) {
-  // The initial First-Party Sets were:
+  // The initial Related Website Sets were:
   // {primary: A, associatedSites: [B, C]}
   //
-  // After the Overrides policy is applied, the expected First-Party Sets are:
-  // {primary: A, associatedSites: [B, C, D]}}
-  EXPECT_EQ(IsFirstPartySetsEnabledInitially(),
-            AreSitesInSameFirstPartySet(kHostA, kHostD));
-  EXPECT_EQ(IsFirstPartySetsEnabledInitially(),
-            AreSitesInSameFirstPartySet(kHostA, kHostB));
-  EXPECT_EQ(IsFirstPartySetsEnabledInitially(),
-            AreSitesInSameFirstPartySet(kHostA, kHostC));
+  // After the Overrides policy is applied, the expected Related Website Sets
+  // are: {primary: A, associatedSites: [B, C, D]}}
+  EXPECT_EQ(IsRelatedWebsiteSetsEnabledInitially(),
+            AreSitesInSameRelatedWebsiteSet(kHostA, kHostD));
+  EXPECT_EQ(IsRelatedWebsiteSetsEnabledInitially(),
+            AreSitesInSameRelatedWebsiteSet(kHostA, kHostB));
+  EXPECT_EQ(IsRelatedWebsiteSetsEnabledInitially(),
+            AreSitesInSameRelatedWebsiteSet(kHostA, kHostC));
 }
 
 INSTANTIATE_TEST_SUITE_P(
     FirstPartySets,
     OverridesPolicyAdditionBrowsertest,
-    ::testing::Combine(::testing::Bool(),
-                       ::testing::Values(PrefState::kDefault,
-                                         PrefState::kDisabled,
-                                         PrefState::kEnabled)));
+    ::testing::Combine(
+        ::testing::Bool(),  // Feature Enabled
+        ::testing::Values(
+            PolicyTest::BooleanPolicy::kNotConfigured,
+            PolicyTest::BooleanPolicy::kFalse,
+            PolicyTest::BooleanPolicy::kTrue),  // FirstPartySetsEnabled
+        ::testing::Values(
+            PolicyTest::BooleanPolicy::kNotConfigured,
+            PolicyTest::BooleanPolicy::kFalse,
+            PolicyTest::BooleanPolicy::kTrue),  // RelatedWebsiteSetsEnabled
+        ::testing::Values(
+            policy::key::kFirstPartySetsOverrides,
+            policy::key::kRelatedWebsiteSetsOverrides)  // Overrides Policy
+        ),
+    TestNameGenerator);
 
 class OverridesPolicyReplacementAndAdditionBrowsertest
     : public EnabledPolicyBrowsertest {
@@ -345,24 +468,36 @@ class OverridesPolicyReplacementAndAdditionBrowsertest
 
 IN_PROC_BROWSER_TEST_P(OverridesPolicyReplacementAndAdditionBrowsertest,
                        CheckMemberships) {
-  // The initial First-Party Sets were:
+  // The initial Related Website Sets were:
   // {primary: A, associatedSites: [B, C]}
   //
-  // After the Overrides policy is applied, the expected First-Party Sets are:
+  // After the Overrides policy is applied, the expected Related Website Sets
+  // are:
   // {primary: A, associatedSites: [D]} and {primary: B, associatedSites: [C]}.
-  EXPECT_FALSE(AreSitesInSameFirstPartySet(kHostB, kHostA));
-  EXPECT_EQ(IsFirstPartySetsEnabledInitially(),
-            AreSitesInSameFirstPartySet(kHostD, kHostA));
-  EXPECT_EQ(IsFirstPartySetsEnabledInitially(),
-            AreSitesInSameFirstPartySet(kHostC, kHostB));
+  EXPECT_FALSE(AreSitesInSameRelatedWebsiteSet(kHostB, kHostA));
+  EXPECT_EQ(IsRelatedWebsiteSetsEnabledInitially(),
+            AreSitesInSameRelatedWebsiteSet(kHostD, kHostA));
+  EXPECT_EQ(IsRelatedWebsiteSetsEnabledInitially(),
+            AreSitesInSameRelatedWebsiteSet(kHostC, kHostB));
 }
 
 INSTANTIATE_TEST_SUITE_P(
     FirstPartySets,
     OverridesPolicyReplacementAndAdditionBrowsertest,
-    ::testing::Combine(::testing::Bool(),
-                       ::testing::Values(PrefState::kDefault,
-                                         PrefState::kDisabled,
-                                         PrefState::kEnabled)));
+    ::testing::Combine(
+        ::testing::Bool(),  // Feature Enabled
+        ::testing::Values(
+            PolicyTest::BooleanPolicy::kNotConfigured,
+            PolicyTest::BooleanPolicy::kFalse,
+            PolicyTest::BooleanPolicy::kTrue),  // FirstPartySetsEnabled
+        ::testing::Values(
+            PolicyTest::BooleanPolicy::kNotConfigured,
+            PolicyTest::BooleanPolicy::kFalse,
+            PolicyTest::BooleanPolicy::kTrue),  // RelatedWebsiteSetsEnabled
+        ::testing::Values(
+            policy::key::kFirstPartySetsOverrides,
+            policy::key::kRelatedWebsiteSetsOverrides)  // Overrides Policy
+        ),
+    TestNameGenerator);
 }  // namespace
 }  // namespace policy

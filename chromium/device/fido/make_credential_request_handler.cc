@@ -871,8 +871,7 @@ void MakeCredentialRequestHandler::HandleResponse(
 
   if (status != CtapDeviceResponseCode::kSuccess) {
     FIDO_LOG(ERROR) << "Failing make credential request due to status "
-                    << static_cast<int>(status) << " from "
-                    << authenticator->GetDisplayName();
+                    << status << " from " << authenticator->GetDisplayName();
     std::move(completion_callback_)
         .Run(*maybe_result, absl::nullopt, authenticator);
     return;
@@ -1074,6 +1073,11 @@ void MakeCredentialRequestHandler::SpecializeRequestForAuthenticator(
       // UV on authenticators without it.
       request->user_verification =
           AtLeastUVPreferred(request->user_verification);
+    }
+    // Evaluating the PRF at creation time is only supported with the "prf"
+    // extension.
+    if (request->prf_input && !auth_options.supports_prf) {
+      request->prf_input.reset();
     }
   }
 

@@ -42,6 +42,8 @@ source_set("vivaldi_ntp") {
     "resources:vivaldi_ntp_background_color",
     "resources:vivaldi_private_ntp_background_color",
     "resources:vivaldi_ntp_searchbar_background_color",
+    "resources:vivaldi_private_toolbar_background_color",
+    "resources:vivaldi_private_tabview_selected_background_color",
     "resources:vivaldi_ntp_speed_dial_container_background_color",
     "resources:vivaldi_ntp_speed_dial_cell_background_color",
     "resources:vivaldi_ntp_speed_dial_cell_shadow_color",

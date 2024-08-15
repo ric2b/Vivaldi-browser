@@ -2,6 +2,8 @@
 
 #include "extraparts/vivaldi_browser_main_extra_parts_mac.h"
 
+#import <Cocoa/Cocoa.h>
+
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
 #include "base/apple/foundation_util.h"
@@ -35,9 +37,6 @@ void VivaldiBrowserMainExtraPartsMac::PostEarlyInitialization() {
   if (keyDoesNotExist) {
     [defaults setBool:true forKey:key];
   }
-
-  if (vivaldi::IsVivaldiRunning())
-    vivaldi::MaybeSetupVivaldiKeychain();
  }
 
 void VivaldiBrowserMainExtraPartsMac::PreProfileInit() {

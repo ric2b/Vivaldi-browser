@@ -14,29 +14,17 @@
 #include "components/device_reauth/device_authenticator.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
-#include "components/password_manager/core/browser/password_store_interface.h"
 #include "ui/gfx/native_widget_types.h"
 
-namespace network {
-namespace mojom {
-class NetworkContext;
-}
-}  // namespace network
-
 namespace password_manager {
-class CredentialsCleanerRunner;
-struct GroupedFacets;
 class PasswordManagerDriver;
 class PasswordManagerClient;
+struct PasswordFormDigest;
 }  // namespace password_manager
 
 namespace autofill {
 class AutofillClient;
 }  // namespace autofill
-
-namespace syncer {
-class SyncService;
-}
 
 class PrefService;
 
@@ -57,17 +45,6 @@ enum class GetLoginMatchType {
 
 // Update |credential| to reflect usage.
 void UpdateMetadataForUsage(password_manager::PasswordForm* credential);
-
-// Reports whether and how passwords are currently synced. In particular, for a
-// null |sync_service| returns NOT_SYNCING.
-password_manager::SyncState GetPasswordSyncState(
-    const syncer::SyncService* sync_service);
-
-// Removes Android username-only credentials from |android_credentials|.
-// Transforms federated credentials into non zero-click ones.
-void TrimUsernameOnlyCredentials(
-    std::vector<std::unique_ptr<password_manager::PasswordForm>>*
-        android_credentials);
 
 // A convenience function for testing that |client| has a non-null LogManager
 // and that that LogManager returns true for IsLoggingActive. This function can
@@ -91,26 +68,6 @@ bool ShowAllSavedPasswordsContextMenuEnabled(
 void UserTriggeredManualGenerationFromContextMenu(
     password_manager::PasswordManagerClient* password_manager_client,
     autofill::AutofillClient* autofill_client);
-
-// This function handles the following clean-ups of credentials:
-// (1) Removing blocklisted duplicates: if two blocklisted credentials have the
-// same signon_realm, they are duplicates of each other. Deleting all but one
-// sharing the signon_realm does not affect Chrome's behaviour and hence
-// duplicates can be removed. Having duplicates makes un-blocklisting not work,
-// hence blocklisted duplicates need to be removed.
-// (2) Removing or fixing of HTTPS credentials with wrong signon_realm. See
-// https://crbug.com/881731 for details.
-// (3) Report metrics about HTTP to HTTPS migration process and remove obsolete
-// HTTP credentials. This feature is not available on iOS platform because the
-// HSTS query is not supported. |network_context_getter| is always null for iOS
-// and it can also be null for some unittests.
-void RemoveUselessCredentials(
-    password_manager::CredentialsCleanerRunner* cleaning_tasks_runner,
-    scoped_refptr<password_manager::PasswordStoreInterface> store,
-    PrefService* prefs,
-    base::TimeDelta delay,
-    base::RepeatingCallback<network::mojom::NetworkContext*()>
-        network_context_getter);
 
 // Excluding protocol from a signon_realm means to remove from the signon_realm
 // what is before the web origin (with the protocol excluded as well). For
@@ -189,9 +146,6 @@ GURL StripAuthAndParams(const GURL& gurl);
 // by default. For ip-addresses, scheme "http://" is used.
 GURL ConstructGURLWithScheme(const std::string& url);
 
-// Returns whether |url| has valid format and either an HTTP or HTTPS scheme.
-bool IsValidPasswordURL(const GURL& url);
-
 // TODO(crbug.com/1261752): Deduplicate GetSignonRealm implementations.
 // Returns the value of PasswordForm::signon_realm for an HTML form with the
 // origin |url|.
@@ -206,23 +160,6 @@ bool IsCredentialProviderEnabledOnStartup(const PrefService* prefs);
 // provider in their iOS settings at startup.
 void SetCredentialProviderEnabledOnStartup(PrefService* prefs, bool enabled);
 #endif
-
-// Retrieves the extended top level domain for a given |url|
-// ("https://www.facebook.com/" => "facebook.com"). If the calculated top
-// private domain matches an entry from the |psl_extensions| (e.g. "app.link"),
-// the domain is extended by one level ("https://facebook.app.link/" =>
-// "facebook.app.link"). If the |url| is not a valid URI or has an unsupported
-// schema (e.g. "android://"), empty string is returned.
-std::string GetExtendedTopLevelDomain(
-    const GURL& url,
-    const base::flat_set<std::string>& psl_extensions);
-
-// This functions merges groups together if one of the following applies:
-// * the same facet is present in both groups.
-// * eTLD+1 of a facet in one group matches eTLD+1 of a facet in another group.
-std::vector<password_manager::GroupedFacets> MergeRelatedGroups(
-    const base::flat_set<std::string>& psl_extensions,
-    const std::vector<password_manager::GroupedFacets>& groups);
 
 // Contains all special symbols considered for password-generation.
 inline constexpr char kSpecialSymbols[] = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
@@ -244,6 +181,11 @@ bool IsSpecialSymbol(char16_t c);
 
 // Returns true if 'type' is a username in a password-less form.
 bool IsSingleUsernameType(autofill::ServerFieldType type);
+
+#if BUILDFLAG(IS_ANDROID)
+// Checks that the feature is enabled.
+bool UsesUPMForLocalM2(PrefService* prefs);
+#endif
 
 }  // namespace password_manager_util
 

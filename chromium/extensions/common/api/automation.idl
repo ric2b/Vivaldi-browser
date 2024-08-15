@@ -310,7 +310,7 @@
     pluginObject,
     popUpButton,
     portal,
-    pre,
+    preDeprecated,
     progressIndicator,
     radioButton,
     radioGroup,
@@ -422,6 +422,7 @@
     showContextMenu,
     signalEndOfTest,
     showTooltip,
+    stitchChildTree,
     startDuckingMedia,
     stopDuckingMedia,
     suspendMedia

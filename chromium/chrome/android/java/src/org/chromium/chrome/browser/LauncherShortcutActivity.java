@@ -17,15 +17,17 @@ import androidx.annotation.RequiresApi;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ResettersForTesting;
+import org.chromium.base.shared_preferences.SharedPreferencesManager;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
-import org.vivaldi.browser.common.VivaldiIntentHandler;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+
+import org.vivaldi.browser.common.VivaldiIntentHandler;
 
 /**
  * A helper activity for routing launcher shortcut intents.
@@ -77,7 +79,7 @@ public class LauncherShortcutActivity extends Activity {
     public static void updateIncognitoShortcut(Context context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N_MR1) return;
         if (ChromeApplicationImpl.isVivaldi()) {
-            SharedPreferencesManager preferences = SharedPreferencesManager.getInstance();
+            SharedPreferencesManager preferences = ChromeSharedPreferences.getInstance();
 
             boolean incognitoShortcutAdded =
                 preferences.readBoolean(ChromePreferenceKeys.INCOGNITO_SHORTCUT_ADDED, false);
@@ -87,7 +89,7 @@ public class LauncherShortcutActivity extends Activity {
             return;
         }
 
-        SharedPreferencesManager preferences = SharedPreferencesManager.getInstance();
+        SharedPreferencesManager preferences = ChromeSharedPreferences.getInstance();
         boolean incognitoEnabled = IncognitoUtils.isIncognitoModeEnabled();
         boolean incognitoShortcutAdded =
                 preferences.readBoolean(ChromePreferenceKeys.INCOGNITO_SHORTCUT_ADDED, false);

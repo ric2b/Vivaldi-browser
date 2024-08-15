@@ -64,8 +64,14 @@ class ManagePasswordsState {
       std::vector<std::unique_ptr<password_manager::PasswordForm>> local_forms,
       const url::Origin& origin);
 
-  // Move to CONFIRMATION_STATE.
+  // Move to SAVE_CONFIRMATION_STATE.
   void OnAutomaticPasswordSave(
+      std::unique_ptr<password_manager::PasswordFormManagerForUI> form_manager);
+
+  // Move to |state|. Updates local_credentials_forms_ to contain pending
+  // credentials.
+  void OnSubmittedGeneratedPassword(
+      password_manager::ui::State state,
       std::unique_ptr<password_manager::PasswordFormManagerForUI> form_manager);
 
   // Move to MANAGE_STATE or INACTIVE_STATE for PSL matched passwords.

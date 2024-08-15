@@ -9,6 +9,7 @@
 
 @class AccountPickerConfiguration;
 @protocol AccountPickerCoordinatorDelegate;
+@protocol SystemIdentity;
 
 // Presents a bottom sheet that lets the user pick or add an account on the
 // device to perform some action.
@@ -20,6 +21,9 @@
 // on top of the account picker e.g. the AddAccountSigninCoordinator's view.
 @property(nonatomic, readonly) UIViewController* viewController;
 
+// The identity currently presented as selected.
+@property(nonatomic, strong) id<SystemIdentity> selectedIdentity;
+
 // Inits the coordinator.
 - (instancetype)initWithBaseViewController:(UIViewController*)baseViewController
                                    browser:(Browser*)browser
@@ -29,6 +33,9 @@
 
 - (instancetype)initWithBaseViewController:(UIViewController*)baseViewController
                                    browser:(Browser*)browser NS_UNAVAILABLE;
+
+// Same as -stop but can be animated.
+- (void)stopAnimated:(BOOL)animated;
 
 // Starts the spinner and disables buttons.
 - (void)startValidationSpinner;

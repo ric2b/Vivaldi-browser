@@ -46,4 +46,7 @@ extern NSString* vAboutSetting;
 // Image name for toolbar menu
 extern NSString* vToolbarMenu;
 
+// Image name for appearance setting
+extern NSString* vAppearanceSetting;
+
 #endif  // IOS_UI_SETTINGS_VIVALDI_SETTINGS_CONSTANTS_H_

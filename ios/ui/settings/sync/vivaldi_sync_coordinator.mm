@@ -483,15 +483,12 @@
 }
 
 - (void)importPasskey:(NSURL*)fileSelected
-    completionHandler:(void (^)(BOOL success))completionHandler {
+    completionHandler:(void (^)(NSString* errorMessage))completionHandler {
   if (!fileSelected) {
     return;
   }
-  BOOL success = [self.mediator importEncryptionPassword:fileSelected];
-  if (completionHandler) {
-    completionHandler(success);
-  }
-  [fileSelected stopAccessingSecurityScopedResource];
+  [self.mediator importEncryptionPassword:fileSelected
+                        completionHandler:completionHandler];
 }
 
 - (void)logOutButtonPressed {

@@ -18,6 +18,7 @@
 #import "components/handoff/handoff_utility.h"
 #import "components/search_engines/template_url_service.h"
 #import "ios/chrome/app/app_startup_parameters.h"
+#import "ios/chrome/app/application_delegate/intents_constants.h"
 #import "ios/chrome/app/application_delegate/startup_information.h"
 #import "ios/chrome/app/application_delegate/tab_opening.h"
 #import "ios/chrome/app/application_mode.h"
@@ -25,9 +26,10 @@
 #import "ios/chrome/app/spotlight/spotlight_util.h"
 #import "ios/chrome/app/startup/app_launch_metrics.h"
 #import "ios/chrome/app/startup/chrome_app_startup_parameters.h"
+#import "ios/chrome/browser/intents/intent_type.h"
 #import "ios/chrome/browser/metrics/first_user_action_recorder.h"
 #import "ios/chrome/browser/policy/policy_util.h"
-#import "ios/chrome/browser/search_engines/template_url_service_factory.h"
+#import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/scene/connection_information.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list.h"
@@ -36,8 +38,8 @@
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
-#import "ios/chrome/browser/url_loading/image_search_param_generator.h"
-#import "ios/chrome/browser/url_loading/url_loading_params.h"
+#import "ios/chrome/browser/url_loading/model/image_search_param_generator.h"
+#import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "ios/chrome/common/intents/OpenInChromeIncognitoIntent.h"
 #import "ios/chrome/common/intents/OpenInChromeIntent.h"
 #import "ios/chrome/common/intents/SearchInChromeIntent.h"
@@ -48,36 +50,6 @@
 using base::UserMetricsAction;
 
 namespace {
-// Constants for 3D touch application static shortcuts.
-NSString* const kShortcutNewSearch = @"OpenNewSearch";
-NSString* const kShortcutNewIncognitoSearch = @"OpenIncognitoSearch";
-NSString* const kShortcutVoiceSearch = @"OpenVoiceSearch";
-NSString* const kShortcutQRScanner = @"OpenQRScanner";
-NSString* const kShortcutLensFromAppIconLongPress =
-    @"OpenLensFromAppIconLongPress";
-NSString* const kShortcutLensFromSpotlight = @"OpenLensFromSpotlight";
-
-// Constants for Siri shortcut.
-NSString* const kSiriShortcutOpenInChrome = @"OpenInChromeIntent";
-NSString* const kSiriShortcutSearchInChrome = @"SearchInChromeIntent";
-NSString* const kSiriShortcutOpenInIncognito = @"OpenInChromeIncognitoIntent";
-NSString* const kSiriOpenReadingList = @"OpenReadingListIntent";
-NSString* const kSiriOpenBookmarks = @"OpenBookmarksIntent";
-NSString* const kSiriOpenRecentTabs = @"OpenRecentTabsIntent";
-NSString* const kSiriOpenTabGrid = @"OpenTabGridIntent";
-NSString* const kSiriVoiceSearch = @"SearchWithVoiceIntent";
-NSString* const kSiriOpenNewTab = @"OpenNewTabIntent";
-NSString* const kSiriPlayDinoGame = @"PlayDinoGameIntent";
-NSString* const kSiriSetChromeDefaultBrowser = @"SetChromeDefaultBrowserIntent";
-NSString* const kSiriViewHistory = @"ViewHistoryIntent";
-NSString* const kSiriOpenNewIncognitoTab = @"OpenNewIncognitoTabIntent";
-NSString* const kSiriManagePaymentMethods = @"ManagePaymentMethodsIntent";
-NSString* const kSiriRunSafetyCheck = @"RunSafetyCheckIntent";
-NSString* const kSiriManagePasswords = @"ManagePasswordsIntent";
-NSString* const kSiriManageSettings = @"ManageSettingsIntent";
-NSString* const kSiriOpenLatestTab = @"OpenLatestTabIntent";
-NSString* const kSiriOpenLensFromIntents = @"OpenLensIntent";
-NSString* const kSiriClearBrowsingData = @"ClearBrowsingDataIntent";
 
 // Constants for compatible mode for user activities.
 NSString* const kRegularMode = @"RegularMode";
@@ -122,10 +94,47 @@ NSArray* CompatibleModeForActivityType(NSString* activityType) {
 }  // namespace
 
 @interface UserActivityHandler ()
+
+// Returns an app startup parameter for opening a new tab with a post action.
++ (AppStartupParameters*)startupParametersForOpeningNewTabWithAction:
+    (TabOpeningPostOpeningAction)action;
+
 // Handles the 3D touch application static items. Does nothing if in first run.
 + (BOOL)handleShortcutItem:(UIApplicationShortcutItem*)shortcutItem
      connectionInformation:(id<ConnectionInformation>)connectionInformation
                  initStage:(InitStage)initStage;
+
+// Open the requested URLs if the app is active. If the app is not active,
+// updates the startupParameters if needed.
++ (void)continueUserActivityURLs:(const std::vector<GURL>&)webpageURLs
+             applicationIsActive:(BOOL)applicationIsActive
+                       tabOpener:(id<TabOpening>)tabOpener
+           connectionInformation:
+               (id<ConnectionInformation>)connectionInformation
+              startupInformation:(id<StartupInformation>)startupInformation
+                       incognito:(BOOL)incognito
+                       initStage:(InitStage)initStage;
+
+// Checks if a new tab must be opened immediately. If the app is not active,
+// updates the startupParameters if needed. Returns wether it could continue
+// userActivity.
++ (BOOL)continueUserActivityURL:(NSURL*)webpageURL
+            applicationIsActive:(BOOL)applicationIsActive
+                      tabOpener:(id<TabOpening>)tabOpener
+          connectionInformation:(id<ConnectionInformation>)connectionInformation
+             startupInformation:(id<StartupInformation>)startupInformation
+                   browserState:(ChromeBrowserState*)browserState
+                      initStage:(InitStage)initStage
+                openExistingTab:(BOOL)openExistingTab;
+
+// Opens multiple tabs.
++ (void)openMultipleTabsWithConnectionInformation:
+            (id<ConnectionInformation>)connectionInformation
+                                        tabOpener:(id<TabOpening>)tabOpener;
+
+// Returns the GURL coming from the search query.
++ (GURL)generateResultGURLFromSearchQuery:(NSString*)searchQuery
+                             browserState:(ChromeBrowserState*)browserState;
 @end
 
 @implementation UserActivityHandler
@@ -210,6 +219,8 @@ NSArray* CompatibleModeForActivityType(NSString* activityType) {
     base::UmaHistogramEnumeration(kAppLaunchSource,
                                   AppLaunchSource::SIRI_SHORTCUT);
     base::RecordAction(UserMetricsAction("IOSLaunchedBySearchInChromeIntent"));
+    base::UmaHistogramEnumeration("IOS.Spotlight.LaunchedIntentType",
+                                  IntentType::kSearchInChrome);
 
     AppStartupParameters* startupParams = [[AppStartupParameters alloc]
         initWithExternalURL:GURL(kChromeUINewTabURL)
@@ -250,6 +261,9 @@ NSArray* CompatibleModeForActivityType(NSString* activityType) {
     base::UmaHistogramEnumeration(kAppLaunchSource,
                                   AppLaunchSource::SIRI_SHORTCUT);
     base::RecordAction(UserMetricsAction("IOSLaunchedByOpenInChromeIntent"));
+    base::UmaHistogramEnumeration("IOS.Spotlight.LaunchedIntentType",
+                                  IntentType::kOpenInChrome);
+
     OpenInChromeIntent* intent =
         base::apple::ObjCCastStrict<OpenInChromeIntent>(
             userActivity.interaction.intent);
@@ -275,24 +289,23 @@ NSArray* CompatibleModeForActivityType(NSString* activityType) {
       return NO;
     }
 
-    AppStartupParameters* startupParams = [[AppStartupParameters alloc]
-           initWithURLs:URLs
-        applicationMode:ApplicationModeForTabOpening::NORMAL];
-
-    [connectionInformation setStartupParameters:startupParams];
-    return [self continueUserActivityURLs:URLs
-                      applicationIsActive:applicationIsActive
-                                tabOpener:tabOpener
-                    connectionInformation:connectionInformation
-                       startupInformation:startupInformation
-                                Incognito:NO
-                                initStage:initStage];
+    [self continueUserActivityURLs:URLs
+               applicationIsActive:applicationIsActive
+                         tabOpener:tabOpener
+             connectionInformation:connectionInformation
+                startupInformation:startupInformation
+                         incognito:NO
+                         initStage:initStage];
+    return YES;
 
   } else if ([userActivity.activityType
                  isEqualToString:kSiriShortcutOpenInIncognito]) {
     base::UmaHistogramEnumeration(kAppLaunchSource,
                                   AppLaunchSource::SIRI_SHORTCUT);
     base::RecordAction(UserMetricsAction("IOSLaunchedByOpenInIncognitoIntent"));
+    base::UmaHistogramEnumeration("IOS.Spotlight.LaunchedIntentType",
+                                  IntentType::kOpenInIncognito);
+
     OpenInChromeIncognitoIntent* intent =
         base::apple::ObjCCastStrict<OpenInChromeIncognitoIntent>(
             userActivity.interaction.intent);
@@ -303,20 +316,21 @@ NSArray* CompatibleModeForActivityType(NSString* activityType) {
 
     std::vector<GURL> URLs = createGURLVectorFromIntentURLs(intent.url);
 
-    AppStartupParameters* startupParams = [[AppStartupParameters alloc]
-           initWithURLs:URLs
-        applicationMode:ApplicationModeForTabOpening::INCOGNITO];
-
-    [connectionInformation setStartupParameters:startupParams];
-    return [self continueUserActivityURLs:URLs
-                      applicationIsActive:applicationIsActive
-                                tabOpener:tabOpener
-                    connectionInformation:connectionInformation
-                       startupInformation:startupInformation
-                                Incognito:YES
-                                initStage:initStage];
+    [self continueUserActivityURLs:URLs
+               applicationIsActive:applicationIsActive
+                         tabOpener:tabOpener
+             connectionInformation:connectionInformation
+                startupInformation:startupInformation
+                         incognito:YES
+                         initStage:initStage];
+    return YES;
 
   } else if ([userActivity.activityType isEqualToString:kSiriOpenLatestTab]) {
+    base::UmaHistogramEnumeration("IOS.Spotlight.LaunchedIntentType",
+                                  IntentType::kOpenLatestTab);
+    base::UmaHistogramEnumeration(kAppLaunchSource,
+                                  AppLaunchSource::SIRI_SHORTCUT);
+
     AppStartupParameters* startupParams = [[AppStartupParameters alloc]
         initWithExternalURL:GURL()
                 completeURL:GURL()
@@ -325,43 +339,93 @@ NSArray* CompatibleModeForActivityType(NSString* activityType) {
     startupParams.postOpeningAction = OPEN_LATEST_TAB;
     connectionInformation.startupParameters = startupParams;
   } else if ([userActivity.activityType isEqualToString:kSiriOpenReadingList]) {
+    base::UmaHistogramEnumeration("IOS.Spotlight.LaunchedIntentType",
+                                  IntentType::kOpenReadingList);
+    base::UmaHistogramEnumeration(kAppLaunchSource,
+                                  AppLaunchSource::SIRI_SHORTCUT);
+
     [connectionInformation
         setStartupParameters:[self startupParametersForOpeningNewTabWithAction:
                                        OPEN_READING_LIST]];
   } else if ([userActivity.activityType isEqualToString:kSiriOpenBookmarks]) {
+    base::UmaHistogramEnumeration("IOS.Spotlight.LaunchedIntentType",
+                                  IntentType::kOpenBookmarks);
+    base::UmaHistogramEnumeration(kAppLaunchSource,
+                                  AppLaunchSource::SIRI_SHORTCUT);
+
     [connectionInformation
         setStartupParameters:
             [self startupParametersForOpeningNewTabWithAction:OPEN_BOOKMARKS]];
   } else if ([userActivity.activityType isEqualToString:kSiriOpenRecentTabs]) {
+    base::UmaHistogramEnumeration("IOS.Spotlight.LaunchedIntentType",
+                                  IntentType::kOpenRecentTabs);
+    base::UmaHistogramEnumeration(kAppLaunchSource,
+                                  AppLaunchSource::SIRI_SHORTCUT);
+
     [connectionInformation
         setStartupParameters:[self startupParametersForOpeningNewTabWithAction:
                                        OPEN_RECENT_TABS]];
   } else if ([userActivity.activityType isEqualToString:kSiriOpenTabGrid]) {
+    base::UmaHistogramEnumeration("IOS.Spotlight.LaunchedIntentType",
+                                  IntentType::kOpenTabGrid);
+    base::UmaHistogramEnumeration(kAppLaunchSource,
+                                  AppLaunchSource::SIRI_SHORTCUT);
+
     [connectionInformation
         setStartupParameters:
             [self startupParametersForOpeningNewTabWithAction:OPEN_TAB_GRID]];
   } else if ([userActivity.activityType isEqualToString:kSiriVoiceSearch]) {
+    base::UmaHistogramEnumeration("IOS.Spotlight.LaunchedIntentType",
+                                  IntentType::kOpenVoiceSearch);
+    base::UmaHistogramEnumeration(kAppLaunchSource,
+                                  AppLaunchSource::SIRI_SHORTCUT);
+
     [connectionInformation
         setStartupParameters:[self startupParametersForOpeningNewTabWithAction:
                                        START_VOICE_SEARCH]];
   } else if ([userActivity.activityType isEqualToString:kSiriOpenNewTab]) {
+    base::UmaHistogramEnumeration("IOS.Spotlight.LaunchedIntentType",
+                                  IntentType::kOpenNewTab);
+    base::UmaHistogramEnumeration(kAppLaunchSource,
+                                  AppLaunchSource::SIRI_SHORTCUT);
+
     [connectionInformation
         setStartupParameters:
             [self startupParametersForOpeningNewTabWithAction:NO_ACTION]];
   } else if ([userActivity.activityType isEqualToString:kSiriPlayDinoGame]) {
+    base::UmaHistogramEnumeration("IOS.Spotlight.LaunchedIntentType",
+                                  IntentType::kPlayDinoGame);
+    base::UmaHistogramEnumeration(kAppLaunchSource,
+                                  AppLaunchSource::SIRI_SHORTCUT);
+
     webpageURL =
         [NSURL URLWithString:base::SysUTF8ToNSString(kChromeDinoGameURL)];
   } else if ([userActivity.activityType
                  isEqualToString:kSiriSetChromeDefaultBrowser]) {
+    base::UmaHistogramEnumeration("IOS.Spotlight.LaunchedIntentType",
+                                  IntentType::kSetDefaultBrowser);
+    base::UmaHistogramEnumeration(kAppLaunchSource,
+                                  AppLaunchSource::SIRI_SHORTCUT);
+
     [connectionInformation
         setStartupParameters:[self startupParametersForOpeningNewTabWithAction:
                                        SET_CHROME_DEFAULT_BROWSER]];
   } else if ([userActivity.activityType isEqualToString:kSiriViewHistory]) {
+    base::UmaHistogramEnumeration("IOS.Spotlight.LaunchedIntentType",
+                                  IntentType::kViewHistory);
+    base::UmaHistogramEnumeration(kAppLaunchSource,
+                                  AppLaunchSource::SIRI_SHORTCUT);
+
     [connectionInformation
         setStartupParameters:
             [self startupParametersForOpeningNewTabWithAction:VIEW_HISTORY]];
   } else if ([userActivity.activityType
                  isEqualToString:kSiriOpenNewIncognitoTab]) {
+    base::UmaHistogramEnumeration("IOS.Spotlight.LaunchedIntentType",
+                                  IntentType::kOpenNewIncognitoTab);
+    base::UmaHistogramEnumeration(kAppLaunchSource,
+                                  AppLaunchSource::SIRI_SHORTCUT);
+
     AppStartupParameters* startupParams = [[AppStartupParameters alloc]
         initWithExternalURL:GURL(kChromeUINewTabURL)
                 completeURL:GURL(kChromeUINewTabURL)
@@ -369,28 +433,58 @@ NSArray* CompatibleModeForActivityType(NSString* activityType) {
     [connectionInformation setStartupParameters:startupParams];
   } else if ([userActivity.activityType
                  isEqualToString:kSiriManagePaymentMethods]) {
+    base::UmaHistogramEnumeration("IOS.Spotlight.LaunchedIntentType",
+                                  IntentType::kManagePaymentMethods);
+    base::UmaHistogramEnumeration(kAppLaunchSource,
+                                  AppLaunchSource::SIRI_SHORTCUT);
+
     [connectionInformation
         setStartupParameters:[self startupParametersForOpeningNewTabWithAction:
                                        OPEN_PAYMENT_METHODS]];
   } else if ([userActivity.activityType isEqualToString:kSiriRunSafetyCheck]) {
+    base::UmaHistogramEnumeration("IOS.Spotlight.LaunchedIntentType",
+                                  IntentType::kRunSafetyCheck);
+    base::UmaHistogramEnumeration(kAppLaunchSource,
+                                  AppLaunchSource::SIRI_SHORTCUT);
+
     [connectionInformation
         setStartupParameters:[self startupParametersForOpeningNewTabWithAction:
                                        RUN_SAFETY_CHECK]];
   } else if ([userActivity.activityType isEqualToString:kSiriManagePasswords]) {
+    base::UmaHistogramEnumeration("IOS.Spotlight.LaunchedIntentType",
+                                  IntentType::kManagePasswords);
+    base::UmaHistogramEnumeration(kAppLaunchSource,
+                                  AppLaunchSource::SIRI_SHORTCUT);
+
     [connectionInformation
         setStartupParameters:[self startupParametersForOpeningNewTabWithAction:
                                        MANAGE_PASSWORDS]];
   } else if ([userActivity.activityType isEqualToString:kSiriManageSettings]) {
+    base::UmaHistogramEnumeration("IOS.Spotlight.LaunchedIntentType",
+                                  IntentType::kManageSettings);
+    base::UmaHistogramEnumeration(kAppLaunchSource,
+                                  AppLaunchSource::SIRI_SHORTCUT);
+
     [connectionInformation
         setStartupParameters:
             [self startupParametersForOpeningNewTabWithAction:MANAGE_SETTINGS]];
   } else if ([userActivity.activityType
                  isEqualToString:kSiriOpenLensFromIntents]) {
+    base::UmaHistogramEnumeration("IOS.Spotlight.LaunchedIntentType",
+                                  IntentType::kStartLens);
+    base::UmaHistogramEnumeration(kAppLaunchSource,
+                                  AppLaunchSource::SIRI_SHORTCUT);
+
     [connectionInformation
         setStartupParameters:[self startupParametersForOpeningNewTabWithAction:
                                        START_LENS_FROM_INTENTS]];
   } else if ([userActivity.activityType
                  isEqualToString:kSiriClearBrowsingData]) {
+    base::UmaHistogramEnumeration("IOS.Spotlight.LaunchedIntentType",
+                                  IntentType::kClearBrowsingData);
+    base::UmaHistogramEnumeration(kAppLaunchSource,
+                                  AppLaunchSource::SIRI_SHORTCUT);
+
     [connectionInformation
         setStartupParameters:[self startupParametersForOpeningNewTabWithAction:
                                        OPEN_CLEAR_BROWSING_DATA_DIALOG]];
@@ -409,129 +503,6 @@ NSArray* CompatibleModeForActivityType(NSString* activityType) {
                           browserState:browserState
                              initStage:initStage
                        openExistingTab:NO];
-}
-
-+ (BOOL)continueUserActivityURL:(NSURL*)webpageURL
-            applicationIsActive:(BOOL)applicationIsActive
-                      tabOpener:(id<TabOpening>)tabOpener
-          connectionInformation:(id<ConnectionInformation>)connectionInformation
-             startupInformation:(id<StartupInformation>)startupInformation
-                   browserState:(ChromeBrowserState*)browserState
-                      initStage:(InitStage)initStage
-                openExistingTab:(BOOL)openExistingTab {
-  if (!webpageURL)
-    return NO;
-
-  GURL webpageGURL(net::GURLWithNSURL(webpageURL));
-  if (!webpageGURL.is_valid())
-    return NO;
-
-  if (applicationIsActive && initStage > InitStageFirstRun) {
-    // The app is already active so the applicationDidBecomeActive: method will
-    // never be called. Open the requested URL immediately.
-    ApplicationModeForTabOpening targetMode =
-        [[connectionInformation startupParameters] applicationMode];
-    UrlLoadParams params = UrlLoadParams::InNewTab(webpageGURL);
-
-    if (connectionInformation.startupParameters.textQuery) {
-      NSString* query = connectionInformation.startupParameters.textQuery;
-
-      GURL result = [self generateResultGURLFromSearchQuery:query
-                                               browserState:browserState];
-      params.web_params.url = result;
-    }
-
-    if ([[connectionInformation startupParameters] applicationMode] !=
-            ApplicationModeForTabOpening::INCOGNITO &&
-        [tabOpener URLIsOpenedInRegularMode:webpageGURL]) {
-      // Record metric.
-    }
-    [tabOpener dismissModalsAndMaybeOpenSelectedTabInMode:targetMode
-                                        withUrlLoadParams:params
-                                           dismissOmnibox:YES
-                                               completion:^{
-                                                 [connectionInformation
-                                                     setStartupParameters:nil];
-                                               }];
-    return YES;
-  }
-
-  // Don't record the first action as a user action, since it will not be
-  // initiated by the user.
-  [startupInformation resetFirstUserActionRecorder];
-
-  if (![connectionInformation startupParameters]) {
-    AppStartupParameters* startupParams = [[AppStartupParameters alloc]
-        initWithExternalURL:webpageGURL
-                completeURL:webpageGURL
-            applicationMode:ApplicationModeForTabOpening::NORMAL];
-    startupParams.openExistingTab = openExistingTab;
-    [connectionInformation setStartupParameters:startupParams];
-  }
-  return YES;
-}
-
-+ (void)openMultipleTabsWithConnectionInformation:
-            (id<ConnectionInformation>)connectionInformation
-                                        tabOpener:(id<TabOpening>)tabOpener {
-  BOOL incognitoMode =
-      connectionInformation.startupParameters.applicationMode ==
-      ApplicationModeForTabOpening::INCOGNITO;
-  BOOL dismissOmnibox = [[connectionInformation startupParameters]
-                            postOpeningAction] != FOCUS_OMNIBOX;
-
-  // Using a weak reference to `connectionInformation` to solve a memory leak
-  // issue. `tabOpener` and `connectionInformation` are the same object in
-  // some cases (SceneController). This retains the object while the block
-  // exists. Then this block is passed around and in some cases it ends up
-  // stored in BrowserViewController. This results in a memory leak that looks
-  // like this: SceneController -> BrowserViewWrangler -> BrowserCoordinator
-  // -> BrowserViewController -> SceneController
-  __weak id<ConnectionInformation> weakConnectionInfo = connectionInformation;
-
-  [tabOpener
-      dismissModalsAndOpenMultipleTabsWithURLs:weakConnectionInfo
-                                                   .startupParameters.URLs
-                               inIncognitoMode:incognitoMode
-                                dismissOmnibox:dismissOmnibox
-                                    completion:^{
-                                      weakConnectionInfo.startupParameters =
-                                          nil;
-                                    }];
-}
-
-+ (BOOL)continueUserActivityURLs:(const std::vector<GURL>&)webpageURLs
-             applicationIsActive:(BOOL)applicationIsActive
-                       tabOpener:(id<TabOpening>)tabOpener
-           connectionInformation:
-               (id<ConnectionInformation>)connectionInformation
-              startupInformation:(id<StartupInformation>)startupInformation
-                       Incognito:(BOOL)Incognito
-                       initStage:(InitStage)initStage
-
-{
-  if (applicationIsActive && initStage > InitStageFirstRun) {
-    // The app is already active so the applicationDidBecomeActive: method will
-    // never be called. Open the requested URLs immediately.
-    [self openMultipleTabsWithConnectionInformation:connectionInformation
-                                          tabOpener:tabOpener];
-    return YES;
-  }
-
-  // Don't record the first action as a user action, since it will not be
-  // initiated by the user.
-  [startupInformation resetFirstUserActionRecorder];
-
-  if (![connectionInformation startupParameters]) {
-    AppStartupParameters* startupParams = [[AppStartupParameters alloc]
-           initWithURLs:webpageURLs
-        applicationMode:ApplicationModeForTabOpening::UNDETERMINED];
-    if (Incognito) {
-      startupParams.applicationMode = ApplicationModeForTabOpening::INCOGNITO;
-    }
-    [connectionInformation setStartupParameters:startupParams];
-  }
-  return YES;
 }
 
 + (void)performActionForShortcutItem:(UIApplicationShortcutItem*)shortcutItem
@@ -559,33 +530,6 @@ NSArray* CompatibleModeForActivityType(NSString* activityType) {
   if (completionHandler) {
     completionHandler(handledShortcutItem);
   }
-}
-
-+ (BOOL)willContinueUserActivityWithType:(NSString*)userActivityType {
-  return
-      [userActivityType isEqualToString:handoff::kChromeHandoffActivityType] ||
-      (spotlight::IsSpotlightAvailable() &&
-       [userActivityType isEqualToString:CSSearchableItemActionType]);
-}
-
-+ (GURL)generateResultGURLFromSearchQuery:(NSString*)searchQuery
-                             browserState:(ChromeBrowserState*)browserState {
-  TemplateURLService* templateURLService =
-      ios::TemplateURLServiceFactory::GetForBrowserState(browserState);
-
-  const TemplateURL* defaultURL =
-      templateURLService->GetDefaultSearchProvider();
-  DCHECK(defaultURL);
-  DCHECK(!defaultURL->url().empty());
-  DCHECK(
-      defaultURL->url_ref().IsValid(templateURLService->search_terms_data()));
-  std::u16string queryString = base::SysNSStringToUTF16(searchQuery);
-  TemplateURLRef::SearchTermsArgs search_args(queryString);
-
-  GURL result(defaultURL->url_ref().ReplaceSearchTerms(
-      search_args, templateURLService->search_terms_data()));
-
-  return result;
 }
 
 + (void)handleStartupParametersWithTabOpener:(id<TabOpening>)tabOpener
@@ -702,17 +646,16 @@ NSArray* CompatibleModeForActivityType(NSString* activityType) {
 
   if (IsIncognitoModeDisabled(prefService)) {
     return [array containsObject:kRegularMode];
-  } else if (IsIncognitoModeForced(prefService)) {
+  }
+  if (IsIncognitoModeForced(prefService)) {
     return [array containsObject:kIncognitoMode];
   }
-
   // Return YES if the compatible mode array is not nil.
   return array != nil;
 }
 
 #pragma mark - Internal methods.
 
-// Returns an app startup parameter for opening a new tab with a post action.
 + (AppStartupParameters*)startupParametersForOpeningNewTabWithAction:
     (TabOpeningPostOpeningAction)action {
   AppStartupParameters* startupParams = [[AppStartupParameters alloc]
@@ -796,6 +739,157 @@ NSArray* CompatibleModeForActivityType(NSString* activityType) {
       &key, base::SysNSStringToUTF8(shortcutItem.type));
   base::debug::DumpWithoutCrashing();
   return NO;
+}
+
++ (void)continueUserActivityURLs:(const std::vector<GURL>&)webpageURLs
+             applicationIsActive:(BOOL)applicationIsActive
+                       tabOpener:(id<TabOpening>)tabOpener
+           connectionInformation:
+               (id<ConnectionInformation>)connectionInformation
+              startupInformation:(id<StartupInformation>)startupInformation
+                       incognito:(BOOL)incognito
+                       initStage:(InitStage)initStage {
+  ApplicationModeForTabOpening applicationMode;
+  if (incognito) {
+    applicationMode = ApplicationModeForTabOpening::INCOGNITO;
+  } else {
+    applicationMode = ApplicationModeForTabOpening::NORMAL;
+  }
+  AppStartupParameters* startupParams =
+      [[AppStartupParameters alloc] initWithURLs:webpageURLs
+                                 applicationMode:applicationMode];
+  [connectionInformation setStartupParameters:startupParams];
+
+  if (applicationIsActive && initStage > InitStageFirstRun) {
+    // The app is already active so the applicationDidBecomeActive: method will
+    // never be called. Open the requested URLs immediately.
+    [self openMultipleTabsWithConnectionInformation:connectionInformation
+                                          tabOpener:tabOpener];
+    return;
+  }
+
+  // Don't record the first action as a user action, since it will not be
+  // initiated by the user.
+  [startupInformation resetFirstUserActionRecorder];
+
+  if (![connectionInformation startupParameters]) {
+    startupParams.applicationMode = ApplicationModeForTabOpening::UNDETERMINED;
+    if (incognito) {
+      startupParams.applicationMode = ApplicationModeForTabOpening::INCOGNITO;
+    }
+    [connectionInformation setStartupParameters:startupParams];
+  }
+}
+
++ (BOOL)continueUserActivityURL:(NSURL*)webpageURL
+            applicationIsActive:(BOOL)applicationIsActive
+                      tabOpener:(id<TabOpening>)tabOpener
+          connectionInformation:(id<ConnectionInformation>)connectionInformation
+             startupInformation:(id<StartupInformation>)startupInformation
+                   browserState:(ChromeBrowserState*)browserState
+                      initStage:(InitStage)initStage
+                openExistingTab:(BOOL)openExistingTab {
+  if (!webpageURL) {
+    return NO;
+  }
+
+  GURL webpageGURL(net::GURLWithNSURL(webpageURL));
+  if (!webpageGURL.is_valid()) {
+    return NO;
+  }
+
+  if (applicationIsActive && initStage > InitStageFirstRun) {
+    // The app is already active so the applicationDidBecomeActive: method will
+    // never be called. Open the requested URL immediately.
+    ApplicationModeForTabOpening targetMode =
+        [[connectionInformation startupParameters] applicationMode];
+    UrlLoadParams params = UrlLoadParams::InNewTab(webpageGURL);
+
+    if (connectionInformation.startupParameters.textQuery) {
+      NSString* query = connectionInformation.startupParameters.textQuery;
+
+      GURL result = [self generateResultGURLFromSearchQuery:query
+                                               browserState:browserState];
+      params.web_params.url = result;
+    }
+
+    if ([[connectionInformation startupParameters] applicationMode] !=
+            ApplicationModeForTabOpening::INCOGNITO &&
+        [tabOpener URLIsOpenedInRegularMode:webpageGURL]) {
+      // Record metric.
+    }
+    [tabOpener dismissModalsAndMaybeOpenSelectedTabInMode:targetMode
+                                        withUrlLoadParams:params
+                                           dismissOmnibox:YES
+                                               completion:^{
+                                                 [connectionInformation
+                                                     setStartupParameters:nil];
+                                               }];
+    return YES;
+  }
+
+  // Don't record the first action as a user action, since it will not be
+  // initiated by the user.
+  [startupInformation resetFirstUserActionRecorder];
+
+  if (![connectionInformation startupParameters]) {
+    AppStartupParameters* startupParams = [[AppStartupParameters alloc]
+        initWithExternalURL:webpageGURL
+                completeURL:webpageGURL
+            applicationMode:ApplicationModeForTabOpening::NORMAL];
+    startupParams.openExistingTab = openExistingTab;
+    [connectionInformation setStartupParameters:startupParams];
+  }
+  return YES;
+}
+
++ (void)openMultipleTabsWithConnectionInformation:
+            (id<ConnectionInformation>)connectionInformation
+                                        tabOpener:(id<TabOpening>)tabOpener {
+  BOOL incognitoMode =
+      connectionInformation.startupParameters.applicationMode ==
+      ApplicationModeForTabOpening::INCOGNITO;
+  BOOL dismissOmnibox = [[connectionInformation startupParameters]
+                            postOpeningAction] != FOCUS_OMNIBOX;
+
+  // Using a weak reference to `connectionInformation` to solve a memory leak
+  // issue. `tabOpener` and `connectionInformation` are the same object in
+  // some cases (SceneController). This retains the object while the block
+  // exists. Then this block is passed around and in some cases it ends up
+  // stored in BrowserViewController. This results in a memory leak that looks
+  // like this: SceneController -> BrowserViewWrangler -> BrowserCoordinator
+  // -> BrowserViewController -> SceneController
+  __weak id<ConnectionInformation> weakConnectionInfo = connectionInformation;
+
+  [tabOpener
+      dismissModalsAndOpenMultipleTabsWithURLs:weakConnectionInfo
+                                                   .startupParameters.URLs
+                               inIncognitoMode:incognitoMode
+                                dismissOmnibox:dismissOmnibox
+                                    completion:^{
+                                      weakConnectionInfo.startupParameters =
+                                          nil;
+                                    }];
+}
+
++ (GURL)generateResultGURLFromSearchQuery:(NSString*)searchQuery
+                             browserState:(ChromeBrowserState*)browserState {
+  TemplateURLService* templateURLService =
+      ios::TemplateURLServiceFactory::GetForBrowserState(browserState);
+
+  const TemplateURL* defaultURL =
+      templateURLService->GetDefaultSearchProvider();
+  DCHECK(defaultURL);
+  DCHECK(!defaultURL->url().empty());
+  DCHECK(
+      defaultURL->url_ref().IsValid(templateURLService->search_terms_data()));
+  std::u16string queryString = base::SysNSStringToUTF16(searchQuery);
+  TemplateURLRef::SearchTermsArgs search_args(queryString);
+
+  GURL result(defaultURL->url_ref().ReplaceSearchTerms(
+      search_args, templateURLService->search_terms_data()));
+
+  return result;
 }
 
 @end

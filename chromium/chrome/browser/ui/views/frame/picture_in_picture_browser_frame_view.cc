@@ -39,6 +39,8 @@
 #include "ui/views/event_monitor.h"
 #include "ui/views/layout/animating_layout_manager.h"
 #include "ui/views/layout/flex_layout_view.h"
+#include "ui/views/style/typography.h"
+#include "ui/views/style/typography_provider.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/window/frame_background.h"
 #include "ui/views/window/window_shape.h"
@@ -76,6 +78,7 @@ namespace {
 
 constexpr int kWindowIconImageSize = 16;
 constexpr int kBackToTabImageSize = 16;
+constexpr int kContentSettingIconSize = 16;
 
 // The height of the controls bar at the top of the window.
 constexpr int kTopControlsHeight = 30;
@@ -202,8 +205,21 @@ class WindowEventObserver : public ui::EventObserver {
 };
 
 void DefinitelyExitPictureInPicture(
-    PictureInPictureBrowserFrameView& frame_view) {
-  if (!PictureInPictureWindowManager::GetInstance()->ExitPictureInPicture()) {
+    PictureInPictureBrowserFrameView& frame_view,
+    PictureInPictureWindowManager::UiBehavior behavior) {
+  switch (behavior) {
+    case PictureInPictureWindowManager::UiBehavior::kCloseWindowOnly:
+    case PictureInPictureWindowManager::UiBehavior::kCloseWindowAndPauseVideo:
+      frame_view.set_close_reason(
+          PictureInPictureBrowserFrameView::CloseReason::kCloseButton);
+      break;
+    case PictureInPictureWindowManager::UiBehavior::kCloseWindowAndFocusOpener:
+      frame_view.set_close_reason(
+          PictureInPictureBrowserFrameView::CloseReason::kBackToTabButton);
+      break;
+  }
+  if (!PictureInPictureWindowManager::GetInstance()
+           ->ExitPictureInPictureViaWindowUi(behavior)) {
     // If the picture-in-picture controller has been disconnected for
     // some reason, then just manually close the window to prevent
     // getting into a state where the back to tab button no longer
@@ -433,7 +449,7 @@ PictureInPictureBrowserFrameView::PictureInPictureBrowserFrameView(
                    .Build());
 
   // Creates the window icon.
-  const gfx::FontList& font_list = views::style::GetFont(
+  const gfx::FontList& font_list = views::TypographyProvider::Get().GetFont(
       CONTEXT_OMNIBOX_PRIMARY, views::style::STYLE_PRIMARY);
   location_icon_view_ = top_bar_container_view_->AddChildView(
       std::make_unique<LocationIconView>(font_list, this, this));
@@ -444,13 +460,21 @@ PictureInPictureBrowserFrameView::PictureInPictureBrowserFrameView(
                                      gfx::Insets::TLBR(0, 8, 0, 4));
   }
 
+  // For file URLs, we want to elide the tail, since the file name and/or query
+  // part of the file URL can be made to look like an origin for spoofing. For
+  // HTTPS URLs, we elide the head to prevent spoofing via long origins, since
+  // in the HTTPS case everything besides the origin is removed for display.
+  auto elide_behavior = location_bar_model_->GetURL().SchemeIsFile()
+                            ? gfx::ELIDE_TAIL
+                            : gfx::ELIDE_HEAD;
+
   // Creates the window title.
   top_bar_container_view_->AddChildView(
       views::Builder<views::Label>()
           .CopyAddressTo(&window_title_)
           .SetText(location_bar_model_->GetURLForDisplay())
           .SetHorizontalAlignment(gfx::ALIGN_LEFT)
-          .SetElideBehavior(gfx::ELIDE_HEAD)
+          .SetElideBehavior(elide_behavior)
           .SetProperty(
               views::kFlexBehaviorKey,
               views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
@@ -472,6 +496,7 @@ PictureInPictureBrowserFrameView::PictureInPictureBrowserFrameView(
 
   // Creates the content setting views based on the models.
   for (auto& model : models) {
+    model->SetIconSize(kContentSettingIconSize);
     auto image_view = std::make_unique<ContentSettingImageView>(
         std::move(model), this, this, font_list);
     content_setting_views_.push_back(
@@ -482,9 +507,9 @@ PictureInPictureBrowserFrameView::PictureInPictureBrowserFrameView(
   back_to_tab_button_ = button_container_view_->AddChildView(
       std::make_unique<BackToTabButton>(base::BindRepeating(
           [](PictureInPictureBrowserFrameView* frame_view) {
-            frame_view->close_reason_ = CloseReason::kBackToTabButton;
-            PictureInPictureWindowManager::GetInstance()->FocusInitiator();
-            DefinitelyExitPictureInPicture(*frame_view);
+            DefinitelyExitPictureInPicture(
+                *frame_view, PictureInPictureWindowManager::UiBehavior::
+                                 kCloseWindowAndFocusOpener);
           },
           base::Unretained(this))));
 
@@ -492,8 +517,9 @@ PictureInPictureBrowserFrameView::PictureInPictureBrowserFrameView(
   close_image_button_ = button_container_view_->AddChildView(
       std::make_unique<CloseImageButton>(base::BindRepeating(
           [](PictureInPictureBrowserFrameView* frame_view) {
-            frame_view->close_reason_ = CloseReason::kCloseButton;
-            DefinitelyExitPictureInPicture(*frame_view);
+            DefinitelyExitPictureInPicture(
+                *frame_view,
+                PictureInPictureWindowManager::UiBehavior::kCloseWindowOnly);
           },
           base::Unretained(this))));
 
@@ -524,15 +550,15 @@ PictureInPictureBrowserFrameView::PictureInPictureBrowserFrameView(
   hide_close_button_animation_.set_continuous(false);
   hide_close_button_animation_.set_delegate(this);
 
-#if !BUILDFLAG(IS_ANDROID)
   // If the window manager wants us to display an overlay, get it.  In practice,
   // this is the auto-pip Allow / Block content setting UI.
   if (auto auto_pip_setting_overlay =
-          PictureInPictureWindowManager::GetInstance()->GetOverlayView()) {
+          PictureInPictureWindowManager::GetInstance()->GetOverlayView(
+              browser_view->browser()->override_bounds(),
+              top_bar_container_view_, views::BubbleBorder::TOP_CENTER)) {
     auto_pip_setting_overlay_ =
         AddChildView(std::move(auto_pip_setting_overlay));
   }
-#endif
 
 #if BUILDFLAG(IS_LINUX)
   frame_background_ = std::make_unique<views::FrameBackground>();
@@ -616,9 +642,10 @@ void PictureInPictureBrowserFrameView::OnBrowserViewInitViewsComplete() {
                      : screen->GetDisplayForNewWindows();
 
   const gfx::Rect window_bounds =
-      PictureInPictureWindowManager::AdjustPictureInPictureWindowBounds(
-          pip_options.value(), display,
-          GetMinimumSize() + gfx::Size(insets.width(), insets.height()));
+      PictureInPictureWindowManager::GetInstance()
+          ->AdjustPictureInPictureWindowBounds(
+              pip_options.value(), display,
+              GetMinimumSize() + gfx::Size(insets.width(), insets.height()));
 
   browser_view()->browser()->set_override_bounds(window_bounds);
 }
@@ -759,6 +786,13 @@ void PictureInPictureBrowserFrameView::AddedToWidget() {
   // light mode window.
   GetWidget()->SetColorModeOverride(ui::ColorProviderKey::ColorMode::kDark);
 
+  // If the AutoPiP setting overlay is set, show the permission settings bubble.
+  if (auto_pip_setting_overlay_) {
+    auto_pip_setting_overlay_->ShowBubble(
+        GetWidget()->GetNativeView(),
+        AutoPipSettingOverlayView::PipWindowType::kDocumentPip);
+  }
+
   BrowserNonClientFrameView::AddedToWidget();
 }
 
@@ -768,6 +802,11 @@ void PictureInPictureBrowserFrameView::RemovedFromWidget() {
 #if RESIZE_DOCUMENT_PICTURE_IN_PICTURE_TO_DIALOG
   child_dialog_observer_helper_.reset();
 #endif  // RESIZE_DOCUMENT_PICTURE_IN_PICTURE_TO_DIALOG
+
+  // Clear the AutoPiP setting overlay view.
+  if (auto_pip_setting_overlay_) {
+    auto_pip_setting_overlay_ = nullptr;
+  }
 
   BrowserNonClientFrameView::RemovedFromWidget();
 }
@@ -921,8 +960,7 @@ SkColor PictureInPictureBrowserFrameView::GetIconLabelBubbleBackgroundColor()
 ///////////////////////////////////////////////////////////////////////////////
 // ContentSettingImageView::Delegate implementations:
 
-bool PictureInPictureBrowserFrameView::ShouldHideContentSettingImage(
-    ImageType type) {
+bool PictureInPictureBrowserFrameView::ShouldHideContentSettingImage() {
   return false;
 }
 
@@ -936,7 +974,7 @@ PictureInPictureBrowserFrameView::GetContentSettingWebContents() {
 ContentSettingBubbleModelDelegate*
 PictureInPictureBrowserFrameView::GetContentSettingBubbleModelDelegate() {
   // Use the opener browser delegate to open any new tab.
-  Browser* browser = chrome::FindBrowserWithWebContents(GetWebContents());
+  Browser* browser = chrome::FindBrowserWithTab(GetWebContents());
   return browser->content_setting_bubble_model_delegate();
 }
 
@@ -948,9 +986,7 @@ void PictureInPictureBrowserFrameView::OnWidgetActivationChanged(
     bool active) {
   // The window may become inactive when a popup modal shows, so we need to
   // check if the mouse is still inside the window.
-  if (!active && mouse_inside_window_)
-    active = true;
-  UpdateTopBarView(active);
+  UpdateTopBarView(active || mouse_inside_window_ || IsOverlayViewVisible());
 }
 
 void PictureInPictureBrowserFrameView::OnWidgetDestroying(
@@ -960,6 +996,12 @@ void PictureInPictureBrowserFrameView::OnWidgetDestroying(
 #if RESIZE_DOCUMENT_PICTURE_IN_PICTURE_TO_DIALOG
   child_dialog_observer_helper_.reset();
 #endif  // RESIZE_DOCUMENT_PICTURE_IN_PICTURE_TO_DIALOG
+}
+
+void PictureInPictureBrowserFrameView::OnWidgetBoundsChanged(
+    views::Widget* widget,
+    const gfx::Rect& new_bounds) {
+  PictureInPictureWindowManager::GetInstance()->UpdateCachedBounds(new_bounds);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1245,7 +1287,17 @@ views::Label* PictureInPictureBrowserFrameView::GetWindowTitleForTesting() {
 void PictureInPictureBrowserFrameView::OnMouseEnteredOrExitedWindow(
     bool entered) {
   mouse_inside_window_ = entered;
-  UpdateTopBarView(mouse_inside_window_);
+  // If the overlay view is visible, then we should keep the top bar icons
+  // visible too.  If the overlay is dismissed, we'll leave it in the same state
+  // until a mouse-out event, which is reasonable.  If the UI is dismissed via
+  // the mouse, then it's inside the window anyway.  If it's dismissed via the
+  // keyboard, keeping it that way until the next mouse in/out actually looks
+  // better than having the top bar hide immediately.
+  UpdateTopBarView(mouse_inside_window_ || IsOverlayViewVisible());
+}
+
+bool PictureInPictureBrowserFrameView::IsOverlayViewVisible() const {
+  return auto_pip_setting_overlay_ && auto_pip_setting_overlay_->GetVisible();
 }
 
 BEGIN_METADATA(PictureInPictureBrowserFrameView, BrowserNonClientFrameView)

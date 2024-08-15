@@ -35,25 +35,13 @@ public class AccountUtils {
     private AccountUtils() {}
 
     /**
-     * Creates an Account object for the given {@param name}.
-     * Use {@link CoreAccountInfo} objects instead of {@link Account}.
+     * Creates an Account object for the given {@param name}. Only used in places where we need to
+     * talk to Android which is very rare. Non-signin code should not use this method and should
+     * use {@link CoreAccountInfo} instead.
+     * TODO(crbug.com/1450614): Rename this method to createAccountFromEmail.
      */
-    @Deprecated
     public static Account createAccountFromName(String name) {
         return new Account(name, GOOGLE_ACCOUNT_TYPE);
-    }
-
-    /**
-     * Converts a list of accounts to a list of account names.
-     * TODO(crbug.com/1462264): Replace usage with toAccountEmails().
-     */
-    @Deprecated
-    public static List<String> toAccountNames(final List<Account> accounts) {
-        List<String> accountNames = new ArrayList<>();
-        for (Account account : accounts) {
-            accountNames.add(account.name);
-        }
-        return accountNames;
     }
 
     /**

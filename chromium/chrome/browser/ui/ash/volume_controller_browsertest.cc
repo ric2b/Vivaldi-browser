@@ -72,7 +72,8 @@ class VolumeControllerTest : public InProcessBrowserTest,
 
   ~VolumeControllerTest() override {}
 
-  bool IsQsRevampEnabled() const { return GetParam(); }
+  // TODO(b/305075031) clean up after the flag is removed.
+  bool IsQsRevampEnabled() const { return true; }
 
   void SetUpOnMainThread() override {
     audio_handler_ = ash::CrasAudioHandler::Get();
@@ -178,10 +179,10 @@ IN_PROC_BROWSER_TEST_P(VolumeControllerTest, Mutes) {
   VolumeMute();
   // After the volume down, the volume goes down to zero explicitly.
   // For QsRevamp: Press volume down key will decrease the volume from the
-  // original volume thus the volume is unmuted and recovered.
+  // original volume while the volume is still muted.
   VolumeDown();
   if (IsQsRevampEnabled()) {
-    EXPECT_FALSE(audio_handler_->IsOutputMuted());
+    EXPECT_TRUE(audio_handler_->IsOutputMuted());
     EXPECT_EQ(initial_volume, audio_handler_->GetOutputVolumePercent());
   } else {
     EXPECT_TRUE(audio_handler_->IsOutputMuted());
@@ -213,7 +214,8 @@ class VolumeControllerSoundsTest : public VolumeControllerTest {
 
   ~VolumeControllerSoundsTest() override {}
 
-  bool IsQsRevampEnabled() const { return GetParam(); }
+  // TODO(b/305075031) clean up after the flag is removed.
+  bool IsQsRevampEnabled() { return true; }
 
   void SetUpInProcessBrowserTestFixture() override {
     sounds_manager_ = new SoundsManagerTestImpl();
@@ -272,27 +274,16 @@ IN_PROC_BROWSER_TEST_P(VolumeControllerSoundsTest, EdgeCases) {
   EXPECT_EQ(3, num_play_requests());
 
   // Check that sound isn't played when audio is muted.
-  // For QsRevamp: Pressing volume down key will unmute the output and the
-  // sound will be played.
   audio_handler_->SetOutputVolumePercent(50);
   VolumeMute();
   VolumeDown();
-  if (IsQsRevampEnabled()) {
-    ASSERT_FALSE(audio_handler_->IsOutputMuted());
-    EXPECT_EQ(4, num_play_requests());
-  } else {
-    ASSERT_TRUE(audio_handler_->IsOutputMuted());
-    EXPECT_EQ(3, num_play_requests());
-  }
+  ASSERT_TRUE(audio_handler_->IsOutputMuted());
+  EXPECT_EQ(3, num_play_requests());
 
   // Check that audio is unmuted and sound is played.
   VolumeUp();
   ASSERT_FALSE(audio_handler_->IsOutputMuted());
-  if (IsQsRevampEnabled()) {
-    EXPECT_EQ(5, num_play_requests());
-  } else {
-    EXPECT_EQ(4, num_play_requests());
-  }
+  EXPECT_EQ(4, num_play_requests());
 }
 
 class VolumeControllerSoundsDisabledTest : public VolumeControllerSoundsTest {

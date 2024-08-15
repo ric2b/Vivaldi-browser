@@ -16,6 +16,10 @@
     display: grid;
   }
 
+  #acceleratorViewList accelerator-edit-view:not(:last-of-type) {
+    border-bottom: var(--cr-separator-line);
+  }
+
   #addIcon {
     padding-top: 11px;
   }
@@ -49,6 +53,7 @@
     border-radius: 16px;
     display: flex;
     flex-direction: column;
+    min-height: 296px;
     justify-content: space-between;
     margin-left: 32px;
     margin-right: 32px;
@@ -68,6 +73,11 @@
     display: flex;
     justify-content: space-between;
   }
+
+  #maxAcceleratorsReached{
+    padding-block-start: 8px;
+    padding-block-end: 4px;
+  }
 </style>
 
 <cr-dialog id="editDialog" on-close="onDialogClose">
@@ -80,20 +90,22 @@
           items="[[getSortedFilteredAccelerators(acceleratorInfos)]]">
         <accelerator-edit-view class="acceleratorItem"
             accelerator-info=[[item]]
-            action=[[action]]
-            source=[[source]]>
+            action="[[action]]"
+            source="[[source]]"
+            on-edit-action-completed="onEditActionCompleted">
+        </accelerator-edit-view>
+      </template>
+      <template id="newAccelerator" is="dom-if"
+          if="[[showNewAccelerator(pendingNewAcceleratorState, acceleratorInfos)]]"
+          restamp>
+        <accelerator-edit-view id="pendingAccelerator"
+            view-state="{{pendingNewAcceleratorState}}"
+            action="[[action]]"
+            source="[[source]]"
+            on-edit-action-completed="onEditActionCompleted">
         </accelerator-edit-view>
       </template>
     </div>
-    <template id="newAccelerator" is="dom-if"
-        if="[[showNewAccelerator(pendingNewAcceleratorState, acceleratorInfos)]]"
-        restamp>
-      <accelerator-edit-view id="pendingAccelerator"
-          view-state="{{pendingNewAcceleratorState}}"
-          action=[[action]]
-          source=[[source]]>
-      </accelerator-edit-view>
-    </template>
     <div id="addAcceleratorContainer"
         hidden="[[!showAddButton(pendingNewAcceleratorState, acceleratorInfos,
           isAcceleratorCapturing, observableDefaultAcceleratorsWithConflict.*)]]">

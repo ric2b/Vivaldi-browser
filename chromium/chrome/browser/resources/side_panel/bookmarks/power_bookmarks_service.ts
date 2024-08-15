@@ -243,9 +243,10 @@ export class PowerBookmarksService {
       let topLevelBookmarks: chrome.bookmarks.BookmarkTreeNode[] = [];
       this.folders_.forEach(
           folder => topLevelBookmarks = topLevelBookmarks.concat(
-              (folder.id === loadTimeData.getString('bookmarksBarId')) ?
-                  [folder] :
-                  folder.children!));
+              (folder.id === loadTimeData.getString('otherBookmarksId') ||
+               folder.id === loadTimeData.getString('mobileBookmarksId')) ?
+                  folder.children! :
+                  [folder]));
       bookmarks = topLevelBookmarks;
     }
     if (searchQuery || labels.find((label) => label.active)) {
@@ -506,8 +507,7 @@ export class PowerBookmarksService {
       return;
     }
 
-    const url: Url = new Url();
-    url.url = bookmark.url;
+    const url: Url = {url: bookmark.url};
 
     // Fetch the representative image for this page, if possible.
     this.activeImageServiceRequestCount_++;
@@ -515,7 +515,7 @@ export class PowerBookmarksService {
         await PageImageServiceBrowserProxy.getInstance()
             .handler.getPageImageUrl(
                 PageImageServiceClientId.Bookmarks, url,
-                {suggestImages: true, optimizationGuideImages: true});
+                {suggestImages: false, optimizationGuideImages: true});
     this.activeImageServiceRequestCount_--;
 
     if (result) {

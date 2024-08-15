@@ -105,6 +105,10 @@ class PrefService;
 @property(nonatomic, readonly)
     DestinationCustomizationModel* destinationCustomizationModel;
 
+// Whether or not there is a destination customization session currently in
+// progress.
+@property(nonatomic, readonly) BOOL isDestinationCustomizationInProgress;
+
 // Release any C++ objects that can't be reference counted.
 - (void)disconnect;
 
@@ -140,6 +144,14 @@ class PrefService;
 // Tells the orderer that destinations customization was cancelled and should
 // not be saved.
 - (void)cancelDestinationsUpdate;
+
+// Alerts the orderer that an item linked to `actionType` has had its own
+// `shown` state toggled. And that `actionSubtitle` is the proper subtitle for
+// if the linked item is now not shown. For example, if the Bookmarks
+// destination is shown, this method can be called for action type Bookmark.
+- (void)customizationUpdateToggledShown:(BOOL)shown
+                    forLinkedActionType:(overflow_menu::ActionType)actionType
+                         actionSubtitle:(NSString*)actionSubtitle;
 
 // Vivaldi
 // Returns the current ordering of active page actions.

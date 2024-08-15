@@ -29,6 +29,7 @@
 #include "base/logging.h"
 #include "base/mac/scoped_aedesc.h"
 #include "base/mac/scoped_ioobject.h"
+#include "base/posix/sysctl.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
@@ -49,7 +50,7 @@ class LoginItemsFileList {
   ~LoginItemsFileList() = default;
 
   [[nodiscard]] bool Initialize() {
-    DCHECK(!login_items_.get()) << __func__ << " called more than once.";
+    DCHECK(!login_items_) << __func__ << " called more than once.";
     // The LSSharedFileList suite of functions has been deprecated. Instead,
     // a LoginItems helper should be registered with SMLoginItemSetEnabled()
     // https://crbug.com/1154377.
@@ -63,8 +64,8 @@ class LoginItemsFileList {
   }
 
   LSSharedFileListRef GetLoginFileList() {
-    DCHECK(login_items_.get()) << "Initialize() failed or not called.";
-    return login_items_;
+    DCHECK(login_items_) << "Initialize() failed or not called.";
+    return login_items_.get();
   }
 
   // Looks into Shared File Lists corresponding to Login Items for the item
@@ -73,17 +74,18 @@ class LoginItemsFileList {
   // reference.
   apple::ScopedCFTypeRef<LSSharedFileListItemRef> GetLoginItemForApp(
       NSURL* url) {
-    DCHECK(login_items_.get()) << "Initialize() failed or not called.";
+    DCHECK(login_items_) << "Initialize() failed or not called.";
 
 #pragma clang diagnostic push  // https://crbug.com/1154377
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
     apple::ScopedCFTypeRef<CFArrayRef> login_items_array(
-        LSSharedFileListCopySnapshot(login_items_, /*inList=*/nullptr));
+        LSSharedFileListCopySnapshot(login_items_.get(), /*inList=*/nullptr));
 #pragma clang diagnostic pop
 
-    for (CFIndex i = 0; i < CFArrayGetCount(login_items_array); ++i) {
+    for (CFIndex i = 0; i < CFArrayGetCount(login_items_array.get()); ++i) {
       LSSharedFileListItemRef item =
-          (LSSharedFileListItemRef)CFArrayGetValueAtIndex(login_items_array, i);
+          (LSSharedFileListItemRef)CFArrayGetValueAtIndex(
+              login_items_array.get(), i);
 #pragma clang diagnostic push  // https://crbug.com/1154377
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
       // kLSSharedFileListDoNotMountVolumes is used so that we don't trigger
@@ -120,7 +122,7 @@ bool IsHiddenLoginItem(LSSharedFileListItemRef item) {
           item, kLSSharedFileListLoginItemHidden)));
 #pragma clang diagnostic pop
 
-  return hidden && hidden == kCFBooleanTrue;
+  return hidden && hidden.get() == kCFBooleanTrue;
 }
 
 }  // namespace
@@ -174,7 +176,7 @@ void AddToLoginItems(const FilePath& app_bundle_file_path,
   apple::ScopedCFTypeRef<LSSharedFileListItemRef> item =
       login_items.GetLoginItemForApp(app_bundle_url);
 
-  if (item.get() && (IsHiddenLoginItem(item) == hide_on_startup)) {
+  if (item.get() && (IsHiddenLoginItem(item.get()) == hide_on_startup)) {
     return;  // There already is a login item with required hide flag.
   }
 
@@ -182,7 +184,7 @@ void AddToLoginItems(const FilePath& app_bundle_file_path,
   if (item.get()) {
 #pragma clang diagnostic push  // https://crbug.com/1154377
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-    LSSharedFileListItemRemove(login_items.GetLoginFileList(), item);
+    LSSharedFileListItemRemove(login_items.GetLoginFileList(), item.get());
 #pragma clang diagnostic pop
   }
 
@@ -220,7 +222,7 @@ void RemoveFromLoginItems(const FilePath& app_bundle_file_path) {
 
 #pragma clang diagnostic push  // https://crbug.com/1154377
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-  LSSharedFileListItemRemove(login_items.GetLoginFileList(), item);
+  LSSharedFileListItemRemove(login_items.GetLoginFileList(), item.get());
 #pragma clang diagnostic pop
 }
 
@@ -268,7 +270,8 @@ bool WasLaunchedAsLoginItemRestoreState() {
     return true;
   }
 
-  if (CFBooleanRef restore_state = base::apple::CFCast<CFBooleanRef>(plist)) {
+  if (CFBooleanRef restore_state =
+          base::apple::CFCast<CFBooleanRef>(plist.get())) {
     return CFBooleanGetValue(restore_state);
   }
 
@@ -291,7 +294,7 @@ bool WasLaunchedAsHiddenLoginItem() {
     // The OS itself can launch items, usually for the resume feature.
     return false;
   }
-  return IsHiddenLoginItem(item);
+  return IsHiddenLoginItem(item.get());
 }
 
 bool RemoveQuarantineAttribute(const FilePath& file_path) {
@@ -301,20 +304,6 @@ bool RemoveQuarantineAttribute(const FilePath& file_path) {
 }
 
 namespace {
-
-std::string StringSysctlByName(const char* name) {
-  size_t buf_len;
-  int result = sysctlbyname(name, nullptr, &buf_len, nullptr, 0);
-  PCHECK(result == 0);
-  CHECK_GE(buf_len, 1u);
-
-  std::string value(buf_len - 1, '\0');
-  result = sysctlbyname(name, &value[0], &buf_len, nullptr, 0);
-  PCHECK(result == 0);
-  CHECK_EQ(value[buf_len - 1], '\0');
-
-  return value;
-}
 
 int ParseOSProductVersion(const std::string_view& version) {
   int macos_version = 0;
@@ -373,8 +362,8 @@ int ParseOSProductVersionForTesting(const std::string_view& version) {
 }
 
 int MacOSVersion() {
-  static int macos_version =
-      ParseOSProductVersion(StringSysctlByName("kern.osproductversion"));
+  static int macos_version = ParseOSProductVersion(
+      StringSysctlByName("kern.osproductversion").value());
 
   return macos_version;
 }
@@ -421,11 +410,11 @@ std::string GetPlatformSerialNumber() {
   }
 
   apple::ScopedCFTypeRef<CFTypeRef> serial_number(
-      IORegistryEntryCreateCFProperty(expert_device,
+      IORegistryEntryCreateCFProperty(expert_device.get(),
                                       CFSTR(kIOPlatformSerialNumberKey),
                                       kCFAllocatorDefault, 0));
   CFStringRef serial_number_cfstring =
-      base::apple::CFCast<CFStringRef>(serial_number);
+      base::apple::CFCast<CFStringRef>(serial_number.get());
   if (!serial_number_cfstring) {
     DLOG(ERROR) << "Error retrieving the machine serial number.";
     return std::string();

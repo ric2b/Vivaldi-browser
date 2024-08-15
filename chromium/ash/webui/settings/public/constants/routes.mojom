@@ -116,6 +116,8 @@ enum Subpage {
   // Note: Value 705 was for deprecated kOnStartup. Do not reuse.
   kAppNotifications = 706,
   kArcVmUsbPreferences = 707,
+  kManageIsolatedWebApps = 708,
+  kAppNotificationsManager = 709,
 
   // Crostini section.
   kCrostiniDetails = 800,
@@ -141,11 +143,12 @@ enum Subpage {
   kSmartPrivacy = 1103,
   kPrivacyHub = 1104,
   kPrivacyHubMicrophone = 1105,
+  kPrivacyHubGeolocation = 1107,
 
   // Languages and Input section.
   // 1200 was used for kLanguagesAndInputDetails. Do not reuse.
   // 1201 was used for kManageInputMethods. Do not reuse.
-  kSmartInputs = 1202,
+  // 1202 was used for kSmartInputs. Do not reuse.
   kInputMethodOptions = 1203,
   kLanguages = 1204,
   kInput = 1205,
@@ -254,6 +257,7 @@ const string kSearchSubpagePath = "osSearch/search";
 const string kAppsSectionPath = "apps";
 const string kAppManagementSubpagePath = "app-management";
 const string kAppNotificationsSubpagePath = "app-notifications";
+const string kAppNotificationsManagerSubpagePath = "app-notifications-manager";
 const string kAppDetailsSubpagePath = "app-management/detail";
 const string kGooglePlayStoreSubpagePath = "androidAppsDetails";
 const string kPluginVmSharedPathsSubpagePath =
@@ -262,6 +266,7 @@ const string kPluginVmUsbPreferencesSubpagePath =
     "app-management/pluginVm/sharedUsbDevices";
 const string kArcVmUsbPreferencesSubpagePath =
      "androidAppsDetails/sharedUsbDevices";
+const string kManageIsolatedWebAppsSubpagePath = "manage-isolated-web-apps";
 
 // Crostini section.
 const string kCrostiniSectionPath = "crostini";
@@ -291,10 +296,11 @@ const string kSmartPrivacySubpagePath = "osPrivacy/smartPrivacy";
 const string kPrivacyHubSubpagePath = "osPrivacy/privacyHub";
 const string kPrivacyHubMicrophoneSubpagePath =
      "osPrivacy/privacyHub/microphone";
+const string kPrivacyHubGeolocationSubpagePath =
+      "osPrivacy/privacyHub/geolocation";
 
 // Languages and Input section.
 const string kLanguagesAndInputSectionPath = "osLanguages";
-const string kSmartInputsSubpagePath = "osLanguages/smartInputs";
 const string kInputMethodOptionsSubpagePath = "osLanguages/inputMethodOptions";
 const string kLanguagesSubpagePath = "osLanguages/languages";
 const string kInputSubpagePath = "osLanguages/input";

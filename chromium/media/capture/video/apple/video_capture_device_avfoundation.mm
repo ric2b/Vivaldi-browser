@@ -309,7 +309,28 @@ AVCaptureDeviceFormat* FindBestCaptureFormat(
     // To avoid races with concurrent callbacks, grab the lock before stopping
     // capture and clearing all the variables.
     base::AutoLock lock(_lock);
+
+    // Cleanup AVCaptureSession
+    // 1. Stop the AVCaptureSession
     [self stopCapture];
+    // 2. Remove AVCaptureInputs and AVCaptureOutputs
+    for (AVCaptureInput* input in _captureSession.inputs) {
+      [_captureSession removeInput:input];
+    }
+    for (AVCaptureOutput* output in _captureSession.outputs) {
+      [_captureSession removeOutput:output];
+    }
+    // 3. Set the AVCaptureSession to nil to remove strong references
+    _captureSession = nil;
+
+    // Cleanup AVCaptureDevice
+    // 1. Unlock any configuration (if locked)
+    [_captureDevice unlockForConfiguration];
+    // 2. Remove observer
+    [_captureDevice removeObserver:self forKeyPath:@"portraitEffectActive"];
+    // 3. Release and deallocate the capture device
+    _captureDevice = nil;
+
     _frameReceiver = nullptr;
     _sampleBufferTransformer.reset();
     _mainThreadTaskRunner = nullptr;
@@ -1040,8 +1061,8 @@ AVCaptureDeviceFormat* FindBestCaptureFormat(
 #endif
 
     const media::VideoCaptureFormat captureFormat(
-        gfx::Size(CVPixelBufferGetWidth(final_pixel_buffer),
-                  CVPixelBufferGetHeight(final_pixel_buffer)),
+        gfx::Size(CVPixelBufferGetWidth(final_pixel_buffer.get()),
+                  CVPixelBufferGetHeight(final_pixel_buffer.get())),
         _frameRate, media::PIXEL_FORMAT_NV12);
     // When the |pixelBuffer| is the result of a conversion (not camera
     // pass-through) then it originates from a CVPixelBufferPool and the color
@@ -1053,7 +1074,7 @@ AVCaptureDeviceFormat* FindBestCaptureFormat(
     // TODO(hbos): Investigate how to successfully parse and/or configure the
     // color space correctly. The implications of this hack is not fully
     // understood.
-    [self processPixelBufferNV12IOSurface:final_pixel_buffer
+    [self processPixelBufferNV12IOSurface:final_pixel_buffer.get()
                             captureFormat:captureFormat
                                colorSpace:kColorSpaceRec709Apple
                                 timestamp:timestamp];

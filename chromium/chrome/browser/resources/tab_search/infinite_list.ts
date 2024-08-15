@@ -18,8 +18,8 @@
 
 import 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
 
-import {assert} from 'chrome://resources/js/assert_ts.js';
-import {getDeepActiveElement} from 'chrome://resources/js/util_ts.js';
+import {assert} from 'chrome://resources/js/assert.js';
+import {getDeepActiveElement} from 'chrome://resources/js/util.js';
 import {IronSelectorElement} from 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
 import {calculateSplices, PolymerElement, TemplateInstanceBase, templatize} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -124,7 +124,10 @@ export class InfiniteList extends PolymerElement {
    */
   ensureAllDomItemsAvailable() {
     if (this.items.length > 0) {
-      const shouldUpdateHeight = this.instances_.length !== this.items.length;
+      // Height may need to be updated when length has not changed, if previous
+      // height calculation was performed when this element was not visible.
+      const shouldUpdateHeight = this.instances_.length !== this.items.length ||
+          this.$.container.style.height === '0px';
       for (let i = this.instances_.length; i < this.items.length; i++) {
         this.createAndInsertDomItem_(i);
       }

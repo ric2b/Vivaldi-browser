@@ -35,9 +35,25 @@
 #include "url/origin.h"
 
 namespace content {
-namespace {
 
-bool AreHttpRequestHeadersCompatible(
+// static
+PrerenderHost* PrerenderHost::GetFromFrameTreeNodeIfPrerendering(
+    FrameTreeNode& frame_tree_node) {
+  if (!frame_tree_node.frame_tree().is_prerendering()) {
+    return nullptr;
+  }
+  return &GetFromFrameTreeNode(frame_tree_node);
+}
+
+// static
+PrerenderHost& PrerenderHost::GetFromFrameTreeNode(
+    FrameTreeNode& frame_tree_node) {
+  CHECK(frame_tree_node.frame_tree().is_prerendering());
+  return *static_cast<PrerenderHost*>(frame_tree_node.frame_tree().delegate());
+}
+
+// static
+bool PrerenderHost::AreHttpRequestHeadersCompatible(
     const std::string& potential_activation_headers_str,
     const std::string& prerender_headers_str,
     PrerenderTriggerType trigger_type,
@@ -58,6 +74,11 @@ bool AreHttpRequestHeadersCompatible(
   potential_activation_headers.RemoveHeader("Purpose");
   prerender_headers.RemoveHeader("Sec-Purpose");
   potential_activation_headers.RemoveHeader("Sec-Purpose");
+
+  prerender_headers.RemoveHeader("RTT");
+  potential_activation_headers.RemoveHeader("RTT");
+  prerender_headers.RemoveHeader("Downlink");
+  potential_activation_headers.RemoveHeader("Downlink");
 
   // TODO(https://crbug.com/1378921): Instead of handling headers added by
   // embedders specifically, prerender should expose an interface to embedders
@@ -93,24 +114,6 @@ bool AreHttpRequestHeadersCompatible(
                      std::move(prerender_headers), trigger_type,
                      embedder_histogram_suffix));
   return false;
-}
-
-}  // namespace
-
-// static
-PrerenderHost* PrerenderHost::GetFromFrameTreeNodeIfPrerendering(
-    FrameTreeNode& frame_tree_node) {
-  if (!frame_tree_node.frame_tree().is_prerendering()) {
-    return nullptr;
-  }
-  return &GetFromFrameTreeNode(frame_tree_node);
-}
-
-// static
-PrerenderHost& PrerenderHost::GetFromFrameTreeNode(
-    FrameTreeNode& frame_tree_node) {
-  CHECK(frame_tree_node.frame_tree().is_prerendering());
-  return *static_cast<PrerenderHost*>(frame_tree_node.frame_tree().delegate());
 }
 
 PrerenderHost::PrerenderHost(
@@ -332,6 +335,11 @@ bool PrerenderHost::StartPrerendering() {
   if (!created_navigation_handle)
     return false;
 
+  if (attributes_.prerender_navigation_handle_callback) {
+    attributes_.prerender_navigation_handle_callback.value().Run(
+        *created_navigation_handle);
+  }
+
   // Even when LoadURLWithParams() returns a valid navigation handle, navigation
   // can fail during navigation start, for example, due to prerendering a
   // non-supported URL scheme that is filtered out in
@@ -505,7 +513,6 @@ std::unique_ptr<StoredPage> PrerenderHost::Activate(
   CHECK(!page->render_frame_host()->GetParentOrOuterDocumentOrEmbedder());
 
   page->render_frame_host()->SetFrameTreeNode(*(target_frame_tree.root()));
-
   page->render_frame_host()->SetRenderFrameHostOwner(target_frame_tree.root());
 
   // Copy frame name into the replication state of the primary main frame to
@@ -924,6 +931,8 @@ PrerenderHost::LoadingOutcome PrerenderHost::WaitForLoadStopForTesting() {
       },
       loop.QuitClosure(), &status);
   loop.Run();
+  // Reset callback to null in case if loop is quit by timeout.
+  on_wait_loading_finished_.Reset();
   return status;
 }
 
@@ -985,7 +994,6 @@ void PrerenderHost::SetFailureReason(
     case PrerenderFinalStatus::kLowEndDevice:
     case PrerenderFinalStatus::kInvalidSchemeRedirect:
     case PrerenderFinalStatus::kInvalidSchemeNavigation:
-    case PrerenderFinalStatus::kInProgressNavigation:
     case PrerenderFinalStatus::kNavigationRequestBlockedByCsp:
     case PrerenderFinalStatus::kMainFrameNavigation:
     case PrerenderFinalStatus::kMojoBinderPolicy:
@@ -996,7 +1004,6 @@ void PrerenderHost::SetFailureReason(
     case PrerenderFinalStatus::kNavigationBadHttpStatus:
     case PrerenderFinalStatus::kClientCertRequested:
     case PrerenderFinalStatus::kNavigationRequestNetworkError:
-    case PrerenderFinalStatus::kMaxNumOfRunningPrerendersExceeded:
     case PrerenderFinalStatus::kCancelAllHostsForTesting:
     case PrerenderFinalStatus::kDidFailLoad:
     case PrerenderFinalStatus::kStop:
@@ -1007,9 +1014,8 @@ void PrerenderHost::SetFailureReason(
     case PrerenderFinalStatus::kMixedContent:
     case PrerenderFinalStatus::kTriggerBackgrounded:
     case PrerenderFinalStatus::kMemoryLimitExceeded:
-    case PrerenderFinalStatus::kFailToGetMemoryUsage:
     case PrerenderFinalStatus::kDataSaverEnabled:
-    case PrerenderFinalStatus::kHasEffectiveUrl:
+    case PrerenderFinalStatus::kTriggerUrlHasEffectiveUrl:
     case PrerenderFinalStatus::kInactivePageRestriction:
     case PrerenderFinalStatus::kStartFailed:
     case PrerenderFinalStatus::kTimeoutBackgrounded:
@@ -1039,8 +1045,13 @@ void PrerenderHost::SetFailureReason(
     case PrerenderFinalStatus::kMemoryPressureOnTrigger:
     case PrerenderFinalStatus::kMemoryPressureAfterTriggered:
     case PrerenderFinalStatus::kPrerenderingDisabledByDevTools:
-    case PrerenderFinalStatus::kResourceLoadBlockedByClient:
     case PrerenderFinalStatus::kActivatedWithAuxiliaryBrowsingContexts:
+    case PrerenderFinalStatus::kMaxNumOfRunningEagerPrerendersExceeded:
+    case PrerenderFinalStatus::kMaxNumOfRunningNonEagerPrerendersExceeded:
+    case PrerenderFinalStatus::kMaxNumOfRunningEmbedderPrerendersExceeded:
+    case PrerenderFinalStatus::kPrerenderingUrlHasEffectiveUrl:
+    case PrerenderFinalStatus::kRedirectedPrerenderingUrlHasEffectiveUrl:
+    case PrerenderFinalStatus::kActivationUrlHasEffectiveUrl:
       if (attempt_) {
         attempt_->SetFailureReason(
             ToPreloadingFailureReason(reason.final_status()));

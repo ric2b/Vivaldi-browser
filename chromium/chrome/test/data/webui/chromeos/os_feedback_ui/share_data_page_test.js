@@ -5,16 +5,16 @@
 import 'chrome://resources/mojo/mojo/public/mojom/base/big_buffer.mojom-lite.js';
 import 'chrome://resources/mojo/mojo/public/mojom/base/string16.mojom-lite.js';
 
-import {fakeEmptyFeedbackContext, fakeFeedbackContext, fakeInternalUserFeedbackContext} from 'chrome://os-feedback/fake_data.js';
+import {fakeEmptyFeedbackContext, fakeFeedbackContext, fakeInternalUserFeedbackContext, fakeLoginFlowFeedbackContext} from 'chrome://os-feedback/fake_data.js';
 import {FakeFeedbackServiceProvider} from 'chrome://os-feedback/fake_feedback_service_provider.js';
 import {FeedbackFlowState} from 'chrome://os-feedback/feedback_flow.js';
 import {FeedbackAppPreSubmitAction, FeedbackContext} from 'chrome://os-feedback/feedback_types.js';
 import {setFeedbackServiceProviderForTesting} from 'chrome://os-feedback/mojo_interface_provider.js';
 import {ShareDataPageElement} from 'chrome://os-feedback/share_data_page.js';
-import {mojoString16ToString, stringToMojoString16} from 'chrome://resources/ash/common/mojo_utils.js';
 import {getDeepActiveElement} from 'chrome://resources/ash/common/util.js';
+import {mojoString16ToString, stringToMojoString16} from 'chrome://resources/js/mojo_type_util.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {assertArrayEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
+import {assertArrayEquals, assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
 import {eventToPromise, isVisible} from '../test_util.js';
@@ -122,14 +122,6 @@ export function shareDataPageTestSuite() {
     assertEquals('Send', getElementContent('#buttonSend'));
     assertTrue(page.i18nExists('sendButtonLabel'));
 
-    // Verify the attach files label is in the page.
-    assertTrue(page.i18nExists('attachFilesLabel'));
-    assertEquals('Attach files', getElementContent('#attachFilesLabel'));
-
-    // Verify the add files Icon is in the page.
-    const addFilesIcon = getElement('#attachFilesIcon');
-    assertTrue(!!addFilesIcon);
-
     // Verify the user email label is in the page.
     assertTrue(page.i18nExists('userEmailLabel'));
     assertEquals('Email', getElementContent('#userEmailLabel'));
@@ -188,12 +180,56 @@ export function shareDataPageTestSuite() {
     // Privacy note is a long localized string in HTML format.
     assertTrue(page.i18nExists('privacyNote'));
     assertEquals(
-        'Go to the Legal Help page to request content changes for ' +
-            'legal reasons. Some account and system information ' +
-            'may be sent to Google. We will use the information you ' +
-            'give us to help address technical issues and to improve our ' +
-            'services, subject to our Privacy Policy and Terms of Service.',
+        'Some account and system information may be sent to Google. We use ' +
+            'this information to help address technical issues and improve ' +
+            'our services, subject to our Privacy Policy and Terms of ' +
+            'Service. To request content changes, go to Legal Help.',
         getElementContent('#privacyNote'));
+  });
+
+  // Test the privacy note displayed to logged out users.
+  test('privacyNote_loggedOut_users', async () => {
+    await initializePage();
+    page.feedbackContext = fakeLoginFlowFeedbackContext;
+    assertEquals(
+        'Some account and system information may be sent to Google. We use ' +
+            'this information to help address technical issues and improve ' +
+            'our services, subject to our Privacy Policy ' +
+            '(https://policies.google.com/privacy) and Terms of Service ' +
+            '(https://policies.google.com/terms). To request content changes,' +
+            ' go to Legal Help ' +
+            '(https://support.google.com/legal/answer/3110420).',
+        getElementContent('#privacyNote'));
+  });
+
+  // Test the add file section is visible to logged in users.
+  test('addFileVisible_loggedIn_users', async () => {
+    await initializePage();
+    page.feedbackContext = fakeFeedbackContext;
+    assertNotEquals('Login', page.feedbackContext.categoryTag);
+
+    assertTrue(page.i18nExists('attachFilesLabelLoggedIn'));
+    // Add file section is visible.
+    assertTrue(isVisible(getElement('#addFileContainer')));
+    // Attach files Icon should be visible.
+    assertTrue(isVisible(getElement('#attachFilesIcon')));
+    // Attach files label should be "Attach files".
+    assertEquals('Attach files', getElementContent('#attachFilesLabel'));
+  });
+
+  // Test the add file section is invisible to logged out users.
+  test('addFileInvisible_loggedOut_users', async () => {
+    await initializePage();
+    page.feedbackContext = fakeLoginFlowFeedbackContext;
+    assertEquals('Login', page.feedbackContext.categoryTag);
+
+    assertTrue(page.i18nExists('attachFilesLabelLoggedOut'));
+    // Add file section is invisible.
+    assertFalse(isVisible(getElement('#addFileContainer')));
+    // Attach files Icon should be invisible.
+    assertFalse(isVisible(getElement('#attachFilesIcon')));
+    // Attach files label should be "Add screenshot".
+    assertEquals('Add screenshot', getElementContent('#attachFilesLabel'));
   });
 
   // Test that the email drop down is populated with two options.
@@ -795,7 +831,7 @@ export function shareDataPageTestSuite() {
    */
   test('AdditionalContext_CategoryTag_Bluetooth', async () => {
     await initializePage();
-    page.feedbackContext = fakeFeedbackContext;
+    page.feedbackContext = fakeEmptyFeedbackContext;
 
     // Uncheck the "Link Cross Device Dogfood Feedback" checkbox so that only
     // the Bluetooth-specific categoryTag is added to the report.
@@ -848,7 +884,7 @@ export function shareDataPageTestSuite() {
       'AdditionalContext_CategoryTag_LinkCrossDeviceDogfoodFeedback',
       async () => {
         await initializePage();
-        page.feedbackContext = fakeFeedbackContext;
+        page.feedbackContext = fakeEmptyFeedbackContext;
 
         // Uncheck the bluetooth logs checkbox so that only the "Link Cross
         // Device Dogfood Feedback"-specific categoryTag is added to the report.

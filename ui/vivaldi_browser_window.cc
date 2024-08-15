@@ -21,7 +21,6 @@
 #include "browser/vivaldi_runtime_feature.h"
 #include "build/build_config.h"
 #include "chrome/browser/apps/platform_apps/audio_focus_web_contents_observer.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/browser_extension_window_controller.h"
@@ -56,6 +55,7 @@
 #include "chrome/browser/ui/views/download/download_in_progress_dialog_view.h"
 #include "chrome/browser/ui/views/extensions/extension_keybinding_registry_views.h"
 #include "chrome/browser/ui/views/eye_dropper/eye_dropper.h"
+#include "chrome/browser/ui/views/page_action/page_action_icon_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -109,6 +109,9 @@
 #include "extensions/schema/vivaldi_utilities.h"
 #include "extensions/schema/window_private.h"
 #include "extensions/tools/vivaldi_tools.h"
+#if defined(ENABLE_RELAY_PROXY)
+#include "proxy/launcher.h"
+#endif
 #include "ui/infobar_container_web_proxy.h"
 #include "ui/views/vivaldi_native_widget.h"
 #include "ui/views/vivaldi_window_widget_delegate.h"
@@ -118,7 +121,6 @@
 #include "ui/vivaldi_ui_utils.h"
 #include "ui/window_registry_service.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
-
 #if defined(USE_AURA)
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
@@ -130,6 +132,10 @@
 #include "chrome/browser/shell_integration_linux.h"
 #include "chrome/browser/ui/views/theme_profile_key.h"
 #include "ui/linux/linux_ui.h"
+#endif
+
+#if BUILDFLAG(IS_MAC)
+#import "browser/vivaldi_app_observer.h"
 #endif
 
 #if BUILDFLAG(IS_WIN)
@@ -193,6 +199,10 @@ class VivaldiBrowserWindow::InterfaceHelper final
 
   Profile* GetProfile() override { return window_->GetProfile(); }
 
+  autofill::AutofillBubbleHandler* GetAutofillBubbleHandler() {
+    return window_->autofill_bubble_handler_.get();
+  }
+
   bool IsFullscreen() const override { return window_->IsFullscreen(); }
 
   void EnterFullscreen(const GURL& url,
@@ -237,14 +247,18 @@ class VivaldiBrowserWindow::InterfaceHelper final
       content::WebContents* web_contents,
       autofill::SaveCardBubbleController* controller,
       bool is_user_gesture) override {
-    return nullptr;
+    // Hold a AutofillBubbleHandlerImpl and implement a toolbarprovider for
+    // anchor points.
+    return GetAutofillBubbleHandler()->ShowSaveCreditCardBubble(
+        web_contents, controller, is_user_gesture);
   }
 
   autofill::AutofillBubbleBase* ShowLocalCardMigrationBubble(
       content::WebContents* web_contents,
       autofill::LocalCardMigrationBubbleController* controller,
       bool is_user_gesture) override {
-    return nullptr;
+    return GetAutofillBubbleHandler()->ShowLocalCardMigrationBubble(
+        web_contents, controller, is_user_gesture);
   }
 
   autofill::AutofillBubbleBase* ShowIbanBubble(
@@ -252,48 +266,48 @@ class VivaldiBrowserWindow::InterfaceHelper final
       autofill::IbanBubbleController* controller,
       bool is_user_gesture,
       autofill::IbanBubbleType bubble_type) override {
-    return nullptr;
+    return GetAutofillBubbleHandler()->ShowIbanBubble(
+        web_contents, controller, is_user_gesture, bubble_type);
   }
 
   autofill::AutofillBubbleBase* ShowOfferNotificationBubble(
       content::WebContents* web_contents,
       autofill::OfferNotificationBubbleController* controller,
       bool is_user_gesture) override {
-    return nullptr;
+    return GetAutofillBubbleHandler()->ShowOfferNotificationBubble(
+        web_contents, controller, is_user_gesture);
   }
 
   autofill::AutofillBubbleBase* ShowSaveAddressProfileBubble(
       content::WebContents* web_contents,
       autofill::SaveUpdateAddressProfileBubbleController* controller,
       bool is_user_gesture) override {
-    return nullptr;
+    return GetAutofillBubbleHandler()->ShowSaveAddressProfileBubble(
+        web_contents, controller, is_user_gesture);
   }
 
   autofill::AutofillBubbleBase* ShowUpdateAddressProfileBubble(
       content::WebContents* web_contents,
       autofill::SaveUpdateAddressProfileBubbleController* controller,
       bool is_user_gesture) override {
-    return nullptr;
-  }
-
-  autofill::AutofillBubbleBase* ShowEditAddressProfileDialog(
-      content::WebContents* web_contents,
-      autofill::EditAddressProfileDialogController* controller) override {
-    return nullptr;
+    return GetAutofillBubbleHandler()->ShowUpdateAddressProfileBubble(
+        web_contents, controller, is_user_gesture);
   }
 
   autofill::AutofillBubbleBase* ShowVirtualCardManualFallbackBubble(
       content::WebContents* web_contents,
       autofill::VirtualCardManualFallbackBubbleController* controller,
       bool is_user_gesture) override {
-    return nullptr;
+    return GetAutofillBubbleHandler()->ShowVirtualCardManualFallbackBubble(
+        web_contents, controller, is_user_gesture);
   }
 
   autofill::AutofillBubbleBase* ShowVirtualCardEnrollBubble(
       content::WebContents* web_contents,
       autofill::VirtualCardEnrollBubbleController* controller,
       bool is_user_gesture) override {
-    return nullptr;
+    return GetAutofillBubbleHandler()->ShowVirtualCardEnrollBubble(
+        web_contents, controller, is_user_gesture);
   }
 
   autofill::AutofillBubbleBase* ShowMandatoryReauthBubble(
@@ -301,10 +315,9 @@ class VivaldiBrowserWindow::InterfaceHelper final
       autofill::MandatoryReauthBubbleController* controller,
       bool is_user_gesture,
       autofill::MandatoryReauthBubbleType bubble_type) override {
-    return nullptr;
+    return GetAutofillBubbleHandler()->ShowMandatoryReauthBubble(
+        web_contents, controller, is_user_gesture, bubble_type);
   }
-
-  void OnPasswordSaved() override {}
 
   // ExtensionFunctionDispatcher::Delegate overrides
 
@@ -619,6 +632,17 @@ VivaldiBrowserWindow::VivaldiBrowserWindow()
 }
 
 VivaldiBrowserWindow::~VivaldiBrowserWindow() {
+#if defined(ENABLE_RELAY_PROXY)
+  // Remove relay proxy if we are about to close the last window that can
+  // control it (a normal window). Remaining windows can be popups, PWAs etc.
+  if (BrowserList::GetInstance()->size() > 1) {
+    int num_normal = vivaldi::GetBrowserCountOfType(Browser::TYPE_NORMAL);
+    if (num_normal == 1) {
+      vivaldi::proxy::disconnect();
+    }
+  }
+#endif
+
   // The WindowRegistryService can return null.
   if (vivaldi::WindowRegistryService::Get(GetProfile())) {
     vivaldi::WindowRegistryService::Get(GetProfile())
@@ -790,6 +814,13 @@ void VivaldiBrowserWindow::CreateWebContents(
   PrefService* prefs = GetProfile()->GetPrefs();
   prompt_on_quit_ =
       prefs->GetBoolean(vivaldiprefs::kSystemShowExitConfirmationDialog);
+
+  toolbar_button_provider_ =
+      std::make_unique<VivaldiToolbarButtonProvider>(this);
+
+  autofill_bubble_handler_ =
+      std::make_unique<autofill::AutofillBubbleHandlerImpl>(
+          browser_.get(), toolbar_button_provider_.get());
 }
 
 void VivaldiBrowserWindow::InitWidget(
@@ -926,6 +957,13 @@ void VivaldiBrowserWindow::InjectVivaldiWindowIdComplete(base::Value result) {
       extensions::vivaldi::window_private::OnWebContentsHasWindow::kEventName,
       extensions::vivaldi::window_private::OnWebContentsHasWindow::Create(id()),
       browser_->profile());
+}
+
+void VivaldiBrowserWindow::OnUIReady() {
+#if BUILDFLAG(IS_MAC)
+  vivaldi::VivaldiAppObserver::Get(browser_->profile())->
+      OnWindowShown(this, true);
+#endif
 }
 
 void VivaldiBrowserWindow::Show() {
@@ -1267,22 +1305,6 @@ void VivaldiBrowserWindow::ContinueClose(CloseDialogMode mode,
     // We may have overriden this value when calling quit from menu.
     SetPromptOnQuit(
         prefs->GetBoolean(vivaldiprefs::kSystemShowExitConfirmationDialog));
-
-    if (mode == CloseDialogMode::CloseWindow) {
-      ::vivaldi::BroadcastEvent(
-          extensions::vivaldi::window_private::OnWindowCloseCanceled::
-              kEventName,
-          extensions::vivaldi::window_private::OnWindowCloseCanceled::Create(
-              id()),
-          browser_->profile());
-    }
-
-    // Notify about the cancellation of window close so
-    // events can be sent to the web ui.
-    // content::NotificationService::current()->Notify(
-    //  chrome::NOTIFICATION_BROWSER_CLOSE_CANCELLED,
-    //  content::Source<Browser>(browser()),
-    //  content::NotificationService::NoDetails());
   }
 }
 
@@ -1301,21 +1323,13 @@ void VivaldiBrowserWindow::SetPromptOnQuit(bool prompt) {
 // We used this function from Chromium to signal that a close action
 // (application or window) has been stopped by the user due to beforeunload
 // handling
-void VivaldiBrowserWindow::CancelWindowClose(Browser* browser) {
+void VivaldiBrowserWindow::CancelWindowClose() {
   for (Browser* b : *BrowserList::GetInstance()) {
     if (b->is_vivaldi()) {
       VivaldiBrowserWindow* window =
           static_cast<VivaldiBrowserWindow*>(b->window());
       window->quit_dialog_shown_ = false;
       window->close_dialog_shown_ = false;
-      if (b == browser) {
-        ::vivaldi::BroadcastEvent(
-            extensions::vivaldi::window_private::OnWindowCloseCanceled::
-                kEventName,
-            extensions::vivaldi::window_private::OnWindowCloseCanceled::Create(
-                window->id()),
-            b->profile());
-      }
     }
   }
 }
@@ -2180,24 +2194,24 @@ bool VivaldiBrowserWindow::IsFeaturePromoActive(
   return false;
 }
 
-bool VivaldiBrowserWindow::MaybeShowFeaturePromo(
-    const base::Feature& iph_feature,
-    user_education::FeaturePromoController::BubbleCloseCallback close_callback,
-    user_education::FeaturePromoSpecification::FormatParameters body_params,
-    user_education::FeaturePromoSpecification::FormatParameters title_params) {
-  return false;
+user_education::FeaturePromoResult VivaldiBrowserWindow::CanShowFeaturePromo(
+    const base::Feature& iph_feature) const {
+  return user_education::FeaturePromoResult::Failure::kFeatureDisabled;
+}
+
+user_education::FeaturePromoResult VivaldiBrowserWindow::MaybeShowFeaturePromo(
+    user_education::FeaturePromoParams params) {
+  return user_education::FeaturePromoResult::Failure::kFeatureDisabled;
 }
 
 bool VivaldiBrowserWindow::MaybeShowStartupFeaturePromo(
-    const base::Feature& iph_feature,
-    user_education::FeaturePromoController::StartupPromoCallback promo_callback,
-    user_education::FeaturePromoController::BubbleCloseCallback close_callback,
-    user_education::FeaturePromoSpecification::FormatParameters body_params,
-    user_education::FeaturePromoSpecification::FormatParameters title_params) {
+    user_education::FeaturePromoParams params) {
   return false;
 }
 
-bool VivaldiBrowserWindow::CloseFeaturePromo(const base::Feature& iph_feature) {
+bool VivaldiBrowserWindow::CloseFeaturePromo(
+    const base::Feature& iph_feature,
+    user_education::FeaturePromoCloseReason close_reason) {
   return false;
 }
 
@@ -2208,7 +2222,7 @@ VivaldiBrowserWindow::CloseFeaturePromoAndContinue(
 }
 
 void VivaldiBrowserWindow::UpdateDraggableRegions(
-    const std::vector<extensions::DraggableRegion>& regions) {
+    const std::vector<extensions::mojom::DraggableRegionPtr>& regions) {
   if (with_native_frame_) {
     // The system handles the drag.
     return;
@@ -2217,12 +2231,11 @@ void VivaldiBrowserWindow::UpdateDraggableRegions(
   // This is based on RawDraggableRegionsToSkRegion from
   // chromium/extensions/browser/app_window/app_window.cc
   draggable_region_ = std::make_unique<SkRegion>();
-  for (auto iter = regions.cbegin(); iter != regions.cend(); ++iter) {
-    const extensions::DraggableRegion& region = *iter;
+  for (auto& region: regions) {
     draggable_region_->op(
-        SkIRect::MakeLTRB(region.bounds.x(), region.bounds.y(),
-                          region.bounds.right(), region.bounds.bottom()),
-        region.draggable ? SkRegion::kUnion_Op : SkRegion::kDifference_Op);
+        SkIRect::MakeLTRB(region->bounds.x(), region->bounds.y(),
+                          region->bounds.right(), region->bounds.bottom()),
+        region->draggable ? SkRegion::kUnion_Op : SkRegion::kDifference_Op);
   }
 
   OnViewWasResized();
@@ -2236,10 +2249,93 @@ bool VivaldiBrowserWindow::IsBorderlessModeEnabled() const {
   return false;
 }
 
+bool VivaldiBrowserWindow::GetCanResize() {
+  // Will change in the future to handle multi-tab windows.
+  // crbug.com/1493617 & SetCanResizeFromWebAPI.
+  return false;
+}
+
 void VivaldiBrowserWindow::BeforeUnloadFired(content::WebContents* source) {
   // web_contents_delegate_ calls back when unload has fired and we can self
   // destruct. Note we cannot destruct here since cleanup is done.
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&VivaldiBrowserWindow::DeleteThis,
                                 base::Unretained(this)));
+}
+
+VivaldiToolbarButtonProvider::VivaldiToolbarButtonProvider(
+    VivaldiBrowserWindow* window)
+    : window_(window) {}
+
+VivaldiToolbarButtonProvider::~VivaldiToolbarButtonProvider() {
+  window_ = nullptr;
+}
+
+ExtensionsToolbarContainer*
+VivaldiToolbarButtonProvider::GetExtensionsToolbarContainer() {
+  return nullptr;
+}
+
+gfx::Size VivaldiToolbarButtonProvider::GetToolbarButtonSize() const {
+  const int size = 48;
+  return gfx::Size(size, size);
+}
+
+views::View*
+VivaldiToolbarButtonProvider::GetDefaultExtensionDialogAnchorView() {
+  return window_->GetWebView();
+}
+
+PageActionIconView* VivaldiToolbarButtonProvider::GetPageActionIconView(
+    PageActionIconType type) {
+  return static_cast<PageActionIconView*>(window_->GetWebView());
+}
+
+AppMenuButton* VivaldiToolbarButtonProvider::GetAppMenuButton() {
+  return nullptr;
+}
+
+gfx::Rect VivaldiToolbarButtonProvider::GetFindBarBoundingBox(
+    int contents_bottom) {
+  return gfx::Rect();
+}
+
+void VivaldiToolbarButtonProvider::FocusToolbar() {}
+
+views::AccessiblePaneView*
+VivaldiToolbarButtonProvider::GetAsAccessiblePaneView() {
+  return nullptr;
+}
+
+views::View* VivaldiToolbarButtonProvider::GetAnchorView(
+    PageActionIconType type) {
+  // Return the webview.
+  return window_->GetWebView();
+}
+
+void VivaldiToolbarButtonProvider::ZoomChangedForActiveTab(
+    bool can_show_bubble) {}
+
+AvatarToolbarButton* VivaldiToolbarButtonProvider::GetAvatarToolbarButton() {
+  return nullptr;
+}
+
+ToolbarButton* VivaldiToolbarButtonProvider::GetBackButton() {
+  return nullptr;
+}
+
+ReloadButton* VivaldiToolbarButtonProvider::GetReloadButton() {
+  return nullptr;
+}
+
+IntentChipButton* VivaldiToolbarButtonProvider::GetIntentChipButton() {
+  return nullptr;
+}
+
+DownloadToolbarButtonView* VivaldiToolbarButtonProvider::GetDownloadButton() {
+  return nullptr;
+}
+
+SidePanelToolbarButton* VivaldiToolbarButtonProvider::GetSidePanelButton() {
+  return nullptr;
 }

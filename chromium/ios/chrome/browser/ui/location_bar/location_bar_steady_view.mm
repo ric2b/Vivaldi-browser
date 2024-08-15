@@ -11,6 +11,7 @@
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/dynamic_type_util.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_constants.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
@@ -43,6 +44,8 @@ const CGFloat kVoiceSearchButtonTrailingSpacing = -7;
 const CGFloat kbadgeViewAnimationDuration = 0.2;
 // Location label vertical offset.
 const CGFloat kLocationLabelVerticalOffset = -1;
+// The margin from the leading side when not centered.
+const CGFloat kLeadingMargin = 20;
 }  // namespace
 
 @interface LocationBarSteadyView ()
@@ -99,7 +102,7 @@ const CGFloat kLocationLabelVerticalOffset = -1;
       [[LocationBarSteadyViewColorScheme alloc] init];
 
   scheme.fontColor = [UIColor colorNamed:kTextPrimaryColor];
-  scheme.placeholderColor = [UIColor colorNamed:kTextfieldPlaceholderColor];
+  scheme.placeholderColor = content_suggestions::SearchHintLabelColor();
   scheme.trailingButtonColor = [UIColor colorNamed:kGrey600Color];
 
   return scheme;
@@ -159,7 +162,9 @@ const CGFloat kLocationLabelVerticalOffset = -1;
 
 #pragma mark - LocationBarSteadyView
 
-@implementation LocationBarSteadyView
+@implementation LocationBarSteadyView {
+  NSLayoutConstraint* _xConstraint;
+}
 
 - (instancetype)init {
   self = [super initWithFrame:CGRectZero];
@@ -209,7 +214,8 @@ const CGFloat kLocationLabelVerticalOffset = -1;
             constraintEqualToAnchor:_locationLabel.leadingAnchor
                 constant:vLocationBarSteadyViewLocationImageToLabelSpacing],
         [_locationLabel.trailingAnchor
-            constraintEqualToAnchor:_locationContainerView.trailingAnchor],
+            constraintLessThanOrEqualToAnchor:
+              _locationContainerView.trailingAnchor],
         [_locationIconImageView.centerYAnchor
             constraintEqualToAnchor:_locationContainerView.centerYAnchor],
       ];
@@ -278,9 +284,9 @@ const CGFloat kLocationLabelVerticalOffset = -1;
     } else {
 
     // Make the label gravitate towards the center of the view.
-    NSLayoutConstraint* centerX = [_locationContainerView.centerXAnchor
+    _xConstraint = [_locationContainerView.centerXAnchor
         constraintEqualToAnchor:self.centerXAnchor];
-    centerX.priority = UILayoutPriorityDefaultHigh;
+    _xConstraint.priority = UILayoutPriorityDefaultHigh;
 
     _locationContainerViewLeadingAnchorConstraint =
         [_locationContainerView.leadingAnchor
@@ -310,7 +316,7 @@ const CGFloat kLocationLabelVerticalOffset = -1;
       [_trailingButton.widthAnchor constraintEqualToConstant:kButtonSize],
       [_trailingButton.heightAnchor constraintEqualToConstant:kButtonSize],
       _trailingButtonTrailingAnchorConstraint,
-      centerX,
+      _xConstraint,
       _locationContainerViewLeadingAnchorConstraint,
     ]];
     } // End Vivaldi
@@ -506,6 +512,20 @@ const CGFloat kLocationLabelVerticalOffset = -1;
 - (void)enableTrailingButton:(BOOL)enabled {
   self.trailingButton.enabled = enabled;
   [self updateAccessibility];
+}
+
+- (void)setCentered:(BOOL)centered {
+  _xConstraint.active = NO;
+  if (centered) {
+    _xConstraint = [_locationContainerView.centerXAnchor
+        constraintEqualToAnchor:self.centerXAnchor];
+  } else {
+    _xConstraint = [_locationContainerView.leadingAnchor
+        constraintEqualToAnchor:self.leadingAnchor
+                       constant:kLeadingMargin];
+  }
+  _xConstraint.priority = UILayoutPriorityDefaultHigh;
+  _xConstraint.active = YES;
 }
 
 #pragma mark - UIResponder

@@ -9,9 +9,9 @@
 #include "build/build_config.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/grit/chromium_strings.h"
+#include "chrome/grit/branded_strings.h"
 #include "components/grit/components_resources.h"
-#include "components/strings/grit/components_chromium_strings.h"
+#include "components/strings/grit/components_branded_strings.h"
 #include "components/version_ui/version_ui_constants.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -66,10 +66,10 @@ void UpdateVersionUIDataSource(content::WebUIDataSource* html_source) {
                                   IDS_VIVALDI_VERSION_UI_CREDITS);
 
   html_source->AddString("productLicenseChromiumURL",
-                         base::UTF8ToUTF16(chrome::kChromiumProjectURL));
+                         chrome::kChromiumProjectURL);
 
   html_source->AddString("productLicenseCreditsURL",
-                         base::UTF8ToUTF16(chrome::kChromeUICreditsURL));
+                         chrome::kChromeUICreditsURL);
 
   html_source->AddLocalizedString("productTOS", IDS_ABOUT_TERMS_OF_SERVICE);
 }

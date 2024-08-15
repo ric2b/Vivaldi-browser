@@ -7,16 +7,21 @@
 #import "base/memory/raw_ptr.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/autofill/ios/form_util/form_activity_params.h"
+#import "components/password_manager/core/browser/features/password_features.h"
+#import "components/password_manager/core/browser/password_form.h"
+#import "components/password_manager/core/browser/password_manager.h"
 #import "components/password_manager/core/browser/password_store_interface.h"
 #import "components/password_manager/core/browser/password_ui_utils.h"
 #import "components/password_manager/core/browser/ui/credential_ui_entry.h"
+#import "components/password_manager/ios/ios_password_manager_driver_factory.h"
 #import "components/password_manager/ios/shared_password_controller.h"
 #import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/autofill/bottom_sheet/autofill_bottom_sheet_java_script_feature.h"
 #import "ios/chrome/browser/autofill/bottom_sheet/autofill_bottom_sheet_tab_helper.h"
 #import "ios/chrome/browser/autofill/form_input_suggestions_provider.h"
 #import "ios/chrome/browser/autofill/form_suggestion_tab_helper.h"
-#import "ios/chrome/browser/autofill/manual_fill/passwords_fetcher.h"
-#import "ios/chrome/browser/default_browser/utils.h"
+#import "ios/chrome/browser/default_browser/model/utils.h"
+#import "ios/chrome/browser/passwords/model/password_tab_helper.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/web_state_list/active_web_state_observation_forwarder.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
@@ -28,6 +33,7 @@
 #import "ios/chrome/common/ui/reauthentication/reauthentication_event.h"
 #import "ios/chrome/common/ui/reauthentication/reauthentication_protocol.h"
 #import "ios/chrome/grit/ios_strings.h"
+#import "ios/web/public/js_messaging/web_frames_manager.h"
 #import "ios/web/public/web_state.h"
 #import "ios/web/public/web_state_observer_bridge.h"
 #import "ui/base/l10n/l10n_util_mac.h"
@@ -41,8 +47,7 @@ using ReauthenticationEvent::kMissingPasscode;
 using ReauthenticationEvent::kSuccess;
 
 @interface PasswordSuggestionBottomSheetMediator () <WebStateListObserving,
-                                                     CRWWebStateObserver,
-                                                     PasswordFetcherDelegate>
+                                                     CRWWebStateObserver>
 
 // The object that provides suggestions while filling forms.
 @property(nonatomic, weak) id<FormInputSuggestionsProvider> suggestionsProvider;
@@ -52,9 +57,6 @@ using ReauthenticationEvent::kSuccess;
 
 // Default globe favicon when no favicon is available.
 @property(nonatomic, readonly) FaviconAttributes* defaultGlobeIconAttributes;
-
-// The password fetcher to query the user profile.
-@property(nonatomic, strong) PasswordFetcher* passwordFetcher;
 
 @end
 
@@ -84,12 +86,13 @@ using ReauthenticationEvent::kSuccess;
   // Vector of credentials related to the current page.
   std::vector<password_manager::CredentialUIEntry> _credentials;
 
+  // Vector of forms that have been received via the password sharing feature
+  // and the user has not been notified about them yet.
+  std::vector<const password_manager::PasswordForm*> _sharedUnnotifiedForms;
+
   // Whether the field that triggered the bottom sheet will need to refocus when
   // the bottom sheet is dismissed. Default is true.
   bool _needsRefocus;
-
-  // Whether to disable the bottom sheet on exit. Default is false.
-  bool _disableBottomSheetOnExit;
 
   // FaviconLoader is a keyed service that uses LargeIconService to retrieve
   // favicon images.
@@ -118,7 +121,6 @@ using ReauthenticationEvent::kSuccess;
                         accountPasswordStore {
   if (self = [super init]) {
     _needsRefocus = true;
-    _disableBottomSheetOnExit = false;
     _faviconLoader = faviconLoader;
     _prefService = prefService;
     _reauthenticationModule = reauthModule;
@@ -148,22 +150,18 @@ using ReauthenticationEvent::kSuccess;
       self.suggestionsProvider = tabHelper->GetAccessoryViewProvider();
       DCHECK(self.suggestionsProvider);
 
+      __weak __typeof(self) weakSelf = self;
       [self.suggestionsProvider
           retrieveSuggestionsForForm:params
                             webState:activeWebState
             accessoryViewUpdateBlock:^(
                 NSArray<FormSuggestion*>* suggestions,
                 id<FormInputSuggestionsProvider> formInputSuggestionsProvider) {
-              self.suggestions = suggestions;
+              weakSelf.suggestions = suggestions;
+              [weakSelf fetchCredentialsForForm:params.unique_form_id
+                                       webState:activeWebState
+                                     webFrameId:params.frame_id];
             }];
-
-      // Fetch passwords related to the suggestions.
-      _credentials.clear();
-      self.passwordFetcher = [[PasswordFetcher alloc]
-          initWithProfilePasswordStore:_profilePasswordStore
-                  accountPasswordStore:_accountPasswordStore
-                              delegate:self
-                                   URL:url::Origin::Create(_URL).GetURL()];
     }
   }
   return self;
@@ -234,6 +232,10 @@ using ReauthenticationEvent::kSuccess;
           base::SysUTF8ToNSString(password_manager::GetShownOrigin(origin));
     }
     [consumer setSuggestions:self.suggestions andDomain:domain];
+    if ([self shouldDisplaySharingNotification]) {
+      [consumer setTitle:[self sharingNotificationTitle]
+                subtitle:[self sharingNotificationSubtitle:domain]];
+    }
   } else {
     [consumer dismiss];
   }
@@ -248,6 +250,7 @@ using ReauthenticationEvent::kSuccess;
 
   [self logExitReason:kUsePasswordSuggestion];
   [self logReauthEvent:kAttempt];
+  [self markSharedPasswordNotificationsDisplayed];
 
   if (!suggestion.requiresReauth) {
     [self logReauthEvent:kSuccess];
@@ -272,9 +275,10 @@ using ReauthenticationEvent::kSuccess;
 }
 
 - (void)dismiss {
-  if ((_needsRefocus || _disableBottomSheetOnExit) && _webStateList) {
+  if (_needsRefocus && _webStateList) {
     [self logExitReason:kDismissal];
     [self incrementDismissCount];
+    [self markSharedPasswordNotificationsDisplayed];
 
     web::WebState* activeWebState = _webStateList->GetActiveWebState();
     if (!activeWebState) {
@@ -294,16 +298,6 @@ using ReauthenticationEvent::kSuccess;
 
 - (void)disableRefocus {
   _needsRefocus = false;
-}
-
-- (void)willSelectSuggestion:(NSInteger)row {
-  if ([[self usernameAtRow:row] length] == 0) {
-    // If the currently selected row has no username, the bottom sheet will
-    // disable itself on exit to allow the user to open the keyboard to fill in
-    // the username field.
-    _disableBottomSheetOnExit = true;
-  }
-  [self disableRefocus];
 }
 
 - (NSString*)usernameAtRow:(NSInteger)row {
@@ -364,24 +358,10 @@ using ReauthenticationEvent::kSuccess;
   [self onWebStateChange];
 }
 
-#pragma mark - PasswordFetcherDelegate
-
-- (void)passwordFetcher:(PasswordFetcher*)passwordFetcher
-      didFetchPasswords:
-          (std::vector<std::unique_ptr<password_manager::PasswordForm>>)
-              passwords {
-  std::vector<password_manager::CredentialUIEntry> credentials;
-  for (const auto& form : passwords) {
-    credentials.push_back(password_manager::CredentialUIEntry(*form));
-  }
-  _credentials = credentials;
-}
-
 #pragma mark - Private
 
 - (void)onWebStateChange {
   _needsRefocus = false;
-  _disableBottomSheetOnExit = false;
   [self.consumer dismiss];
 }
 
@@ -432,6 +412,103 @@ using ReauthenticationEvent::kSuccess;
 // Logs reauthentication events.
 - (void)logReauthEvent:(ReauthenticationEvent)event {
   base::UmaHistogramEnumeration("IOS.Reauth.Password.BottomSheet", event);
+}
+
+// Fetches all credentials for the current form.
+- (void)fetchCredentialsForForm:(autofill::FormRendererId)formId
+                       webState:(web::WebState*)webState
+                     webFrameId:(const std::string&)frameId {
+  _credentials.clear();
+
+  if (![self hasSuggestions]) {
+    return;
+  }
+
+  PasswordTabHelper* tabHelper = PasswordTabHelper::FromWebState(webState);
+  if (!tabHelper) {
+    return;
+  }
+
+  password_manager::PasswordManager* passwordManager =
+      tabHelper->GetPasswordManager();
+  CHECK(passwordManager);
+
+  web::WebFramesManager* webFramesManager =
+      AutofillBottomSheetJavaScriptFeature::GetInstance()->GetWebFramesManager(
+          webState);
+  web::WebFrame* frame = webFramesManager->GetFrameWithId(frameId);
+
+  password_manager::PasswordManagerDriver* driver =
+      IOSPasswordManagerDriverFactory::FromWebStateAndWebFrame(webState, frame);
+  const std::vector<const password_manager::PasswordForm*>* passwordForms =
+      passwordManager->GetBestMatches(driver, formId);
+  if (!passwordForms) {
+    return;
+  }
+
+  bool sharingNotificationEnabled = base::FeatureList::IsEnabled(
+      password_manager::features::kSharedPasswordNotificationUI);
+  for (const auto* form : *passwordForms) {
+    if (sharingNotificationEnabled &&
+        form->type ==
+            password_manager::PasswordForm::Type::kReceivedViaSharing &&
+        !form->sharing_notification_displayed) {
+      _sharedUnnotifiedForms.push_back(form);
+    }
+    _credentials.push_back(password_manager::CredentialUIEntry(*form));
+  }
+}
+
+// Returns whether the bottom sheet should contain a notification about shared
+// passwords.
+- (BOOL)shouldDisplaySharingNotification {
+  return base::FeatureList::IsEnabled(
+             password_manager::features::kSharedPasswordNotificationUI) &&
+         _sharedUnnotifiedForms.size() > 0;
+}
+
+// Marks sharing notification as displayed in password store for all credentials
+// on `_sharedUnnotifiedForms`.
+// TODO(crbug.com/1493620): Add calling this on any type of sheet dismissal.
+- (void)markSharedPasswordNotificationsDisplayed {
+  if (![self shouldDisplaySharingNotification]) {
+    return;
+  }
+
+  for (const password_manager::PasswordForm* form : _sharedUnnotifiedForms) {
+    // Make a non-const copy so we can modify it.
+    password_manager::PasswordForm updatedForm = *form;
+    updatedForm.sharing_notification_displayed = true;
+    if (form->IsUsingAccountStore()) {
+      _accountPasswordStore->UpdateLogin(std::move(updatedForm));
+    } else {
+      _profilePasswordStore->UpdateLogin(std::move(updatedForm));
+    }
+  }
+  _sharedUnnotifiedForms.clear();
+}
+
+// Creates title to be displayed when the user needs to be notified about new
+// shared passwords.
+- (NSString*)sharingNotificationTitle {
+  return base::SysUTF16ToNSString(l10n_util::GetPluralStringFUTF16(
+      IDS_IOS_PASSWORD_SHARING_NOTIFICATION_TITLE,
+      _sharedUnnotifiedForms.size()));
+}
+
+// Creates subtitle to be displayed when the user needs to be notified about new
+// shared passwords.
+- (NSString*)sharingNotificationSubtitle:(NSString*)domain {
+  if (_sharedUnnotifiedForms.size() == 1) {
+    return base::SysUTF16ToNSString(l10n_util::GetStringFUTF16(
+        IDS_IOS_PASSWORD_SHARING_NOTIFICATION_SINGLE_PASSWORD_SUBTITLE,
+        _sharedUnnotifiedForms[0]->sender_name,
+        base::SysNSStringToUTF16(domain)));
+  } else {
+    return base::SysUTF16ToNSString(l10n_util::GetStringFUTF16(
+        IDS_IOS_PASSWORD_SHARING_NOTIFICATION_MULTIPLE_PASSWORDS_SUBTITLE,
+        base::SysNSStringToUTF16(domain)));
+  }
 }
 
 @end

@@ -17,6 +17,14 @@ class WebContents;
 
 namespace autofill {
 
+// Specifies how the popup cell was selected.
+enum PopupCellSelectionSource {
+  // (Un)selections with no direct user input, e.g. unselection by timeout.
+  kNonUserInput,
+  kMouse,
+  kKeyboard,
+};
+
 // Sets the |x| and |width| components of |popup_bounds| as the x-coordinate
 // of the starting point and the width of the popup, taking into account the
 // direction it's supposed to grow (either to the left or to the right).
@@ -159,9 +167,11 @@ bool PopupMayExceedContentAreaBounds(content::WebContents* web_contents);
 // either to the main or the footer section.
 bool IsFooterPopupItemId(PopupItemId popup_item_id);
 
-// Returns whether the suggestion with this `popup_item_id` is a group filling
-// suggestion. Those have a different style from regular suggestions.
-bool IsGroupFillingPopupItemId(PopupItemId popup_item_id);
+int GetMainTextStyleForPopupItemId(PopupItemId popup_item_id);
+
+// Return whether the suggestion with this `popup_item_id` can have child
+// suggestions.
+bool IsExpandablePopupItemId(PopupItemId popup_item_id);
 
 }  // namespace autofill
 

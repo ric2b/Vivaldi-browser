@@ -16,12 +16,12 @@
 #include "base/time/time.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/web_applications/app_service/web_app_publisher_helper.h"
-#include "chrome/browser/web_applications/web_app_id.h"
 #include "chromeos/crosapi/mojom/app_service.mojom.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/icon_types.h"
 #include "components/services/app_service/public/cpp/permission.h"
+#include "components/webapps/common/web_app_id.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -114,7 +114,7 @@ class LacrosWebAppsController : public crosapi::mojom::AppController,
       base::OnceCallback<void(crosapi::mojom::LaunchResultPtr)> callback,
       const std::vector<content::WebContents*>& web_contents);
 
-  const WebApp* GetWebApp(const AppId& app_id) const;
+  const WebApp* GetWebApp(const webapps::AppId& app_id) const;
 
   void OnShortcutsMenuIconsRead(
       const std::string& app_id,

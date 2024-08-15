@@ -4,7 +4,7 @@
 #define IOS_SYNC_FILE_STORE_FACTORY_H_
 
 #include "base/no_destructor.h"
-#include "ios/chrome/browser/sync/sync_service_factory.h"
+#import "ios/chrome/browser/sync/model/sync_service_factory.h"
 
 namespace file_sync {
 class SyncedFileStore;

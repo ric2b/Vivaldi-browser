@@ -4,13 +4,13 @@
 
 import '../../definitions/file_manager_private.js';
 
+import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
 
 import {MockProgressCenter} from '../../background/js/mock_progress_center.js';
 import {installMockChrome} from '../../common/js/mock_chrome.js';
 import {ProgressItemState} from '../../common/js/progress_center_common.js';
 import {toFilesAppURL} from '../../common/js/url_constants.js';
-import {util} from '../../common/js/util.js';
 
 import {DriveSyncHandlerImpl} from './drive_sync_handler.js';
 
@@ -35,8 +35,6 @@ function asFileURL(name: string) {
  * Mock chrome APIs.
  */
 const mockChrome: any = {};
-
-util.isInlineSyncStatusEnabled = () => false;
 
 mockChrome.fileManagerPrivate = {
   onFileTransfersUpdated: {
@@ -156,6 +154,8 @@ window.webkitResolveLocalFileSystemURL =
 
 // Set up the test components.
 export function setUp() {
+  loadTimeData.overrideValues({INLINE_SYNC_STATUS: false});
+
   // Install mock chrome APIs.
   installMockChrome(mockChrome);
 
@@ -247,7 +247,7 @@ export async function testOffline() {
   // Check that this created one progressing item.
   assertEquals(
       1, progressCenter.getItemsByState(ProgressItemState.PROGRESSING).length);
-  let item = progressCenter.getItemById('drive-sync');
+  let item = progressCenter.getItemById('drive-sync')!;
   assertEquals(ProgressItemState.PROGRESSING, item.state);
   assertTrue(driveSyncHandler.syncing);
 
@@ -258,7 +258,7 @@ export async function testOffline() {
   // There are two items cancelled including the pin item.
   assertEquals(
       2, progressCenter.getItemsByState(ProgressItemState.CANCELED).length);
-  item = progressCenter.getItemById('drive-sync');
+  item = progressCenter.getItemById('drive-sync')!;
   assertEquals(ProgressItemState.CANCELED, item.state);
   assertFalse(driveSyncHandler.syncing);
 }
@@ -278,9 +278,9 @@ export async function testTransferUpdate() {
 
   // There should be one progressing pin item and one canceled sync item.
   assertEquals(2, progressCenter.getItemCount());
-  let syncItem = progressCenter.getItemById('drive-sync');
+  let syncItem = progressCenter.getItemById('drive-sync')!;
   assertEquals(ProgressItemState.CANCELED, syncItem.state);
-  let pinItem = progressCenter.getItemById('drive-pin');
+  let pinItem = progressCenter.getItemById('drive-pin')!;
   assertEquals(ProgressItemState.PROGRESSING, pinItem.state);
 
   // Start a sync transfer.
@@ -312,9 +312,9 @@ export async function testTransferUpdate() {
 
   // There should be one completed pin item and one progressing sync item.
   assertEquals(2, progressCenter.getItemCount());
-  syncItem = progressCenter.getItemById('drive-sync');
+  syncItem = progressCenter.getItemById('drive-sync')!;
   assertEquals(ProgressItemState.PROGRESSING, syncItem.state);
-  pinItem = progressCenter.getItemById('drive-pin');
+  pinItem = progressCenter.getItemById('drive-pin')!;
   assertEquals(ProgressItemState.COMPLETED, pinItem.state);
 
   // Fail the sync transfer.
@@ -330,9 +330,9 @@ export async function testTransferUpdate() {
 
   // There should be one completed pin item and one canceled sync item.
   assertEquals(2, progressCenter.getItemCount());
-  syncItem = progressCenter.getItemById('drive-sync');
+  syncItem = progressCenter.getItemById('drive-sync')!;
   assertEquals(ProgressItemState.CANCELED, syncItem.state);
-  pinItem = progressCenter.getItemById('drive-pin');
+  pinItem = progressCenter.getItemById('drive-pin')!;
   assertEquals(ProgressItemState.COMPLETED, pinItem.state);
 }
 
@@ -352,9 +352,9 @@ testTransferUpdateNoNotificationPartiallyIgnoredTransferUpdates() {
 
   // There should be one progressing sync item and one canceled pin item.
   assertEquals(2, progressCenter.getItemCount());
-  let syncItem = progressCenter.getItemById('drive-sync');
+  let syncItem = progressCenter.getItemById('drive-sync')!;
   assertEquals(ProgressItemState.PROGRESSING, syncItem.state);
-  const pinItem = progressCenter.getItemById('drive-pin');
+  const pinItem = progressCenter.getItemById('drive-pin')!;
   assertEquals(ProgressItemState.CANCELED, pinItem.state);
 
   // In the event where the syncing paths are ignored, the following transfer
@@ -370,6 +370,6 @@ testTransferUpdateNoNotificationPartiallyIgnoredTransferUpdates() {
   });
 
   // The progressing item should be hidden.
-  syncItem = progressCenter.getItemById('drive-sync');
+  syncItem = progressCenter.getItemById('drive-sync')!;
   assertEquals(ProgressItemState.CANCELED, syncItem.state);
 }

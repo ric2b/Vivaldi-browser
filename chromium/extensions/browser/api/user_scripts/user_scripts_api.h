@@ -8,6 +8,7 @@
 #include "extensions/browser/api/scripting/scripting_utils.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/browser/extension_function_histogram_value.h"
+#include "extensions/common/api/user_scripts.h"
 
 namespace extensions {
 
@@ -66,6 +67,54 @@ class UserScriptsUnregisterFunction : public ExtensionFunction {
 
   // Called when user scripts have been unregistered..
   void OnUserScriptsUnregistered(const absl::optional<std::string>& error);
+};
+
+class UserScriptsUpdateFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("userScripts.update", USERSCRIPTS_UPDATE)
+
+  UserScriptsUpdateFunction() = default;
+  UserScriptsUpdateFunction(const UserScriptsUpdateFunction&) = delete;
+  const UserScriptsUpdateFunction& operator=(const UserScriptsUpdateFunction&) =
+      delete;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+ private:
+  ~UserScriptsUpdateFunction() override = default;
+
+  // Returns a UserScript object by updating the `original_script` with the
+  // `new_script` given delta. If the updated script cannot be parsed, populates
+  // `parse_error` and returns nullptr.
+  std::unique_ptr<UserScript> ApplyUpdate(
+      api::user_scripts::RegisteredUserScript& new_script,
+      api::user_scripts::RegisteredUserScript& original_script,
+      std::u16string* parse_error);
+
+  // Called when user script files have been validated.
+  void OnUserScriptFilesValidated(scripting::ValidateScriptsResult result);
+
+  // Called when user scripts have been updated..
+  void OnUserScriptsUpdated(const absl::optional<std::string>& error);
+};
+
+class UserScriptsConfigureWorldFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("userScripts.configureWorld",
+                             USERSCRIPTS_CONFIGUREWORLD)
+
+  UserScriptsConfigureWorldFunction() = default;
+  UserScriptsConfigureWorldFunction(const UserScriptsConfigureWorldFunction&) =
+      delete;
+  const UserScriptsConfigureWorldFunction& operator=(
+      const UserScriptsConfigureWorldFunction&) = delete;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+ private:
+  ~UserScriptsConfigureWorldFunction() override = default;
 };
 
 }  // namespace extensions

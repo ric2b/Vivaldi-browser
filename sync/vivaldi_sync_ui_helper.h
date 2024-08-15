@@ -7,7 +7,7 @@
 #include "base/functional/callback.h"
 #include "base/time/time.h"
 #include "components/sync/base/user_selectable_type.h"
-#include "components/sync/protocol/sync_protocol_error.h"
+#include "components/sync/engine/sync_protocol_error.h"
 #include "components/sync/service/sync_service.h"
 #include "components/sync/service/sync_service_observer.h"
 

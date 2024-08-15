@@ -1,4 +1,14 @@
 {
+  "chromeos-amd64-generic-asan-rel": {
+    "args_file": "//build/args/chromeos/amd64-generic.gni",
+    "gn_args": {
+      "dcheck_always_on": false,
+      "is_asan": true,
+      "is_chromeos_device": true,
+      "ozone_platform_headless": true,
+      "use_remoteexec": true
+    }
+  },
   "chromeos-amd64-generic-cfi-thin-lto-rel": {
     "args_file": "//build/args/chromeos/amd64-generic.gni",
     "gn_args": {
@@ -19,6 +29,7 @@
       "is_chromeos_device": true,
       "is_debug": true,
       "ozone_platform_headless": true,
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -42,17 +53,31 @@
       "dcheck_always_on": true,
       "is_chromeos_device": true,
       "ozone_platform_headless": true,
+      "use_dummy_lastchange": true,
       "use_real_dbus_clients": false,
       "use_remoteexec": true
     }
   },
-  "chromeos-amd64-generic-rel-rts": {
+  "chromeos-amd64-generic-rel-gtest": {
     "args_file": "//build/args/chromeos/amd64-generic-vm.gni",
     "gn_args": {
       "also_build_lacros_chrome_for_architecture": "amd64",
       "dcheck_always_on": true,
       "is_chromeos_device": true,
       "ozone_platform_headless": true,
+      "use_dummy_lastchange": true,
+      "use_real_dbus_clients": false,
+      "use_remoteexec": true
+    }
+  },
+  "chromeos-amd64-generic-rel-renamed": {
+    "args_file": "//build/args/chromeos/amd64-generic-vm.gni",
+    "gn_args": {
+      "also_build_lacros_chrome_for_architecture": "amd64",
+      "dcheck_always_on": true,
+      "is_chromeos_device": true,
+      "ozone_platform_headless": true,
+      "use_dummy_lastchange": true,
       "use_real_dbus_clients": false,
       "use_remoteexec": true
     }
@@ -64,6 +89,7 @@
       "dcheck_always_on": true,
       "is_chromeos_device": true,
       "ozone_platform_headless": true,
+      "use_dummy_lastchange": true,
       "use_real_dbus_clients": false,
       "use_remoteexec": true
     }
@@ -71,7 +97,6 @@
   "chromeos-arm-generic-dbg": {
     "args_file": "//build/args/chromeos/arm-generic.gni",
     "gn_args": {
-      "also_build_lacros_chrome_for_architecture": "arm",
       "dcheck_always_on": false,
       "is_chromeos_device": true,
       "is_debug": true,
@@ -85,6 +110,7 @@
       "dcheck_always_on": true,
       "is_chromeos_device": true,
       "ozone_platform_headless": true,
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -126,35 +152,7 @@
       "ozone_platform_headless": true,
       "proprietary_codecs": true,
       "symbol_level": 0,
-      "use_remoteexec": true
-    }
-  },
-  "gpu-fyi-try-chromeos-kevin": {
-    "args_file": "//build/args/chromeos/kevin.gni",
-    "gn_args": {
-      "dcheck_always_on": false,
-      "ffmpeg_branding": "Chrome",
-      "is_chromeos_device": true,
-      "is_component_build": false,
-      "is_debug": false,
-      "ozone_platform_headless": true,
-      "proprietary_codecs": true,
-      "symbol_level": 0,
-      "use_remoteexec": true
-    }
-  },
-  "gpu-fyi-try-chromeos-skylab-kevin": {
-    "args_file": "//build/args/chromeos/kevin.gni",
-    "gn_args": {
-      "dcheck_always_on": false,
-      "ffmpeg_branding": "Chrome",
-      "is_chromeos_device": true,
-      "is_component_build": false,
-      "is_debug": false,
-      "is_skylab": true,
-      "ozone_platform_headless": true,
-      "proprietary_codecs": true,
-      "symbol_level": 0,
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -165,12 +163,27 @@
       "dcheck_always_on": true,
       "is_chromeos_device": true,
       "is_debug": false,
+      "is_skylab": true,
       "ozone_platform_headless": true,
       "target_os": "chromeos",
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
-  "lacros-amd64-generic-rel-skylab": {
+  "lacros-amd64-generic-rel-non-skylab": {
+    "args_file": "//build/args/chromeos/amd64-generic-crostoolchain.gni",
+    "gn_args": {
+      "chromeos_is_browser_only": true,
+      "dcheck_always_on": true,
+      "is_chromeos_device": true,
+      "is_debug": false,
+      "ozone_platform_headless": true,
+      "target_os": "chromeos",
+      "use_dummy_lastchange": true,
+      "use_remoteexec": true
+    }
+  },
+  "lacros-amd64-generic-rel-orchestrator": {
     "args_file": "//build/args/chromeos/amd64-generic-crostoolchain.gni",
     "gn_args": {
       "chromeos_is_browser_only": true,
@@ -180,19 +193,7 @@
       "is_skylab": true,
       "ozone_platform_headless": true,
       "target_os": "chromeos",
-      "use_remoteexec": true
-    }
-  },
-  "lacros-amd64-generic-rel-skylab-fyi": {
-    "args_file": "//build/args/chromeos/amd64-generic-crostoolchain.gni",
-    "gn_args": {
-      "chromeos_is_browser_only": true,
-      "dcheck_always_on": false,
-      "is_chromeos_device": true,
-      "is_debug": false,
-      "is_skylab": true,
-      "ozone_platform_headless": true,
-      "target_os": "chromeos",
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -205,6 +206,20 @@
       "is_debug": false,
       "ozone_platform_headless": true,
       "target_os": "chromeos",
+      "use_dummy_lastchange": true,
+      "use_remoteexec": true
+    }
+  },
+  "lacros-arm-generic-rel-skylab": {
+    "args_file": "//build/args/chromeos/arm-generic-crostoolchain.gni",
+    "gn_args": {
+      "chromeos_is_browser_only": true,
+      "dcheck_always_on": false,
+      "is_chromeos_device": true,
+      "is_debug": false,
+      "is_skylab": true,
+      "ozone_platform_headless": true,
+      "target_os": "chromeos",
       "use_remoteexec": true
     }
   },
@@ -215,6 +230,19 @@
       "dcheck_always_on": true,
       "is_chromeos_device": true,
       "is_debug": false,
+      "ozone_platform_headless": true,
+      "target_os": "chromeos",
+      "use_remoteexec": true
+    }
+  },
+  "lacros-arm64-generic-rel-skylab": {
+    "args_file": "//build/args/chromeos/arm64-generic-crostoolchain.gni",
+    "gn_args": {
+      "chromeos_is_browser_only": true,
+      "dcheck_always_on": false,
+      "is_chromeos_device": true,
+      "is_debug": false,
+      "is_skylab": true,
       "ozone_platform_headless": true,
       "target_os": "chromeos",
       "use_remoteexec": true
@@ -241,6 +269,7 @@
       "is_debug": false,
       "symbol_level": 0,
       "target_os": "chromeos",
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -259,6 +288,8 @@
       "symbol_level": 0,
       "target_os": "chromeos",
       "use_clang_coverage": true,
+      "use_cups": true,
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -270,6 +301,8 @@
       "proprietary_codecs": true,
       "symbol_level": 1,
       "target_os": "chromeos",
+      "use_cups": true,
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -281,6 +314,8 @@
       "proprietary_codecs": true,
       "symbol_level": 1,
       "target_os": "chromeos",
+      "use_cups": true,
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -294,6 +329,8 @@
       "proprietary_codecs": true,
       "symbol_level": 0,
       "target_os": "chromeos",
+      "use_cups": true,
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -312,42 +349,8 @@
       "symbol_level": 0,
       "target_os": "chromeos",
       "use_clang_coverage": true,
-      "use_remoteexec": true
-    }
-  },
-  "linux-chromeos-rel-rts": {
-    "gn_args": {
-      "also_build_lacros_chrome": true,
-      "coverage_instrumentation_input_file": "//.code-coverage/files_to_instrument.txt",
-      "dcheck_always_on": true,
-      "enable_backup_ref_ptr_feature_flag": true,
-      "enable_dangling_raw_ptr_checks": true,
-      "enable_dangling_raw_ptr_feature_flag": true,
-      "ffmpeg_branding": "ChromeOS",
-      "is_component_build": false,
-      "is_debug": false,
-      "proprietary_codecs": true,
-      "symbol_level": 0,
-      "target_os": "chromeos",
-      "use_clang_coverage": true,
-      "use_remoteexec": true
-    }
-  },
-  "linux-chromeos-siso-rel": {
-    "gn_args": {
-      "also_build_lacros_chrome": true,
-      "coverage_instrumentation_input_file": "//.code-coverage/files_to_instrument.txt",
-      "dcheck_always_on": true,
-      "enable_backup_ref_ptr_feature_flag": true,
-      "enable_dangling_raw_ptr_checks": true,
-      "enable_dangling_raw_ptr_feature_flag": true,
-      "ffmpeg_branding": "ChromeOS",
-      "is_component_build": false,
-      "is_debug": false,
-      "proprietary_codecs": true,
-      "symbol_level": 0,
-      "target_os": "chromeos",
-      "use_clang_coverage": true,
+      "use_cups": true,
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -359,6 +362,7 @@
       "is_debug": true,
       "symbol_level": 1,
       "target_os": "chromeos",
+      "use_cups": true,
       "use_remoteexec": true
     }
   },
@@ -374,33 +378,8 @@
       "symbol_level": 0,
       "target_os": "chromeos",
       "use_clang_coverage": true,
-      "use_remoteexec": true
-    }
-  },
-  "linux-lacros-rel-rts": {
-    "gn_args": {
-      "also_build_ash_chrome": true,
-      "chromeos_is_browser_only": true,
-      "dcheck_always_on": true,
-      "is_component_build": false,
-      "is_debug": false,
-      "symbol_level": 0,
-      "target_os": "chromeos",
-      "use_remoteexec": true
-    }
-  },
-  "linux-lacros-siso-rel": {
-    "gn_args": {
-      "also_build_ash_chrome": true,
-      "chromeos_is_browser_only": true,
-      "coverage_instrumentation_input_file": "//.code-coverage/files_to_instrument.txt",
-      "dcheck_always_on": true,
-      "is_clang": true,
-      "is_component_build": false,
-      "is_debug": false,
-      "symbol_level": 0,
-      "target_os": "chromeos",
-      "use_clang_coverage": true,
+      "use_cups": true,
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   }

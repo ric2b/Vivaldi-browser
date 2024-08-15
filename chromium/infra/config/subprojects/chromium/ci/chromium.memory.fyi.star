@@ -137,7 +137,7 @@ ci.builder(
         category = "linux|ubsan",
         short_name = "fyi",
     ),
-    execution_timeout = 4 * time.hour,
+    execution_timeout = 6 * time.hour,
     reclient_jobs = reclient.jobs.DEFAULT,
 )
 

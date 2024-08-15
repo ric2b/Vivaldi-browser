@@ -15,9 +15,9 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_piece_forward.h"
 #include "chrome/common/extensions/api/passwords_private.h"
-#include "components/password_manager/core/browser/bulk_leak_check_service.h"
-#include "components/password_manager/core/browser/ui/export_progress_status.h"
-#include "components/password_manager/core/browser/ui/import_results.h"
+#include "components/password_manager/core/browser/export/export_progress_status.h"
+#include "components/password_manager/core/browser/import/import_results.h"
+#include "components/password_manager/core/browser/leak_detection/bulk_leak_check_service.h"
 #include "components/password_manager/core/browser/ui/insecure_credentials_manager.h"
 #include "extensions/browser/extension_function.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -32,8 +32,7 @@ namespace extensions {
 // saved passwords and password exceptions (reading, adding, changing, removing,
 // import/export) and to notify listeners when these values have changed.
 class PasswordsPrivateDelegate
-    : public base::SupportsWeakPtr<PasswordsPrivateDelegate>,
-      public base::RefCounted<PasswordsPrivateDelegate> {
+    : public base::RefCounted<PasswordsPrivateDelegate> {
  public:
   using ImportResultsCallback =
       base::OnceCallback<void(const api::passwords_private::ImportResults&)>;
@@ -242,7 +241,7 @@ class PasswordsPrivateDelegate
   GetInsecureCredentialsManager() = 0;
 
   // Restarts the authentication timer if it is running.
-  virtual void ExtendAuthValidity() = 0;
+  virtual void RestartAuthTimer() = 0;
 
   // Switches Biometric authentication before filling state after
   // successful authentication.
@@ -255,6 +254,13 @@ class PasswordsPrivateDelegate
   // Shows the file with the exported passwords in OS shell.
   virtual void ShowExportedFileInShell(content::WebContents* web_contents,
                                        std::string file_path) = 0;
+
+  // Vivaldi. Trigger the OS authentication dialog, if needed.
+  // web_contents must not be null.
+  virtual void AuthenticateUser(base::OnceCallback<void(bool)> auth_callback,
+                                content::WebContents* web_contents) {}
+
+  virtual base::WeakPtr<PasswordsPrivateDelegate> AsWeakPtr() = 0;
 
  protected:
   virtual ~PasswordsPrivateDelegate() = default;

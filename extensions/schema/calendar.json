@@ -363,6 +363,11 @@
             "type": "boolean",
             "optional": true,
             "description": "Should the event be deleted locally once server deletion is completed."
+          },
+          "end_recurring": {
+            "description": "When this event ends re-occurring. In milliseconds since the epoch.",
+            "type": "number",
+            "optional": true
           }
         }
       },
@@ -541,6 +546,11 @@
             "type": "boolean",
             "optional": true,
             "description": "Should the event be deleted locally once server deletion is completed."
+          },
+          "end_recurring": {
+            "description": "When this event ends re-occurring. In milliseconds since the epoch.",
+            "type": "number",
+            "optional": true
           }
         }
       },
@@ -1286,6 +1296,11 @@
                 "type": "boolean",
                 "optional": true,
                 "description": "Should the event be deleted locally once server deletion is completed."
+              },
+              "end_recurring": {
+                "description": "When this event ends re-occurring. In milliseconds since the epoch.",
+                "type": "number",
+                "optional": true
               }
             }
           }

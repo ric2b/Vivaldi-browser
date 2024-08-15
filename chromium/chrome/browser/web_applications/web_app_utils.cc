@@ -61,6 +61,7 @@
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/constants/ash_features.h"
 #include "base/feature_list.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
@@ -69,11 +70,6 @@
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "base/strings/strcat.h"
-#include "chrome/browser/browser_process.h"
-#include "chrome/browser/profiles/profile_attributes_storage.h"
-#include "chrome/browser/profiles/profile_manager.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/crosapi/mojom/app_service.mojom.h"
 #include "chromeos/lacros/lacros_service.h"
 #include "chromeos/startup/browser_params_proxy.h"
@@ -120,7 +116,7 @@ class AppIconFetcherTask : public content::WebContentsObserver {
   // the `web_app_provider` and supplies the icon to the web_page via jscript.
   static void FetchAndPopulateIcon(content::WebContents* web_contents,
                                    WebAppProvider* web_app_provider,
-                                   const AppId& app_id) {
+                                   const webapps::AppId& app_id) {
     new AppIconFetcherTask(web_contents, web_app_provider, app_id);
   }
 
@@ -129,7 +125,7 @@ class AppIconFetcherTask : public content::WebContentsObserver {
  private:
   AppIconFetcherTask(content::WebContents* web_contents,
                      WebAppProvider* web_app_provider,
-                     const AppId& app_id)
+                     const webapps::AppId& app_id)
       : WebContentsObserver(web_contents) {
     DCHECK(web_contents);
     // For best results, this should be of equal (or slightly higher) value than
@@ -307,25 +303,28 @@ bool AreWebAppsEnabled(Profile* profile) {
     return false;
   }
   auto* user_manager = user_manager::UserManager::Get();
-  // Don't enable for Chrome App Kiosk sessions.
-  if (user_manager && user_manager->IsLoggedInAsKioskApp())
+  // Never enable for ARC Kiosk sessions.
+  if (user_manager && user_manager->IsLoggedInAsArcKioskApp()) {
     return false;
-  // Don't enable for ARC Kiosk sessions.
-  if (user_manager && user_manager->IsLoggedInAsArcKioskApp())
-    return false;
-  // Don't enable for Web Kiosk if kKioskEnableAppService is disabled.
-  if (user_manager && user_manager->IsLoggedInAsWebKioskApp() &&
-      !base::FeatureList::IsEnabled(features::kKioskEnableAppService))
-    return false;
+  }
+  // Don't enable if SWAs in Kiosk session are disabled for the next session
+  // types.
+  if (!base::FeatureList::IsEnabled(ash::features::kKioskEnableSystemWebApps)) {
+    // Don't enable for Chrome App Kiosk sessions.
+    if (user_manager && user_manager->IsLoggedInAsKioskApp()) {
+      return false;
+    }
+    // Don't enable for Web Kiosk if kKioskEnableAppService is disabled.
+    if (user_manager && user_manager->IsLoggedInAsWebKioskApp() &&
+        !base::FeatureList::IsEnabled(features::kKioskEnableAppService)) {
+      return false;
+    }
+  }
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
   // Disable web apps in the profile unless one of the following is true:
   // * the profile is the main one
   // * the testing condition is set
-  // * it is an app profile.
-  if (!(profile->IsMainProfile() || g_skip_main_profile_check_for_testing ||
-        (ResolveExperimentalWebAppIsolationFeature() ==
-             ExperimentalWebAppIsolationMode::kProfile &&
-         Profile::IsWebAppProfilePath(profile->GetPath())))) {
+  if (!(profile->IsMainProfile() || g_skip_main_profile_check_for_testing)) {
     return false;
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -393,7 +392,7 @@ base::FilePath GetManifestResourcesDirectory(Profile* profile) {
 
 base::FilePath GetManifestResourcesDirectoryForApp(
     const base::FilePath& web_apps_root_directory,
-    const AppId& app_id) {
+    const webapps::AppId& app_id) {
   return GetManifestResourcesDirectory(web_apps_root_directory)
       .AppendASCII(app_id);
 }
@@ -472,7 +471,7 @@ bool AreNewFileHandlersASubsetOfOld(const apps::FileHandlers& old_handlers,
 
 std::tuple<std::u16string, size_t>
 GetFileTypeAssociationsHandledByWebAppForDisplay(Profile* profile,
-                                                 const AppId& app_id) {
+                                                 const webapps::AppId& app_id) {
   auto* provider = WebAppProvider::GetForLocalAppsUnchecked(profile);
   if (!provider)
     return {};
@@ -535,49 +534,6 @@ void SetSkipMainProfileCheckForTesting(bool skip_check) {
 bool IsMainProfileCheckSkippedForTesting() {
   return g_skip_main_profile_check_for_testing;
 }
-
-base::FilePath GenerateWebAppProfilePath(const std::string& app_id) {
-  CHECK(ResolveExperimentalWebAppIsolationFeature() ==
-        ExperimentalWebAppIsolationMode::kProfile);
-  auto* profile_manager = g_browser_process->profile_manager();
-  const base::FilePath& user_data_dir = profile_manager->user_data_dir();
-
-  // We are not allowed to reuse a deleted profile path before chrome restart.
-  // To deal with the case where a user re-install an app after deleting it in
-  // the same session, we will use a loop to search for the next available
-  // profile name. Limiting the loop to 1k times is more than enough.
-  //
-  // TODO(https://crbug.com/1425284): a better way is to do some proper cleanup
-  // after deleting the profile so that we can just reuse the path.
-  for (int i = 0; i < 1000; ++i) {
-    auto path = user_data_dir.Append(base::StrCat(
-        {chrome::kWebAppProfilePrefix, app_id, "-", base::NumberToString(i)}));
-    if (profile_manager->CanCreateProfileAtPath(path)) {
-      // We don't allow installing a web app twice, so the web app profile
-      // shouldn't exist.
-      CHECK(!profile_manager->GetProfileAttributesStorage()
-                 .GetProfileAttributesWithPath(path))
-          << "profile at " << path << " already exists";
-      return path;
-    }
-  }
-
-  // Reaching here is extremely unlikely. Something else must be wrong.
-  NOTREACHED_NORETURN();
-}
-
-ExperimentalWebAppIsolationMode ResolveExperimentalWebAppIsolationFeature() {
-  // Profile isolation takes precedence.
-  if (base::FeatureList::IsEnabled(
-          chromeos::features::kExperimentalWebAppProfileIsolation)) {
-    return ExperimentalWebAppIsolationMode::kProfile;
-  }
-  if (base::FeatureList::IsEnabled(
-          chromeos::features::kExperimentalWebAppStoragePartitionIsolation)) {
-    return ExperimentalWebAppIsolationMode::kStoragePartition;
-  }
-  return ExperimentalWebAppIsolationMode::kDisabled;
-}
 #endif
 
 bool HasAnySpecifiedSourcesAndNoOtherSources(
@@ -594,12 +550,12 @@ bool CanUserUninstallWebApp(WebAppManagementTypes sources) {
                                                  kUserUninstallableSources);
 }
 
-AppId GetAppIdFromAppSettingsUrl(const GURL& url) {
+webapps::AppId GetAppIdFromAppSettingsUrl(const GURL& url) {
   // App Settings page is served under chrome://app-settings/<app-id>.
   // url.path() returns "/<app-id>" with a leading slash.
   std::string path = url.path();
   if (path.size() <= 1)
-    return AppId();
+    return webapps::AppId();
   return path.substr(1);
 }
 
@@ -678,7 +634,7 @@ content::mojom::AlternativeErrorPageOverrideInfoPtr ConstructWebAppErrorPage(
   }
 
   WebAppRegistrar& web_app_registrar = web_app_provider->registrar_unsafe();
-  const absl::optional<AppId> app_id =
+  const absl::optional<webapps::AppId> app_id =
       web_app_registrar.FindAppWithUrlInScope(url);
   if (!app_id.has_value()) {
     return nullptr;

@@ -32,3 +32,17 @@ NSString* const kDeleteButtonForPasswordDetailsId =
     @"kDeleteButtonForPasswordDetailsId";
 
 NSString* const kLocalOnlyPasswordIconId = @"kLocalOnlyPasswordIconId";
+
+NSString* const kWidgetPromoImageName = @"password_manager_widget_promo";
+
+NSString* const kWidgetPromoDisabledImageName =
+    @"password_manager_widget_promo_disabled";
+
+NSString* const kWidgetPromoId = @"WidgetPromoId";
+
+NSString* const kWidgetPromoCloseButtonId = @"WidgetPromoCloseButtonId";
+
+NSString* const kWidgetPromoImageID = @"WidgetPromoImageID";
+
+const char kPasswordManagerWidgetPromoActionHistogram[] =
+    "IOS.PasswordManager.WidgetPromo.Action";

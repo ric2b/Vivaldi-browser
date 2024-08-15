@@ -19,6 +19,7 @@
 #include "chrome/browser/extensions/api/commands/command_service.h"
 #include "chrome/browser/extensions/api/context_menus/context_menus_api_helpers.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
+#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/extension_uninstall_dialog.h"
 #include "chrome/browser/extensions/menu_manager.h"
@@ -26,6 +27,8 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/global_error/global_error_service.h"
+#include "chrome/browser/ui/global_error/global_error_service_factory.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/extensions/api/context_menus.h"
 #include "chrome/grit/theme_resources.h"
@@ -238,6 +241,7 @@ content::BrowserContext* ExtensionActionUtilFactory::GetBrowserContextToUse(
   return ExtensionsBrowserClient::Get()->GetContextRedirectedToOriginal(
       context, /*force_guest_profile=*/true);
 }
+
 // static
 void ExtensionActionUtil::SendIconLoaded(
     content::BrowserContext* browser_context,
@@ -557,7 +561,7 @@ void ExtensionActionUtil::OnExtensionCommandRemoved(
 
 void ExtensionActionUtil::NotifyTabSelectionChange(
     content::WebContents* selected_contents) {
-  Browser* browser = chrome::FindBrowserWithWebContents(selected_contents);
+  Browser* browser = chrome::FindBrowserWithTab(selected_contents);
   if (!browser)
     return;
   last_active_tab_window_ = browser->session_id();
@@ -599,6 +603,10 @@ std::string NoExtensionAction(const std::string& extension_id) {
 
 std::string NoSuchMenuItem(const std::string& menu_id) {
   return "No menu action for the menu with id " + menu_id;
+}
+
+std::string NoSuchGlobalError(int command_id) {
+  return "No error with id " + std::to_string(command_id);
 }
 
 }  // namespace
@@ -795,6 +803,61 @@ ExtensionActionUtilsShowExtensionOptionsFunction::Run() {
   return RespondNow(NoArguments());
 }
 
+ExtensionFunction::ResponseAction
+ExtensionActionUtilsShowGlobalErrorFunction::Run() {
+  using vivaldi::extension_action_utils::ShowGlobalError::Params;
+
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+
+  GlobalError* error =
+      GlobalErrorServiceFactory::GetForProfile(profile)
+          ->GetGlobalErrorByMenuItemCommandID(params->command_id);
+
+  if (!error)
+    return RespondNow(Error(NoSuchGlobalError(params->command_id)));
+
+  Browser* browser = ::vivaldi::FindBrowserByWindowId(params->window_id);
+  if (!browser)
+    return RespondNow(Error(NoSuchWindow(params->window_id)));
+
+  error->ShowBubbleView(browser);
+
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+ExtensionActionUtilsTriggerGlobalErrorsFunction::Run() {
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+
+  const GlobalErrorService::GlobalErrorList& errors =
+      GlobalErrorServiceFactory::GetForProfile(profile)->errors();
+  for (auto* err : errors) {
+    DCHECK(err);
+
+    vivaldi::extension_action_utils::ExtensionInstallError jserror;
+    VivaldiExtensionDisabledGlobalError* error =
+        static_cast<VivaldiExtensionDisabledGlobalError*>(err);
+    jserror.id = error->GetExtensionId();
+    jserror.name = error->GetExtensionName();
+
+    jserror.command_id = ExtensionActionUtilFactory::GetForBrowserContext(
+            browser_context())->GetExtensionToIdProvider()
+                            .AddOrGetId(error->GetExtension()->id());
+
+    ::vivaldi::BroadcastEvent(
+        vivaldi::extension_action_utils::OnExtensionDisabledInstallErrorAdded::
+            kEventName,
+        vivaldi::extension_action_utils::OnExtensionDisabledInstallErrorAdded::
+            Create(jserror),
+        browser_context());
+  }
+
+  return RespondNow(NoArguments());
+}
+
 namespace {
 
 vivaldi::extension_action_utils::MenuType MenuItemTypeToEnum(
@@ -950,6 +1013,179 @@ ExtensionActionUtilsExecuteMenuActionFunction::Run() {
   manager->ExecuteCommand(browser_context(), contents, nullptr,
                           content::ContextMenuParams(), action_id);
   return RespondNow(ArgumentList(Results::Create(true)));
+}
+
+/// VivaldiExtensionDisabledGlobalError
+
+VivaldiExtensionDisabledGlobalError::VivaldiExtensionDisabledGlobalError(
+    content::BrowserContext* context,
+    ExternalInstallError* error)
+    : browser_context_(context), error_(error) {
+  int unique_id =
+      ExtensionActionUtilFactory::GetForBrowserContext(browser_context_)
+          ->GetExtensionToIdProvider()
+          .AddOrGetId(error->extension_id());
+
+  command_id_ = unique_id;
+  extension_id_ = error->GetExtension()->id();
+  extension_name_ = error->GetExtension()->name();
+
+  vivaldi::extension_action_utils::ExtensionInstallError jserror;
+  jserror.id = extension_id_;
+  jserror.command_id = unique_id;
+  jserror.name = extension_name_;
+
+  ::vivaldi::BroadcastEvent(
+      vivaldi::extension_action_utils::OnExtensionDisabledInstallErrorAdded::
+          kEventName,
+      vivaldi::extension_action_utils::OnExtensionDisabledInstallErrorAdded::
+          Create(jserror),
+      browser_context_);
+}
+
+VivaldiExtensionDisabledGlobalError::VivaldiExtensionDisabledGlobalError(
+    ExtensionService* service,
+    const Extension* extension)
+    : browser_context_(service->profile()),
+      service_(service),
+      extension_(extension) {
+  registry_observation_.Observe(ExtensionRegistry::Get(service->profile()));
+
+  vivaldi::extension_action_utils::ExtensionInstallError error;
+
+  error.id = extension->id();
+  error.name = extension->name();
+
+  command_id_ = ExtensionActionUtilFactory::GetForBrowserContext(
+          browser_context_)->GetExtensionToIdProvider()
+                         .AddOrGetId(extension->id());
+
+  error.command_id = command_id_;
+
+  ::vivaldi::BroadcastEvent(
+      vivaldi::extension_action_utils::OnExtensionDisabledInstallErrorAdded::
+          kEventName,
+      vivaldi::extension_action_utils::OnExtensionDisabledInstallErrorAdded::
+          Create(error),
+      service_->GetBrowserContext());
+}
+
+VivaldiExtensionDisabledGlobalError::~VivaldiExtensionDisabledGlobalError() {
+
+  vivaldi::extension_action_utils::ExtensionInstallError error;
+
+  error.id = extension_id_;
+  error.name = extension_name_;
+
+  ::vivaldi::BroadcastEvent(
+      vivaldi::extension_action_utils::OnExtensionDisabledInstallErrorRemoved::
+          kEventName,
+      vivaldi::extension_action_utils::OnExtensionDisabledInstallErrorRemoved::
+          Create(error),
+      browser_context_);
+}
+
+GlobalErrorWithStandardBubble::Severity
+VivaldiExtensionDisabledGlobalError::GetSeverity() {
+  return SEVERITY_LOW;
+}
+
+bool VivaldiExtensionDisabledGlobalError::HasMenuItem() {
+  return true;
+}
+int VivaldiExtensionDisabledGlobalError::MenuItemCommandID() {
+  return command_id_;
+}
+std::u16string VivaldiExtensionDisabledGlobalError::MenuItemLabel() {
+  std::string extension_name = error_->GetExtension()->name();
+  return base::UTF8ToUTF16(extension_name);
+}
+void VivaldiExtensionDisabledGlobalError::ExecuteMenuItem(Browser* browser) {
+}
+bool VivaldiExtensionDisabledGlobalError::HasBubbleView() {
+  return false;
+}
+bool VivaldiExtensionDisabledGlobalError::HasShownBubbleView() {
+  return false;
+}
+void VivaldiExtensionDisabledGlobalError::ShowBubbleView(Browser* browser) {
+  error_->ShowDialog(browser);
+}
+
+GlobalErrorBubbleViewBase*
+VivaldiExtensionDisabledGlobalError::GetBubbleView() {
+  return nullptr;
+}
+
+// GlobalErrorWithStandardBubble implementation.
+
+void VivaldiExtensionDisabledGlobalError::OnShutdown(
+    ExtensionRegistry* registry) {
+  DCHECK_EQ(ExtensionRegistry::Get(service_->profile()), registry);
+  registry_observation_.Reset();
+}
+
+void VivaldiExtensionDisabledGlobalError::OnExtensionLoaded(
+    content::BrowserContext* browser_context,
+    const Extension* extension) {
+  if (extension != GetExtension())
+    return;
+  RemoveGlobalError();
+}
+
+void VivaldiExtensionDisabledGlobalError::OnExtensionUninstalled(
+    content::BrowserContext* browser_context,
+    const Extension* extension,
+    UninstallReason reason) {
+  if (extension != GetExtension())
+    return;
+  RemoveGlobalError();
+}
+
+void VivaldiExtensionDisabledGlobalError::RemoveGlobalError() {
+  std::unique_ptr<GlobalError> ptr =
+      GlobalErrorServiceFactory::GetForProfile(service_->profile())
+          ->RemoveGlobalError(this);
+  registry_observation_.Reset();
+  base::SingleThreadTaskRunner::GetCurrentDefault()->DeleteSoon(FROM_HERE,
+                                                                ptr.release());
+}
+
+const Extension* VivaldiExtensionDisabledGlobalError::GetExtension() {
+
+  if (extension_)
+    return extension_.get();
+
+  const Extension* ext = error_->GetExtension();
+  return ext;
+}
+
+ExtensionToIdProvider::ExtensionToIdProvider() {}
+
+ExtensionToIdProvider::~ExtensionToIdProvider() {}
+
+// Can be called multiple times.
+int ExtensionToIdProvider::AddOrGetId(const std::string& extension_id) {
+  int hasExtensionId = GetCommandId(extension_id);
+  if (hasExtensionId != -1) {
+    return hasExtensionId;
+  }
+  last_used_id_++;
+  extension_ids_[extension_id] = last_used_id_;
+  return last_used_id_;
+}
+
+void ExtensionToIdProvider::RemoveExtension(const std::string& extension_id) {
+  DCHECK(GetCommandId(extension_id) == -1);
+  extension_ids_.erase(extension_id);
+}
+
+int ExtensionToIdProvider::GetCommandId(const std::string& extension_id) {
+  ExtensionToIdMap::const_iterator it = extension_ids_.find(extension_id);
+  if (it == extension_ids_.end()) {
+    return -1;
+  }
+  return it->second;
 }
 
 }  // namespace extensions

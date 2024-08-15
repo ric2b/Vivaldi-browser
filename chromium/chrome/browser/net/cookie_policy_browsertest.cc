@@ -31,6 +31,7 @@
 #include "net/base/features.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/features_generated.h"
 #include "ui/base/window_open_disposition.h"
 
@@ -72,6 +73,20 @@ class CookiePolicyBrowserTest : public InProcessBrowserTest {
  protected:
   CookiePolicyBrowserTest()
       : https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {}
+
+  virtual std::vector<base::test::FeatureRef> EnabledFeatures() {
+    return {blink::features::kWebSQLAccess};
+  }
+
+  virtual std::vector<base::test::FeatureRef> DisabledFeatures() { return {}; }
+
+  void SetUp() override {
+    // WebSQL is disabled by default as of M119 (crbug/695592).
+    // Enable feature in tests during deprecation trial and enterprise
+    // policy support.
+    feature_list_.InitWithFeatures(EnabledFeatures(), DisabledFeatures());
+    InProcessBrowserTest::SetUp();
+  }
 
   void SetUpOnMainThread() override {
     host_resolver()->AddRule("*", "127.0.0.1");
@@ -152,10 +167,19 @@ class CookiePolicyBrowserTest : public InProcessBrowserTest {
   }
 
   net::test_server::EmbeddedTestServer https_server_;
+  base::test::ScopedFeatureList feature_list_;
+};
+
+class CookiePolicyBrowser3pcAllowedTest : public CookiePolicyBrowserTest {
+ protected:
+  std::vector<base::test::FeatureRef> DisabledFeatures() override {
+    return {content_settings::features::kTrackingProtection3pcd};
+  }
 };
 
 // Visits a page that sets a first-party cookie.
-IN_PROC_BROWSER_TEST_F(CookiePolicyBrowserTest, AllowFirstPartyCookies) {
+IN_PROC_BROWSER_TEST_F(CookiePolicyBrowser3pcAllowedTest,
+                       AllowFirstPartyCookies) {
   SetBlockThirdPartyCookies(false);
 
   GURL url(https_server_.GetURL(kHostA, "/set-cookie?cookie1"));
@@ -192,7 +216,7 @@ IN_PROC_BROWSER_TEST_F(CookiePolicyBrowserTest,
 }
 
 // Third-Party Frame Tests
-IN_PROC_BROWSER_TEST_F(CookiePolicyBrowserTest,
+IN_PROC_BROWSER_TEST_F(CookiePolicyBrowser3pcAllowedTest,
                        ThirdPartyCookiesIFrameAllowSetting) {
   SetBlockThirdPartyCookies(false);
 
@@ -259,7 +283,7 @@ IN_PROC_BROWSER_TEST_F(CookiePolicyBrowserTest,
   EXPECT_EQ(content::GetCookies(browser()->profile(), GetURL(kHostB)), "");
 }
 
-IN_PROC_BROWSER_TEST_F(CookiePolicyBrowserTest,
+IN_PROC_BROWSER_TEST_F(CookiePolicyBrowser3pcAllowedTest,
                        ThirdPartyCookiesIFrameAllowReading) {
   SetBlockThirdPartyCookies(false);
 
@@ -690,13 +714,6 @@ class ThirdPartyPartitionedStorageAccessibilityTest
     : public CookiePolicyBrowserTest,
       public testing::WithParamInterface<std::tuple<ContextType, bool>> {
  public:
-  ThirdPartyPartitionedStorageAccessibilityTest() {
-    feature_list_.InitWithFeatureStates(
-        {{net::features::kThirdPartyStoragePartitioning,
-          StoragePartitioningEnabled()},
-         {net::features::kThirdPartyPartitionedStorageAllowedByDefault, true}});
-  }
-
   void ExpectStorage(content::RenderFrameHost* frame, bool expected_storage) {
     switch (ContextType()) {
       case ContextType::kFrame:
@@ -722,6 +739,13 @@ class ThirdPartyPartitionedStorageAccessibilityTest
   bool StoragePartitioningEnabled() const { return std::get<1>(GetParam()); }
 
  protected:
+  std::vector<base::test::FeatureRef> DisabledFeatures() override {
+    if (StoragePartitioningEnabled()) {
+      return {};
+    }
+    return {net::features::kThirdPartyStoragePartitioning};
+  }
+
   ContextType ContextType() const { return std::get<0>(GetParam()); }
 
  private:
@@ -831,14 +855,10 @@ IN_PROC_BROWSER_TEST_P(
 
 class ThirdPartyPartitionedStorageAccessibilityCanBeDisabledTest
     : public ThirdPartyPartitionedStorageAccessibilityTest {
- public:
-  ThirdPartyPartitionedStorageAccessibilityCanBeDisabledTest() {
-    feature_list_.InitAndDisableFeature(
-        net::features::kThirdPartyPartitionedStorageAllowedByDefault);
+ protected:
+  std::vector<base::test::FeatureRef> DisabledFeatures() override {
+    return {net::features::kThirdPartyPartitionedStorageAllowedByDefault};
   }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
 };
 
 // Tests that even if partitioned third-party storage would otherwise be
@@ -926,17 +946,11 @@ IN_PROC_BROWSER_TEST_P(CookiePolicyStorageBrowserTest,
 class ThirdPartyCookiePhaseoutPolicyStorageBrowserTest
     : public CookiePolicyBrowserTest {
  protected:
-  ThirdPartyCookiePhaseoutPolicyStorageBrowserTest() {
-    feature_list_.InitWithFeatures(
-        {
+  std::vector<base::test::FeatureRef> EnabledFeatures() override {
+    return {blink::features::kWebSQLAccess,
             net::features::kForceThirdPartyCookieBlocking,
-            net::features::kThirdPartyStoragePartitioning,
-        },
-        {});
+            net::features::kThirdPartyStoragePartitioning};
   }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(ThirdPartyCookiePhaseoutPolicyStorageBrowserTest,

@@ -72,6 +72,7 @@ class NET_EXPORT_PRIVATE UDPClientSocket : public DatagramClientSocket {
   int SetReceiveBufferSize(int32_t size) override;
   int SetSendBufferSize(int32_t size) override;
   int SetDoNotFragment() override;
+  int SetRecvEcn() override;
   void SetMsgConfirm(bool confirm) override;
   const NetLogWithSource& NetLog() const override;
   void EnableRecvOptimization() override;
@@ -102,6 +103,7 @@ class NET_EXPORT_PRIVATE UDPClientSocket : public DatagramClientSocket {
 #endif
 
  private:
+  NetLogWithSource net_log_;
   UDPSocket socket_;
   bool adopted_opened_socket_ = false;
   bool connect_called_ = false;

@@ -22,6 +22,9 @@ namespace media {
 
 namespace {
 
+// TODO(jkardatzke): Remove this when it is in linux/videodev2.h.
+#define V4L2_MEMORY_FLAG_SECURE 0x2
+
 // Maximum number of requests that can be created.
 constexpr size_t kMaxNumRequests = 32;
 
@@ -130,6 +133,7 @@ std::vector<base::ScopedFD> GetDmabufsForV4L2Buffer(
     expbuf.plane = i;
     expbuf.flags = O_CLOEXEC;
     if (ioctl_cb.Run(VIDIOC_EXPBUF, &expbuf) != 0) {
+      RecordVidiocIoctlErrorUMA(VidiocIoctlRequests::kVidiocExpbuf);
       dmabuf_fds.clear();
       break;
     }
@@ -159,12 +163,14 @@ V4L2ExtCtrl::V4L2ExtCtrl(uint32_t id, int32_t val) : V4L2ExtCtrl(id) {
 // Also provides helper functions.
 class V4L2Buffer {
  public:
-  static std::unique_ptr<V4L2Buffer> Create(const IoctlAsCallback& ioctl_cb,
-                                            const MmapAsCallback& mmap_cb,
-                                            enum v4l2_buf_type type,
-                                            enum v4l2_memory memory,
-                                            const struct v4l2_format& format,
-                                            size_t buffer_id);
+  static std::unique_ptr<V4L2Buffer> Create(
+      const IoctlAsCallback& ioctl_cb,
+      const MmapAsCallback& mmap_cb,
+      const AllocateSecureBufferAsCallback& allocate_secure_cb,
+      enum v4l2_buf_type type,
+      enum v4l2_memory memory,
+      const struct v4l2_format& format,
+      size_t buffer_id);
 
   V4L2Buffer(const V4L2Buffer&) = delete;
   V4L2Buffer& operator=(const V4L2Buffer&) = delete;
@@ -175,6 +181,10 @@ class V4L2Buffer {
   size_t GetMemoryUsage() const;
   const struct v4l2_buffer& v4l2_buffer() const { return v4l2_buffer_; }
   scoped_refptr<VideoFrame> GetVideoFrame();
+  // Returns true upon successfully claiming the handle, false otherwise.
+  bool ClaimSecureHandle();
+  void ReleaseSecureHandle() { handle_claimed_ = false; }
+  uint64_t GetSecureHandle() { return secure_handle_; }
 
  private:
   V4L2Buffer(const IoctlAsCallback& ioctl_cb,
@@ -185,6 +195,7 @@ class V4L2Buffer {
              size_t buffer_id);
   bool Query();
   scoped_refptr<VideoFrame> CreateVideoFrame();
+  void SecureBufferAllocated(base::ScopedFD secure_fd, uint64_t secure_handle);
 
   const IoctlAsCallback ioctl_cb_;
   const MmapAsCallback mmap_cb_;
@@ -199,20 +210,38 @@ class V4L2Buffer {
 
   struct v4l2_format format_;
   scoped_refptr<VideoFrame> video_frame_;
+  base::ScopedFD secure_buffer_;
+  uint64_t secure_handle_ = 0;
+  bool handle_claimed_ = false;
+  base::WeakPtrFactory<V4L2Buffer> weak_factory_{this};
 };
 
-std::unique_ptr<V4L2Buffer> V4L2Buffer::Create(const IoctlAsCallback& ioctl_cb,
-                                               const MmapAsCallback& mmap_cb,
-                                               enum v4l2_buf_type type,
-                                               enum v4l2_memory memory,
-                                               const struct v4l2_format& format,
-                                               size_t buffer_id) {
+std::unique_ptr<V4L2Buffer> V4L2Buffer::Create(
+    const IoctlAsCallback& ioctl_cb,
+    const MmapAsCallback& mmap_cb,
+    const AllocateSecureBufferAsCallback& allocate_secure_cb,
+    enum v4l2_buf_type type,
+    enum v4l2_memory memory,
+    const struct v4l2_format& format,
+    size_t buffer_id) {
   // Not using std::make_unique because constructor is private.
   std::unique_ptr<V4L2Buffer> buffer(new V4L2Buffer(std::move(ioctl_cb),
                                                     std::move(mmap_cb), type,
                                                     memory, format, buffer_id));
+  if (!buffer->Query()) {
+    return nullptr;
+  }
 
-  return buffer->Query() ? std::move(buffer) : nullptr;
+  if (type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE && allocate_secure_cb) {
+    CHECK_EQ(memory, V4L2_MEMORY_DMABUF);
+    // Invoke the callback for secure buffer allocation. We only use dmabufs for
+    // the OUTPUT queue when doing secure playback.
+    allocate_secure_cb.Run(buffer->v4l2_buffer_.m.planes[0].length,
+                           base::BindOnce(&V4L2Buffer::SecureBufferAllocated,
+                                          buffer->weak_factory_.GetWeakPtr()));
+  }
+
+  return buffer;
 }
 
 V4L2Buffer::V4L2Buffer(const IoctlAsCallback& ioctl_cb,
@@ -248,9 +277,28 @@ V4L2Buffer::~V4L2Buffer() {
   }
 }
 
+bool V4L2Buffer::ClaimSecureHandle() {
+  if (handle_claimed_) {
+    return false;
+  }
+  handle_claimed_ = true;
+  return true;
+}
+
+void V4L2Buffer::SecureBufferAllocated(base::ScopedFD secure_fd,
+                                       uint64_t secure_handle) {
+  CHECK(secure_fd.is_valid());
+  CHECK(secure_handle);
+  secure_buffer_ = std::move(secure_fd);
+  secure_handle_ = secure_handle;
+  // Set the FD in the plane data.
+  v4l2_buffer_.m.planes[0].m.fd = secure_buffer_.get();
+}
+
 bool V4L2Buffer::Query() {
   int ret = ioctl_cb_.Run(VIDIOC_QUERYBUF, &v4l2_buffer_);
   if (ret) {
+    RecordVidiocIoctlErrorUMA(VidiocIoctlRequests::kVidiocQuerybuf);
     VPLOGF(1) << "VIDIOC_QUERYBUF failed: ";
     return false;
   }
@@ -770,6 +818,22 @@ bool V4L2WritableBufferRef::QueueDMABuf(
   return std::move(self).DoQueue(request_ref, nullptr);
 }
 
+bool V4L2WritableBufferRef::QueueDMABuf(V4L2RequestRef* request_ref) && {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(buffer_data_);
+
+  // Move ourselves so our data gets freed no matter when we return
+  V4L2WritableBufferRef self(std::move(*this));
+
+  if (self.Memory() != V4L2_MEMORY_DMABUF) {
+    VLOGF(1) << "Called on invalid buffer type!";
+    return false;
+  }
+
+  // The FD should already be set in the plane data, so submit it.
+  return std::move(self).DoQueue(request_ref, nullptr);
+}
+
 size_t V4L2WritableBufferRef::PlanesCount() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(buffer_data_);
@@ -998,12 +1062,14 @@ size_t V4L2ReadableBuffer::BufferId() const {
 V4L2Queue::V4L2Queue(const IoctlAsCallback& ioctl_cb,
                      const base::RepeatingClosure& schedule_poll_cb,
                      const MmapAsCallback& mmap_cb,
+                     const AllocateSecureBufferAsCallback& allocate_secure_cb,
                      enum v4l2_buf_type type,
                      base::OnceClosure destroy_cb)
     : type_(type),
       ioctl_cb_(ioctl_cb),
       schedule_poll_cb_(schedule_poll_cb),
       mmap_cb_(mmap_cb),
+      allocate_secure_cb_(allocate_secure_cb),
       destroy_cb_(std::move(destroy_cb)),
       weak_this_factory_(this) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -1042,6 +1108,7 @@ absl::optional<struct v4l2_format> V4L2Queue::SetFormat(uint32_t fourcc,
   struct v4l2_format format = BuildV4L2Format(type_, fourcc, size, buffer_size);
   if (ioctl_cb_.Run(VIDIOC_S_FMT, &format) != 0 ||
       format.fmt.pix_mp.pixelformat != fourcc) {
+    RecordVidiocIoctlErrorUMA(VidiocIoctlRequests::kVidiocSFmt);
     VPQLOGF(2) << "Failed to set format fourcc: " << FourccToString(fourcc);
     return absl::nullopt;
   }
@@ -1070,6 +1137,7 @@ std::pair<absl::optional<struct v4l2_format>, int> V4L2Queue::GetFormat() {
   memset(&format, 0, sizeof(format));
   format.type = type_;
   if (ioctl_cb_.Run(VIDIOC_G_FMT, &format) != 0) {
+    RecordVidiocIoctlErrorUMA(VidiocIoctlRequests::kVidiocGFmt);
     VPQLOGF(2) << "Failed to get format";
     return std::make_pair(absl::nullopt, errno);
   }
@@ -1083,6 +1151,7 @@ absl::optional<gfx::Rect> V4L2Queue::GetVisibleRect() {
   struct v4l2_selection selection = {.type = type_,
                                      .target = V4L2_SEL_TGT_COMPOSE};
   if (ioctl_cb_.Run(VIDIOC_G_SELECTION, &selection) != 0) {
+    RecordVidiocIoctlErrorUMA(VidiocIoctlRequests::kVidiocGSelection);
     VQLOGF(1) << "Failed to get visible rect";
     return absl::nullopt;
   }
@@ -1125,17 +1194,21 @@ size_t V4L2Queue::AllocateBuffers(size_t count,
   planes_count_ = format->fmt.pix_mp.num_planes;
   DCHECK_LE(planes_count_, static_cast<size_t>(VIDEO_MAX_PLANES));
 
-  const __u8 coherency = incoherent ? V4L2_MEMORY_FLAG_NON_COHERENT : 0;
+  __u8 flags = incoherent ? V4L2_MEMORY_FLAG_NON_COHERENT : 0;
+  if (allocate_secure_cb_) {
+    flags |= V4L2_MEMORY_FLAG_SECURE;
+  }
   struct v4l2_requestbuffers reqbufs = {
       .count = base::checked_cast<decltype(v4l2_requestbuffers::count)>(count),
       .type = type_,
       .memory = memory,
-      .flags = coherency};
+      .flags = flags};
   DVQLOGF(3) << "Requesting " << count << " buffers ("
              << (incoherent ? "incoherent" : "coherent") << ")";
 
   int ret = ioctl_cb_.Run(VIDIOC_REQBUFS, &reqbufs);
   if (ret) {
+    RecordVidiocIoctlErrorUMA(VidiocIoctlRequests::kVidiocReqbufs);
     VPQLOGF(1) << "VIDIOC_REQBUFS failed";
     return 0;
   }
@@ -1147,8 +1220,8 @@ size_t V4L2Queue::AllocateBuffers(size_t count,
 
   // Now query all buffer information.
   for (size_t i = 0; i < reqbufs.count; i++) {
-    auto buffer =
-        V4L2Buffer::Create(ioctl_cb_, mmap_cb_, type_, memory_, *format, i);
+    auto buffer = V4L2Buffer::Create(ioctl_cb_, mmap_cb_, allocate_secure_cb_,
+                                     type_, memory_, *format, i);
 
     if (!buffer) {
       if (!DeallocateBuffers()) {
@@ -1187,12 +1260,16 @@ bool V4L2Queue::DeallocateBuffers() {
   free_buffers_ = nullptr;
 
   // Free all buffers.
-  const __u8 coherency = incoherent_ ? V4L2_MEMORY_FLAG_NON_COHERENT : 0;
+  __u8 flags = incoherent_ ? V4L2_MEMORY_FLAG_NON_COHERENT : 0;
+  if (allocate_secure_cb_) {
+    flags |= V4L2_MEMORY_FLAG_SECURE;
+  }
   struct v4l2_requestbuffers reqbufs = {
-      .count = 0, .type = type_, .memory = memory_, .flags = coherency};
+      .count = 0, .type = type_, .memory = memory_, .flags = flags};
 
   int ret = ioctl_cb_.Run(VIDIOC_REQBUFS, &reqbufs);
   if (ret) {
+    RecordVidiocIoctlErrorUMA(VidiocIoctlRequests::kVidiocReqbufs);
     VPQLOGF(1) << "VIDIOC_REQBUFS failed";
     return false;
   }
@@ -1235,6 +1312,79 @@ class V4L2BufferRefFactory {
                                   std::move(video_frame));
   }
 };
+
+CroStatus::Or<uint64_t> V4L2Queue::GetFreeSecureHandle() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // No buffers allocated at the moment?
+  if (!free_buffers_) {
+    return CroStatus::Codes::kSecureBufferPoolEmpty;
+  }
+
+  uint64_t sec_handle = 0;
+  // Go through the free list and look up each buffer by its ID to see if it has
+  // been claimed yet. If it's not claimed, claim and return that handle.
+  std::vector<size_t> ids_to_return_to_pool;
+  while (!sec_handle) {
+    auto free_id = free_buffers_->GetFreeBuffer();
+    if (!free_id.has_value()) {
+      break;
+    }
+
+    // Go through our buffer list to see if this one is claimed or not.
+    ids_to_return_to_pool.emplace_back(free_id.value());
+    for (auto& buf : buffers_) {
+      if (buf->v4l2_buffer().index == free_id.value()) {
+        if (buf->ClaimSecureHandle()) {
+          sec_handle = buf->GetSecureHandle();
+          break;
+        }
+      }
+    }
+  }
+
+  for (auto buf_id : ids_to_return_to_pool) {
+    free_buffers_->ReturnBuffer(buf_id);
+  }
+
+  if (!sec_handle) {
+    return CroStatus::Codes::kSecureBufferPoolEmpty;
+  }
+
+  return sec_handle;
+}
+
+void V4L2Queue::ReleaseSecureHandle(uint64_t secure_handle) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // Go through the list of buffers and find the matching one with the secure
+  // handle and release that one.
+  for (auto& buf : buffers_) {
+    if (buf->GetSecureHandle() == secure_handle) {
+      buf->ReleaseSecureHandle();
+      return;
+    }
+  }
+}
+
+absl::optional<V4L2WritableBufferRef> V4L2Queue::GetFreeBufferForSecureHandle(
+    uint64_t secure_handle) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // This method should always return a valid buffer because it should have been
+  // claimed for the corresponding secure handle already.
+  CHECK(!!free_buffers_);
+
+  // Go through the list of buffers and find the matching one with the secure
+  // handle. It should be claimed, and then we should be able to get the free
+  // buffer w/ the corresponding ID.
+  for (auto& buf : buffers_) {
+    if (buf->GetSecureHandle() == secure_handle) {
+      auto rv = GetFreeBuffer((buf->v4l2_buffer().index));
+      CHECK(!!rv);
+      return rv;
+    }
+  }
+  NOTREACHED();
+  return absl::nullopt;
+}
 
 absl::optional<V4L2WritableBufferRef> V4L2Queue::GetFreeBuffer() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -1318,6 +1468,7 @@ bool V4L2Queue::QueueBuffer(struct v4l2_buffer* v4l2_buffer,
 
   int ret = ioctl_cb_.Run(VIDIOC_QBUF, v4l2_buffer);
   if (ret) {
+    RecordVidiocIoctlErrorUMA(VidiocIoctlRequests::kVidiocQbuf);
     VPQLOGF(1) << "VIDIOC_QBUF failed";
     return false;
   }
@@ -1357,6 +1508,7 @@ std::pair<bool, V4L2ReadableBufferRef> V4L2Queue::DequeueBuffer() {
   v4l2_buffer.length = planes_count_;
   int ret = ioctl_cb_.Run(VIDIOC_DQBUF, &v4l2_buffer);
   if (ret) {
+    RecordVidiocIoctlErrorUMA(VidiocIoctlRequests::kVidiocDqbuf);
     // TODO(acourbot): we should not have to check for EPIPE as codec clients
     // should not call this method after the last buffer is dequeued.
     switch (errno) {
@@ -1405,6 +1557,7 @@ bool V4L2Queue::Streamon() {
   int arg = static_cast<int>(type_);
   int ret = ioctl_cb_.Run(VIDIOC_STREAMON, &arg);
   if (ret) {
+    RecordVidiocIoctlErrorUMA(VidiocIoctlRequests::kVidiocStreamon);
     VPQLOGF(1) << "VIDIOC_STREAMON failed";
     return false;
   }
@@ -1424,6 +1577,7 @@ bool V4L2Queue::Streamoff() {
   int arg = static_cast<int>(type_);
   int ret = ioctl_cb_.Run(VIDIOC_STREAMOFF, &arg);
   if (ret) {
+    RecordVidiocIoctlErrorUMA(VidiocIoctlRequests::kVidiocStreamoff);
     VPQLOGF(1) << "VIDIOC_STREAMOFF failed";
     return false;
   }

@@ -36,6 +36,61 @@ HatsUI::HatsUI(content::WebUI* web_ui) : ui::UntrustedWebUIController(web_ui) {
   webui::SetupWebUIDataSource(
       source, base::make_span(kHatsResources, kHatsResourcesSize),
       IDR_HATS_HATS_HTML);
+
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ScriptSrc,
+      "script-src "
+      // The SHA256 hash of the initial inline JS. Must be replaced when the js
+      // source code changes. Can be viewed via developer tools if the page
+      // throws an error.
+      "'sha256-Jn+1+gFu9qNjYPcvPY3ntC5j2dR0JZr/CCfXHm4nxVw=' "
+      // Scripts loaded transitively from the initial one are allowed:
+      "'strict-dynamic' "
+      ";");
+
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::StyleSrc,
+      "style-src "
+
+      // Unfortunately the HATS javascript does inject inline CSS:
+      "'unsafe-inline' "
+
+      // Origins of the CSS resources:
+      "https://gstatic.com "
+      "https://www.gstatic.com "
+      "https://fonts.gstatic.com "
+      "https://fonts.googleapis.com "
+      ";");
+
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::FontSrc,
+      "font-src https://fonts.gstatic.com ;");
+
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ImgSrc,
+      "img-src https://www.gstatic.com ;");
+
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::FrameSrc,
+      "frame-src https://scone-pa.clients6.google.com/ ;");
+
+  // TODO(crbug.com/1481674): Enable TrustedType.
+  source->DisableTrustedTypesCSP();
+}
+
+HatsUI::~HatsUI() = default;
+
+void HatsUI::BindInterface(
+    mojo::PendingReceiver<hats::mojom::PageHandlerFactory> receiver) {
+  page_factory_receiver_.reset();
+  page_factory_receiver_.Bind(std::move(receiver));
+}
+
+void HatsUI::CreatePageHandler(
+    mojo::PendingRemote<hats::mojom::Page> page,
+    mojo::PendingReceiver<hats::mojom::PageHandler> receiver) {
+  page_handler_ =
+      std::make_unique<HatsPageHandler>(std::move(receiver), std::move(page));
 }
 
 WEB_UI_CONTROLLER_TYPE_IMPL(HatsUI)

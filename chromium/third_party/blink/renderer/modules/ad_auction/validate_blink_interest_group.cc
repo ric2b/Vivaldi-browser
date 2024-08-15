@@ -143,6 +143,10 @@ size_t EstimateBlinkInterestGroupSize(
     size += X25519_PUBLIC_VALUE_LEN;
   }
 
+  if (group.aggregation_coordinator_origin) {
+    size += group.aggregation_coordinator_origin->ToString().length();
+  }
+
   return size;
 }
 
@@ -419,6 +423,21 @@ bool ValidateBlinkInterestGroup(const mojom::blink::InterestGroup& group,
     error =
         "Interest groups that provide a value of additionalBidKey "
         "for negative targeting must not provide a value for ads.";
+    return false;
+  }
+
+  if (group.additional_bid_key && group.update_url) {
+    error =
+        "Interest groups that provide a value of additionalBidKey "
+        "for negative targeting must not provide an updateURL.";
+    return false;
+  }
+
+  if (group.aggregation_coordinator_origin &&
+      group.aggregation_coordinator_origin->Protocol() != url::kHttpsScheme) {
+    error_field_name = "aggregationCoordinatorOrigin";
+    error_field_value = group.aggregation_coordinator_origin->ToString();
+    error = "aggregationCoordinatorOrigin origin must be HTTPS.";
     return false;
   }
 

@@ -4,7 +4,7 @@
 
 package org.chromium.device;
 
-import org.chromium.base.annotations.JNINamespace;
+import org.jni_zero.JNINamespace;
 
 /**
  * Lists //services/device features that can be accessed through {@link DeviceFeatureMap}.
@@ -20,6 +20,8 @@ public abstract class DeviceFeatureList {
             "WebAuthenticationAndroidCredManForHybrid";
     public static final String WEBAUTHN_ANDROID_HYBRID_CLIENT_UI =
             "WebAuthenticationAndroidHybridClientUi";
+    public static final String WEBAUTHN_ANDROID_INCOGNITO_CONFIRMATION =
+            "WebAuthenticationAndroidIncognitoConfirmation";
     public static final String WEBAUTHN_CABLE_VIA_CREDMAN = "WebAuthenticationCableViaCredMan";
     public static final String WEBAUTHN_DONT_PRELINK_IN_PROFILES =
             "WebAuthenticationDontPrelinkInProfiles";

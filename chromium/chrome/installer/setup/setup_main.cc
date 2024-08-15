@@ -18,8 +18,11 @@
 #include <string>
 
 #include "base/at_exit.h"
+#include "base/clang_profiling_buildflags.h"
 #include "base/command_line.h"
 #include "base/dcheck_is_on.h"
+#include "base/debug/alias.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/debug/handle_hooks_win.h"
 #include "base/file_version_info.h"
 #include "base/files/file_path.h"
@@ -36,9 +39,9 @@
 #include "base/process/memory.h"
 #include "base/process/process.h"
 #include "base/process/process_metrics.h"
+#include "base/strings/strcat_win.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_executor.h"
 #include "base/threading/platform_thread.h"
@@ -78,7 +81,6 @@
 #include "chrome/installer/setup/setup_singleton.h"
 #include "chrome/installer/setup/setup_util.h"
 #include "chrome/installer/setup/uninstall.h"
-#include "chrome/installer/setup/user_experiment.h"
 #include "chrome/installer/util/app_command.h"
 #include "chrome/installer/util/conditional_work_item_list.h"
 #include "chrome/installer/util/delete_after_reboot_helper.h"
@@ -104,6 +106,10 @@
 #include "content/public/common/content_switches.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(CLANG_PROFILING)
+#include "base/test/clang_profiling.h"
+#endif
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 #include "chrome/installer/util/google_update_util.h"
@@ -161,17 +167,17 @@ LONG OverwriteDisplayVersions(const std::wstring& product,
                               const std::wstring& value) {
   // The version is held in two places.  First change it in the MSI Installer
   // registry entry.  It is held under a "squashed guid" key.
-  std::wstring reg_path = base::StringPrintf(
-      L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData\\"
-      L"%ls\\Products\\%ls\\InstallProperties",
-      kSystemPrincipalSid, InstallUtil::GuidToSquid(product).c_str());
+  std::wstring reg_path = base::StrCat(
+      {L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData\\",
+       kSystemPrincipalSid, L"\\Products\\", InstallUtil::GuidToSquid(product),
+       L"\\InstallProperties"});
   LONG result1 = OverwriteDisplayVersion(reg_path, value, KEY_WOW64_64KEY);
 
   // The display version also exists under the Unininstall registry key with
   // the original guid.  Check both WOW64_64 and WOW64_32.
-  reg_path = base::StringPrintf(
-      L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{%ls}",
-      product.c_str());
+  reg_path = base::StrCat(
+      {L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{", product,
+       L"}"});
   // Consider the operation a success if either of these succeeds.
   LONG result2 = OverwriteDisplayVersion(reg_path, value, KEY_WOW64_64KEY);
   LONG result3 = OverwriteDisplayVersion(reg_path, value, KEY_WOW64_32KEY);
@@ -273,7 +279,21 @@ LONG OverwriteDisplayVersionsAfterMsiexec(base::win::ScopedHandle startup_event,
 
     // Notify the parent process that this one is ready to go.
     if (startup_event.IsValid()) {
-      ::SetEvent(startup_event.Get());
+      if (!::SetEvent(startup_event.Get())) {
+        // Failure to signal the event likely means that the handle is invalid.
+        // Clear the ScopedHandle to prevent a crash upon close and proceed with
+        // the operation. The parent process will wait for 30s in this case (see
+        // DelayedOverwriteDisplayVersions) and will then continue on its merry
+        // way.
+        if (auto error = ::GetLastError(); error != ERROR_INVALID_HANDLE) {
+          // It is highly unexpected that this would fail for any other reason.
+          // Send diagnostics for analysis just in case.
+          // TODO(grt): Check for data and remove this in March 2024.
+          base::debug::Alias(&error);
+          base::debug::DumpWithoutCrashing();
+        }
+        (void)startup_event.release();
+      }
       startup_event.Close();
     }
 
@@ -499,16 +519,20 @@ installer::InstallStatus RepeatDeleteOldVersions(
       return installer::SETUP_SINGLETON_RELEASED;
     }
 
-    // Note that Windows 11 22H2 has a bug whereby process priorities are not
-    // altered by PROCESS_MODE_BACKGROUND_BEGIN, but I/O and memory priorities
-    // still are. See https://crbug.com/1396155 for details.
+    // SetPriorityClass with PROCESS_MODE_BACKGROUND_BEGIN will cap the process
+    // working set to 32 MiB. This was experimentally determined after being
+    // reported in https://crbug.com/1475179. This can lead to extreme
+    // inefficiency as most CPU time is spent faulting in pages and then
+    // immediately trimming the working set. In one trace 99% of CPU time was
+    // spent handling page faults, so avoid SetPriorityClass with
+    // PROCESS_MODE_BACKGROUND_BEGIN.
     base::ScopedClosureRunner restore_priority;
-    if (::SetPriorityClass(::GetCurrentProcess(),
-                           PROCESS_MODE_BACKGROUND_BEGIN) != 0) {
-      // Be aware that a process restoring itself to normal priority from
+    if (::SetThreadPriority(::GetCurrentThread(),
+                            THREAD_MODE_BACKGROUND_BEGIN) != 0) {
+      // Be aware that a thread restoring itself to normal priority from
       // background priority is inherently somewhat of a priority inversion.
       restore_priority.ReplaceClosure(base::BindOnce([]() {
-        ::SetPriorityClass(::GetCurrentProcess(), PROCESS_MODE_BACKGROUND_END);
+        ::SetThreadPriority(::GetCurrentThread(), THREAD_MODE_BACKGROUND_END);
       }));
     }
     const bool delete_old_versions_success =
@@ -791,8 +815,7 @@ installer::InstallStatus InstallProducts(InstallationState& original_state,
                                          const base::FilePath& setup_exe,
                                          const base::CommandLine& cmd_line,
                                          const InitialPreferences& prefs,
-                                         InstallerState* installer_state,
-                                         base::FilePath* installer_directory) {
+                                         InstallerState* installer_state) {
   DCHECK(installer_state);
   installer::InstallStatus install_status = installer::UNKNOWN_STATUS;
   installer::ArchiveType archive_type = installer::UNKNOWN_ARCHIVE_TYPE;
@@ -804,15 +827,15 @@ installer::InstallStatus InstallProducts(InstallationState& original_state,
   // normal process priority class. This is done here because InstallProducts-
   // Helper has read-only access to the state and because the action also
   // affects everything else that runs below.
-  const bool entered_background_mode = installer::AdjustProcessPriority();
+  const bool entered_background_mode = installer::AdjustThreadPriority();
   VLOG_IF(1, entered_background_mode) << "Entered background processing mode.";
 
   if (CheckPreInstallConditions(original_state, *installer_state,
                                 &install_status)) {
     VLOG(1) << "Installing to " << installer_state->target_path().value();
-    install_status = InstallProductsHelper(original_state, setup_exe, cmd_line,
-                                           prefs, *installer_state,
-                                           installer_directory, &archive_type);
+    install_status =
+        InstallProductsHelper(original_state, setup_exe, cmd_line, prefs,
+                              *installer_state, &archive_type);
   } else {
     // CheckPreInstallConditions must set the status on failure.
     DCHECK_NE(install_status, installer::UNKNOWN_STATUS);
@@ -883,12 +906,11 @@ installer::InstallStatus RegisterDevChrome(
   if (!existing_chrome)
     existing_chrome = original_state.GetProductState(true);
   if (existing_chrome) {
-    static const wchar_t kPleaseUninstallYourChromeMessage[] =
-        L"You already have a full-installation (non-dev) of %1ls, please "
-        L"uninstall it first using Add/Remove Programs in the control panel.";
-    std::wstring name(InstallUtil::GetDisplayName());
-    std::wstring message(
-        base::StringPrintf(kPleaseUninstallYourChromeMessage, name.c_str()));
+    const std::wstring name = InstallUtil::GetDisplayName();
+    const std::wstring message = base::StrCat(
+        {L"You already have a full-installation (non-dev) of ", name,
+         L", please uninstall it first using Add/Remove Programs in the "
+         L"control panel."});
 
     LOG(ERROR) << "Aborting operation: another installation of " << name
                << " was found, as a last resort (if the product is not present "
@@ -1146,11 +1168,6 @@ bool HandleNonInstallCmdLineOptions(installer::ModifyParams& modify_params,
                   << setup_exe.value();
     }
     *exit_code = InstallUtil::GetInstallReturnCode(status);
-  } else if (cmd_line.HasSwitch(installer::switches::kUserExperiment)) {
-    installer::RunUserExperiment(cmd_line,
-                                 InitialPreferences::ForCurrentProcess(),
-                                 original_state, installer_state);
-    exit_code = 0;
   } else if (cmd_line.HasSwitch(installer::switches::kPatch)) {
     const std::string patch_type_str(
         cmd_line.GetSwitchValueASCII(installer::switches::kPatch));
@@ -1275,7 +1292,6 @@ InstallStatus InstallProductsHelper(InstallationState& original_state,
                                     const base::CommandLine& cmd_line,
                                     const InitialPreferences& prefs,
                                     InstallerState& installer_state,
-                                    base::FilePath* installer_directory,
                                     ArchiveType* archive_type) {
   DCHECK(archive_type);
   const bool system_install = installer_state.system_install();
@@ -1503,12 +1519,6 @@ InstallStatus InstallProductsHelper(InstallationState& original_state,
             app_guid, base::UTF8ToWide(installer_version->GetString()));
       }
     }
-    // Return the path to the directory containing the newly installed
-    // setup.exe and uncompressed archive if the caller requested it.
-    if (installer_directory) {
-      *installer_directory =
-          installer_state.GetInstallerDirectory(*installer_version);
-    }
   }
 
   // temp_path's dtor will take care of deleting or scheduling itself for
@@ -1655,12 +1665,6 @@ int SetupMain(HINSTANCE instance) {
        cmd_line.HasSwitch(installer::switches::kRegisterChromeBrowser))) {
     return installer::SXS_OPTION_NOT_SUPPORTED;
   }
-  // Some switches only apply for modes that support retention experiments.
-  if (!install_static::SupportsRetentionExperiments() &&
-      cmd_line.HasSwitch(installer::switches::kUserExperiment)) {
-    return installer::SXS_OPTION_NOT_SUPPORTED;
-  }
-
   // Some command line options are no longer supported and must error out.
   if (installer::ContainsUnsupportedSwitch(cmd_line))
     return installer::UNSUPPORTED_OPTION;
@@ -1757,7 +1761,6 @@ int SetupMain(HINSTANCE instance) {
       return installer::INSTALL_FAILED;
   }
 
-  base::FilePath installer_directory;
   installer::InstallStatus install_status = installer::UNKNOWN_STATUS;
   // If --uninstall option is given, uninstall the identified product(s)
   if (is_uninstall) {
@@ -1766,18 +1769,8 @@ int SetupMain(HINSTANCE instance) {
   } else {
     // If --uninstall option is not specified, we assume it is install case.
     install_status = InstallProducts(original_state, setup_exe, cmd_line, prefs,
-                                     &installer_state, &installer_directory);
+                                     &installer_state);
     DoLegacyCleanups(installer_state, install_status);
-
-    // It may be time to kick off an experiment if this was a successful update
-    // and Chrome was not in use (since the experiment only applies to inactive
-    // installs).
-    if (install_status == installer::NEW_VERSION_UPDATED &&
-        installer::ShouldRunUserExperiment(installer_state)) {
-      installer::BeginUserExperiment(
-          installer_state, installer_directory.Append(setup_exe.BaseName()),
-          !system_install);
-    }
   }
 
   if (installer::kVivaldi) {
@@ -1830,8 +1823,37 @@ int WINAPI wWinMain(HINSTANCE instance,
   vivaldi::CheckForDebugSetupCommand(show_command);
 #endif
 
+  const auto process_exit_code = SetupMain(instance);
+
   // https://crbug.com/896565: Graceful shutdown sometimes fails for reasons out
   // of the installer's control. Crashes from such failures are inactionable, so
-  // terminate the process forthwith.
-  base::Process::TerminateCurrentProcessImmediately(SetupMain(instance));
+  // terminate the process forthwith. Do not use
+  // base::Process::TerminateCurrentProcessImmediately because it will crash the
+  // process with int 3 in cases where ::TerminateProcess returns; see
+  // https://crbug.com/1489598. It is better for the installer to try to return
+  // the actual exit code (risking the original crash).
+#if BUILDFLAG(CLANG_PROFILING)
+  base::WriteClangProfilingProfile();
+#endif
+
+  ::SetLastError(ERROR_SUCCESS);
+  const auto terminate_result = ::TerminateProcess(
+      ::GetCurrentProcess(), static_cast<UINT>(process_exit_code));
+
+  // It is unexpected that this code is reached. In the event that it is,
+  // capture error information left behind by TerminateProcess in case the
+  // process crashes during exit and put it on the stack in the hopes that
+  // we can find it in a post-return crash dump.
+  const auto terminate_error_code = ::GetLastError();
+
+  DWORD exit_codes[] = {
+      0xDEADBECF,
+      static_cast<DWORD>(process_exit_code),
+      static_cast<DWORD>(terminate_result),
+      terminate_error_code,
+      0xDEADBEDF,
+  };
+  base::debug::Alias(exit_codes);
+
+  return process_exit_code;
 }

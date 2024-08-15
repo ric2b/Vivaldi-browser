@@ -78,12 +78,14 @@
 #include "ui/aura/client/drag_drop_client.h"
 #include "ui/aura/window.h"
 #include "ui/compositor/layer.h"
+#include "ui/compositor/layer_tree_owner.h"
 #include "ui/compositor/presentation_time_recorder.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/compositor/test/layer_animation_stopped_waiter.h"
 #include "ui/compositor/test/test_utils.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/menu/menu_item_view.h"
@@ -91,7 +93,9 @@
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/test/views_test_utils.h"
+#include "ui/views/view_utils.h"
 #include "ui/views/widget/widget_observer.h"
+#include "ui/wm/core/coordinate_conversion.h"
 
 namespace ash {
 namespace test {
@@ -108,6 +112,18 @@ gfx::RectF GetViewBoundsWithCurrentTransform(views::View* view) {
       gfx::RectF(view->GetMirroredBounds()));
 }
 
+absl::optional<gfx::Vector2d> GetOffsetBetweenLayers(ui::Layer* source,
+                                                     ui::Layer* target) {
+  gfx::Vector2d offset;
+  for (auto* current = source; current; current = current->parent()) {
+    if (current == target) {
+      return offset;
+    }
+    offset += current->bounds().OffsetFromOrigin();
+  }
+  return absl::nullopt;
+}
+
 float CalculateManhattanDistance(gfx::Point p1, gfx::Point p2) {
   return std::abs(p1.x() - p2.x()) + std::abs(p1.y() - p2.y());
 }
@@ -116,14 +132,23 @@ class ShelfItemFactoryFake : public ShelfModel::ShelfItemFactory {
  public:
   virtual ~ShelfItemFactoryFake() = default;
 
-  bool CreateShelfItemForAppId(
-      const std::string& app_id,
-      ShelfItem* item,
-      std::unique_ptr<ShelfItemDelegate>* delegate) override {
-    *item = ShelfItem();
-    item->id = ShelfID(app_id);
-    *delegate = std::make_unique<TestShelfItemDelegate>(item->id);
-    return true;
+  // ShelfModel::ShelfItemFactory:
+  std::unique_ptr<ShelfItem> CreateShelfItemForApp(
+      const ShelfID& shelf_id,
+      ShelfItemStatus status,
+      ShelfItemType shelf_item_type,
+      const std::u16string& title) override {
+    auto item = std::make_unique<ShelfItem>();
+    item->id = shelf_id;
+    item->status = status;
+    item->type = shelf_item_type;
+    item->title = title;
+    return item;
+  }
+
+  std::unique_ptr<ShelfItemDelegate> CreateShelfItemDelegateForAppId(
+      const std::string& app_id) override {
+    return std::make_unique<TestShelfItemDelegate>(ShelfID(app_id));
   }
 };
 
@@ -299,7 +324,7 @@ class AppsGridViewTest : public AshTestBase, views::WidgetObserver {
 
     scoped_feature_list_.InitWithFeatureStates(
         {{app_list_features::kDragAndDropRefactor, use_drag_drop_refactor_},
-         {features::kAppCollectionFolderRefresh, folder_icon_refresh_}});
+         {features::kPromiseIcons, true}});
     AshTestBase::SetUp();
 
     // Make the display big enough to hold the app list.
@@ -455,8 +480,6 @@ class AppsGridViewTest : public AshTestBase, views::WidgetObserver {
 
   bool use_drag_drop_refactor() const { return use_drag_drop_refactor_; }
 
-  bool folder_icon_refresh() const { return folder_icon_refresh_; }
-
   AppsGridView* folder_apps_grid_view() const {
     return app_list_folder_view_->items_grid_view();
   }
@@ -486,6 +509,18 @@ class AppsGridViewTest : public AshTestBase, views::WidgetObserver {
 
     event_generator->MoveMouseTo(location);
     event_generator->ClickLeftButton();
+  }
+
+  ui::LayerTreeOwner* GetPendingPromiseLayerForId(
+      const std::string& promise_app_id) {
+    auto found =
+        apps_grid_view_->pending_promise_apps_removals_.find(promise_app_id);
+
+    if (found == apps_grid_view_->pending_promise_apps_removals_.end()) {
+      return nullptr;
+    }
+
+    return found->second.get();
   }
 
   // Simulates a long press on the point `location` if the test is in tablet
@@ -744,8 +779,6 @@ class AppsGridViewTest : public AshTestBase, views::WidgetObserver {
   bool create_as_tablet_mode_ = false;
   // True to test with the drag and drop refactor feature enabled.
   bool use_drag_drop_refactor_ = false;
-  // True if the folder icon refresh feature is enabled.
-  bool folder_icon_refresh_ = false;
 
   std::unique_ptr<PageFlipWaiter> page_flip_waiter_;
 
@@ -804,7 +837,7 @@ class AppsGridViewDragTestBase : public AppsGridViewTest {
     return drag_icon_layer;
   }
 
-  bool IsDragIconIsAnimatingForGrid(AppsGridView* apps_grid_view) {
+  bool IsDragIconAnimatingForGrid(AppsGridView* apps_grid_view) {
     ui::Layer* drag_icon_layer = GetDragIconLayer(apps_grid_view);
 
     if (!drag_icon_layer) {
@@ -837,17 +870,14 @@ INSTANTIATE_TEST_SUITE_P(All,
 
 class AppsGridViewFolderIconRefreshTest
     : public AppsGridViewDragTestBase,
-      public testing::WithParamInterface<std::tuple<bool, bool>> {
+      public testing::WithParamInterface<bool> {
  public:
-  AppsGridViewFolderIconRefreshTest() {
-    is_rtl_ = std::get<0>(GetParam());
-    folder_icon_refresh_ = std::get<1>(GetParam());
-  }
+  AppsGridViewFolderIconRefreshTest() { is_rtl_ = GetParam(); }
 };
 
-INSTANTIATE_TEST_SUITE_P(All,
+INSTANTIATE_TEST_SUITE_P(Rtl,
                          AppsGridViewFolderIconRefreshTest,
-                         testing::Combine(testing::Bool(), testing::Bool()));
+                         testing::Bool());
 
 // Tests for legacy behaviour using the old drag and drop code.
 class AppsGridViewDragLegacyTest : public AppsGridViewDragTestBase,
@@ -1854,14 +1884,7 @@ TEST_P(AppsGridViewFolderIconRefreshTest, FolderIconExtendState) {
   auto* background_layer = folder_view->icon_background_layer_for_test();
 
   // The icon_background_layer is only created if the icon refresh is enabled.
-  if (folder_icon_refresh()) {
-    EXPECT_TRUE(background_layer);
-  } else {
-    EXPECT_FALSE(background_layer);
-    // Return early as the test below verifies the background layer that isn't
-    // available with legacy folder icons.
-    return;
-  }
+  EXPECT_TRUE(background_layer);
 
   InitiateDragForItemAtCurrentPageAt(AppsGridView::MOUSE, 0, 1,
                                      apps_grid_view_);
@@ -1891,10 +1914,6 @@ TEST_P(AppsGridViewFolderIconRefreshTest, FolderIconExtendState) {
 }
 
 TEST_P(AppsGridViewFolderIconRefreshTest, FolderIconItemCounter) {
-  if (!folder_icon_refresh()) {
-    return;
-  }
-
   GetTestModel()->CreateAndPopulateFolderWithApps(2);
   GetTestModel()->CreateAndPopulateFolderWithApps(4);
   GetTestModel()->CreateAndPopulateFolderWithApps(10);
@@ -2016,7 +2035,7 @@ TEST_P(AppsGridViewDragTest, DragIconAnimatesAfterDragToFolder) {
   tasks.push_back(base::BindLambdaForTesting([&]() { EndDrag(); }));
   MaybeRunDragAndDropSequenceForAppList(&tasks, /*is_touch =*/false);
 
-  ASSERT_TRUE(IsDragIconIsAnimatingForGrid(apps_grid_view_));
+  ASSERT_TRUE(IsDragIconAnimatingForGrid(apps_grid_view_));
   MaybeCheckHaptickEventsCount(1);
   EXPECT_FALSE(GetAppListTestHelper()->IsInFolderView());
 
@@ -2082,7 +2101,7 @@ TEST_P(AppsGridViewDragTest, DragIconAnimatesAfterDragToCreateFolder) {
   tasks.push_back(base::BindLambdaForTesting([&]() { EndDrag(); }));
   MaybeRunDragAndDropSequenceForAppList(&tasks, /*is_touch =*/false);
 
-  ASSERT_TRUE(IsDragIconIsAnimatingForGrid(apps_grid_view_));
+  ASSERT_TRUE(IsDragIconAnimatingForGrid(apps_grid_view_));
   MaybeCheckHaptickEventsCount(1);
   EXPECT_FALSE(GetAppListTestHelper()->IsInFolderView());
 
@@ -2094,42 +2113,174 @@ TEST_P(AppsGridViewDragTest, DragIconAnimatesAfterDragToCreateFolder) {
   MaybeCheckHaptickEventsCount(1);
 }
 
-TEST_P(AppsGridViewDragLegacyTest, FolderNotOpenedIfGridHidesDuringIconDrop) {
+TEST_P(AppsGridViewDragTest, DragIconAnimatesToTargetItemBounds) {
   GetTestModel()->PopulateApps(3);
   UpdateLayout();
 
-  ui::ScopedAnimationDurationScaleMode non_zero_duration_mode(
-      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+  // Start drag from centerpoint of item_view
+  AppListItemView* const item_view = GetItemViewInTopLevelGrid(1);
+  StartDragForViewAndFireTimer(AppsGridView::MOUSE, item_view);
 
-  InitiateDragForItemAtCurrentPageAt(AppsGridView::MOUSE, 0, 1,
-                                     apps_grid_view_);
+  std::list<base::OnceClosure> tasks;
+  tasks.push_back(base::BindLambdaForTesting([&]() {
+    MaybeCheckHaptickEventsCount(1);
+    const gfx::Point drop_point =
+        GetItemRectOnCurrentPageAt(0, 3).CenterPoint();
+    UpdateDrag(AppsGridView::MOUSE, drop_point, apps_grid_view_, 5 /*steps*/);
+  }));
+
+  // End drag, and verify target drop icon bounds.
+  tasks.push_back(base::BindLambdaForTesting([&]() {
+    // Enable drop animation, as the test is verifying target animated
+    // transform/bounds.
+    ui::ScopedAnimationDurationScaleMode non_zero_duration_mode(
+        ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+    EndDrag();
+
+    gfx::Rect final_item_icon_bounds = item_view->GetIconBounds();
+    views::View::ConvertRectToScreen(item_view, &final_item_icon_bounds);
+
+    ui::Layer* const drag_icon_layer = GetDragIconLayer(apps_grid_view_);
+    // Get drag icon layer's target position relative to the layer target
+    // bounds.
+    gfx::Rect drag_icon_target_bounds =
+        drag_icon_layer->GetTargetTransform().MapRect(
+            gfx::Rect(drag_icon_layer->GetTargetBounds().size()));
+
+    // Convert the drag icon target bounds to the layer of the root window that
+    // host the drag icon.
+    aura::Window* const root_window =
+        item_view->GetWidget()->GetNativeWindow()->GetRootWindow();
+    const absl::optional<gfx::Vector2d> offset_to_root_window =
+        GetOffsetBetweenLayers(drag_icon_layer, root_window->layer());
+    ASSERT_TRUE(offset_to_root_window);
+    drag_icon_target_bounds.Offset(*offset_to_root_window);
+
+    // Convert drag icon target bounds to screen.
+    gfx::RectF drag_icon_target_bounds_in_screen(drag_icon_target_bounds);
+    wm::TranslateRectToScreen(root_window, &drag_icon_target_bounds_in_screen);
+
+    EXPECT_EQ(gfx::RectF(final_item_icon_bounds),
+              drag_icon_target_bounds_in_screen);
+  }));
+
+  MaybeRunDragAndDropSequenceForAppList(&tasks, /*is_touch =*/false);
+  MaybeCheckHaptickEventsCount(1);
+}
+
+TEST_P(AppsGridViewDragTest,
+       DragIconAnimatesToTargetItemBoundsOnSecondaryScreen) {
+  UpdateDisplay("1000x700, 1024x768");
+  GetTestModel()->PopulateApps(3);
+  UpdateLayout();
+
+  // Show the app list on the secondary display.
+  GetAppListTestHelper()->Dismiss();
+  GetAppListTestHelper()->ShowAndRunLoop(GetSecondaryDisplay().id());
+
+  // Start drag from centerpoint of item_view
+  AppListItemView* const item_view = GetItemViewInTopLevelGrid(1);
+  StartDragForViewAndFireTimer(AppsGridView::MOUSE, item_view);
+
+  std::list<base::OnceClosure> tasks;
+  tasks.push_back(base::BindLambdaForTesting([&]() {
+    MaybeCheckHaptickEventsCount(1);
+    const gfx::Point drop_point =
+        GetItemRectOnCurrentPageAt(0, 3).CenterPoint();
+    UpdateDrag(AppsGridView::MOUSE, drop_point, apps_grid_view_, 5 /*steps*/);
+  }));
+
+  // End drag, and verify target drop icon bounds.
+  tasks.push_back(base::BindLambdaForTesting([&]() {
+    // Enable drop animation, as the test is verifying target animated
+    // transform/bounds.
+    ui::ScopedAnimationDurationScaleMode non_zero_duration_mode(
+        ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+    EndDrag();
+
+    gfx::Rect final_item_icon_bounds = item_view->GetIconBounds();
+    views::View::ConvertRectToScreen(item_view, &final_item_icon_bounds);
+
+    ui::Layer* const drag_icon_layer = GetDragIconLayer(apps_grid_view_);
+    // Get drag icon layer's target position relative to the layer target
+    // bounds.
+    gfx::Rect drag_icon_target_bounds =
+        drag_icon_layer->GetTargetTransform().MapRect(
+            gfx::Rect(drag_icon_layer->GetTargetBounds().size()));
+
+    // Convert the drag icon target bounds to the layer of the root window that
+    // host the drag icon.
+    aura::Window* const root_window =
+        item_view->GetWidget()->GetNativeWindow()->GetRootWindow();
+    const absl::optional<gfx::Vector2d> offset_to_root_window =
+        GetOffsetBetweenLayers(drag_icon_layer, root_window->layer());
+    ASSERT_TRUE(offset_to_root_window);
+    drag_icon_target_bounds.Offset(*offset_to_root_window);
+
+    // Convert drag icon target bounds to screen.
+    gfx::RectF drag_icon_target_bounds_in_screen(drag_icon_target_bounds);
+    wm::TranslateRectToScreen(root_window, &drag_icon_target_bounds_in_screen);
+
+    EXPECT_EQ(gfx::RectF(final_item_icon_bounds),
+              drag_icon_target_bounds_in_screen);
+  }));
+
+  MaybeRunDragAndDropSequenceForAppList(&tasks, /*is_touch =*/false);
+  MaybeCheckHaptickEventsCount(1);
+}
+
+TEST_P(AppsGridViewDragTest, FolderNotOpenedIfGridHidesDuringIconDrop) {
+  GetTestModel()->PopulateApps(3);
+  UpdateLayout();
+
+  AppListItemView* drag_view =
+      GetItemViewInCurrentPageAt(0, 1, apps_grid_view_);
+  StartDragForViewAndFireTimer(AppsGridView::MOUSE, drag_view);
+
+  std::list<base::OnceClosure> tasks;
+  tasks.push_back(base::BindLambdaForTesting([&]() {
+    MaybeCheckHaptickEventsCount(1);
+
+    // Drag the drag view over another app item to create a new folder.
+    gfx::Point to = GetItemRectOnCurrentPageAt(0, 0).CenterPoint();
+    UpdateDrag(AppsGridView::MOUSE, to, apps_grid_view_, 10 /*steps*/);
+  }));
+  tasks.push_back(base::BindLambdaForTesting([&]() {
+    // Enable animations, as the test is testing interactions that depend on the
+    // animation timing.
+    ui::ScopedAnimationDurationScaleMode non_zero_duration_mode(
+        ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+    EndDrag();
+
+    MaybeCheckHaptickEventsCount(1);
+    EXPECT_FALSE(GetAppListTestHelper()->IsInFolderView());
+    ASSERT_TRUE(IsDragIconAnimatingForGrid(apps_grid_view_));
+
+    // Start typing to close the apps page, and open search results.
+    GetEventGenerator()->GestureTapAt(
+        search_box_view_->GetBoundsInScreen().CenterPoint());
+    GetEventGenerator()->PressAndReleaseKey(ui::VKEY_A);
+    EXPECT_FALSE(IsDragIconAnimatingForGrid(apps_grid_view_));
+
+    // Wait for page switch animation.
+    auto* helper = GetAppListTestHelper();
+    ui::LayerAnimationStoppedWaiter().Wait(
+        helper->GetBubbleAppsPage()->GetPageAnimationLayerForTest());
+
+    ASSERT_FALSE(helper->GetBubbleAppsPage()->GetVisible());
+    ASSERT_TRUE(helper->GetBubbleSearchPage()->GetVisible());
+  }));
+
+  MaybeRunDragAndDropSequenceForAppList(&tasks, /*is_touch =*/false);
   MaybeCheckHaptickEventsCount(1);
 
-  // Dragging item_1 over Item_0 creates a folder.
-  gfx::Point to = GetItemRectOnCurrentPageAt(0, 0).CenterPoint();
-  UpdateDrag(AppsGridView::MOUSE, to, apps_grid_view_, 10 /*steps*/);
-  EndDrag();
-
-  IsDragIconIsAnimatingForGrid(apps_grid_view_);
-  MaybeCheckHaptickEventsCount(1);
-  EXPECT_FALSE(GetAppListTestHelper()->IsInFolderView());
-
-  // Start typing to close the apps page, and open search results - verify the
-  // folder does not get opened, and that the icon drop animation gets canceled.
-  GetEventGenerator()->GestureTapAt(
-      search_box_view_->GetBoundsInScreen().CenterPoint());
-  GetEventGenerator()->PressAndReleaseKey(ui::VKEY_A);
-
-  auto* helper = GetAppListTestHelper();
-  // Wait for page switch animation.
-  ui::LayerAnimationStoppedWaiter().Wait(
-      helper->GetBubbleAppsPage()->GetPageAnimationLayerForTest());
-  ASSERT_FALSE(helper->GetBubbleAppsPage()->GetVisible());
-  ASSERT_TRUE(helper->GetBubbleSearchPage()->GetVisible());
-
+  // Verify the folder did not get opened, and that the icon drop animation is
+  // no longer running.
   EXPECT_FALSE(test_api_->GetDragIconLayer());
-  EXPECT_FALSE(helper->IsInFolderView());
-  MaybeCheckHaptickEventsCount(1);
+  EXPECT_FALSE(GetAppListTestHelper()->IsInFolderView());
 }
 
 TEST_F(AppsGridViewTest, CheckFolderWithMultipleItemsContents) {
@@ -2303,7 +2454,7 @@ TEST_P(AppsGridViewDragTest, DragIconAnimatesAfterDragOutOfFolder) {
   tasks.push_back(base::BindLambdaForTesting([&]() { EndDrag(); }));
   MaybeRunDragAndDropSequenceForAppList(&tasks, /*is_touch =*/false);
 
-  IsDragIconIsAnimatingForGrid(apps_grid_view_);
+  EXPECT_TRUE(IsDragIconAnimatingForGrid(apps_grid_view_));
   MaybeCheckHaptickEventsCount(1);
 }
 
@@ -2347,7 +2498,7 @@ TEST_P(AppsGridViewDragTest, DragIconAnimatesAfterDragToAnotherFolder) {
 
   MaybeCheckHaptickEventsCount(1);
 
-  ASSERT_TRUE(IsDragIconIsAnimatingForGrid(apps_grid_view_));
+  ASSERT_TRUE(IsDragIconAnimatingForGrid(apps_grid_view_));
   MaybeCheckHaptickEventsCount(1);
   EXPECT_FALSE(GetAppListTestHelper()->IsInFolderView());
 
@@ -2399,7 +2550,7 @@ TEST_P(AppsGridViewDragTest,
   tasks.push_back(base::BindLambdaForTesting([&]() { EndDrag(); }));
   MaybeRunDragAndDropSequenceForAppList(&tasks, /*is_touch =*/false);
 
-  IsDragIconIsAnimatingForGrid(apps_grid_view_);
+  EXPECT_TRUE(IsDragIconAnimatingForGrid(apps_grid_view_));
   MaybeCheckHaptickEventsCount(1);
 }
 
@@ -2425,7 +2576,7 @@ TEST_P(AppsGridViewDragTest, DragIconAnimatesAfterReorderDrag) {
   tasks.push_back(base::BindLambdaForTesting([&]() { EndDrag(); }));
   MaybeRunDragAndDropSequenceForAppList(&tasks, /*is_touch =*/false);
 
-  IsDragIconIsAnimatingForGrid(apps_grid_view_);
+  EXPECT_TRUE(IsDragIconAnimatingForGrid(apps_grid_view_));
   MaybeCheckHaptickEventsCount(1);
 }
 
@@ -2615,8 +2766,7 @@ TEST_P(AppsGridViewDragTest, MouseDragItemReorderAfterFolderDropPoint) {
                                    GetItemRectOnCurrentPageAt(0, 0).x()) /
                           2;
     gfx::Vector2d drag_vector(
-        -2 * half_tile_width -
-            GetAppListConfig()->folder_dropping_circle_radius() - 4,
+        -2 * half_tile_width - GetAppListConfig()->folder_bubble_radius() - 4,
         0);
     // Flip drag vector in rtl.
     if (is_rtl_) {
@@ -6329,6 +6479,59 @@ TEST_P(AppsGridViewClamshellAndTabletTest,
     histogram_tester.ExpectTotalCount(
         kClamshellDragReorderAnimationSmoothnessHistogram, 1);
   }
+}
+
+TEST_F(AppsGridViewTest, PromiseIconLayers) {
+  AppListItem* item = GetTestModel()->CreateAndAddPromiseItem("PromiseApp");
+  const std::string promise_app_id = item->GetMetadata()->id;
+  UpdateLayout();
+
+  AppListItemView* promise_view = apps_grid_view_->GetItemViewAt(0);
+
+  // Promise apps are created with app_status kPending.
+  EXPECT_EQ(promise_view->item()->progress(), -1.0f);
+  EXPECT_TRUE(promise_view->layer());
+
+  // Change app status to installing and send a progress update.
+  item->UpdateAppStatusForTesting(AppStatus::kInstalling);
+  item->SetProgress(0.3f);
+  EXPECT_EQ(promise_view->item()->progress(), 0.3f);
+  EXPECT_TRUE(promise_view->layer());
+
+  // Set the last status update to kInstallSuccess as if the app had finished
+  // installing.
+  item->UpdateAppStatusForTesting(AppStatus::kInstallSuccess);
+  EXPECT_TRUE(promise_view->layer());
+
+  ui::ScopedAnimationDurationScaleMode non_zero_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+  // Simulate pushing the installed app.
+  GetTestModel()->DeleteItem(item->id());
+
+  ui::LayerTreeOwner* promise_app_duplicate_layer =
+      GetPendingPromiseLayerForId(promise_app_id);
+  ASSERT_TRUE(promise_app_duplicate_layer);
+
+  auto* installed_item = GetTestModel()->CreateItem("installed_id");
+  auto installed_item_metadata = installed_item->CloneMetadata();
+  installed_item_metadata->promise_package_id = promise_app_id;
+  installed_item->SetMetadata(std::move(installed_item_metadata));
+  GetTestModel()->AddItem(std::move(installed_item));
+
+  AppListItemView* installed_view = apps_grid_view_->GetItemViewAt(0);
+  EXPECT_EQ(installed_view->item()->id(), "installed_id");
+  ASSERT_TRUE(installed_view->layer());
+  ASSERT_TRUE(GetPendingPromiseLayerForId(promise_app_id));
+
+  // Verify that the layer is still animating.
+  EXPECT_TRUE(installed_view->layer()->GetAnimator()->is_animating());
+  EXPECT_EQ(1.0f, installed_view->layer()->GetAnimator()->GetTargetOpacity());
+  EXPECT_TRUE(
+      promise_app_duplicate_layer->root()->GetAnimator()->is_animating());
+  EXPECT_EQ(
+      0.0f,
+      promise_app_duplicate_layer->root()->GetAnimator()->GetTargetOpacity());
 }
 
 }  // namespace test

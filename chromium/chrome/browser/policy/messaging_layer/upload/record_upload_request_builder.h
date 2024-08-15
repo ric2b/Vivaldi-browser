@@ -9,7 +9,7 @@
 
 #include "base/feature_list.h"
 #include "base/values.h"
-
+#include "build/build_config.h"
 #include "components/reporting/proto/synced/record.pb.h"
 #include "components/reporting/resources/resource_manager.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -34,9 +34,10 @@ namespace reporting {
 //         "generationId": 123456789,
 //         "priority": 1
 //         // The string value of the `generation_guid` may be empty for managed
-//         // devices, but will always have a value for unmanaged devices. It's
-//         // value, if present, must be a string of base::Uuid. See base/uuid.h
-//         // for format information.
+//         // ChromeOS devices or any non-ChromeOS devices, but will always have
+//         // a value for unmanaged ChromeOS devices. Its value, if present,
+//         // must be a string of base::Uuid. See base/uuid.h for format
+//         // information.
 //         "generation_guid": "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"
 //       },
 //       "compressionInformation": {
@@ -64,9 +65,9 @@ namespace reporting {
 //   // components/reporting/proto/interface.proto
 //   "attachEncryptionSettings": true,
 //   "requestId": "SomeString",
-//   // optional field, corresponding to the configuration file that the
-//   // server provides to the client.
-//   "attachConfigurationFile": true
+//   // optional field, corresponding to the configuration file version
+//   // that the client is holding at the moment.
+//   "configurationFileVersion": 1234
 //   // optional field, only used by the client tast tests to signal to the
 //   // server that this is an automated test from the lab. In production, this
 //   // should always be absent. Even if it is erroneously present in production
@@ -106,8 +107,12 @@ class UploadEncryptedReportingRequestBuilder {
   // RequestId key used to build UploadEncryptedReportingRequest
   static constexpr char kRequestId[] = "requestId";
 
+  // The default values signal the server that it shouldn't attach the
+  // encryption settings and that the config_file_version hasn't been set by
+  // `RecordHandlerImpl`.
   explicit UploadEncryptedReportingRequestBuilder(
-      bool attach_encryption_settings = false);
+      bool attach_encryption_settings = false,
+      int config_file_version = -1);
   ~UploadEncryptedReportingRequestBuilder();
 
   // Adds record, converts it into base::Value::Dict, updates reservation to
@@ -126,7 +131,7 @@ class UploadEncryptedReportingRequestBuilder {
 
   static std::string_view GetEncryptedRecordListPath();
   static std::string_view GetAttachEncryptionSettingsPath();
-  static std::string_view GetAttachConfigurationFilePath();
+  static std::string_view GetConfigurationFileVersionPath();
   static std::string_view GetSourcePath();
 
   absl::optional<base::Value::Dict> result_;
@@ -163,7 +168,9 @@ class SequenceInformationDictionaryBuilder {
   static std::string_view GetSequencingIdPath();
   static std::string_view GetGenerationIdPath();
   static std::string_view GetPriorityPath();
+#if BUILDFLAG(IS_CHROMEOS)
   static std::string_view GetGenerationGuidPath();
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
  private:
   absl::optional<base::Value::Dict> result_;

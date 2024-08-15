@@ -1,4 +1,4 @@
-# Copyright 2022 The Chromium Authors. All rights reserved.
+# Copyright 2022 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -16,7 +16,6 @@ mojom("automation") {
 mojom("assistive_technology_type") {
   sources = [ "assistive_technology_type.mojom" ]
   public_deps = [ "//mojo/public/mojom/base" ]
-  webui_module_path = "/"
 }
 
 mojom("mojom") {
@@ -42,6 +41,9 @@ mojom("mojom") {
 if (supports_os_accessibility_service) {
   mojom("os_service_mojom") {
     sources = [
+      "autoclick.mojom",
+      "file_loader.mojom",
+      "speech_recognition.mojom",
       "tts.mojom",
       "user_interface.mojom",
     ]
@@ -51,7 +53,6 @@ if (supports_os_accessibility_service) {
       "//skia/public/mojom:mojom",
       "//ui/gfx/geometry/mojom",
     ]
-    webui_module_path = "/"
   }
 
   group("os_accessibility_service_js") {
@@ -60,6 +61,8 @@ if (supports_os_accessibility_service) {
       "$root_gen_dir/skia/public/mojom/skcolor.mojom-lite.js",
       "$root_gen_dir/ui/gfx/geometry/mojom/geometry.mojom-lite.js",
       "$target_gen_dir/assistive_technology_type.mojom-lite.js",
+      "$target_gen_dir/autoclick.mojom-lite.js",
+      "$target_gen_dir/speech_recognition.mojom-lite.js",
       "$target_gen_dir/tts.mojom-lite.js",
       "$target_gen_dir/user_interface.mojom-lite.js",
     ]

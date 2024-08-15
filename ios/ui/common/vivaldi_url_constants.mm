@@ -28,6 +28,9 @@ NSString* const vVivaldiRecoverUsernameUrl =
 NSString* const vVivaldiRecoverPasswordUrl =
     @"https://login.vivaldi.net/profile/id/userInfoView";
 
+const char vVivaldiBugReportURL[] =
+    "https://help.vivaldi.com/ios/ios-troubleshoot/report-a-bug-in-vivaldi-on-ios/";
+
 // Help
 const char vVivaldiHelpCopyLinkToHightlightUrl[] =
     "https://help.vivaldi.com/ios/ios-browse/copy-link-to-highlight-on-ios/";

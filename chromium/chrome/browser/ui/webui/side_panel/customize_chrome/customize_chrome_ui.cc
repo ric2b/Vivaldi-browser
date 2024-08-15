@@ -7,8 +7,8 @@
 #include <string>
 #include <utility>
 
-#include "chrome/browser/browser_features.h"
 #include "chrome/browser/cart/cart_handler.h"
+#include "chrome/browser/image_fetcher/image_decoder_impl.h"
 #include "chrome/browser/new_tab_page/modules/new_tab_page_modules.h"
 #include "chrome/browser/new_tab_page/new_tab_page_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -20,6 +20,7 @@
 #include "chrome/browser/ui/webui/sanitized_image_source.h"
 #include "chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_page_handler.h"
 #include "chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_section.h"
+#include "chrome/browser/ui/webui/side_panel/customize_chrome/wallpaper_search/wallpaper_search_handler.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
@@ -27,6 +28,7 @@
 #include "chrome/grit/side_panel_customize_chrome_resources_map.h"
 #include "chrome/grit/side_panel_shared_resources.h"
 #include "chrome/grit/side_panel_shared_resources_map.h"
+#include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/search/ntp_features.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
@@ -49,6 +51,7 @@ DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(CustomizeChromeUI, kChromeThemeElementId);
 
 CustomizeChromeUI::CustomizeChromeUI(content::WebUI* web_ui)
     : ui::MojoBubbleWebUIController(web_ui),
+      image_decoder_(std::make_unique<ImageDecoderImpl>()),
       profile_(Profile::FromWebUI(web_ui)),
       web_contents_(web_ui->GetWebContents()),
       module_id_names_(ntp::MakeModuleIdNames(
@@ -134,10 +137,12 @@ CustomizeChromeUI::CustomizeChromeUI(content::WebUI* web_ui)
           ntp_features::kCustomizeChromeSidePanelExtensionsCard) &&
           features::IsChromeWebuiRefresh2023());
 
-  source->AddBoolean("wallpaperSearchEnabled",
-                     base::FeatureList::IsEnabled(
-                         ntp_features::kCustomizeChromeWallpaperSearch) &&
-                         base::FeatureList::IsEnabled(features::kMantaService));
+  source->AddBoolean(
+      "wallpaperSearchEnabled",
+      base::FeatureList::IsEnabled(
+          ntp_features::kCustomizeChromeWallpaperSearch) &&
+          base::FeatureList::IsEnabled(
+              optimization_guide::features::kOptimizationGuideModelExecution));
 
   webui::SetupChromeRefresh2023(source);
 
@@ -221,6 +226,14 @@ void CustomizeChromeUI::BindInterface(
         pending_receiver) {
   color_provider_handler_ = std::make_unique<ui::ColorChangeHandler>(
       web_ui()->GetWebContents(), std::move(pending_receiver));
+}
+
+void CustomizeChromeUI::BindInterface(
+    mojo::PendingReceiver<
+        side_panel::customize_chrome::mojom::WallpaperSearchHandler>
+        pending_receiver) {
+  wallpaper_search_handler_ = std::make_unique<WallpaperSearchHandler>(
+      std::move(pending_receiver), profile_, image_decoder_.get());
 }
 
 void CustomizeChromeUI::CreatePageHandler(

@@ -109,9 +109,6 @@
                                bool activePage = true,
                                bool inherit_opener = true);
 
-  // Maybe add the guest to the tabstrip of the opener.
-  void MaybeAddToOpenersTabStrip(const base::Value::Dict& create_params);
-
   // Starts loading in the current WebContents if this is needed.
   void LoadTabContentsIfNecessary();
 

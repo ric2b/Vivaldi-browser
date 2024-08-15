@@ -17,12 +17,14 @@
 
 #include "base/check.h"
 #include "base/containers/span.h"
+#include "base/debug/alias.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
 #include "base/functional/function_ref.h"
 #include "base/hash/hash.h"
+#include "base/logging.h"
 #include "base/process/process_iterator.h"
 #include "base/ranges/algorithm.h"
 #include "base/scoped_generic.h"
@@ -30,6 +32,7 @@
 #include "base/types/expected.h"
 #include "base/win/atl.h"
 #include "base/win/scoped_handle.h"
+#include "base/win/win_util.h"
 #include "base/win/windows_types.h"
 #include "chrome/updater/updater_scope.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -111,6 +114,13 @@ using WrlRuntimeClass = Microsoft::WRL::RuntimeClass<
 template <typename Interface, REFIID iid_user, REFIID iid_system>
 class DynamicIIDsImpl : public internal::WrlRuntimeClass<Interface> {
  public:
+  DynamicIIDsImpl() {
+    VLOG(3) << __func__ << ": Interface: " << typeid(Interface).name()
+            << ": iid_user: " << base::win::WStringFromGUID(iid_user)
+            << ": iid_system: " << base::win::WStringFromGUID(iid_system)
+            << ": IsSystemInstall(): " << IsSystemInstall();
+  }
+
   IFACEMETHODIMP QueryInterface(REFIID riid, void** object) override {
     return internal::WrlRuntimeClass<Interface>::QueryInterface(
         riid == (IsSystemInstall() ? iid_system : iid_user)
@@ -335,8 +345,8 @@ bool CompareOSVersions(const OSVERSIONINFOEX& os, BYTE oper);
 // and cannot be reversed.
 bool EnableProcessHeapMetadataProtection();
 
-// Creates a unique temporary directory. The directory is created under
-// %ProgramFiles% if the caller is admin, so it is secure.
+// Creates a unique temporary directory. The directory is created under a secure
+// location if the caller is admin.
 absl::optional<base::ScopedTempDir> CreateSecureTempDir();
 
 // Signals the shutdown event that causes legacy GoogleUpdate processes to exit.
@@ -405,6 +415,15 @@ template <typename T, typename I, typename... TArgs>
 // Does not create the directory if it does not exist.
 [[nodiscard]] absl::optional<base::FilePath> GetInstallDirectoryX86(
     UpdaterScope scope);
+
+// Gets the contents under a given registry key.
+absl::optional<std::wstring> GetRegKeyContents(const std::wstring& reg_key);
+
+// Returns the textual description of a system `error` as provided by the
+// operating system. The function assumes that the locale value for the calling
+// thread is set, otherwise, the function uses the user/system default LANGID,
+// or it defaults to US English.
+std::wstring GetTextForSystemError(int error);
 
 }  // namespace updater
 

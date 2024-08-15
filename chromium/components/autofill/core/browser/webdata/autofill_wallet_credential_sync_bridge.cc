@@ -60,6 +60,7 @@ AutofillWalletCredentialSyncBridge::AutofillWalletCredentialSyncBridge(
       web_data_backend_(web_data_backend) {
   CHECK(web_data_backend_);
   CHECK(GetAutofillTable());
+  scoped_observation_.Observe(web_data_backend_.get());
   LoadMetadata();
 }
 
@@ -138,7 +139,8 @@ AutofillWalletCredentialSyncBridge::ApplyIncrementalSyncChanges(
   // empty `entity_data`, where only the metadata needs to be updated. This
   // check helps check that and prevent any false positives.
   if (!entity_data.empty()) {
-    web_data_backend_->NotifyOfMultipleAutofillChanges();
+    web_data_backend_->NotifyOnAutofillChangedBySync(
+        syncer::AUTOFILL_WALLET_CREDENTIAL);
   }
   return change_processor()->GetError();
 }
@@ -188,13 +190,16 @@ void AutofillWalletCredentialSyncBridge::ApplyDisableSyncChanges(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // For this data type, we want to delete all the data (not just the metadata)
   // when the type is disabled!
+  // Note- This only clears the data from the local database and doesn't trigger
+  // a `REMOVE` call to the Chrome Sync server.
   if (AutofillTable* table = GetAutofillTable();
       !table || !table->ClearServerCvcs()) {
     change_processor()->ReportError(
         {FROM_HERE, "Failed to delete wallet credential data from the table."});
   }
   web_data_backend_->CommitChanges();
-  web_data_backend_->NotifyOfMultipleAutofillChanges();
+  web_data_backend_->NotifyOnAutofillChangedBySync(
+      syncer::AUTOFILL_WALLET_CREDENTIAL);
 }
 
 bool AutofillWalletCredentialSyncBridge::IsEntityDataValid(
@@ -202,6 +207,28 @@ bool AutofillWalletCredentialSyncBridge::IsEntityDataValid(
   return entity_data.specifics.has_autofill_wallet_credential() &&
          IsAutofillWalletCredentialDataSpecificsValid(
              entity_data.specifics.autofill_wallet_credential());
+}
+
+void AutofillWalletCredentialSyncBridge::CreditCardChanged(
+    const CreditCardChange& change) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // `ADD` and `UPDATE` changes for credit card can be ignored as there is no
+  // cvc field for the credit card sync entity.
+  if (change.type() != CreditCardChange::REMOVE) {
+    return;
+  }
+  std::unique_ptr<syncer::MetadataChangeList> metadata_change_list =
+      CreateMetadataChangeList();
+  // Delete the cvc from sync servers for server cards.
+  if (GetAutofillTable()->RemoveServerCvc(
+          change.data_model().instrument_id())) {
+    // We are extracting the `instrument_id` directly here instead of using
+    // `GetStorageKey`. This is to avoid additional processing of generating the
+    // entity data for the `change` and then extracting the `instrument_id`.
+    change_processor()->Delete(
+        base::NumberToString(change.data_model().instrument_id()),
+        metadata_change_list.get());
+  }
 }
 
 void AutofillWalletCredentialSyncBridge::ServerCvcChanged(
@@ -238,8 +265,6 @@ void AutofillWalletCredentialSyncBridge::ActOnLocalChange(
     case ServerCvcChange::REMOVE:
       change_processor()->Delete(change.key(), metadata_change_list.get());
       break;
-    case ServerCvcChange::EXPIRE:
-      NOTREACHED_NORETURN();
   }
 }
 

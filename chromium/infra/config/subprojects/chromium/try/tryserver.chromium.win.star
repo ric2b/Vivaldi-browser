@@ -23,6 +23,7 @@ try_.defaults.set(
     reclient_instance = reclient.instance.DEFAULT_UNTRUSTED,
     reclient_jobs = reclient.jobs.LOW_JOBS_FOR_CQ,
     service_account = try_.DEFAULT_SERVICE_ACCOUNT,
+    siso_configs = ["builder"],
     siso_enable_cloud_profiler = True,
     siso_enable_cloud_trace = True,
     siso_project = siso.project.DEFAULT_UNTRUSTED,
@@ -56,6 +57,14 @@ try_.builder(
         "pool_size": 20,
         "tests": "*",
     },
+)
+
+try_.builder(
+    name = "win-clobber-rel",
+    mirrors = [
+        "ci/win-archive-rel",
+    ],
+    contact_team_email = "chrome-desktop-engprod@google.com",
 )
 
 try_.builder(
@@ -131,10 +140,11 @@ try_.compilator_builder(
 )
 
 try_.builder(
-    name = "win_archive",
+    name = "win32-clobber-rel",
     mirrors = [
         "ci/win32-archive-rel",
     ],
+    contact_team_email = "chrome-desktop-engprod@google.com",
 )
 
 try_.builder(
@@ -161,6 +171,7 @@ try_.builder(
 
 try_.builder(
     name = "win_chromium_compile_rel_ng",
+    branch_selector = branches.selector.WINDOWS_BRANCHES,
     mirrors = [
         "ci/Win Builder",
     ],
@@ -195,13 +206,6 @@ try_.builder(
     os = os.WINDOWS_ANY,
     execution_timeout = 6 * time.hour,
     reclient_instance = None,
-)
-
-try_.builder(
-    name = "win_x64_archive",
-    mirrors = [
-        "ci/win-archive-rel",
-    ],
 )
 
 try_.builder(
@@ -341,9 +345,4 @@ try_.gpu.optional_tests_builder(
             cq.location_filter(exclude = True, path_regexp = ".*\\.md"),
         ],
     ),
-)
-
-try_.builder(
-    name = "win-cr23-rel",
-    mirrors = ["ci/win-cr23-rel"],
 )

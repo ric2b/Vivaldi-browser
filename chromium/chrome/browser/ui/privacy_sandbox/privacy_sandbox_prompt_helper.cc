@@ -11,10 +11,13 @@
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/search.h"
+#include "chrome/browser/search_engine_choice/search_engine_choice_service.h"
+#include "chrome/browser/search_engine_choice/search_engine_choice_service_factory.h"
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/privacy_sandbox/privacy_sandbox_prompt.h"
+#include "chrome/browser/ui/profiles/profile_customization_bubble_sync_controller.h"
 #include "chrome/common/extensions/chrome_manifest_url_handlers.h"
 #include "chrome/common/webui_url_constants.h"
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
@@ -149,12 +152,33 @@ void PrivacySandboxPromptHelper::DidFinishNavigation(
     }
   }
 
-  auto* browser =
-      chrome::FindBrowserWithWebContents(navigation_handle->GetWebContents());
+// `SearchEngineChoiceService` may need to suppress this dialog to avoid
+// dialog conflicts and too frequent promos.
+#if BUILDFLAG(ENABLE_SEARCH_ENGINE_CHOICE)
+  SearchEngineChoiceService* search_engine_choice_service =
+      SearchEngineChoiceServiceFactory::GetForProfile(profile());
+  if (search_engine_choice_service &&
+      !search_engine_choice_service->CanSuppressPrivacySandboxPromo()) {
+    base::UmaHistogramEnumeration(kPrivacySandboxPromptHelperEventHistogram,
+                                  SettingsPrivacySandboxPromptHelperEvent::
+                                      kSearchEngineChoiceDialogShown);
+    return;
+  }
+#endif
 
-  // If a sign-in dialog is being currently displayed, the prompt should
-  // not be shown to avoid conflict.
-  if (browser->signin_view_controller()->ShowsModalDialog()) {
+  auto* browser =
+      chrome::FindBrowserWithTab(navigation_handle->GetWebContents());
+
+  // If a sign-in dialog is being currently displayed or is about to be
+  // displayed, the prompt should not be shown to avoid conflict.
+  bool signin_dialog_showing =
+      browser->signin_view_controller()->ShowsModalDialog();
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
+  signin_dialog_showing =
+      signin_dialog_showing ||
+      IsProfileCustomizationBubbleSyncControllerRunning(browser);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+  if (signin_dialog_showing) {
     base::UmaHistogramEnumeration(
         kPrivacySandboxPromptHelperEventHistogram,
         SettingsPrivacySandboxPromptHelperEvent::kSigninDialogShown);

@@ -14,6 +14,8 @@
 namespace blink {
 
 class CanvasContextCreationAttributesCore;
+class ExceptionState;
+class EXTBlendFuncExtended;
 class EXTClipControl;
 class EXTColorBufferFloat;
 class EXTColorBufferHalfFloat;
@@ -45,7 +47,6 @@ class WebGLProvokingVertex;
 class WebGLRenderSharedExponent;
 class WebGLShaderPixelLocalStorage;
 class WebGLStencilTexturing;
-class WebGLVideoTexture;
 
 class WebGL2RenderingContext : public WebGL2RenderingContextBase {
   DEFINE_WRAPPERTYPEINFO();
@@ -76,7 +77,7 @@ class WebGL2RenderingContext : public WebGL2RenderingContextBase {
       const Platform::GraphicsInfo&,
       const CanvasContextCreationAttributesCore& requested_attributes);
 
-  ImageBitmap* TransferToImageBitmap(ScriptState*) final;
+  ImageBitmap* TransferToImageBitmap(ScriptState*, ExceptionState&) final;
   String ContextName() const override { return "WebGL2RenderingContext"; }
   void RegisterContextExtensions() override;
   V8RenderingContext* AsV8RenderingContext() final;
@@ -85,6 +86,7 @@ class WebGL2RenderingContext : public WebGL2RenderingContextBase {
   void Trace(Visitor*) const override;
 
  protected:
+  Member<EXTBlendFuncExtended> ext_blend_func_extended_;
   Member<EXTClipControl> ext_clip_control_;
   Member<EXTColorBufferFloat> ext_color_buffer_float_;
   Member<EXTColorBufferHalfFloat> ext_color_buffer_half_float_;
@@ -128,7 +130,6 @@ class WebGL2RenderingContext : public WebGL2RenderingContextBase {
   Member<WebGLRenderSharedExponent> webgl_render_shared_exponent_;
   Member<WebGLShaderPixelLocalStorage> webgl_shader_pixel_local_storage_;
   Member<WebGLStencilTexturing> webgl_stencil_texturing_;
-  Member<WebGLVideoTexture> webgl_video_texture_;
 };
 
 }  // namespace blink

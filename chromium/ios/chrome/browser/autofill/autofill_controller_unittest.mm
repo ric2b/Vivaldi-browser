@@ -20,7 +20,7 @@
 #import "components/autofill/core/browser/metrics/autofill_metrics.h"
 #import "components/autofill/core/browser/personal_data_manager.h"
 #import "components/autofill/core/browser/test_autofill_manager_waiter.h"
-#import "components/autofill/core/browser/webdata/autofill_entry.h"
+#import "components/autofill/core/browser/webdata/autocomplete_entry.h"
 #import "components/autofill/core/common/autofill_clock.h"
 #import "components/autofill/core/common/autofill_features.h"
 #import "components/autofill/ios/browser/autofill_agent.h"
@@ -39,14 +39,14 @@
 #import "ios/chrome/browser/autofill/form_suggestion_controller.h"
 #import "ios/chrome/browser/autofill/personal_data_manager_factory.h"
 #import "ios/chrome/browser/infobars/infobar_manager_impl.h"
-#import "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
-#import "ios/chrome/browser/passwords/password_controller.h"
+#import "ios/chrome/browser/passwords/model/ios_chrome_profile_password_store_factory.h"
+#import "ios/chrome/browser/passwords/model/password_controller.h"
 #import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/ui/autofill/chrome_autofill_client_ios.h"
 #import "ios/chrome/browser/ui/autofill/form_input_accessory/form_input_accessory_mediator.h"
 #import "ios/chrome/browser/ui/settings/personal_data_manager_finished_profile_tasks_waiter.h"
 #import "ios/chrome/browser/web/chrome_web_client.h"
-#import "ios/chrome/browser/webdata_services/web_data_service_factory.h"
+#import "ios/chrome/browser/webdata_services/model/web_data_service_factory.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/web/public/js_messaging/web_frame.h"
 #import "ios/web/public/js_messaging/web_frames_manager.h"
@@ -165,9 +165,9 @@ void CheckField(const FormStructure& form,
   FAIL() << "Missing field " << name;
 }
 
-AutofillEntry CreateAutofillEntry(const std::u16string& value) {
+AutocompleteEntry CreateAutocompleteEntry(const std::u16string& value) {
   const base::Time kNow = AutofillClock::Now();
-  return AutofillEntry(AutofillKey(u"Name", value), kNow, kNow);
+  return AutocompleteEntry(AutocompleteKey(u"Name", value), kNow, kNow);
 }
 
 // Forces rendering of a UIView. This is used in tests to make sure that UIKit
@@ -195,10 +195,11 @@ class TestConsumer : public WebDataServiceConsumer {
       WebDataServiceBase::Handle handle,
       std::unique_ptr<WDTypedResult> result) override {
     DCHECK_EQ(result->GetType(), AUTOFILL_VALUE_RESULT);
-    result_ = static_cast<WDResult<std::vector<AutofillEntry>>*>(result.get())
-                  ->GetValue();
+    result_ =
+        static_cast<WDResult<std::vector<AutocompleteEntry>>*>(result.get())
+            ->GetValue();
   }
-  std::vector<AutofillEntry> result_;
+  std::vector<AutocompleteEntry> result_;
 };
 
 // Text fixture to test autofill.
@@ -207,7 +208,7 @@ class AutofillControllerTest : public PlatformTest {
   AutofillControllerTest() : web_client_(std::make_unique<ChromeWebClient>()) {
     TestChromeBrowserState::Builder builder;
     builder.AddTestingFactory(
-        IOSChromePasswordStoreFactory::GetInstance(),
+        IOSChromeProfilePasswordStoreFactory::GetInstance(),
         base::BindRepeating(&password_manager::BuildPasswordStoreInterface<
                             web::BrowserState,
                             password_manager::MockPasswordStoreInterface>));
@@ -360,7 +361,7 @@ void AutofillControllerTest::SetUp() {
   [accessory_mediator_ injectWebState:web_state()];
   [accessory_mediator_ injectProvider:suggestion_controller_];
 
-  histogram_tester_.reset(new base::HistogramTester());
+  histogram_tester_ = std::make_unique<base::HistogramTester>();
 }
 
 void AutofillControllerTest::TearDown() {
@@ -635,9 +636,9 @@ TEST_F(AutofillControllerTest, KeyValueImport) {
           browser_state_.get(), ServiceAccessType::EXPLICIT_ACCESS);
   TestConsumer consumer;
   const int limit = 1;
-  consumer.result_ = {CreateAutofillEntry(u"Should"),
-                      CreateAutofillEntry(u"get"),
-                      CreateAutofillEntry(u"overwritten")};
+  consumer.result_ = {CreateAutocompleteEntry(u"Should"),
+                      CreateAutocompleteEntry(u"get"),
+                      CreateAutocompleteEntry(u"overwritten")};
   web_data_service->GetFormValuesForElementName(u"greeting", std::u16string(),
                                                 limit, &consumer);
   base::ThreadPoolInstance::Get()->FlushForTesting();
@@ -801,13 +802,13 @@ TEST_F(AutofillControllerTest, CreditCardImport) {
   infobars::InfoBarManager* infobar_manager =
       InfoBarManagerImpl::FromWebState(web_state());
   WaitForCondition(^bool() {
-    return infobar_manager->infobar_count();
+    return infobar_manager->infobars().size();
   });
   ExpectMetric("Autofill.CreditCardInfoBar.Local",
                AutofillMetrics::INFOBAR_SHOWN);
-  ASSERT_EQ(1U, infobar_manager->infobar_count());
+  ASSERT_EQ(1U, infobar_manager->infobars().size());
   infobars::InfoBarDelegate* infobar =
-      infobar_manager->infobar_at(0)->delegate();
+      infobar_manager->infobars()[0]->delegate();
   ConfirmInfoBarDelegate* confirm_infobar = infobar->AsConfirmInfoBarDelegate();
 
   // This call cause a modification of the PersonalDataManager, so wait until

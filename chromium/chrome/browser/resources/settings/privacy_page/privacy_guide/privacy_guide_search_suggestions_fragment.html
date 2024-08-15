@@ -18,8 +18,8 @@
         on-change="onSearchSuggestionsToggleClick_">
     </settings-toggle-button>
   </div>
-  <div class="description-wrapper two-column">
-    <div class="description-column description-column-first">
+  <div class="settings-columned-section">
+    <div class="column">
       <div class="description-header">
         $i18n{privacyGuideFeatureDescriptionHeader}
       </div>
@@ -31,7 +31,7 @@
         </privacy-guide-description-item>
       </div>
     </div>
-    <div class="description-column">
+    <div class="column">
       <div class="description-header">$i18n{privacyGuideThingsToConsider}</div>
       <div role="list">
         <privacy-guide-description-item
@@ -43,6 +43,11 @@
             role="listitem"
             icon="settings20:link"
             label="$i18n{privacyGuideSearchSuggestionsPrivacyDescription2}">
+        </privacy-guide-description-item>
+        <privacy-guide-description-item
+            role="listitem"
+            icon="settings20:lightbulb"
+            label="$i18n{privacyGuideSearchSuggestionsPrivacyDescription3}">
         </privacy-guide-description-item>
       </div>
     </div>

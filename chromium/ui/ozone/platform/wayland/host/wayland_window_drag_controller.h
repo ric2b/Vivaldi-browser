@@ -110,6 +110,8 @@ class WaylandWindowDragController : public WaylandDataDevice::DragDelegate,
 
   absl::optional<mojom::DragEventSource> drag_source() { return drag_source_; }
 
+  const gfx::Vector2d& drag_offset_for_testing() const { return drag_offset_; }
+
  private:
   class ExtendedDragSource;
 
@@ -136,8 +138,9 @@ class WaylandWindowDragController : public WaylandDataDevice::DragDelegate,
   const WaylandWindow* GetDragTarget() const override;
 
   // WaylandDataSource::Delegate
-  void OnDataSourceFinish(bool completed) override;
-  void OnDataSourceSend(const std::string& mime_type,
+  void OnDataSourceFinish(WaylandDataSource* source, bool completed) override;
+  void OnDataSourceSend(WaylandDataSource* source,
+                        const std::string& mime_type,
                         std::string* contents) override;
 
   // PlatformEventDispatcher

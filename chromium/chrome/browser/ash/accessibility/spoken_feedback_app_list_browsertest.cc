@@ -73,11 +73,14 @@ class TestSearchProvider : public app_list::SearchProvider {
   TestSearchProvider(const std::string& prefix,
                      ChromeSearchResult::DisplayType display_type,
                      ChromeSearchResult::Category category,
-                     ChromeSearchResult::ResultType result_type)
+                     ChromeSearchResult::ResultType result_type,
+                     ash::AppListSearchControlCategory control_category)
       : prefix_(prefix),
         display_type_(display_type),
         category_(category),
-        result_type_(result_type) {}
+        result_type_(result_type) {
+    set_control_category(control_category);
+  }
 
   TestSearchProvider(const TestSearchProvider&) = delete;
   TestSearchProvider& operator=(const TestSearchProvider&) = delete;
@@ -143,7 +146,8 @@ void InitializeTestSearchProviders(
       std::make_unique<TestSearchProvider>(
           "app", ChromeSearchResult::DisplayType::kList,
           ChromeSearchResult::Category::kApps,
-          ChromeSearchResult::ResultType::kInstalledApp);
+          ChromeSearchResult::ResultType::kInstalledApp,
+          ash::AppListSearchControlCategory::kApps);
   *apps_provider_ptr = apps_provider.get();
   search_controller->AddProvider(std::move(apps_provider));
 
@@ -151,7 +155,8 @@ void InitializeTestSearchProviders(
       std::make_unique<TestSearchProvider>(
           "item", ChromeSearchResult::DisplayType::kList,
           ChromeSearchResult::Category::kWeb,
-          ChromeSearchResult::ResultType::kOmnibox);
+          ChromeSearchResult::ResultType::kOmnibox,
+          ash::AppListSearchControlCategory::kWeb);
   *web_provider_ptr = web_provider.get();
   search_controller->AddProvider(std::move(web_provider));
 
@@ -159,7 +164,8 @@ void InitializeTestSearchProviders(
       std::make_unique<TestSearchProvider>(
           "image", ChromeSearchResult::DisplayType::kImage,
           ChromeSearchResult::Category::kFiles,
-          ChromeSearchResult::ResultType::kImageSearch);
+          ChromeSearchResult::ResultType::kImageSearch,
+          ash::AppListSearchControlCategory::kImages);
   *image_provider_ptr = image_provider.get();
   search_controller->AddProvider(std::move(image_provider));
 }
@@ -186,8 +192,10 @@ class SpokenFeedbackAppListBaseTest : public LoggedInSpokenFeedbackTest {
     // Disable the app list nudge in the spoken feedback app list test.
     AppListTestApi().DisableAppListNudge(true);
 
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kProductivityLauncherImageSearch);
+    scoped_feature_list_.InitWithFeatures(
+        {features::kProductivityLauncherImageSearch,
+         features::kLauncherSearchControl},
+        {});
 
     LoggedInSpokenFeedbackTest::SetUp();
   }
@@ -271,7 +279,7 @@ class SpokenFeedbackAppListBaseTest : public LoggedInSpokenFeedbackTest {
   void ReadWindowTitle() {
     extensions::browsertest_util::ExecuteScriptInBackgroundPageNoWait(
         browser()->profile(), extension_misc::kChromeVoxExtensionId,
-        "import('/chromevox/background/"
+        "import('/chromevox/background/input/"
         "command_handler_interface.js').then(module => "
         "module.CommandHandlerInterface.instance.onCommand('readCurrentTitle'))"
         ";");
@@ -776,6 +784,9 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackAppListTest,
 }
 
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackAppListSearchTest, LauncherSearch) {
+  // Disable search notifier to simplify the test.
+  AppListTestApi().DisableSearchNotifier(true);
+
   EnableChromeVox();
   ShowAppList();
 
@@ -837,9 +848,17 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackAppListSearchTest, LauncherSearch) {
     }
   }
 
-  // Cycle focus to the close button.
+  // Cycle focus to the filter button.
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_DOWN); });
+  sm_.ExpectSpeech("Toggle search result categories");
+
+  // Move focus to the close button.
   sm_.Call([this]() { SendKeyPress(ui::VKEY_DOWN); });
   sm_.ExpectSpeech("Clear searchbox text");
+
+  // Move focus back to the filter button.
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_UP); });
+  sm_.ExpectSpeech("Toggle search result categories");
 
   // Go back to the last result.
   sm_.Call([this]() { SendKeyPress(ui::VKEY_UP); });
@@ -968,6 +987,89 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackAppListSearchTest, VocalizeResultCount) {
 
   sm_.ExpectSpeech("A");
   sm_.ExpectSpeech("Displaying 5 results for ga");
+
+  sm_.Replay();
+}
+
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackAppListSearchTest,
+                       SearchNotifierAnnouncement) {
+  EnableChromeVox();
+  ShowAppList();
+
+  sm_.ExpectSpeechPattern("Search your *");
+  sm_.ExpectSpeech("Edit text");
+
+  sm_.Call([this]() {
+    apps_provider_->set_best_match_count(2);
+    apps_provider_->set_count(3);
+    web_provider_->set_count(4);
+    SendKeyPress(ui::VKEY_G);
+  });
+
+  // Announce that there is a image search notifier.
+  sm_.ExpectSpeech("G");
+  sm_.ExpectSpeech("Displaying 8 results for g");
+  sm_.ExpectSpeech("Find your images by the content");
+  sm_.ExpectSpeech("Press shift plus tab to learn more");
+
+  // Verify the notifier announcement on focus.
+  sm_.Call([this]() { SendKeyPressWithShift(ui::VKEY_TAB); });
+  sm_.ExpectSpeech("Continue");
+  sm_.ExpectSpeechPattern("Try searching *");
+
+  sm_.Replay();
+}
+
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackAppListSearchTest, SearchCategoryFilter) {
+  EnableChromeVox();
+  ShowAppList();
+
+  sm_.ExpectSpeechPattern("Search your *");
+  sm_.ExpectSpeech("Edit text");
+
+  sm_.Call([this]() {
+    apps_provider_->set_best_match_count(2);
+    apps_provider_->set_count(3);
+    web_provider_->set_count(4);
+    SendKeyPress(ui::VKEY_G);
+  });
+
+  sm_.ExpectSpeech("G");
+  sm_.ExpectSpeech("Displaying 8 results for g");
+
+  // Move focus to the search notifier.
+  sm_.Call([this]() { SendKeyPressWithShift(ui::VKEY_TAB); });
+  sm_.ExpectSpeech("Continue");
+  sm_.ExpectSpeechPattern("Try searching *");
+
+  // Move focus to the close button.
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_UP); });
+  sm_.ExpectSpeech("Clear searchbox text");
+
+  // Move focus to the filter button.
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_UP); });
+  sm_.ExpectSpeech("Toggle search result categories");
+
+  // Open the filter menu.
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_RETURN); });
+  sm_.ExpectSpeech("menu opened");
+
+  // Move focus to the category options.
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_DOWN); });
+  sm_.ExpectSpeech("Apps");
+  sm_.ExpectSpeech("Checked");
+  sm_.ExpectSpeech("Your installed apps");
+
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_DOWN); });
+  sm_.ExpectSpeech("Websites");
+  sm_.ExpectSpeech("Checked");
+  sm_.ExpectSpeech("Websites including pages you've visited and open pages");
+
+  // Toggle the websites search category.
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_RETURN); });
+  sm_.ExpectSpeech("Websites");
+  sm_.ExpectSpeech("Not checked");
+  sm_.ExpectSpeech("Websites including pages you've visited and open pages");
 
   sm_.Replay();
 }

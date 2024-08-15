@@ -269,6 +269,12 @@ const char kEnableExtensionActivityLogTesting[] =
 const char kEnableHangoutServicesExtensionForTesting[] =
     "enable-hangout-services-extension-for-testing";
 
+#if BUILDFLAG(IS_CHROMEOS)
+// Makes Lacros use a location shared across users for browser components.
+const char kEnableLacrosSharedComponentsDir[] =
+    "enable-lacros-shared-components-dir";
+#endif
+
 // Allows NaCl to run in all contexts (such as open web). Note that
 // kDisableNaCl disables NaCl in all contexts and takes precedence.
 const char kEnableNaCl[] = "enable-nacl";
@@ -599,10 +605,6 @@ const char kTestName[] = "test-name";
 // policy is set.
 const char kTrustedDownloadSources[] = "trusted-download-sources";
 
-// Experimental. Shows a dialog asking the user to try chrome. This flag is to
-// be used only by the upgrade process.
-const char kTryChromeAgain[] = "try-chrome-again";
-
 // Overrides per-origin quota settings to unlimited storage for any
 // apps/origins.  This should be used only for testing purpose.
 const char kUnlimitedStorage[] = "unlimited-storage";
@@ -790,6 +792,12 @@ const char kHideIcons[] = "hide-icons";
 // Whether or not the browser should warn if the profile is on a network share.
 // This flag is only relevant for Windows currently.
 const char kNoNetworkProfileWarning[] = "no-network-profile-warning";
+
+// Whether this process should PrefetchVirtualMemory on the contents of
+// Chrome.dll. This warms up the pages in memory to speed up startup but might
+// not be required in later renderers and/or GPU. For experiment info see
+// crbug.com/1350257.
+const char kNoPreReadMainDll[] = "no-pre-read-main-dll";
 
 // Used in combination with kNotificationLaunchId to specify the inline reply
 // entered in the toast in the Windows Action Center.

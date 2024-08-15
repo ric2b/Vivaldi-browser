@@ -5,45 +5,86 @@
 #ifndef CHROME_BROWSER_PICTURE_IN_PICTURE_AUTO_PIP_SETTING_OVERLAY_VIEW_H_
 #define CHROME_BROWSER_PICTURE_IN_PICTURE_AUTO_PIP_SETTING_OVERLAY_VIEW_H_
 
+#include "base/check_is_test.h"
 #include "base/functional/callback.h"
+#include "base/timer/timer.h"
+#include "chrome/browser/picture_in_picture/auto_pip_setting_view.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/views/view.h"
+#include "ui/views/view_targeter_delegate.h"
+#include "ui/views/widget/widget_observer.h"
 
 // Creates and manages the content setting overlay for autopip.  This is used
 // both for video-only and document pip on desktop.  It is not used on Android.
-class AutoPipSettingOverlayView : public views::View {
+class AutoPipSettingOverlayView : public views::View,
+                                  public views::ViewTargeterDelegate,
+                                  public views::WidgetObserver {
  public:
-  enum class UiResult {
-    // User selected 'Allow'.
-    kAllow,
+  METADATA_HEADER(AutoPipSettingOverlayView);
 
-    // User selected 'Block'.
-    kBlock,
-
-    // UI was dismissed without the user selecting anything.
-    // TODO(crbug.com/1465527): Call back with `kDismissed` sometimes.
-    kDismissed,
+  // Represents the Picture-in-Picture window type. Used by the |ShowBubble|
+  // method to properly display the bubble according to the PipWindowType.
+  enum class PipWindowType {
+    kVideoPip,
+    kDocumentPip,
   };
-  using ResultCb = base::OnceCallback<void(UiResult result)>;
 
-  explicit AutoPipSettingOverlayView(ResultCb result_cb);
+  using ResultCb =
+      base::OnceCallback<void(AutoPipSettingView::UiResult result)>;
+
+  explicit AutoPipSettingOverlayView(
+      ResultCb result_cb,
+      const GURL& origin,
+      const gfx::Rect& browser_view_overridden_bounds,
+      views::View* anchor_view,
+      views::BubbleBorder::Arrow arrow);
   ~AutoPipSettingOverlayView() override;
 
   AutoPipSettingOverlayView(const AutoPipSettingOverlayView&) = delete;
   AutoPipSettingOverlayView(AutoPipSettingOverlayView&&) = delete;
 
-  const views::View* get_block_button_for_testing() const {
-    return block_button_;
+  // Create and show the AutoPipSettingView bubble. The parent parameter will be
+  // set as the bubble's parent window.
+  virtual void ShowBubble(gfx::NativeView parent,
+                          PipWindowType pip_window_type);
+
+  views::View* get_background_for_testing() const {
+    CHECK_IS_TEST();
+    return background_;
   }
-  const views::View* get_allow_button_for_testing() const {
-    return allow_button_;
-  }
+
+  // Returns true if the bubble wants events at this point.  In practice, this
+  // means "is over a button".
+  virtual bool WantsEvent(const gfx::Point& point_in_screen);
+
+  // Return the size of the bubble.  This does not include the scrim.
+  virtual gfx::Size GetBubbleSize() const;
+
+  // views::WidgetObserver
+  void OnWidgetDestroying(views::Widget*) override;
+
+  AutoPipSettingView* get_view_for_testing() { return auto_pip_setting_view_; }
 
  private:
-  void OnButtonPressed(UiResult result);
+  // We temporarily own the setting view during init, but usually this is null.
+  // Keep it separate so one doesn't accidentally use it.  It's likely that you
+  // really want `auto_pip_setting_view_`, outside this struct.
+  struct {
+    std::unique_ptr<AutoPipSettingView> auto_pip_setting_view_;
+  } init_;
 
-  ResultCb result_cb_;
-  raw_ptr<views::View> block_button_ = nullptr;
-  raw_ptr<views::View> allow_button_ = nullptr;
+  raw_ptr<views::View> background_ = nullptr;
+  raw_ptr<AutoPipSettingView> auto_pip_setting_view_ = nullptr;
+  raw_ptr<views::Widget> widget_ = nullptr;
+  gfx::Size bubble_size_;
+  std::unique_ptr<base::OneShotTimer> show_timer_;
+  base::WeakPtrFactory<AutoPipSettingOverlayView> weak_factory_{this};
+
+  // Callback used to hide the semi-opaque background layer.
+  void OnHideView();
+
+  // Perform a linear fade in of |layer|.
+  void FadeInLayer(ui::Layer* layer);
 };
 
 #endif  // CHROME_BROWSER_PICTURE_IN_PICTURE_AUTO_PIP_SETTING_OVERLAY_VIEW_H_

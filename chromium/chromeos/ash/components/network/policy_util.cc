@@ -37,6 +37,10 @@ const char kActivationCodePattern[] = R"((^LPA\:1\$[a-zA-Z0-9.\-+*\/:%]*\$))";
 
 namespace {
 
+// When this is true, ephemeral network policies have been enabled by device
+// policy.
+bool g_ephemeral_network_policies_enabled_by_policy = false;
+
 std::string GetString(const base::Value::Dict& dict, const char* key) {
   const std::string* value = dict.FindString(key);
   return value ? *value : std::string();
@@ -154,6 +158,16 @@ void ApplyGlobalAutoconnectPolicy(NetworkProfile::Type profile_type,
   auto_connect_dictionary->Set(policy_source, false);
   auto_connect_dictionary->Set(::onc::kAugmentationEffectiveSetting,
                                policy_source);
+}
+
+bool HasAnyRecommendedField(const base::Value::List& onc_list) {
+  for (const auto& entry : onc_list) {
+    if (entry.is_dict() &&
+        ::ash::policy_util::HasAnyRecommendedField(entry.GetDict())) {
+      return true;
+    }
+  }
+  return false;
 }
 
 }  // namespace
@@ -484,6 +498,22 @@ bool IsCellularPolicy(const base::Value::Dict& onc_config) {
   return type && *type == ::onc::network_type::kCellular;
 }
 
+bool HasAnyRecommendedField(const base::Value::Dict& onc_config) {
+  for (const auto [field_name, onc_value] : onc_config) {
+    if (field_name == ::onc::kRecommended && onc_value.is_list() &&
+        !onc_value.GetList().empty()) {
+      return true;
+    }
+    if (onc_value.is_dict() && HasAnyRecommendedField(onc_value.GetDict())) {
+      return true;
+    }
+    if (onc_value.is_list() && HasAnyRecommendedField(onc_value.GetList())) {
+      return true;
+    }
+  }
+  return false;
+}
+
 const std::string* GetIccidFromONC(const base::Value::Dict& onc_config) {
   if (!IsCellularPolicy(onc_config))
     return nullptr;
@@ -545,6 +575,18 @@ absl::optional<SmdxActivationCode> GetSmdxActivationCodeFromONC(
                  << "configuration. Expected either an SM-DP+ activation code "
                  << "or an SM-DS activation code but got neither.";
   return absl::nullopt;
+}
+
+void SetEphemeralNetworkPoliciesEnabled() {
+  g_ephemeral_network_policies_enabled_by_policy = true;
+}
+
+void ResetEphemeralNetworkPoliciesEnabledForTesting() {
+  g_ephemeral_network_policies_enabled_by_policy = false;
+}
+
+bool AreEphemeralNetworkPoliciesEnabled() {
+  return g_ephemeral_network_policies_enabled_by_policy;
 }
 
 }  // namespace ash::policy_util

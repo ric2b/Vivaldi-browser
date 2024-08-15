@@ -18,6 +18,7 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/ui/autofill/autofill_context_menu_manager.h"
+#include "components/compose/buildflags.h"
 #include "components/custom_handlers/protocol_handler_registry.h"
 #include "components/lens/buildflags.h"
 #include "components/renderer_context_menu/context_menu_content_type.h"
@@ -36,6 +37,10 @@
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/vector2d.h"
+
+#if BUILDFLAG(ENABLE_COMPOSE)
+#include "chrome/browser/compose/chrome_compose_client.h"
+#endif
 
 #if BUILDFLAG(ENABLE_LENS_DESKTOP_GOOGLE_BRANDED_FEATURES)
 #include "chrome/browser/lens/region_search/lens_region_search_controller.h"
@@ -135,7 +140,7 @@ class RenderViewContextMenu
   void ExecuteCommand(int command_id, int event_flags) override;
   void AddSpellCheckServiceItem(bool is_checked) override;
   void AddAccessibilityLabelsServiceItem(bool is_checked) override;
-  void AddPdfOcrMenuItem(bool is_always_active) override;
+  void AddPdfOcrMenuItem() override;
 
   // Registers a one-time callback that will be called the next time a context
   // menu is shown.
@@ -198,12 +203,19 @@ class RenderViewContextMenu
   virtual const policy::DlpRulesManager* GetDlpRulesManager() const;
 #endif
 
+#if BUILDFLAG(ENABLE_COMPOSE)
+  virtual ChromeComposeClient* GetChromeComposeClient() const;
+#endif
+
   // RenderViewContextMenuBase:
   // If called in Ash when Lacros is the only browser, this open the URL in
   // Lacros. In that case, only the |url| and some values of |disposition| are
-  // respected - other parameters are ignored.
+  // respected - other parameters are ignored. The |initiator| parameter is the
+  // origin that supplied the URL being navigated to; it may be an opaque origin
+  // with no precursor if the URL came from the browser itself or the user.
   void OpenURLWithExtraHeaders(const GURL& url,
                                const GURL& referring_url,
+                               const url::Origin& initiator,
                                WindowOpenDisposition disposition,
                                ui::PageTransition transition,
                                const std::string& extra_headers,
@@ -279,7 +291,7 @@ class RenderViewContextMenu
   void AppendPrintItem();
   void AppendPartialTranslateItem();
   void AppendMediaRouterItem();
-  void AppendReadAnythingItem();
+  void AppendReadingModeItem();
   void AppendRotationItems();
   void AppendSpellingAndSearchSuggestionItems();
   void AppendOtherEditableItems();
@@ -361,6 +373,7 @@ class RenderViewContextMenu
   void ExecLoadImage();
   void ExecLoop();
   void ExecControls();
+  void ExecSaveVideoFrameAs();
   void ExecCopyVideoFrame();
   void ExecLiveCaption();
   void ExecRotateCW();
@@ -396,6 +409,10 @@ class RenderViewContextMenu
   // checks multiple criteria, e.g. whether translation is disabled by a policy
   // or whether the current page can be translated.
   bool CanTranslate(bool menu_logging);
+
+  // Under the correct conditions, issues a preconnection to the Lens URL and
+  // warms up a renderer process.
+  void MaybePrepareForLensQuery();
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   // Does not execute "Save link as" if the URL is blocked by the URL filter.

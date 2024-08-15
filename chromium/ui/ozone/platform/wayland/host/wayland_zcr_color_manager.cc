@@ -22,7 +22,7 @@ namespace ui {
 
 namespace {
 constexpr uint32_t kMinVersion = 1;
-constexpr uint32_t kMaxVersion = 5;
+constexpr uint32_t kMaxVersion = 6;
 }  // namespace
 
 // static
@@ -51,6 +51,7 @@ void WaylandZcrColorManager::Instantiate(WaylandConnection* connection,
   if (connection->wayland_output_manager())
     connection->wayland_output_manager()->InitializeAllColorManagementOutputs();
 
+  connection->zcr_color_manager_->version_ = std::min(version, kMaxVersion);
   connection->zcr_color_manager_->PreloadCommonColorSpaces();
 }
 

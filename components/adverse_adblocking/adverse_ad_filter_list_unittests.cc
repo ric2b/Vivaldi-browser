@@ -8,7 +8,7 @@
 #include "app/vivaldi_apptools.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/password_manager/account_password_store_factory.h"
-#include "chrome/browser/password_manager/password_store_factory.h"
+#include "chrome/browser/password_manager/profile_password_store_factory.h"
 #include "chrome/test/base/testing_browser_process.h"
 
 #include "components/adverse_adblocking/adverse_ad_filter_list_factory.h"
@@ -22,7 +22,7 @@
 #include "content/public/common/content_client.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "extraparts/vivaldi_content_browser_client.h"
-#include "prefs/vivaldi_browser_prefs.h"
+#include "prefs/vivaldi_local_state_prefs.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -36,7 +36,7 @@ class VivaldiSubresourceFilterTest : public AdverseAdFilterTestHarness {
     ChromeContentBrowserClient::RegisterLocalStatePrefs(
         local_state_.registry());
     safe_browsing::RegisterLocalStatePrefs(local_state_.registry());
-    vivaldi::RegisterLocalState(local_state_.registry());
+    vivaldi::RegisterLocalStatePrefs(local_state_.registry());
     TestingBrowserProcess::GetGlobal()->SetLocalState(&local_state_);
     AdverseAdFilterTestHarness::SetUp();
 
@@ -45,7 +45,7 @@ class VivaldiSubresourceFilterTest : public AdverseAdFilterTestHarness {
     browser_content_client_.reset(new VivaldiContentBrowserClient);
     content::SetBrowserClientForTesting(browser_content_client_.get());
 
-    PasswordStoreFactory::GetInstance()->SetTestingFactory(
+    ProfilePasswordStoreFactory::GetInstance()->SetTestingFactory(
         profile(), base::BindRepeating(&::password_manager::BuildPasswordStore<
                                        content::BrowserContext,
                                        ::password_manager::TestPasswordStore>));

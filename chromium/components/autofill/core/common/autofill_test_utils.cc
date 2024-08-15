@@ -97,6 +97,14 @@ RemoteFrameToken MakeRemoteFrameToken(RandomizeFrame randomize) {
   }
 }
 
+FormData CreateFormDataForFrame(FormData form, LocalFrameToken frame_token) {
+  form.host_frame = frame_token;
+  for (FormFieldData& field : form.fields) {
+    field.host_frame = frame_token;
+  }
+  return form;
+}
+
 FormData WithoutValues(FormData form) {
   for (FormFieldData& field : form.fields) {
     field.value.clear();
@@ -129,7 +137,7 @@ FormFieldData WithoutUnserializedData(FormFieldData field) {
 FormFieldData CreateTestFormField(std::string_view label,
                                   std::string_view name,
                                   std::string_view value,
-                                  std::string_view type) {
+                                  FormControlType type) {
   FormFieldData field;
   field.host_frame = MakeLocalFrameToken();
   field.unique_renderer_id = MakeFieldRendererId();
@@ -144,7 +152,7 @@ FormFieldData CreateTestFormField(std::string_view label,
 FormFieldData CreateTestFormField(std::string_view label,
                                   std::string_view name,
                                   std::string_view value,
-                                  std::string_view type,
+                                  FormControlType type,
                                   std::string_view autocomplete) {
   FormFieldData field = CreateTestFormField(label, name, value, type);
   field.autocomplete_attribute = autocomplete;
@@ -155,7 +163,7 @@ FormFieldData CreateTestFormField(std::string_view label,
 FormFieldData CreateTestFormField(std::string_view label,
                                   std::string_view name,
                                   std::string_view value,
-                                  std::string_view type,
+                                  FormControlType type,
                                   std::string_view autocomplete,
                                   uint64_t max_length) {
   FormFieldData field = CreateTestFormField(label, name, value, type);
@@ -182,9 +190,9 @@ FormFieldData CreateTestSelectField(std::string_view label,
                                     std::string_view autocomplete,
                                     const std::vector<const char*>& values,
                                     const std::vector<const char*>& contents) {
-  return CreateTestSelectOrSelectListField(label, name, value, autocomplete,
-                                           values, contents,
-                                           /*field_type=*/"select-one");
+  return CreateTestSelectOrSelectListField(
+      label, name, value, autocomplete, values, contents,
+      /*type=*/FormControlType::kSelectOne);
 }
 
 FormFieldData CreateTestSelectField(const std::vector<const char*>& values) {
@@ -200,9 +208,10 @@ FormFieldData CreateTestSelectOrSelectListField(
     std::string_view autocomplete,
     const std::vector<const char*>& values,
     const std::vector<const char*>& contents,
-    std::string_view field_type) {
-  CHECK(field_type == "select-one" || field_type == "selectlist");
-  FormFieldData field = CreateTestFormField(label, name, value, field_type);
+    FormControlType type) {
+  CHECK(type == FormControlType::kSelectOne ||
+        type == FormControlType::kSelectList);
+  FormFieldData field = CreateTestFormField(label, name, value, type);
   field.autocomplete_attribute = autocomplete;
   field.parsed_autocomplete = ParseAutocompleteAttribute(autocomplete);
 
@@ -223,17 +232,14 @@ FormFieldData CreateTestDatalistField(std::string_view label,
                                       const std::vector<const char*>& values,
                                       const std::vector<const char*>& labels) {
   // Fill the base attributes.
-  FormFieldData field = CreateTestFormField(label, name, value, "text");
+  FormFieldData field =
+      CreateTestFormField(label, name, value, FormControlType::kInputText);
 
-  field.datalist_values.reserve(values.size());
-  for (const auto* x : values) {
-    field.datalist_values.emplace_back(base::UTF8ToUTF16(x));
+  field.datalist_options.reserve(std::min(values.size(), labels.size()));
+  for (size_t i = 0; i < std::min(values.size(), labels.size()); ++i) {
+    field.datalist_options.push_back({.value = base::UTF8ToUTF16(values[i]),
+                                      .content = base::UTF8ToUTF16(labels[i])});
   }
-  field.datalist_labels.reserve(labels.size());
-  for (const auto* x : values) {
-    field.datalist_labels.emplace_back(base::UTF8ToUTF16(x));
-  }
-
   return field;
 }
 
@@ -245,10 +251,14 @@ FormData CreateTestPersonalInformationFormData() {
   form.action = GURL("https://myform.com/submit.html");
   form.main_frame_origin =
       url::Origin::Create(GURL("https://myform_root.com/form.html"));
-  form.fields = {CreateTestFormField("First Name", "firstname", "", "text"),
-                 CreateTestFormField("Middle Name", "middlename", "", "text"),
-                 CreateTestFormField("Last Name", "lastname", "", "text"),
-                 CreateTestFormField("Email", "email", "", "email")};
+  form.fields = {
+      CreateTestFormField("First Name", "firstname", "",
+                          FormControlType::kInputText),
+      CreateTestFormField("Middle Name", "middlename", "",
+                          FormControlType::kInputText),
+      CreateTestFormField("Last Name", "lastname", "",
+                          FormControlType::kInputText),
+      CreateTestFormField("Email", "email", "", FormControlType::kInputEmail)};
   return form;
 }
 
@@ -271,33 +281,37 @@ FormData CreateTestCreditCardFormData(bool is_https,
   }
 
   if (split_names) {
-    form.fields.push_back(CreateTestFormField(
-        "First Name on Card", "firstnameoncard", "", "text", "cc-given-name"));
-    form.fields.push_back(CreateTestFormField(
-        "Last Name on Card", "lastnameoncard", "", "text", "cc-family=name"));
-  } else {
     form.fields.push_back(
-        CreateTestFormField("Name on Card", "nameoncard", "", "text"));
+        CreateTestFormField("First Name on Card", "firstnameoncard", "",
+                            FormControlType::kInputText, "cc-given-name"));
+    form.fields.push_back(
+        CreateTestFormField("Last Name on Card", "lastnameoncard", "",
+                            FormControlType::kInputText, "cc-family=name"));
+  } else {
+    form.fields.push_back(CreateTestFormField("Name on Card", "nameoncard", "",
+                                              FormControlType::kInputText));
+  }
+  form.fields.push_back(CreateTestFormField("Card Number", "cardnumber", "",
+                                            FormControlType::kInputText));
+  if (use_month_type) {
+    form.fields.push_back(CreateTestFormField("Expiration Date", "ccmonth", "",
+                                              FormControlType::kInputMonth));
+  } else {
+    form.fields.push_back(CreateTestFormField("Expiration Date", "ccmonth", "",
+                                              FormControlType::kInputText));
+    form.fields.push_back(
+        CreateTestFormField("", "ccyear", "", FormControlType::kInputText));
   }
   form.fields.push_back(
-      CreateTestFormField("Card Number", "cardnumber", "", "text"));
-  if (use_month_type) {
-    form.fields.push_back(
-        CreateTestFormField("Expiration Date", "ccmonth", "", "month"));
-  } else {
-    form.fields.push_back(
-        CreateTestFormField("Expiration Date", "ccmonth", "", "text"));
-    form.fields.push_back(CreateTestFormField("", "ccyear", "", "text"));
-  }
-  form.fields.push_back(CreateTestFormField("CVC", "cvc", "", "text"));
+      CreateTestFormField("CVC", "cvc", "", FormControlType::kInputText));
   return form;
 }
 
 FormData CreateTestIbanFormData(std::string_view value) {
   FormData form;
   form.url = GURL("https://www.foo.com");
-  form.fields = {
-      CreateTestFormField("IBAN Value:", "iban_value", value, "text")};
+  form.fields = {CreateTestFormField("IBAN Value:", "iban_value", value,
+                                     FormControlType::kInputText)};
   return form;
 }
 

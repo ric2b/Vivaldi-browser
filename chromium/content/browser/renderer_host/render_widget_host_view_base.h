@@ -24,8 +24,8 @@
 #include "components/viz/common/surfaces/surface_id.h"
 #include "components/viz/host/hit_test/hit_test_query.h"
 #include "content/browser/renderer_host/display_feature.h"
-#include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/common/content_export.h"
+#include "content/common/input/event_with_latency_info.h"
 #include "content/public/browser/render_frame_metadata_provider.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/common/page_visibility_state.h"
@@ -61,7 +61,7 @@ class Compositor;
 class Cursor;
 class LatencyInfo;
 class TouchEvent;
-enum class DomCode;
+enum class DomCode : uint32_t;
 struct DidOverscrollParams;
 }  // namespace ui
 
@@ -593,6 +593,8 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView {
 
   bool HasFallbackSurfaceForTesting() const { return HasFallbackSurface(); }
 
+  void SetIsFrameSinkIdOwner(bool is_owner);
+
   // Vivaldi addition:
   bool IsRenderWidgetHostViewMac() { return is_render_widget_host_view_mac_; }
 
@@ -601,6 +603,9 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView {
   ~RenderWidgetHostViewBase() override;
 
   void NotifyObserversAboutShutdown();
+
+  virtual void UpdateFrameSinkIdRegistration();
+  bool is_frame_sink_id_owner() const { return is_frame_sink_id_owner_; }
 
   virtual MouseWheelPhaseHandler* GetMouseWheelPhaseHandler();
 
@@ -765,6 +770,8 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView {
   bool view_stopped_flinging_for_test_ = false;
 
   bool is_evicted_ = false;
+
+  bool is_frame_sink_id_owner_ = false;
 
   base::WeakPtrFactory<RenderWidgetHostViewBase> weak_factory_{this};
 };

@@ -19,6 +19,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/to_vector.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/branding_buildflags.h"
@@ -137,13 +138,9 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest, HelpAppV2) {
 IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest, HelpAppV2SearchInLauncher) {
   WaitForTestSystemAppInstall();
   auto* system_app = GetManager().GetSystemApp(SystemWebAppType::HELP);
-  std::vector<int> search_terms = system_app->GetAdditionalSearchTerms();
-  std::vector<std::string> search_terms_strings;
-  base::ranges::transform(search_terms,
-                          std::back_inserter(search_terms_strings),
-                          &l10n_util::GetStringUTF8);
-  EXPECT_EQ(std::vector<std::string>({"Get Help", "Perks", "Offers"}),
-            search_terms_strings);
+  EXPECT_THAT(base::test::ToVector(system_app->GetAdditionalSearchTerms(),
+                                   &l10n_util::GetStringUTF8),
+              testing::ElementsAre("Get Help", "Perks", "Offers"));
 }
 
 // Test that the Help App has a minimum window size of 600x320.
@@ -210,7 +207,7 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest, HelpAppV2InAppMetrics) {
 IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest,
                        HasCorrectThemeAndBackgroundColor) {
   WaitForTestSystemAppInstall();
-  web_app::AppId app_id =
+  webapps::AppId app_id =
       *GetManager().GetAppIdForSystemApp(SystemWebAppType::HELP);
   web_app::WebAppRegistrar& registrar =
       web_app::WebAppProvider::GetForTest(profile())->registrar_unsafe();
@@ -377,7 +374,7 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest,
   EXPECT_EQ(profile()->GetPrefs()->GetInteger(
                 prefs::kDiscoverTabSuggestionChipTimesLeftToShow),
             3);
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+  Browser* browser = chrome::FindBrowserWithTab(web_contents);
   // Close the web contents we just created to simulate what would happen in
   // production with a background page. This helps us ensure that our
   // notification shows up and can be interacted with even after the web ui
@@ -436,7 +433,7 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest,
                 prefs::kReleaseNotesSuggestionChipTimesLeftToShow),
             3);
 
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+  Browser* browser = chrome::FindBrowserWithTab(web_contents);
   // Close the web contents we just created to simulate what would happen in
   // production with a background page. This helps us ensure that our
   // notification shows up and can be interacted with even after the web ui

@@ -7,7 +7,7 @@
 #include "components/paint_preview/common/paint_preview_tracker.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
+#include "third_party/blink/renderer/core/layout/inline/inline_cursor.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_block_flow.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_block_node.h"
 #include "third_party/blink/renderer/core/paint/paint_controller_paint_test.h"
@@ -22,12 +22,12 @@ namespace {
 
 void ExtractLinks(const PaintRecord& record, std::vector<GURL>* links) {
   for (const cc::PaintOp& op : record) {
-    if (op.GetType() == cc::PaintOpType::Annotate) {
+    if (op.GetType() == cc::PaintOpType::kAnnotate) {
       const auto& annotate_op = static_cast<const cc::AnnotateOp&>(op);
       links->push_back(GURL(
           std::string(reinterpret_cast<const char*>(annotate_op.data->data()),
                       annotate_op.data->size())));
-    } else if (op.GetType() == cc::PaintOpType::DrawRecord) {
+    } else if (op.GetType() == cc::PaintOpType::kDrawrecord) {
       const auto& record_op = static_cast<const cc::DrawRecordOp&>(op);
       ExtractLinks(record_op.record, links);
     }
@@ -64,7 +64,7 @@ TEST_P(NGBoxFragmentPainterTest, ScrollHitTestOrder) {
   auto& scroller = *GetLayoutBoxByElementId("scroller");
   const DisplayItemClient& root_fragment = scroller;
 
-  NGInlineCursor cursor;
+  InlineCursor cursor;
   cursor.MoveTo(*scroller.SlowFirstChild());
   const DisplayItemClient& text_fragment =
       *cursor.Current().GetDisplayItemClient();

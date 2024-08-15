@@ -6,9 +6,10 @@ package org.chromium.chrome.browser.password_manager;
 
 import androidx.annotation.VisibleForTesting;
 
+import org.jni_zero.CalledByNative;
+import org.jni_zero.NativeMethods;
+
 import org.chromium.base.ObserverList;
-import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.annotations.NativeMethods;
 import org.chromium.url.GURL;
 
 /**
@@ -81,6 +82,10 @@ public class PasswordStoreBridge {
     public void insertPasswordCredential(PasswordStoreCredential credential) {
         PasswordStoreBridgeJni.get().insertPasswordCredentialForTesting(
                 mNativePasswordStoreBridge, credential);
+    }
+
+    public void blocklistForTesting(String url) {
+        PasswordStoreBridgeJni.get().blocklistForTesting(mNativePasswordStoreBridge, url);
     }
 
     /**
@@ -157,6 +162,7 @@ public class PasswordStoreBridge {
         long init(PasswordStoreBridge passwordStoreBridge);
         void insertPasswordCredentialForTesting(
                 long nativePasswordStoreBridge, PasswordStoreCredential credential);
+        void blocklistForTesting(long nativePasswordStoreBridge, String url);
         boolean editPassword(long nativePasswordStoreBridge, PasswordStoreCredential credential,
                 String newPassword);
         int getPasswordStoreCredentialsCount(long nativePasswordStoreBridge);

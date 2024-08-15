@@ -41,6 +41,9 @@ class ASH_EXPORT ImeMenuTray : public TrayBackgroundView,
   ImeMenuTray& operator=(const ImeMenuTray&) = delete;
   ~ImeMenuTray() override;
 
+  // Callback called when this TrayBackgroundView is pressed.
+  void OnTrayButtonPressed();
+
   // Shows the virtual keyboard with the given keyset: emoji, handwriting or
   // voice.
   void ShowKeyboardWithKeyset(input_method::ImeKeyset keyset);
@@ -56,7 +59,6 @@ class ASH_EXPORT ImeMenuTray : public TrayBackgroundView,
   void HideBubbleWithView(const TrayBubbleView* bubble_view) override;
   void ClickedOutsideBubble() override;
   void UpdateTrayItemColor(bool is_active) override;
-  void OnTrayActivated(const ui::Event& event) override;
   void CloseBubble() override;
   void ShowBubble() override;
   TrayBubbleView* GetBubbleView() override;
@@ -93,8 +95,8 @@ class ASH_EXPORT ImeMenuTray : public TrayBackgroundView,
   void CreateLabel();
   void CreateImageView();
 
-  // For Jelly: Updates the color of `image_view_` if `is_image` is true or the
-  // color of `label_` otherwise.
+  // Updates the color of `image_view_` if `is_image` is true or the color of
+  // `label_` otherwise.
   void UpdateTrayImageOrLabelColor(bool is_image);
 
   raw_ptr<ImeControllerImpl, ExperimentalAsh> ime_controller_;

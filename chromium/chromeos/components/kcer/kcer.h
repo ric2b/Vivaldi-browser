@@ -104,6 +104,14 @@ enum class COMPONENT_EXPORT(KCER) KeyType {
   kEcc,
 };
 
+// Supported sizes for RSA keys. It's allowed to static_cast the values to
+// uint32_t.
+enum class COMPONENT_EXPORT(KCER) RsaModulusLength {
+  k1024 = 1024,
+  k2048 = 2048,
+  k4096 = 4096
+};
+
 enum class COMPONENT_EXPORT(KCER) EllipticCurve {
   kP256,
 };
@@ -259,6 +267,8 @@ class COMPONENT_EXPORT(KCER) Kcer {
       base::OnceCallback<void(base::expected<bool, Error>)>;
   using SignCallback =
       base::OnceCallback<void(base::expected<Signature, Error>)>;
+  using GetAvailableTokensCallback =
+      base::OnceCallback<void(base::flat_set<Token>)>;
   using GetTokenInfoCallback =
       base::OnceCallback<void(base::expected<TokenInfo, Error>)>;
   using GetKeyInfoCallback =
@@ -280,7 +290,7 @@ class COMPONENT_EXPORT(KCER) Kcer {
   // they are only used there. When Kcer-without-NSS is implemented, they should
   // work everywhere.
   virtual void GenerateRsaKey(Token token,
-                              uint32_t modulus_length_bits,
+                              RsaModulusLength modulus_length_bits,
                               bool hardware_backed,
                               GenerateKeyCallback callback) = 0;
   // Generates a new EC key pair in the `token`. If `hardware_backed` is false,
@@ -389,7 +399,7 @@ class COMPONENT_EXPORT(KCER) Kcer {
                                SignCallback callback) = 0;
 
   // Returns tokens that are available to the current instance of Kcer.
-  virtual base::flat_set<Token> GetAvailableTokens() = 0;
+  virtual void GetAvailableTokens(GetAvailableTokensCallback callback) = 0;
 
   // Retrieves additional info for the loaded `token`. Returns a `TokenInfo`
   // struct on success, kTokenNotAvailable if the `token` will never be loaded,
@@ -421,20 +431,6 @@ class COMPONENT_EXPORT(KCER) Kcer {
                                             std::string profile_id,
                                             StatusCallback callback) = 0;
 };
-
-namespace internal {
-class KcerToken;
-// Creates an instance of Kcer interface, should only be used by a dedicated
-// factory. Tokens are expected to be owned by the factory and live on a non-UI
-// thread. All the requests for the tokens should be posted on the
-// `token_task_runner`. Kcer doesn't take ownership of the tokens and accesses
-// them via weak pointers.
-COMPONENT_EXPORT(KCER)
-std::unique_ptr<Kcer> CreateKcer(
-    scoped_refptr<base::TaskRunner> token_task_runner,
-    base::WeakPtr<internal::KcerToken> user_token,
-    base::WeakPtr<internal::KcerToken> device_token);
-}  // namespace internal
 
 }  // namespace kcer
 

@@ -26,6 +26,11 @@ namespace vivaldi {
 
 #define ICON_SIZE 16
 
+
+bool ContextMenuPostitionDelegate::CanSetPosition() const {
+  return false;
+}
+
 ContextMenuController::ContextMenuController(
     content::WebContents* window_web_contents,
     VivaldiRenderViewContextMenu* rv_context_menu,
@@ -78,14 +83,9 @@ Profile* ContextMenuController::GetProfile() {
 }
 
 bool ContextMenuController::Show() {
-  using Origin = extensions::vivaldi::context_menu::Origin;
-
-  // Mac needs the views version for certain origins as we can not position the
-  // menu properly on mac/cocoa.
-  bool force_views = params_->properties.origin != Origin::ORIGIN_POINTER;
-
   menu_.reset(CreateVivaldiContextMenu(window_web_contents_, nullptr, rect_,
-                                       force_views, rv_context_menu_));
+                                       params_->properties.force_views,
+                                       rv_context_menu_));
 
   if (rv_context_menu_) {
     menu_->SetParentView(rv_context_menu_->parent_view());
@@ -103,7 +103,7 @@ bool ContextMenuController::Show() {
     return false;
   }
 
-  menu_->Init(root_menu_model_, force_views ? this : nullptr);
+  menu_->Init(root_menu_model_, this);
 
   has_shown_ = menu_->Show();
   if (!has_shown_) {
@@ -223,6 +223,9 @@ void ContextMenuController::PopulateModel(const Element& child,
     if (item.enabled.has_value()) {
       id_to_enabled_map_[id] = item.enabled.value();
     }
+    if (item.persistent.has_value()) {
+      id_to_persistent_map_[id] = item.persistent.value();
+    }
     if (item.url && !item.url->empty()) {
       // Set default document icon
       SetIcon(id, params_->properties.icons.at(0), menu_model);
@@ -308,6 +311,10 @@ void ContextMenuController::SanitizeModel(ui::SimpleMenuModel* menu_model) {
   }
 }
 
+bool ContextMenuController::CanSetPosition() const {
+  return params_->properties.force_views;
+}
+
 // Called from chrome when menu size is known.
 void ContextMenuController::SetPosition(gfx::Rect* menu_bounds,
                                         const gfx::Rect& monitor_bounds,
@@ -334,6 +341,17 @@ void ContextMenuController::SetPosition(gfx::Rect* menu_bounds,
 
   // Fallback code in chrome will ensure the menu is within the monitor area so
   // we do not test more than the last adjustment above.
+}
+
+void ContextMenuController::ExecuteIfPersistent(int command_id,
+                                                int event_flags,
+                                                bool* success) {
+  if (IsCommandIdPersistent(command_id)) {
+    ExecuteCommand(command_id, event_flags);
+    *success = true;
+  } else {
+    *success = false;
+  }
 }
 
 void ContextMenuController::SetIcon(int command_id,
@@ -418,6 +436,11 @@ bool ContextMenuController::IsCommandIdChecked(int command_id) const {
 bool ContextMenuController::IsCommandIdEnabled(int command_id) const {
   auto it = id_to_enabled_map_.find(command_id);
   return it != id_to_enabled_map_.end() ? it->second : true;
+}
+
+bool ContextMenuController::IsCommandIdPersistent(int command_id) const {
+  auto it = id_to_persistent_map_.find(command_id);
+  return it != id_to_persistent_map_.end() ? it->second : false;
 }
 
 bool ContextMenuController::IsItemForCommandIdDynamic(int command_id) const {

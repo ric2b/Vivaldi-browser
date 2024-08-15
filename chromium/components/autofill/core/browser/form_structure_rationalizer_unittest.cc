@@ -51,7 +51,7 @@ struct FieldTemplate {
   ServerFieldType field_type = UNKNOWN_TYPE;
   // Section name of a field.
   base::StringPiece section = "";
-  base::StringPiece form_control_type = "text";
+  FormControlType form_control_type = FormControlType::kInputText;
   absl::optional<AutocompleteParsingResult> parsed_autocomplete = absl::nullopt;
   bool is_focusable = true;
   size_t max_length = std::numeric_limits<int>::max();
@@ -73,7 +73,7 @@ FieldTemplate ToNotFocusable(FieldTemplate field_template) {
 }
 
 FieldTemplate ToSelectOne(FieldTemplate field_template) {
-  field_template.form_control_type = "select-one";
+  field_template.form_control_type = FormControlType::kSelectOne;
   return field_template;
 }
 
@@ -99,7 +99,7 @@ std::pair<FormData, std::string> CreateFormAndServerClassification(
       field.section = Section::FromAutocomplete(
           {.section = std::string(field_template.section)});
     }
-    field.form_control_type = std::string(field_template.form_control_type);
+    field.form_control_type = field_template.form_control_type;
     field.is_focusable = field_template.is_focusable;
     field.max_length = field_template.max_length;
     field.parsed_autocomplete = field_template.parsed_autocomplete;
@@ -634,11 +634,13 @@ TEST_F(FormStructureRationalizerTest,
           {"State", "state", ADDRESS_HOME_COUNTRY},
 
           // Second Section
+          {"Full Name", "fullName", NAME_FULL},
           {"Country", "country", ADDRESS_HOME_COUNTRY},
           {"city", "City", ADDRESS_HOME_CITY},
           {"State", "state", ADDRESS_HOME_COUNTRY},
 
           // Third Section
+          {"Full Name", "fullName", NAME_FULL},
           {"city", "City", ADDRESS_HOME_CITY},
           ToSelectOne(
               SetRolePresentation({"State", "state2", ADDRESS_HOME_COUNTRY})),
@@ -648,16 +650,18 @@ TEST_F(FormStructureRationalizerTest,
               ToNotFocusable({"Country", "country2", ADDRESS_HOME_COUNTRY})),
       },
       /*run_heuristics=*/true);
-  EXPECT_THAT(GetTypes(*form_structure),
-              ElementsAre(
-                  // First section.
-                  NAME_FULL, ADDRESS_HOME_COUNTRY, ADDRESS_HOME_COUNTRY,
-                  ADDRESS_HOME_CITY, ADDRESS_HOME_STATE, ADDRESS_HOME_STATE,
-                  // Second section
-                  ADDRESS_HOME_COUNTRY, ADDRESS_HOME_CITY, ADDRESS_HOME_STATE,
-                  // Third section
-                  ADDRESS_HOME_CITY, ADDRESS_HOME_STATE, ADDRESS_HOME_STATE,
-                  ADDRESS_HOME_COUNTRY, ADDRESS_HOME_COUNTRY));
+  EXPECT_THAT(
+      GetTypes(*form_structure),
+      ElementsAre(
+          // First section.
+          NAME_FULL, ADDRESS_HOME_COUNTRY, ADDRESS_HOME_COUNTRY,
+          ADDRESS_HOME_CITY, ADDRESS_HOME_STATE, ADDRESS_HOME_STATE,
+          // Second section
+          NAME_FULL, ADDRESS_HOME_COUNTRY, ADDRESS_HOME_CITY,
+          ADDRESS_HOME_STATE,
+          // Third section
+          NAME_FULL, ADDRESS_HOME_CITY, ADDRESS_HOME_STATE, ADDRESS_HOME_STATE,
+          ADDRESS_HOME_COUNTRY, ADDRESS_HOME_COUNTRY));
 }
 
 TEST_F(FormStructureRationalizerTest,

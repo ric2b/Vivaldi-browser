@@ -29,7 +29,6 @@
 using calendar::CalendarService;
 using calendar::CalendarServiceFactory;
 using vivaldi::GetTime;
-using vivaldi::MilliSecondsFromTime;
 
 namespace extensions {
 
@@ -84,7 +83,7 @@ RecurrenceException CreateException(const RecurrenceExceptionRow& row) {
   RecurrenceException exception;
   exception.exception_id = base::NumberToString(row.id);
   exception.cancelled = row.cancelled;
-  exception.date = MilliSecondsFromTime(row.exception_day);
+  exception.date = row.exception_day.InMillisecondsFSinceUnixEpoch();
   exception.exception_event_id = base::NumberToString(row.exception_event_id);
   exception.parent_event_id = base::NumberToString(row.parent_event_id);
 
@@ -160,9 +159,9 @@ Notification CreateNotification(const NotificationRow& row) {
   notification.event_id = base::NumberToString(row.event_id);
   notification.name = base::UTF16ToUTF8(row.name);
   notification.description = base::UTF16ToUTF8(row.description);
-  notification.when = MilliSecondsFromTime(row.when);
+  notification.when = row.when.InMillisecondsFSinceUnixEpoch();
   notification.delay = row.delay;
-  notification.period = MilliSecondsFromTime(row.period);
+  notification.period = row.period.InMillisecondsFSinceUnixEpoch();
 
   return notification;
 }
@@ -222,7 +221,7 @@ Calendar GetCalendarItem(const CalendarRow& row) {
   calendar.active = row.active();
   calendar.iconindex = row.iconindex();
   calendar.color = row.color();
-  calendar.last_checked = MilliSecondsFromTime(row.last_checked());
+  calendar.last_checked = row.last_checked().InMillisecondsFSinceUnixEpoch();
   calendar.timezone = row.timezone();
   calendar.supported_calendar_component =
       GetSupportedComponents(row.supported_component_set());
@@ -280,11 +279,10 @@ CalendarEvent CreateVivaldiEvent(calendar::EventRow event) {
   cal_event.id = base::NumberToString(event.id);
   cal_event.calendar_id = base::NumberToString(event.calendar_id);
   cal_event.alarm_id = base::NumberToString(event.alarm_id);
-
   cal_event.title = base::UTF16ToUTF8(event.title);
   cal_event.description = base::UTF16ToUTF8(event.description);
-  cal_event.start = MilliSecondsFromTime(event.start);
-  cal_event.end = MilliSecondsFromTime(event.end);
+  cal_event.start = event.start.InMillisecondsFSinceUnixEpoch();
+  cal_event.end = event.end.InMillisecondsFSinceUnixEpoch();
   cal_event.all_day = event.all_day;
   cal_event.is_recurring = event.is_recurring;
   cal_event.location = base::UTF16ToUTF8(event.location);
@@ -296,7 +294,7 @@ CalendarEvent CreateVivaldiEvent(calendar::EventRow event) {
   cal_event.task = event.task;
   cal_event.complete = event.complete;
   cal_event.trash = event.trash;
-  cal_event.trash_time = MilliSecondsFromTime(event.trash_time);
+  cal_event.trash_time = event.trash_time.InMillisecondsFSinceUnixEpoch();
   cal_event.sequence = event.sequence;
   cal_event.ical = base::UTF16ToUTF8(event.ical);
   cal_event.rrule = event.rrule;
@@ -313,9 +311,10 @@ CalendarEvent CreateVivaldiEvent(calendar::EventRow event) {
   cal_event.categories = base::UTF16ToUTF8(event.categories);
   cal_event.component_class = base::UTF16ToUTF8(event.component_class);
   cal_event.attachment = base::UTF16ToUTF8(event.attachment);
-  cal_event.completed = MilliSecondsFromTime(event.completed);
+  cal_event.completed = event.completed.InMillisecondsFSinceUnixEpoch();
   cal_event.sync_pending = event.sync_pending;
   cal_event.delete_pending = event.delete_pending;
+  cal_event.end_recurring = event.end_recurring.InMillisecondsFSinceUnixEpoch();
   return cal_event;
 }
 void CalendarEventRouter::OnEventCreated(CalendarService* service,
@@ -759,6 +758,12 @@ ExtensionFunction::ResponseAction CalendarUpdateEventFunction::Run() {
     updatedEvent.updateFields |= calendar::DELETE_PENDING;
   }
 
+  if (params->changes.end_recurring.has_value()) {
+    double end_recurring = params->changes.end_recurring.value();
+    updatedEvent.end_recurring = GetTime(end_recurring);
+    updatedEvent.updateFields |= calendar::END_RECURRING;
+  }
+
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
   model->UpdateCalendarEvent(
       eventId, updatedEvent,
@@ -938,7 +943,7 @@ vivaldi::calendar::Calendar CreateVivaldiCalendar(
   calendar.ctag = result.ctag();
   calendar.active = result.active();
   calendar.iconindex = result.iconindex();
-  calendar.last_checked = MilliSecondsFromTime(result.last_checked());
+  calendar.last_checked = result.last_checked().InMillisecondsFSinceUnixEpoch();
   calendar.timezone = result.timezone();
   calendar.supported_calendar_component =
       GetSupportedComponents(result.supported_component_set());

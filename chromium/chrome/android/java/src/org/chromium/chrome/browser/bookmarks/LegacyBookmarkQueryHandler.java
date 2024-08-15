@@ -66,8 +66,11 @@ public class LegacyBookmarkQueryHandler implements BookmarkQueryHandler {
         for (BookmarkId bookmarkId : mTopLevelFolders) {
             PowerBookmarkMeta powerBookmarkMeta = mBookmarkModel.getPowerBookmarkMeta(bookmarkId);
             BookmarkItem bookmarkItem = mBookmarkModel.getBookmarkById(bookmarkId);
-            BookmarkListEntry bookmarkListEntry = BookmarkListEntry.createBookmarkEntry(
-                    bookmarkItem, powerBookmarkMeta, mBookmarkUiPrefs.getBookmarkRowDisplayPref());
+            BookmarkListEntry bookmarkListEntry =
+                    BookmarkListEntry.createBookmarkEntry(
+                            bookmarkItem,
+                            powerBookmarkMeta,
+                            mBookmarkUiPrefs.getBookmarkRowDisplayPref());
             bookmarkListEntries.add(bookmarkListEntry);
         }
 
@@ -91,6 +94,6 @@ public class LegacyBookmarkQueryHandler implements BookmarkQueryHandler {
 
     private void populateTopLevelFoldersList() {
         mTopLevelFolders.clear();
-        mTopLevelFolders.addAll(BookmarkUtils.populateTopLevelFolders(mBookmarkModel));
+        mTopLevelFolders.addAll(mBookmarkModel.getTopLevelFolderIds());
     }
 }

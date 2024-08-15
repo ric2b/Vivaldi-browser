@@ -269,6 +269,7 @@ source_set("ios_web_navigation_unittests") {
     "navigation/navigation_item_impl_unittest.mm",
     "navigation/navigation_manager_impl_unittest.mm",
     "navigation/navigation_manager_util_unittest.mm",
+    "navigation/navigation_util_unittest.mm",
     "navigation/nscoder_util_unittest.mm",
     "navigation/proto_util_unittest.mm",
     "navigation/synthesized_session_restore_unittest.mm",
@@ -393,7 +394,6 @@ source_set("ios_web_web_state_unittests") {
     "//ios/web/test:test_support",
     "//ios/web/test/fakes",
     "//ios/web/web_state",
-    "//ios/web/web_state:page_viewport_state",
     "//ios/web/web_state:policy_decision_state_tracker",
     "//ios/web/web_state:test_util",
     "//ios/web/web_state:web_state_impl_header",
@@ -408,7 +408,6 @@ source_set("ios_web_web_state_unittests") {
   ]
 
   sources = [
-    "web_state/page_viewport_state_unittest.mm",
     "web_state/policy_decision_state_tracker_unittest.mm",
     "web_state/web_state_context_menu_bridge_unittest.mm",
     "web_state/web_state_delegate_bridge_unittest.mm",
@@ -580,6 +579,7 @@ test("ios_web_inttests") {
     "//ios/web/test:resources",
     "//ios/web/test:test_constants",
     "//ios/web/test:test_support",
+    "//ios/web/test/fakes",
     "//ios/web/web_state",
     "//ios/web/web_state:test_util",
     "//ios/web/web_state:web_state_impl_header",

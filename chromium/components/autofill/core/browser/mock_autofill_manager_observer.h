@@ -76,7 +76,7 @@ class MockAutofillManagerObserver : public AutofillManager::Observer {
 
   MOCK_METHOD(void,
               OnBeforeAskForValuesToFill,
-              (AutofillManager&, FormGlobalId, FieldGlobalId),
+              (AutofillManager&, FormGlobalId, FieldGlobalId, const FormData&),
               (override));
   MOCK_METHOD(void,
               OnAfterAskForValuesToFill,
@@ -110,9 +110,8 @@ class MockAutofillManagerObserver : public AutofillManager::Observer {
               OnFillOrPreviewDataModelForm,
               (AutofillManager&,
                FormGlobalId,
-               mojom::AutofillActionPersistence action_persistence,
-               (base::span<const std::pair<const FormFieldData*,
-                                           const AutofillField*>>),
+               mojom::ActionPersistence action_persistence,
+               (base::span<const FormFieldData* const>),
                (absl::variant<const AutofillProfile*, const CreditCard*>
                     profile_or_credit_card)),
               (override));

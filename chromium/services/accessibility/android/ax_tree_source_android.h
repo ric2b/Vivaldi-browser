@@ -6,7 +6,6 @@
 
 #include <map>
 #include <memory>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -125,6 +124,9 @@ class AXTreeSourceAndroid
   AccessibilityInfoDataWrapper* GetFirstImportantAncestor(
       AccessibilityInfoDataWrapper* info_data) const;
 
+  AccessibilityInfoDataWrapper* GetFirstAccessibilityFocusableAncestor(
+      AccessibilityInfoDataWrapper* info_data) const;
+
   SerializationDelegate& serialization_delegate() const {
     return *serialization_delegate_.get();
   }
@@ -146,6 +148,8 @@ class AXTreeSourceAndroid
 
   // The window id of this tree.
   absl::optional<int32_t> window_id() const { return window_id_; }
+  // The root id of this tree.
+  absl::optional<int32_t> root_id() const { return root_id_; }
 
   void set_automation_event_router_for_test(
       extensions::AutomationEventRouterInterface* router) {
@@ -155,6 +159,9 @@ class AXTreeSourceAndroid
 
  private:
   friend class AXTreeSourceAndroidTest;
+
+  // Builds the map that stores relationships between nodes.
+  void BuildNodeMap(const mojom::AccessibilityEventData& event_data);
 
   // Actual implementation of NotifyAccessibilityEvent.
   void NotifyAccessibilityEventInternal(

@@ -20,6 +20,7 @@
 #include "components/viz/common/resources/resource_id.h"
 #include "components/viz/common/resources/transferable_resource.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/command_buffer/client/raster_interface.h"
 #include "media/base/media_export.h"
 #include "media/base/video_frame.h"
 #include "ui/gfx/buffer_types.h"
@@ -91,7 +92,6 @@ class MEDIA_EXPORT VideoResourceUpdater
                        viz::ClientResourceProvider* resource_provider,
                        bool use_stream_video_draw_quad,
                        bool use_gpu_memory_buffer_resources,
-                       bool use_r16_texture,
                        int max_resource_size);
 
   VideoResourceUpdater(const VideoResourceUpdater&) = delete;
@@ -189,6 +189,8 @@ class MEDIA_EXPORT VideoResourceUpdater
       scoped_refptr<VideoFrame> video_frame);
 
   gpu::gles2::GLES2Interface* ContextGL();
+  gpu::raster::RasterInterface* RasterInterface();
+  gpu::InterfaceBase* InterfaceBase();
 
   void RecycleResource(uint32_t plane_resource_id,
                        const gpu::SyncToken& sync_token,
@@ -208,8 +210,6 @@ class MEDIA_EXPORT VideoResourceUpdater
       resource_provider_;
   const bool use_stream_video_draw_quad_;
   const bool use_gpu_memory_buffer_resources_;
-  // TODO(crbug.com/759456): Remove after r16 is used without the flag.
-  const bool use_r16_texture_;
   const int max_resource_size_;
   const int tracing_id_;
   std::unique_ptr<PaintCanvasVideoRenderer> video_renderer_;

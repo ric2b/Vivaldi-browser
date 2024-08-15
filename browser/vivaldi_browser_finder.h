@@ -20,7 +20,7 @@ Browser* FindBrowserForEmbedderWebContents(
 VivaldiBrowserWindow* FindWindowForEmbedderWebContents(
     const content::WebContents* contents);
 
-Browser* FindBrowserWithWebContents(const content::WebContents* web_contents);
+Browser* FindBrowserWithTab(const content::WebContents* web_contents);
 Browser* FindBrowserWithNonTabContent(const content::WebContents* web_contents);
 Browser* FindBrowserByWindowId(SessionID::id_type window_id);
 

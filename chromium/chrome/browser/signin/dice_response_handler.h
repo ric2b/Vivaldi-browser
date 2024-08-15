@@ -21,6 +21,7 @@
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "components/signin/public/base/account_consistency_method.h"
 #include "components/signin/public/base/signin_buildflags.h"
+#include "google_apis/gaia/core_account_id.h"
 #include "google_apis/gaia/gaia_auth_consumer.h"
 
 #if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
@@ -58,10 +59,15 @@ class ProcessDiceHeaderDelegate {
   virtual void HandleTokenExchangeSuccess(CoreAccountId account_id,
                                           bool is_new_account) = 0;
 
-  // Asks the delegate to enable sync for the |account_id|.
+  // Asks the delegate to enable sync for the |account_info|.
   // Called after the account was seeded in the account tracker service and
   // after the refresh token was fetched and updated in the token service.
-  virtual void EnableSync(const CoreAccountId& account_id) = 0;
+  virtual void EnableSync(const CoreAccountInfo& account_info) = 0;
+
+  // Called when a Dice signin header is received. This is received before
+  // navigating to the `continue_url`. Chrome has received the authorization
+  // code, but has not exchanged it for a token yet.
+  virtual void OnDiceSigninHeaderReceived() = 0;
 
   // Handles a failure in the token exchange (i.e. shows the error to the user).
   virtual void HandleTokenExchangeFailure(

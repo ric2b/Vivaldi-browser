@@ -324,20 +324,6 @@ class SyncService : public KeyedService {
   // instead.
   virtual bool RequiresClientUpgrade() const = 0;
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  // Relevant only on ChromeOS (Ash), since the state is unreachable otherwise.
-  // Returns if sync-the-feature is disabled because the user cleared data from
-  // the Sync dashboard. It can be re-enabled by invoking
-  // SetSyncFeatureRequested().
-  // TODO(crbug.com/1443446): Consider removing this API, for example by
-  // reporting IsInitialSyncFeatureSetupComplete()==false which is otherwise
-  // unreachable on ChromeOS Ash.
-  // TODO(crbug.com/1462552): Remove once kSync becomes unreachable or is
-  // deleted from the codebase. See ConsentLevel::kSync documentation for
-  // details.
-  virtual bool IsSyncFeatureDisabledViaDashboard() const = 0;
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
   //////////////////////////////////////////////////////////////////////////////
   // DERIVED STATE ACCESS
   //////////////////////////////////////////////////////////////////////////////
@@ -558,6 +544,12 @@ class SyncService : public KeyedService {
   virtual ModelTypeDownloadStatus GetDownloadStatusFor(
       ModelType type) const = 0;
 
+  // TODO(crbug.com/1425071): remove once investigation of timeouts complete.
+  // Records the reason if the `type` is waiting for updates to be downloaded.
+  virtual void RecordReasonIfWaitingForUpdates(
+      ModelType type,
+      const std::string& histogram_name) const = 0;
+
  protected:
   SyncService() = default;
 
@@ -569,9 +561,9 @@ class SyncService : public KeyedService {
   // having DISABLE_REASON_USER_CHOICE.
   // TODO(crbug.com/1444344): Remove this API together with
   // CanSyncFeatureStart().
-  // TODO(crbug.com/1219990): This API may also be removed once feature
-  // kSyncIgnoreSyncRequestedPreference is cleaned up, since HasSyncConsent()
-  // and GetDisableReasons() guarantee that this function returns true.
+  // TODO(crbug.com/1219990): This API may also be removed since
+  // HasSyncConsent() and GetDisableReasons() guarantee that this function
+  // returns true.
   virtual bool IsSyncFeatureConsideredRequested() const = 0;
 };
 

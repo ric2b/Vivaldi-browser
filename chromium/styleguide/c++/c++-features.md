@@ -30,16 +30,19 @@ The current status of existing standards and Abseil features is:
 
 *   **C++11:** _Default allowed; see banned features below_
 *   **C++14:** _Default allowed_
-*   **C++17:** Initially supported December 23, 2021; see allowed/banned/TBD
-    features below
+*   **C++17:** _Initially supported December 23, 2021; see allowed/banned/TBD
+    features below_
 *   **C++20:** _Not yet supported in Chromium_, with the exception of
     [designated initializers](https://google.github.io/styleguide/cppguide.html#Designated_initializers)
 *   **C++23:** _Not yet standardized_
-*   **Abseil:** _Default allowed; see banned/TBD features below_
-      * absl::AnyInvocable: Initially supported June 20, 2022
-      * Log library: Initially supported Aug 31, 2022
-      * CRC32C library: Initially supported Dec 5, 2022
-      * Nullability annotation: Initially supported Jun 21, 2023
+*   **Abseil:** _Default allowed; see banned/TBD features below. The following
+    dates represent the start of the two-year TBD periods for certain parts of
+    Abseil:_
+      * absl::AnyInvocable: Initially added to third_party June 20, 2022
+      * Log library: Initially added to third_party Aug 31, 2022
+      * CRC32C library: Initially added to third_party Dec 5, 2022
+      * Nullability annotation: Initially added to third_party Jun 21, 2023
+      * Overload: Initially added to third_party Sep 27, 2023
 
 [TOC]
 
@@ -843,6 +846,25 @@ objects with the same value have the same object representation.
 [Discussion thread](https://groups.google.com/u/1/a/chromium.org/g/cxx/c/jNMsxFTd30M)
 ***
 
+### std::in_place[_t] <sup>[allowed]</sup>
+
+```c++
+std::optional<std::complex<double>> opt{std::in_place, 0, 1};
+```
+
+**Description:** `std::in_place` is a disambiguation tag for `std::optional` to
+indicate that the object should be constructed in-place.
+
+**Documentation:**
+[`std::in_place`](https://en.cppreference.com/w/cpp/utility/in_place)
+
+**Notes:**
+*** promo
+Allowed now that `std::optional` is allowed.
+[Migration bug](https://crbug.com/1373619) and
+[discussion thread](https://groups.google.com/a/chromium.org/g/cxx/c/XG3G85_ZF1k)
+***
+
 ### std::inclusive_scan <sup>[allowed]</sup>
 
 ```c++
@@ -1059,6 +1081,24 @@ the callable object it holds.
 [Migration bug](https://crbug.com/1412529)
 ***
 
+### std::optional <sup>[allowed]</sup>
+
+```c++
+std::optional<std::string> s;
+```
+
+**Description:** The class template `std::optional` manages an optional
+contained value, i.e. a value that may or may not be present.
+
+**Documentation:**
+[`std::optional`](https://en.cppreference.com/w/cpp/utility/optional)
+
+**Notes:**
+*** promo
+[Migration bug](https://crbug.com/1373619) and
+[discussion thread](https://groups.google.com/a/chromium.org/g/cxx/c/XG3G85_ZF1k)
+***
+
 ### std::{size,empty,data} <sup>[allowed]</sup>
 
 ```c++
@@ -1236,46 +1276,26 @@ once supported.
 [Discussion thread](https://groups.google.com/a/chromium.org/g/cxx/c/cwktrFxxUY4)
 ***
 
-### std::in_place[_type,_index][_t] <sup>[banned]</sup>
+### std::in_place{_type,_index}[_t] <sup>[banned]</sup>
 
 ```c++
-std::optional<std::complex<double>> opt{std::in_place, 0, 1};
 std::variant<int, float> v{std::in_place_type<int>, 1.4};
 ```
 
-**Description:** The `std::in_place` are disambiguation tags for
-`std::optional`, `std::variant`, and `std::any` to indicate that the object
-should be constructed in-place.
+**Description:** `std::in_place_type` and `std::in_place_index` are
+disambiguation tags for `std::variant` and `std::any` to indicate that the
+object should be constructed in-place.
 
 **Documentation:**
-[`std::in_place`](https://en.cppreference.com/w/cpp/utility/in_place)
+[`std::in_place_type`](https://en.cppreference.com/w/cpp/utility/in_place)
 
 **Notes:**
 *** promo
-Banned for now because `std::optional`, `std::variant`, and `std::any` are all
-banned for now. Because `absl::optional` and `absl::variant` are used instead,
-and they require `absl::in_place`, use `absl::in_place` for non-Abseil Chromium
+Banned for now because `std::variant` and `std::any` are banned. Because
+`absl::variant` is used instead, and it requires `absl::in_place_type`, use
+`absl::in_place_type` for non-Abseil Chromium
 code. See the
 [discussion thread](https://groups.google.com/a/chromium.org/g/cxx/c/ZspmuJPpv6s).
-***
-
-### std::optional <sup>[banned]</sup>
-
-```c++
-std::optional<std::string> s;
-```
-
-**Description:** The class template `std::optional` manages an optional
-contained value, i.e. a value that may or may not be present. A common use case
-for optional is the return value of a function that may fail.
-
-**Documentation:**
-[`std::optional`](https://en.cppreference.com/w/cpp/utility/optional)
-
-**Notes:**
-*** promo
-[Will be allowed soon](https://crbug.com/1373619); for now, use
-`absl::optional`.
 ***
 
 ### std::uncaught_exceptions <sup>[banned]</sup>
@@ -1621,6 +1641,24 @@ Banned due to overlap with `base/ranges/algorithm.h`. Use the `base/ranges/`
 facilities instead.
 ***
 
+### FixedArray <sup>[banned]</sup>
+
+```c++
+absl::FixedArray<MyObj> objs_;
+```
+
+**Description:** A fixed size array like `std::array`, but with size determined
+at runtime instead of compile time.
+
+**Documentation:**
+[fixed_array.h](https://source.chromium.org/chromium/chromium/src/+/main:third_party/abseil-cpp/absl/container/fixed_array.h)
+
+**Notes:**
+*** promo
+Direct construction is banned due to the risk of UB with uninitialized
+trivially-default-constructible types. Instead use `base/types/fixed_array.h`,
+which is a light-weight wrapper that deletes the problematic constructor.
+
 ### FunctionRef <sup>[banned]</sup>
 
 ```c++
@@ -1843,7 +1881,6 @@ absl::btree_map
 absl::btree_set
 absl::btree_multimap
 absl::btree_multiset
-absl::FixedArray
 ```
 
 **Description:** Alternatives to STL containers designed to be more efficient
@@ -1912,4 +1949,27 @@ void PaySalary(absl::NotNull<Employee *> employee) {
 These nullability annotations are primarily a human readable signal about the
 intended contract of the pointer. They are not *types* and do not currently
 provide any correctness guarantees.
+***
+
+### Overload <sup>[tbd]</sup>
+
+```c++
+std::variant<int, std::string, double> v(int{1});
+assert(std::visit(absl::Overload(
+                       [](int) -> absl::string_view { return "int"; },
+                       [](const std::string&) -> absl::string_view {
+                         return "string";
+                       },
+                       [](double) -> absl::string_view { return "double"; }),
+                    v) == "int");
+```
+
+**Description:** Returns a functor that provides overloads based on the functors passed to it
+
+**Documentation:**
+[overload.h](https://source.chromium.org/chromium/chromium/src/+/main:third_party/abseil-cpp/absl/functional/overload.h)
+
+**Notes:**
+*** promo
+Overlaps with `base::Overloaded` from `base/functional/overloaded.h`.
 ***

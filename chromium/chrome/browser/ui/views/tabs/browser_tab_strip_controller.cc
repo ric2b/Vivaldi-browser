@@ -21,7 +21,6 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/ui/browser.h"
@@ -60,7 +59,6 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/browser/peak_gpu_memory_tracker.h"
 #include "content/public/browser/web_contents.h"
 #include "ipc/ipc_message.h"
@@ -589,7 +587,7 @@ absl::optional<int> BrowserTabStripController::GetCustomBackgroundId(
 std::u16string BrowserTabStripController::GetAccessibleTabName(
     const Tab* tab) const {
   return browser_view_->GetAccessibleTabLabel(
-      tabstrip_->GetModelIndexOf(tab).value());
+      tabstrip_->GetModelIndexOf(tab).value(), /*is_for_tab=*/true);
 }
 
 Profile* BrowserTabStripController::GetProfile() const {
@@ -781,14 +779,6 @@ void BrowserTabStripController::AddTab(WebContents* contents, int index) {
   hover_tab_selector_.CancelTabTransition();
 
   tabstrip_->AddTabAt(index, TabRendererData::FromTabInModel(model_, index));
-  // Try to show tab groups IPH if needed.
-  if (tabstrip_->GetTabCount() >= 6 && model_->SupportsTabGroups()) {
-    browser_view_->NotifyFeatureEngagementEvent(
-        feature_engagement::events::kSixthTabOpened);
-
-    browser_view_->MaybeShowFeaturePromo(
-        feature_engagement::kIPHDesktopTabGroupsNewGroupFeature);
-  }
 
   // Try to show tab search IPH if needed.
   constexpr int kTabSearchIPHTriggerThreshold = 8;

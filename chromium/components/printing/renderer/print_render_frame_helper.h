@@ -10,6 +10,7 @@
 
 #include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
@@ -78,8 +79,8 @@ class FrameReference {
   blink::WebView* view();
 
  private:
-  blink::WebView* view_;
-  blink::WebLocalFrame* frame_;
+  raw_ptr<blink::WebView, ExperimentalRenderer> view_;
+  raw_ptr<blink::WebLocalFrame, ExperimentalRenderer> frame_;
 };
 
 // Helper to ensure that quit closures for Mojo response are called.
@@ -326,12 +327,12 @@ class PrintRenderFrameHelper
 
   // Initialize print page settings with default settings.
   // Used only for native printing workflow.
-  bool InitPrintSettings(bool fit_to_paper_size);
+  bool InitPrintSettings(blink::WebLocalFrame* frame,
+                         const blink::WebNode& node);
 
   // Calculate number of pages in source document.
-  bool CalculateNumberOfPages(blink::WebLocalFrame* frame,
-                              const blink::WebNode& node,
-                              uint32_t* number_of_pages);
+  uint32_t CalculateNumberOfPages(blink::WebLocalFrame* frame,
+                                  const blink::WebNode& node);
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   // Set options for print preset from source PDF document.

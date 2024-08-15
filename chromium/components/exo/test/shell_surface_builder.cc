@@ -8,7 +8,6 @@
 
 #include "ash/constants/app_types.h"
 #include "ash/wm/desks/desks_util.h"
-#include "ash/wm/window_positioning_utils.h"
 #include "base/memory/raw_ptr.h"
 #include "components/exo/buffer.h"
 #include "components/exo/display.h"
@@ -21,6 +20,7 @@
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
+#include "ui/display/types/display_constants.h"
 
 namespace {
 
@@ -229,6 +229,12 @@ ShellSurfaceBuilder& ShellSurfaceBuilder::SetSecurityDelegate(
   return *this;
 }
 
+ShellSurfaceBuilder& ShellSurfaceBuilder::SetAppType(ash::AppType app_type) {
+  DCHECK(!built_);
+  app_type_ = app_type;
+  return *this;
+}
+
 ShellSurfaceBuilder& ShellSurfaceBuilder::SetParent(ShellSurface* parent) {
   DCHECK(!built_);
   parent_shell_surface_ = parent;
@@ -245,6 +251,12 @@ ShellSurfaceBuilder& ShellSurfaceBuilder::SetAsMenu() {
   DCHECK(!built_);
   menu_ = true;
   return SetAsPopup();
+}
+
+ShellSurfaceBuilder& ShellSurfaceBuilder::SetGrab() {
+  DCHECK(!built_);
+  grab_ = true;
+  return *this;
 }
 
 ShellSurfaceBuilder& ShellSurfaceBuilder::SetClientSubmitsInPixelCoordinates(
@@ -340,6 +352,9 @@ std::unique_ptr<ShellSurface> ShellSurfaceBuilder::BuildShellSurface() {
     shell_surface->SetPopup();
   if (menu_)
     shell_surface->SetMenu();
+  if (grab_) {
+    shell_surface->Grab();
+  }
   if (client_submits_surfaces_in_pixel_coordinates_.has_value()) {
     shell_surface->set_client_submits_surfaces_in_pixel_coordinates(
         client_submits_surfaces_in_pixel_coordinates_.value());
@@ -358,7 +373,8 @@ std::unique_ptr<ShellSurface> ShellSurfaceBuilder::BuildShellSurface() {
         shell_surface->Minimize();
         break;
       case chromeos::WindowStateType::kFullscreen:
-        shell_surface->SetFullscreen(/*fullscreen=*/true);
+        shell_surface->SetFullscreen(/*fullscreen=*/true,
+                                     /*display_id=*/display::kInvalidDisplayId);
         break;
       default:
         // Other states are not supported as initial state in ShellSurface.
@@ -368,6 +384,11 @@ std::unique_ptr<ShellSurface> ShellSurfaceBuilder::BuildShellSurface() {
 
   SetCommonPropertiesAndCommitIfNecessary(shell_surface.get());
 
+  // The widget becomes available after the first commit.
+  if (shell_surface->GetWidget() && app_type_ != ash::AppType::NON_APP) {
+    shell_surface->GetWidget()->GetNativeWindow()->SetProperty(
+        aura::client::kAppType, static_cast<int>(app_type_));
+  }
   return shell_surface;
 }
 
@@ -413,7 +434,8 @@ ShellSurfaceBuilder::BuildClientControlledShellSurface() {
         shell_surface->SetMinimized();
         break;
       case chromeos::WindowStateType::kFullscreen:
-        shell_surface->SetFullscreen(/*fullscreen=*/true);
+        shell_surface->SetFullscreen(/*fullscreen=*/true,
+                                     /*display_id=*/display::kInvalidDisplayId);
         break;
       case chromeos::WindowStateType::kPrimarySnapped:
         shell_surface->SetSnapPrimary(chromeos::kDefaultSnapRatio);
@@ -433,6 +455,9 @@ ShellSurfaceBuilder::BuildClientControlledShellSurface() {
 
   // The widget becomes available after the first commit.
   if (shell_surface->GetWidget()) {
+    CHECK(app_type_ == ash::AppType::NON_APP ||
+          app_type_ == ash::AppType::ARC_APP)
+        << "Incompatible app type is set for ClientControlledShellSurface.";
     shell_surface->GetWidget()->GetNativeWindow()->SetProperty(
         aura::client::kAppType, static_cast<int>(ash::AppType::ARC_APP));
   }
@@ -495,8 +520,14 @@ void ShellSurfaceBuilder::SetCommonPropertiesAndCommitIfNecessary(
 
   if (commit_on_build_) {
     shell_surface->root_surface()->Commit();
-    if (centered_)
-      ash::CenterWindow(shell_surface->GetWidget()->GetNativeWindow());
+    if (centered_) {
+      auto* window = shell_surface->GetWidget()->GetNativeWindow();
+      const display::Display display =
+          display::Screen::GetScreen()->GetDisplayNearestWindow(window);
+      gfx::Rect center_bounds = display.work_area();
+      center_bounds.ClampToCenteredSize(window->bounds().size());
+      window->SetBoundsInScreen(center_bounds, display);
+    }
   } else {
     // 'SetCentered' requires its shell surface to be committed when creatted.
     DCHECK(!centered_);

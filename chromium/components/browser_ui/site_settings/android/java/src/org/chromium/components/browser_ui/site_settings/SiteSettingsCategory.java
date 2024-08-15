@@ -40,15 +40,42 @@ import java.lang.annotation.RetentionPolicy;
  * A base class for dealing with website settings categories.
  */
 public class SiteSettingsCategory {
-    @IntDef({Type.ALL_SITES, Type.ADS, Type.AUGMENTED_REALITY, Type.AUTOMATIC_DOWNLOADS,
-            Type.BACKGROUND_SYNC, Type.BLUETOOTH, Type.BLUETOOTH_SCANNING, Type.CAMERA,
-            Type.CLIPBOARD, Type.COOKIES, Type.IDLE_DETECTION, Type.DEVICE_LOCATION,
-            Type.JAVASCRIPT, Type.MICROPHONE, Type.NFC, Type.NOTIFICATIONS, Type.POPUPS,
-            Type.PROTECTED_MEDIA, Type.SENSORS, Type.SOUND, Type.USB, Type.VIRTUAL_REALITY,
-            Type.USE_STORAGE, Type.AUTO_DARK_WEB_CONTENT, Type.REQUEST_DESKTOP_SITE,
-            Type.FEDERATED_IDENTITY_API, Type.THIRD_PARTY_COOKIES, Type.SITE_DATA, Type.ANTI_ABUSE,
-            Type.AUTOPLAY, // Vivaldi
-            Type.ZOOM, Type.NUM_ENTRIES})
+    @IntDef({
+        Type.ALL_SITES,
+        Type.ADS,
+        Type.AUGMENTED_REALITY,
+        Type.AUTOMATIC_DOWNLOADS,
+        Type.BACKGROUND_SYNC,
+        Type.BLUETOOTH,
+        Type.BLUETOOTH_SCANNING,
+        Type.CAMERA,
+        Type.CLIPBOARD,
+        Type.COOKIES,
+        Type.IDLE_DETECTION,
+        Type.DEVICE_LOCATION,
+        Type.JAVASCRIPT,
+        Type.MICROPHONE,
+        Type.NFC,
+        Type.NOTIFICATIONS,
+        Type.POPUPS,
+        Type.PROTECTED_MEDIA,
+        Type.SENSORS,
+        Type.SOUND,
+        Type.USB,
+        Type.VIRTUAL_REALITY,
+        Type.USE_STORAGE,
+        Type.AUTO_DARK_WEB_CONTENT,
+        Type.REQUEST_DESKTOP_SITE,
+        Type.FEDERATED_IDENTITY_API,
+        Type.THIRD_PARTY_COOKIES,
+        Type.SITE_DATA,
+        Type.ANTI_ABUSE,
+        Type.ZOOM,
+        Type.STORAGE_ACCESS,
+        Type.TRACKING_PROTECTION,
+        Type.AUTOPLAY, // Vivaldi
+        Type.NUM_ENTRIES
+    })
     @Retention(RetentionPolicy.SOURCE)
     public @interface Type {
         // All updates here must also be reflected in {@link #preferenceKey(int)
@@ -83,12 +110,14 @@ public class SiteSettingsCategory {
         int SITE_DATA = 27;
         int ANTI_ABUSE = 28;
         int ZOOM = 29;
+        int STORAGE_ACCESS = 30;
+        int TRACKING_PROTECTION = 31;
 
-        int AUTOPLAY = 30; // Vivaldi
+        int AUTOPLAY = 32; // Vivaldi
         /**
          * Number of handled categories used for calculating array sizes.
          */
-        int NUM_ENTRIES = 31 ;
+        int NUM_ENTRIES = 33;
     }
 
     private final BrowserContextHandle mBrowserContextHandle;
@@ -211,6 +240,8 @@ public class SiteSettingsCategory {
                 return ContentSettingsType.PROTECTED_MEDIA_IDENTIFIER;
             case Type.SENSORS:
                 return ContentSettingsType.SENSORS;
+            case Type.STORAGE_ACCESS:
+                return ContentSettingsType.STORAGE_ACCESS;
             case Type.SOUND:
                 return ContentSettingsType.SOUND;
             case Type.USB:
@@ -222,6 +253,7 @@ public class SiteSettingsCategory {
             case Type.ALL_SITES:
             case Type.USE_STORAGE:
             case Type.ZOOM:
+            case Type.TRACKING_PROTECTION:
                 return ContentSettingsType.DEFAULT; // Conversion unavailable.
         }
         assert false;
@@ -295,6 +327,8 @@ public class SiteSettingsCategory {
                 return "protected_content";
             case Type.SENSORS:
                 return "sensors";
+            case Type.STORAGE_ACCESS:
+                return "storage_access";
             case Type.SOUND:
                 return "sound";
             case Type.USB:
@@ -307,6 +341,8 @@ public class SiteSettingsCategory {
                 return "site_data";
             case Type.THIRD_PARTY_COOKIES:
                 return "third_party_cookies";
+            case Type.TRACKING_PROTECTION:
+                return "tracking_protection";
             case Type.ZOOM:
                 return "zoom";
 

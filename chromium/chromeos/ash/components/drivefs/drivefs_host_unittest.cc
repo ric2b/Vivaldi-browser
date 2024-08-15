@@ -4,9 +4,6 @@
 
 #include "chromeos/ash/components/drivefs/drivefs_host.h"
 
-#include <cmath>
-#include <set>
-#include <string_view>
 #include <type_traits>
 #include <utility>
 
@@ -17,9 +14,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
 #include "base/run_loop.h"
-#include "base/scoped_observation.h"
 #include "base/strings/strcat.h"
-#include "base/strings/string_split.h"
 #include "base/test/bind.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/gmock_move_support.h"
@@ -29,12 +24,13 @@
 #include "base/timer/mock_timer.h"
 #include "chromeos/ash/components/disks/disk_mount_manager.h"
 #include "chromeos/ash/components/disks/mock_disk_mount_manager.h"
-#include "chromeos/ash/components/drivefs/drivefs_host_observer.h"
+#include "chromeos/ash/components/drivefs/drivefs_host.h"
 #include "chromeos/ash/components/drivefs/fake_drivefs.h"
 #include "chromeos/ash/components/drivefs/mojom/drivefs.mojom-test-utils.h"
 #include "chromeos/ash/components/drivefs/mojom/drivefs.mojom.h"
 #include "chromeos/ash/components/drivefs/sync_status_tracker.h"
 #include "chromeos/components/mojo_bootstrap/pending_connection_manager.h"
+#include "components/account_id/account_id.h"
 #include "components/invalidation/impl/fake_invalidation_service.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
@@ -42,7 +38,6 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
-#include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/test/test_network_connection_tracker.h"
@@ -199,7 +194,7 @@ class TestingDriveFsHostDelegate : public DriveFsHost::Delegate,
   mojom::ExtensionConnectionParamsPtr extension_params_;
 };
 
-class MockDriveFsHostObserver : public DriveFsHostObserver {
+class MockDriveFsHostObserver : public DriveFsHost::Observer {
  public:
   MOCK_METHOD(void, OnUnmounted, ());
   MOCK_METHOD(void,
@@ -385,9 +380,7 @@ class DriveFsHostTest : public ::testing::Test, public mojom::DriveFsBootstrap {
 
 TEST_F(DriveFsHostTest, Basic) {
   MockDriveFsHostObserver observer;
-  base::ScopedObservation<DriveFsHost, DriveFsHostObserver> observation_scoper(
-      &observer);
-  observation_scoper.Observe(host_.get());
+  observer.Observe(host_.get());
 
   EXPECT_FALSE(host_->IsMounted());
 
@@ -518,9 +511,7 @@ ACTION_P(CloneStruct, output) {
 TEST_F(DriveFsHostTest, OnSyncingStatusUpdate_ForwardToObservers) {
   ASSERT_NO_FATAL_FAILURE(DoMount());
   MockDriveFsHostObserver observer;
-  base::ScopedObservation<DriveFsHost, DriveFsHostObserver> observation_scoper(
-      &observer);
-  observation_scoper.Observe(host_.get());
+  observer.Observe(host_.get());
   auto status = mojom::SyncingStatus::New();
   status->item_events.emplace_back(absl::in_place, 12, 34, "filename.txt",
                                    kInProgress, 123, 456,
@@ -544,9 +535,7 @@ ACTION_P(CloneVectorOfStructs, output) {
 TEST_F(DriveFsHostTest, OnFilesChanged_ForwardToObservers) {
   ASSERT_NO_FATAL_FAILURE(DoMount());
   MockDriveFsHostObserver observer;
-  base::ScopedObservation<DriveFsHost, DriveFsHostObserver> observation_scoper(
-      &observer);
-  observation_scoper.Observe(host_.get());
+  observer.Observe(host_.get());
   std::vector<mojom::FileChangePtr> changes;
   changes.emplace_back(absl::in_place, base::FilePath("/create"),
                        mojom::FileChange::Type::kCreate);
@@ -567,9 +556,7 @@ TEST_F(DriveFsHostTest, OnFilesChanged_ForwardToObservers) {
 TEST_F(DriveFsHostTest, OnError_ForwardToObservers) {
   ASSERT_NO_FATAL_FAILURE(DoMount());
   MockDriveFsHostObserver observer;
-  base::ScopedObservation<DriveFsHost, DriveFsHostObserver> observation_scoper(
-      &observer);
-  observation_scoper.Observe(host_.get());
+  observer.Observe(host_.get());
   auto error =
       mojom::DriveError::New(mojom::DriveError::Type::kCantUploadStorageFull,
                              base::FilePath("/foo"), 1);
@@ -585,9 +572,7 @@ TEST_F(DriveFsHostTest, OnError_ForwardToObservers) {
 TEST_F(DriveFsHostTest, OnError_IgnoreUnknownErrorTypes) {
   ASSERT_NO_FATAL_FAILURE(DoMount());
   MockDriveFsHostObserver observer;
-  base::ScopedObservation<DriveFsHost, DriveFsHostObserver> observation_scoper(
-      &observer);
-  observation_scoper.Observe(host_.get());
+  observer.Observe(host_.get());
   EXPECT_CALL(observer, OnError(_)).Times(0);
   delegate_->OnError(mojom::DriveError::New(
       static_cast<mojom::DriveError::Type>(
@@ -787,9 +772,7 @@ TEST_F(DriveFsHostTest, ConnectToExtension) {
 TEST_F(DriveFsHostTest, OnMirrorSyncingStatusUpdate_ForwardToObservers) {
   ASSERT_NO_FATAL_FAILURE(DoMount());
   MockDriveFsHostObserver observer;
-  base::ScopedObservation<DriveFsHost, DriveFsHostObserver> observation_scoper(
-      &observer);
-  observation_scoper.Observe(host_.get());
+  observer.Observe(host_.get());
   auto status = mojom::SyncingStatus::New();
   status->item_events.emplace_back(absl::in_place, 12, 34, "filename.txt",
                                    kInProgress, 123, 456,

@@ -46,6 +46,8 @@ component("fido") {
     "opaque_attestation_statement.h",
     "p256_public_key.cc",
     "p256_public_key.h",
+    "prf_input.cc",
+    "prf_input.h",
     "public_key.cc",
     "public_key.h",
     "public_key_credential_descriptor.cc",
@@ -82,6 +84,8 @@ component("fido") {
     "//device/bluetooth/public/cpp",
     "//services/device/public/mojom",
   ]
+
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
   # Android implementation of FIDO is delegated to GMSCore.
   if (!is_android) {
@@ -146,6 +150,14 @@ component("fido") {
       "device_public_key_extension.h",
       "device_response_converter.cc",
       "device_response_converter.h",
+      "enclave/enclave_authenticator.cc",
+      "enclave/enclave_authenticator.h",
+      "enclave/enclave_discovery.cc",
+      "enclave/enclave_discovery.h",
+      "enclave/enclave_protocol_utils.cc",
+      "enclave/enclave_protocol_utils.h",
+      "enclave/enclave_websocket_client.cc",
+      "enclave/enclave_websocket_client.h",
       "fido_authenticator.cc",
       "fido_authenticator.h",
       "fido_device.cc",
@@ -200,6 +212,8 @@ component("fido") {
       "u2f_register_operation.h",
       "u2f_sign_operation.cc",
       "u2f_sign_operation.h",
+      "value_response_conversions.cc",
+      "value_response_conversions.h",
       "virtual_ctap2_device.cc",
       "virtual_ctap2_device.h",
       "virtual_fido_device.cc",
@@ -291,19 +305,6 @@ component("fido") {
       "//dbus",
     ]
   }
-
-  if (!is_chromeos && !is_android) {
-    sources += [
-      "enclave/enclave_authenticator.cc",
-      "enclave/enclave_authenticator.h",
-      "enclave/enclave_discovery.cc",
-      "enclave/enclave_discovery.h",
-      "enclave/enclave_http_client.cc",
-      "enclave/enclave_http_client.h",
-      "enclave/enclave_protocol_utils.cc",
-      "enclave/enclave_protocol_utils.h",
-    ]
-  }
 }
 
 static_library("cablev2_registration") {
@@ -320,6 +321,7 @@ static_library("cablev2_registration") {
     "//components/gcm_driver/instance_id",
     "//third_party/boringssl",
   ]
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
 }
 
 static_library("cablev2_authenticator") {
@@ -334,6 +336,7 @@ static_library("cablev2_authenticator") {
     "//content/public/common",  # for authenticator.mojom
     "//services/network/public/mojom",
   ]
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
 }
 
 static_library("cablev2_test_util") {

@@ -29,7 +29,7 @@
 #include "chrome/browser/media/router/providers/wired_display/wired_display_media_route_provider.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/grit/chromium_strings.h"
+#include "chrome/grit/branded_strings.h"
 #include "components/media_router/browser/issues_observer.h"
 #include "components/media_router/browser/media_router.h"
 #include "components/media_router/browser/media_router_factory.h"
@@ -74,7 +74,8 @@ DesktopMediaPickerController::Params MakeDesktopPickerParams(
   DCHECK(web_contents);
 #endif
 
-  DesktopMediaPickerController::Params params;
+  DesktopMediaPickerController::Params params(
+      DesktopMediaPickerController::Params::RequestSource::kCast);
   // Value of `web_contents` comes from the UI, and typically corresponds to
   // the active tab.
   params.web_contents = web_contents;
@@ -154,8 +155,7 @@ void MediaRouterDesktop::CreateRoute(const MediaSource::Id& source_id,
                                      const url::Origin& origin,
                                      content::WebContents* web_contents,
                                      MediaRouteResponseCallback callback,
-                                     base::TimeDelta timeout,
-                                     bool off_the_record) {
+                                     base::TimeDelta timeout) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   CHECK(callback);
   const MediaSink* sink = GetSinkById(sink_id);
@@ -193,8 +193,8 @@ void MediaRouterDesktop::CreateRoute(const MediaSource::Id& source_id,
 
   const std::string presentation_id = MediaRouterBase::CreatePresentationId();
   auto mr_callback = base::BindOnce(&MediaRouterDesktop::RouteResponseReceived,
-                                    AsWeakPtr(), presentation_id, provider_id,
-                                    off_the_record, std::move(callback), false);
+                                    weak_factory_.GetWeakPtr(), presentation_id,
+                                    provider_id, std::move(callback), false);
 
   if (source.IsDesktopMirroringSource()) {
     desktop_picker_.Show(
@@ -202,8 +202,8 @@ void MediaRouterDesktop::CreateRoute(const MediaSource::Id& source_id,
         {DesktopMediaList::Type::kScreen},
         base::BindRepeating([](content::WebContents* wc) { return true; }),
         base::BindOnce(&MediaRouterDesktop::CreateRouteWithSelectedDesktop,
-                       AsWeakPtr(), provider_id, sink_id, presentation_id,
-                       origin, web_contents, timeout, off_the_record,
+                       weak_factory_.GetWeakPtr(), provider_id, sink_id,
+                       presentation_id, origin, web_contents, timeout,
                        std::move(mr_callback)));
   } else {
     const int frame_tree_node_id =
@@ -211,7 +211,7 @@ void MediaRouterDesktop::CreateRoute(const MediaSource::Id& source_id,
                      : kDefaultFrameTreeNodeId;
     media_route_providers_[provider_id]->CreateRoute(
         source_id, sink_id, presentation_id, origin, frame_tree_node_id,
-        timeout, off_the_record, std::move(mr_callback));
+        timeout, std::move(mr_callback));
   }
 }
 
@@ -224,8 +224,7 @@ void MediaRouterDesktop::JoinRoute(const MediaSource::Id& source_id,
                                    const url::Origin& origin,
                                    content::WebContents* web_contents,
                                    MediaRouteResponseCallback callback,
-                                   base::TimeDelta timeout,
-                                   bool off_the_record) {
+                                   base::TimeDelta timeout) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   absl::optional<mojom::MediaRouteProviderId> provider_id =
       GetProviderIdForPresentation(presentation_id);
@@ -243,11 +242,11 @@ void MediaRouterDesktop::JoinRoute(const MediaSource::Id& source_id,
       web_contents ? web_contents->GetPrimaryMainFrame()->GetFrameTreeNodeId()
                    : kDefaultFrameTreeNodeId;
   auto mr_callback = base::BindOnce(&MediaRouterDesktop::RouteResponseReceived,
-                                    AsWeakPtr(), presentation_id, *provider_id,
-                                    off_the_record, std::move(callback), true);
+                                    weak_factory_.GetWeakPtr(), presentation_id,
+                                    *provider_id, std::move(callback), true);
   media_route_providers_[*provider_id]->JoinRoute(
       source_id, presentation_id, origin, frame_tree_node_id, timeout,
-      off_the_record, std::move(mr_callback));
+      std::move(mr_callback));
 }
 
 void MediaRouterDesktop::TerminateRoute(const MediaRoute::Id& route_id) {
@@ -259,8 +258,9 @@ void MediaRouterDesktop::TerminateRoute(const MediaRoute::Id& route_id) {
         mojom::RouteRequestResultCode::ROUTE_NOT_FOUND);
     return;
   }
-  auto callback = base::BindOnce(&MediaRouterDesktop::OnTerminateRouteResult,
-                                 AsWeakPtr(), route_id, *provider_id);
+  auto callback =
+      base::BindOnce(&MediaRouterDesktop::OnTerminateRouteResult,
+                     weak_factory_.GetWeakPtr(), route_id, *provider_id);
   media_route_providers_[*provider_id]->TerminateRoute(route_id,
                                                        std::move(callback));
 }
@@ -359,7 +359,7 @@ void MediaRouterDesktop::GetMediaController(
     return;
   }
   auto callback = base::BindOnce(&MediaRouterDesktop::OnMediaControllerCreated,
-                                 AsWeakPtr(), route_id);
+                                 weak_factory_.GetWeakPtr(), route_id);
   media_route_providers_[*provider_id]->CreateMediaRouteController(
       route_id, std::move(controller), std::move(observer),
       std::move(callback));
@@ -466,8 +466,9 @@ void MediaRouterDesktop::RegisterMediaRoutesObserver(
     // MediaRoutesObserver is calling this method from its constructor, and that
     // must complete before invoking its virtual OnRoutesUpdated() method.
     content::GetUIThreadTaskRunner({})->PostTask(
-        FROM_HERE, base::BindOnce(&MediaRouterDesktop::NotifyOfExistingRoutes,
-                                  AsWeakPtr(), observer->AsWeakPtr()));
+        FROM_HERE,
+        base::BindOnce(&MediaRouterDesktop::NotifyOfExistingRoutes,
+                       weak_factory_.GetWeakPtr(), observer->AsWeakPtr()));
   }
 }
 
@@ -489,17 +490,7 @@ void MediaRouterDesktop::RegisterPresentationConnectionMessageObserver(
   } else {
     DCHECK(!observer_list->HasObserver(observer));
   }
-
-  bool should_listen = observer_list->empty();
   observer_list->AddObserver(observer);
-  if (should_listen) {
-    absl::optional<mojom::MediaRouteProviderId> provider_id =
-        GetProviderIdForRoute(route_id);
-    if (provider_id) {
-      media_route_providers_[*provider_id]->StartListeningForRouteMessages(
-          route_id);
-    }
-  }
 }
 
 void MediaRouterDesktop::UnregisterPresentationConnectionMessageObserver(
@@ -514,15 +505,6 @@ void MediaRouterDesktop::UnregisterPresentationConnectionMessageObserver(
   }
 
   it->second->RemoveObserver(observer);
-  if (it->second->empty()) {
-    message_observers_.erase(route_id);
-    absl::optional<mojom::MediaRouteProviderId> provider_id =
-        GetProviderIdForRoute(route_id);
-    if (provider_id) {
-      media_route_providers_[*provider_id]->StopListeningForRouteMessages(
-          route_id);
-    }
-  }
 }
 
 void MediaRouterDesktop::RegisterMediaRouteProvider(
@@ -535,7 +517,7 @@ void MediaRouterDesktop::RegisterMediaRouteProvider(
       std::move(media_route_provider_remote));
   bound_remote.set_disconnect_handler(
       base::BindOnce(&MediaRouterDesktop::OnProviderConnectionError,
-                     AsWeakPtr(), provider_id));
+                     weak_factory_.GetWeakPtr(), provider_id));
   media_route_providers_[provider_id] = std::move(bound_remote);
 }
 
@@ -685,7 +667,6 @@ void MediaRouterDesktop::OnRouteAdded(mojom::MediaRouteProviderId provider_id,
 void MediaRouterDesktop::RouteResponseReceived(
     const std::string& presentation_id,
     mojom::MediaRouteProviderId provider_id,
-    bool is_off_the_record,
     MediaRouteResponseCallback callback,
     bool is_join,
     const absl::optional<MediaRoute>& media_route,
@@ -701,12 +682,6 @@ void MediaRouterDesktop::RouteResponseReceived(
                                    ? *error_text
                                    : std::string("Unknown error.");
     result = RouteRequestResult::FromError(error, result_code);
-  } else if (media_route->is_off_the_record() != is_off_the_record) {
-    std::string error = base::StringPrintf(
-        "Mismatch in OffTheRecord status: request = %d, response = %d",
-        is_off_the_record, media_route->is_off_the_record());
-    result = RouteRequestResult::FromError(
-        error, mojom::RouteRequestResultCode::ROUTE_NOT_FOUND);
   } else {
     result = RouteRequestResult::FromSuccess(*media_route, presentation_id);
     OnRouteAdded(provider_id, *media_route);
@@ -866,7 +841,6 @@ void MediaRouterDesktop::CreateRouteWithSelectedDesktop(
     const url::Origin& origin,
     content::WebContents* web_contents,
     base::TimeDelta timeout,
-    bool off_the_record,
     mojom::MediaRouteProvider::CreateRouteCallback mr_callback,
     const std::string& err,
     content::DesktopMediaID media_id) {
@@ -887,7 +861,6 @@ void MediaRouterDesktop::CreateRouteWithSelectedDesktop(
   media_route_providers_[provider_id]->CreateRoute(
       MediaSource::ForDesktop(media_id.ToString(), media_id.audio_share).id(),
       sink_id, presentation_id, origin, kDefaultFrameTreeNodeId, timeout,
-      off_the_record,
       base::BindOnce(
           [](mojom::MediaRouteProvider::CreateRouteCallback inner_callback,
              const absl::optional<media_router::MediaRoute>& route,

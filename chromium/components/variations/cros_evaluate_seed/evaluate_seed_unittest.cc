@@ -5,6 +5,7 @@
 #include "components/variations/cros_evaluate_seed/evaluate_seed.h"
 
 #include "base/strings/strcat.h"
+#include "base/test/protobuf_matchers.h"
 #include "base/test/scoped_chromeos_version_info.h"
 #include "build/branding_buildflags.h"
 #include "build/config/chromebox_for_meetings/buildflags.h"
@@ -15,14 +16,7 @@
 
 namespace variations::cros_early_boot::evaluate_seed {
 
-MATCHER_P(EqualsProto,
-          message,
-          "Match a proto Message equal to the matcher's argument.") {
-  std::string expected_serialized, actual_serialized;
-  message.SerializeToString(&expected_serialized);
-  arg.SerializeToString(&actual_serialized);
-  return expected_serialized == actual_serialized;
-}
+using ::base::EqualsProto;
 
 TEST(VariationsCrosEvaluateSeed, GetClientFilterable_Enrolled) {
   base::CommandLine::ForCurrentProcess()->InitFromArgv(
@@ -65,7 +59,8 @@ TEST_P(VariationsCrosEvaluateSeedGetChannel,
        GetClientFilterableState_Channel_Branded) {
   std::string lsb_release = base::StrCat(
       {"CHROMEOS_RELEASE_TRACK=", GetParam().channel_name, "-channel"});
-  const base::Time lsb_release_time(base::Time::FromDoubleT(12345.6));
+  const base::Time lsb_release_time(
+      base::Time::FromSecondsSinceUnixEpoch(12345.6));
   base::test::ScopedChromeOSVersionInfo lsb_info(lsb_release, lsb_release_time);
 
   base::CommandLine::ForCurrentProcess()->InitFromArgv({"evaluate_seed"});

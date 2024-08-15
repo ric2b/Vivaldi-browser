@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "base/files/file_path.h"
-#include "base/strings/stringprintf.h"
+#include "base/i18n/time_formatting.h"
 #include "base/time/time.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/feedback/system_logs/log_sources/chrome_internal_log_source.h"
@@ -23,6 +23,9 @@
 #include "chrome/browser/support_tool/signin_data_collector.h"
 #include "chrome/browser/support_tool/support_tool_handler.h"
 #include "chrome/browser/support_tool/system_log_source_data_collector_adaptor.h"
+#include "chromeos/ash/components/browser_context_helper/browser_context_types.h"
+#include "third_party/icu/source/i18n/unicode/timezone.h"
+
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/crosapi/browser_manager.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
@@ -44,6 +47,7 @@
 #include "chrome/browser/support_tool/ash/system_logs_data_collector.h"
 #include "chrome/browser/support_tool/ash/system_state_data_collector.h"
 #include "chrome/browser/support_tool/ash/ui_hierarchy_data_collector.h"
+
 #if BUILDFLAG(IS_CHROMEOS_WITH_HW_DETAILS)
 #include "chrome/browser/ash/system_logs/reven_log_source.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_WITH_HW_DETAILS)
@@ -88,14 +92,6 @@ constexpr support_tool::DataCollectorType kDataCollectorsChromeosHwDetails[] = {
 // logs for Lacros.
 constexpr support_tool::DataCollectorType kOptionalDataCollectors[] = {
     support_tool::CHROMEOS_CROS_API, support_tool::CHROMEOS_LACROS};
-
-// Returns the current time in UTCYYYY_MM_DD_HH_mm format.
-std::string GetTimestampString(base::Time timestamp) {
-  base::Time::Exploded tex;
-  timestamp.UTCExplode(&tex);
-  return base::StringPrintf("UTC%04d%02d%02d_%02d%02d", tex.year, tex.month,
-                            tex.day_of_month, tex.hour, tex.minute);
-}
 
 }  // namespace
 
@@ -226,8 +222,12 @@ std::unique_ptr<SupportToolHandler> GetSupportToolHandler(
             /*requested_logs=*/std::set<base::FilePath>()));
         break;
       case support_tool::CHROMEOS_CHROME_USER_LOGS:
-        handler->AddDataCollector(
-            std::make_unique<ChromeUserLogsDataCollector>());
+        // TODO(b:294844737): Add testing for this check.
+        // User session must be active to read user data from Cryptohome.
+        if (ash::IsUserBrowserContext(profile)) {
+          handler->AddDataCollector(
+              std::make_unique<ChromeUserLogsDataCollector>());
+        }
         break;
       case support_tool::CHROMEOS_BLUETOOTH_FLOSS:
         handler->AddDataCollector(
@@ -329,12 +329,11 @@ base::FilePath GetFilepathToExport(base::FilePath target_directory,
                                    const std::string& filename_prefix,
                                    const std::string& case_id,
                                    base::Time timestamp) {
-  std::string timestamp_string = GetTimestampString(timestamp);
-  std::string filename =
-      case_id.empty()
-          ? base::StringPrintf("%s_%s", filename_prefix.c_str(),
-                               timestamp_string.c_str())
-          : base::StringPrintf("%s_%s_%s", filename_prefix.c_str(),
-                               case_id.c_str(), timestamp_string.c_str());
-  return target_directory.AppendASCII(filename);
+  std::string filename = filename_prefix + "_";
+  if (!case_id.empty()) {
+    filename += case_id + "_";
+  }
+  return target_directory.AppendASCII(
+      filename + base::UnlocalizedTimeFormatWithPattern(
+                     timestamp, "'UTC'yyyyMMdd_HHmm", icu::TimeZone::getGMT()));
 }

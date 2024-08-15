@@ -60,6 +60,14 @@ class ASH_EXPORT FocusModeController : public SessionObserver {
   // SessionObserver:
   void OnActiveUserSessionChanged(const AccountId& account_id) override;
 
+  // Extends the focus time by ten minutes by increasing the `end_time_` and
+  // `session_duration_`. This is only used during a focus session.
+  void ExtendActiveSessionDuration();
+
+  // Sets a specific value for `session_duration_` and updates `end_time_` only
+  // during an active focus session.
+  void SetSessionDuration(const base::TimeDelta& new_session_duration);
+
  private:
   void OnTimerTick();
 
@@ -93,10 +101,6 @@ class ASH_EXPORT FocusModeController : public SessionObserver {
   // This will dictate whether DND will be turned on when a Focus Mode session
   // starts. Depends on previous session data (from user prefs) or user input.
   bool turn_on_do_not_disturb_ = true;
-
-  // When a Focus Mode session starts, the previous DND state is stored so that
-  // it can be restored when the session ends.
-  bool previous_do_not_disturb_state_ = false;
 
   base::ObserverList<Observer> observers_;
 };

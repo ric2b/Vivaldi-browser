@@ -31,6 +31,12 @@
 // anymore.
 - (void)neverShowModuleType:(ContentSuggestionsModuleType)type;
 
+// Notifies the audience that the Magic Stack edit button was tapped.
+- (void)didTapMagicStackEditButton;
+
+// Notifies the audience to show the list of parcels.
+- (void)showMagicStackParcelList;
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_CONTENT_SUGGESTIONS_CONTENT_SUGGESTIONS_VIEW_CONTROLLER_AUDIENCE_H_

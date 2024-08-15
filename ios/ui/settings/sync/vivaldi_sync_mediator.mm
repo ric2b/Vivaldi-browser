@@ -265,16 +265,48 @@ PendingRegistration pendingRegistration;
   return _syncService->ui_helper()->SetEncryptionPassword(password);
 }
 
-- (BOOL)importEncryptionPassword:(NSURL*)file {
+- (void)importEncryptionPassword:(NSURL*)file
+         completionHandler:(void (^)(NSString* errorMessage))completionHandler {
+
+  __weak __typeof(self) weakSelf = self;
+  void (^readingAccessor)(NSURL*) = ^(NSURL* newURL) {
+    if (!weakSelf) {
+      return;
+    }
+    base::ScopedBlockingCall inner_scoped_blocking_call(
+        FROM_HERE, base::BlockingType::WILL_BLOCK);
+    NSFileManager* manager = [NSFileManager defaultManager];
+    NSData* data = [manager contentsAtPath:[newURL path]];
+    [weakSelf receivedData:data withCompletion:completionHandler];
+  };
   NSError* error = nil;
-  NSString* key = [NSString stringWithContentsOfFile:[file path]
-                                            encoding:NSUTF8StringEncoding
-                                               error:&error];
-  if (!error && [key length]) {
-    return _syncService->ui_helper()->RestoreEncryptionToken(
-      base::SysNSStringToUTF8(key));
+  NSFileCoordinator* readingCoordinator =
+      [[NSFileCoordinator alloc] initWithFilePresenter:nil];
+  [readingCoordinator
+      coordinateReadingItemAtURL:file
+                        options:NSFileCoordinatorReadingWithoutChanges
+                          error:&error
+                      byAccessor:readingAccessor];
+
+  if (error) {
+    completionHandler([error localizedDescription]);
   }
-  return NO;
+}
+
+- (void)receivedData:(NSData*)data
+      withCompletion:(void (^)(NSString* message))completionHandler {
+    NSString* key = [[NSString alloc]
+        initWithBytes:data.bytes
+               length:data.length
+             encoding:NSUTF8StringEncoding];
+    BOOL success = _syncService->ui_helper()->RestoreEncryptionToken(
+        base::SysNSStringToUTF8(key));
+    if (success && [key length]) {
+      completionHandler(@"");
+      return;
+    }
+    completionHandler(
+      l10n_util::GetNSString(IDS_VIVALDI_ACCOUNT_ENCRYPTION_PASSPHRASE_WRONG));
 }
 
 - (void)storeUsername:(NSString*)username
@@ -856,15 +888,17 @@ PendingRegistration pendingRegistration;
           hasSectionForSectionIdentifier:SectionIdentifierSyncStartSyncing]) {
     return;
   }
-  NSIndexPath* itemIndexPath = [self.settingsConsumer.tableViewModel
-      indexPathForItem:self.startSyncingButton];
+
+  BOOL hasButton = [self.settingsConsumer.tableViewModel
+                        hasItem:self.startSyncingButton
+        inSectionWithIdentifier:SectionIdentifierSyncStartSyncing];
   if (self.segmentedControlItem.selectedItem == SyncAll) {
-    if (!itemIndexPath) {
+    if (!hasButton) {
       [self.settingsConsumer.tableViewModel addItem:self.startSyncingButton
           toSectionWithIdentifier:SectionIdentifierSyncStartSyncing];
     }
   } else {
-    if (itemIndexPath) {
+    if (hasButton) {
       [self.settingsConsumer.tableViewModel
           removeItemWithType:ItemTypeStartSyncingButton
           fromSectionWithIdentifier:SectionIdentifierSyncStartSyncing];

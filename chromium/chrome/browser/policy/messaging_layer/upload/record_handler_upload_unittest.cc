@@ -10,7 +10,8 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
-
+#include "base/types/expected.h"
+#include "build/build_config.h"
 #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "chrome/browser/policy/messaging_layer/proto/synced/log_upload_event.pb.h"
 #include "chrome/browser/policy/messaging_layer/public/report_client_test_util.h"
@@ -66,11 +67,11 @@ constexpr char kAccessParameters[] = "http://destination";
 MATCHER_P(ResponseEquals,
           expected,
           "Compares StatusOr<response> to expected response") {
-  if (!arg.ok()) {
-    *result_listener << "Failure status=" << arg.status();
+  if (!arg.has_value()) {
+    *result_listener << "Failure status=" << arg.error();
     return false;
   }
-  const auto& arg_value = arg.ValueOrDie();
+  const auto& arg_value = arg.value();
   if (arg_value.sequence_information.GetTypeName() !=
       expected.sequence_information.GetTypeName()) {
     *result_listener << "Sequence info type mismatch: actual="
@@ -158,18 +159,18 @@ class RecordHandlerUploadTest : public ::testing::Test {
         ReportQueueConfiguration::Create(
             {.event_type = EventType::kDevice, .destination = LOG_UPLOAD})
             .Build();
-    EXPECT_OK(config_result) << config_result.status();
+    EXPECT_TRUE(config_result.has_value()) << config_result.error();
     test::TestEvent<StatusOr<std::unique_ptr<ReportQueue>>> create_queue_event;
-    ReportQueueProvider::CreateQueue(std::move(config_result.ValueOrDie()),
+    ReportQueueProvider::CreateQueue(std::move(config_result.value()),
                                      create_queue_event.cb());
     auto report_queue_result = create_queue_event.result();
     // Let everything ongoing to finish.
     task_environment_.RunUntilIdle();
-    ASSERT_OK(report_queue_result) << report_queue_result.status();
+    ASSERT_TRUE(report_queue_result.has_value()) << report_queue_result.error();
 
     // Enqueue event.
     test::TestEvent<Status> enqueue_record_event;
-    std::move(report_queue_result.ValueOrDie())
+    std::move(report_queue_result.value())
         ->Enqueue("Record", FAST_BATCH, enqueue_record_event.cb());
     const auto enqueue_record_result = enqueue_record_event.result();
     EXPECT_OK(enqueue_record_result) << enqueue_record_result;
@@ -221,13 +222,15 @@ EncryptedRecord ComposeEncryptedRecord(
     UploadSettings upload_settings,
     absl::optional<UploadTracker> upload_tracker) {
   static constexpr int64_t kGenerationId = 1234;
-  static const std::string kGenerationGuid =
-      base::Uuid::GenerateRandomV4().AsLowercaseString();
   EncryptedRecord encrypted_record;
   encrypted_record.set_encrypted_wrapped_record(data.data(), data.size());
   auto* sequence_information = encrypted_record.mutable_sequence_information();
   sequence_information->set_generation_id(kGenerationId);
+#if BUILDFLAG(IS_CHROMEOS)
+  static const std::string kGenerationGuid =
+      base::Uuid::GenerateRandomV4().AsLowercaseString();
   sequence_information->set_generation_guid(kGenerationGuid);
+#endif  // BUILDFLAG(IS_CHROMEOS)
   sequence_information->set_sequencing_id(0);
   sequence_information->set_priority(Priority::SECURITY);
   {
@@ -347,6 +350,7 @@ TEST_F(RecordHandlerUploadTest, SuccessfulInitiation) {
       }));
 
   handler_->HandleRecords(/*need_encryption_key=*/false,
+                          /*config_file_version=*/-1,
                           std::vector(1, std::move(init_encrypted_record)),
                           std::move(record_reservation), responder_event.cb(),
                           encryption_key_attached_event.repeating_cb());
@@ -396,6 +400,7 @@ TEST_F(RecordHandlerUploadTest, SuccessfulNextStep) {
         std::move(callback).Run(Status::StatusOK());
       }));
   handler_->HandleRecords(/*need_encryption_key=*/false,
+                          /*config_file_version=*/-1,
                           std::vector(1, std::move(next_step_encrypted_record)),
                           std::move(record_reservation), responder_event.cb(),
                           encryption_key_attached_event.repeating_cb());
@@ -442,6 +447,7 @@ TEST_F(RecordHandlerUploadTest, SuccessfulFinalize) {
         std::move(callback).Run(Status::StatusOK());
       }));
   handler_->HandleRecords(/*need_encryption_key=*/false,
+                          /*config_file_version=*/-1,
                           std::vector(1, std::move(fin_encrypted_record)),
                           std::move(record_reservation), responder_event.cb(),
                           encryption_key_attached_event.repeating_cb());
@@ -470,6 +476,7 @@ TEST_F(RecordHandlerUploadTest, AlreadyFinalized) {
   EXPECT_CALL(*test_storage_, AddRecord).Times(0);
 
   handler_->HandleRecords(/*need_encryption_key=*/false,
+                          /*config_file_version=*/-1,
                           std::vector(1, std::move(fin_encrypted_record)),
                           std::move(record_reservation), responder_event.cb(),
                           encryption_key_attached_event.repeating_cb());
@@ -500,7 +507,8 @@ TEST_F(RecordHandlerUploadTest, FailedProcessing) {
              base::OnceCallback<void(
                  StatusOr<std::pair<int64_t /*uploaded*/,
                                     std::string /*session_token*/>>)> cb) {
-            std::move(cb).Run(Status(error::CANCELLED, "Failure by test"));
+            std::move(cb).Run(
+                base::unexpected(Status(error::CANCELLED, "Failure by test")));
           });
   EXPECT_CALL(*delegate_, DoFinalize).Times(0);
   EXPECT_CALL(*delegate_, DoDeleteFile(StrEq(kUploadFileName))).Times(1);
@@ -519,6 +527,7 @@ TEST_F(RecordHandlerUploadTest, FailedProcessing) {
         std::move(callback).Run(Status::StatusOK());
       }));
   handler_->HandleRecords(/*need_encryption_key=*/false,
+                          /*config_file_version=*/-1,
                           std::vector(1, std::move(next_step_encrypted_record)),
                           std::move(record_reservation), responder_event.cb(),
                           encryption_key_attached_event.repeating_cb());
@@ -566,10 +575,10 @@ TEST_F(RecordHandlerUploadTest, RepeatedInitiationAttempts) {
                                          memory_resource_);
     test::TestEvent<SignedEncryptionInfo> encryption_key_attached_event;
     test::TestEvent<CompletionResponse> responder_event;
-    handler_->HandleRecords(/*need_encryption_key=*/false,
-                            std::vector(1, init_encrypted_record),
-                            std::move(record_reservation), responder_event.cb(),
-                            encryption_key_attached_event.repeating_cb());
+    handler_->HandleRecords(
+        /*need_encryption_key=*/false, /*config_file_version=*/-1,
+        std::vector(1, init_encrypted_record), std::move(record_reservation),
+        responder_event.cb(), encryption_key_attached_event.repeating_cb());
     VerifyUploadRequestAndRespond();
     auto response = responder_event.result();
     EXPECT_THAT(response, ResponseEquals(expected_response));
@@ -595,7 +604,8 @@ TEST_F(RecordHandlerUploadTest, InitiationFailureTriggersRetry) {
              base::OnceCallback<void(
                  StatusOr<std::pair<int64_t /*total*/,
                                     std::string /*session_token*/>>)> cb) {
-            std::move(cb).Run(Status(error::CANCELLED, "Failure by test"));
+            std::move(cb).Run(
+                base::unexpected(Status(error::CANCELLED, "Failure by test")));
           }));
   EXPECT_CALL(*delegate_, DoNextStep).Times(0);
   EXPECT_CALL(*delegate_, DoFinalize).Times(0);
@@ -636,6 +646,7 @@ TEST_F(RecordHandlerUploadTest, InitiationFailureTriggersRetry) {
     test::TestEvent<SignedEncryptionInfo> encryption_key_attached_event;
     test::TestEvent<CompletionResponse> responder_event;
     handler_->HandleRecords(/*need_encryption_key=*/false,
+                            /*config_file_version=*/-1,
                             std::vector(1, std::move(init_encrypted_record)),
                             std::move(record_reservation), responder_event.cb(),
                             encryption_key_attached_event.repeating_cb());
@@ -690,6 +701,7 @@ TEST_F(RecordHandlerUploadTest, RepeatedNextStepAttempts) {
     test::TestEvent<SignedEncryptionInfo> encryption_key_attached_event;
     test::TestEvent<CompletionResponse> responder_event;
     handler_->HandleRecords(/*need_encryption_key=*/false,
+                            /*config_file_version=*/-1,
                             std::vector(1, next_step_encrypted_record),
                             std::move(record_reservation), responder_event.cb(),
                             encryption_key_attached_event.repeating_cb());
@@ -722,7 +734,8 @@ TEST_F(RecordHandlerUploadTest, NextStepFailureTriggersRetry) {
              base::OnceCallback<void(
                  StatusOr<std::pair<int64_t /*uploaded*/,
                                     std::string /*session_token*/>>)> cb) {
-            std::move(cb).Run(Status(error::CANCELLED, "Failure by test"));
+            std::move(cb).Run(
+                base::unexpected(Status(error::CANCELLED, "Failure by test")));
           });
   EXPECT_CALL(*delegate_, DoFinalize).Times(0);
 
@@ -762,7 +775,7 @@ TEST_F(RecordHandlerUploadTest, NextStepFailureTriggersRetry) {
     test::TestEvent<SignedEncryptionInfo> encryption_key_attached_event;
     test::TestEvent<CompletionResponse> responder_event;
     handler_->HandleRecords(
-        /*need_encryption_key=*/false,
+        /*need_encryption_key=*/false, /*config_file_version=*/-1,
         std::vector(1, std::move(next_step_encrypted_record)),
         std::move(record_reservation), responder_event.cb(),
         encryption_key_attached_event.repeating_cb());
@@ -815,10 +828,10 @@ TEST_F(RecordHandlerUploadTest, RepeatedFinalizeAttempts) {
                                          memory_resource_);
     test::TestEvent<SignedEncryptionInfo> encryption_key_attached_event;
     test::TestEvent<CompletionResponse> responder_event;
-    handler_->HandleRecords(/*need_encryption_key=*/false,
-                            std::vector(1, fin_encrypted_record),
-                            std::move(record_reservation), responder_event.cb(),
-                            encryption_key_attached_event.repeating_cb());
+    handler_->HandleRecords(
+        /*need_encryption_key=*/false, /*config_file_version=*/-1,
+        std::vector(1, fin_encrypted_record), std::move(record_reservation),
+        responder_event.cb(), encryption_key_attached_event.repeating_cb());
     VerifyUploadRequestAndRespond();
     auto response = responder_event.result();
     EXPECT_THAT(response, ResponseEquals(expected_response));
@@ -845,7 +858,8 @@ TEST_F(RecordHandlerUploadTest, FinalizeFailureTriggersRetry) {
           Invoke([](std::string_view session_token,
                     base::OnceCallback<void(
                         StatusOr<std::string /*access_parameters*/>)> cb) {
-            std::move(cb).Run(Status(error::CANCELLED, "Failure by test"));
+            std::move(cb).Run(
+                base::unexpected(Status(error::CANCELLED, "Failure by test")));
           }));
 
   // Record retry event and then original with status.
@@ -884,6 +898,7 @@ TEST_F(RecordHandlerUploadTest, FinalizeFailureTriggersRetry) {
     test::TestEvent<SignedEncryptionInfo> encryption_key_attached_event;
     test::TestEvent<CompletionResponse> responder_event;
     handler_->HandleRecords(/*need_encryption_key=*/false,
+                            /*config_file_version=*/-1,
                             std::vector(1, std::move(fin_encrypted_record)),
                             std::move(record_reservation), responder_event.cb(),
                             encryption_key_attached_event.repeating_cb());

@@ -7,6 +7,12 @@ declared in that file.
 
 It then uses both the vivaldi and chromium sections to build a list of
 preferences that the javascript side is allowed to read from the C++ side.
+
+/!\: This script should never generate data that is used in the process of
+determining runtime behavior related to prefs. In feneral, changing anything
+in the prefs definitions should work without needing to recompile a new binary.
+The only allowable exception is that removing a pref that is actively used by
+the binary itself.
 """
 
 import argparse
@@ -35,8 +41,6 @@ namespace vivaldiprefs {
 
 extern const char kPlatformDefaultKeyName[];
 
-extern const base::StringPiece g_mergeable_lists[%(mergeable_lists_count)d];
-
 }  // namespace vivaldiprefs
 
 #endif  // %(header_guard)s
@@ -51,9 +55,6 @@ namespace vivaldiprefs {
 %(pref_constants)s
 
 const char kPlatformDefaultKeyName[] = "default_%(target_os)s";
-
-const base::StringPiece g_mergeable_lists[] = {
-%(mergeable_lists)s};
 
 }  // namespace vivaldiprefs
 """
@@ -101,23 +102,6 @@ def generate_prefs_list(current_path, prefs_definitions):
     result['path'] = current_path
     result['comment'] = prefs_definitions.get('description', None)
     result['type'] = prefs_definitions['type']
-    result['syncable'] = prefs_definitions['syncable']
-    sync_method = prefs_definitions.get('sync_method', 'copy')
-    allowed_sync_methods = ['copy', 'merge']
-    if sync_method not in allowed_sync_methods:
-        raise TypeError(
-            'Unknown sync method "{0}" in {1}. The value must be one of ({2})'.
-            format(sync_method, pref_name, ' '.join(allowed_sync_methods))
-        )
-    if sync_method == 'merge' and result['type'] != 'list':
-        raise TypeError(
-            '"{0}" as sync_method in {1} is not supported for ' +
-            'preference type {2}.'.
-            format(sync_method, pref_name, result['type'])
-        )
-
-    result['sync_method'] = sync_method
-
     return [result]
 
 def main():
@@ -138,12 +122,6 @@ def main():
     prefs_list.sort(key=lambda i: i["name"])
     if not re.match('^(android|linux|mac|win|ios)$', args.target_os):
         raise TypeError('unsupported target-os - ' + args.target_os)
-
-    mergeable_lists = [
-        pref['name'] for pref in prefs_list
-            if pref['type'] == 'list' and pref['syncable'] and
-                    pref['sync_method'] == 'merge'
-    ]
 
     top_comments  = PREFS_GEN_FILE_HEAD_TEMPLATE % {
         "origin_name": args.prefs_definitions.name
@@ -169,7 +147,6 @@ def main():
                 'comment':
                     ('// '+ pref['comment'] + '\n') if pref['comment'] else ''
             } for pref in prefs_list]),
-        'mergeable_lists_count': len(mergeable_lists),
     })
 
     args.prefs_names_cc.write(PREFS_NAMES_CC_TEMPLATE % {
@@ -181,10 +158,6 @@ def main():
                 'path': pref['path']
             } for pref in prefs_list]),
         "target_os": args.target_os,
-        'mergeable_lists': ''.join([
-            '  base::StringPiece(%s),\n' % (list_name,)
-                for list_name in mergeable_lists
-        ]),
     })
 
     args.prefs_enums_h.write(PREFS_ENUMS_H_TEMPLATE % {

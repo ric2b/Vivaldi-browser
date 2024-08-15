@@ -27,6 +27,10 @@ static std::u16string SeparatorDescription;
 static std::vector<int> MenuIds;
 static std::string ContainerEdge = "below";
 static int ContainerIndex = 0;
+// This pointer should never be used to access data it holds as we do no attempt
+// to keep it in sync with the actual menu. It is rather used to compare the
+// existing menu to determine if that has been changed (using a new object).
+static NSMenu* BookmarkMenu = nullptr;
 
 namespace vivaldi {
 
@@ -70,6 +74,16 @@ void SortFlags::InitFromPrefs() {
         order_ = ::vivaldi::BookmarkSorter::ORDER_DESCENDING;
     }
   }
+}
+
+
+void SetBookmarkMenu(NSMenu* menu) {
+  BookmarkMenu = menu;
+}
+
+// See comment about BookmarkMenu above.
+NSMenu* GetBookmarkMenu() {
+  return BookmarkMenu;
 }
 
 std::vector<int>& GetBookmarkMenuIds() {

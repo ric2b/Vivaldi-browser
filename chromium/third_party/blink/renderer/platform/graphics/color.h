@@ -136,6 +136,10 @@ class PLATFORM_EXPORT Color {
     return color_space == ColorSpace::kLch || color_space == ColorSpace::kOklch;
   }
 
+  // https://www.w3.org/TR/css-color-4/#legacy-color-syntax
+  // Returns true if the color is of a type that predates CSS Color 4. Includes
+  // rgb(), rgba(), hex color, named color, hsl() and hwb() types. These colors
+  // interpolate and serialize differently from other color types.
   static bool IsLegacyColorSpace(ColorSpace color_space) {
     return color_space == ColorSpace::kSRGBLegacy ||
            color_space == ColorSpace::kHSL || color_space == ColorSpace::kHWB;
@@ -187,7 +191,9 @@ class PLATFORM_EXPORT Color {
 
   // Create a color using the rgba() syntax, with float arguments. All
   // parameters will be clamped to the [0, 1] interval.
-  static Color FromRGBAFloat(float r, float g, float b, float a);
+  static constexpr Color FromRGBAFloat(float r, float g, float b, float a) {
+    return Color(SkColor4f{r, g, b, a});
+  }
 
   // Create a color from a generic color space. Parameters that are none should
   // be specified as absl::nullopt. The value for `alpha` will be clamped to the
@@ -199,6 +205,12 @@ class PLATFORM_EXPORT Color {
                               absl::optional<float> param1,
                               absl::optional<float> param2,
                               absl::optional<float> alpha);
+  static Color FromColorSpace(ColorSpace space,
+                              absl::optional<float> param0,
+                              absl::optional<float> param1,
+                              absl::optional<float> param2) {
+    return FromColorSpace(space, param0, param1, param2, 1.0f);
+  }
 
   // Create a color using the hsl() syntax.
   static Color FromHSLA(absl::optional<float> h,
@@ -249,7 +261,7 @@ class PLATFORM_EXPORT Color {
 
   // TODO(crbug.com/1308932): These three functions are just helpers for
   // while we're converting platform/graphics to float color.
-  static Color FromSkColor4f(SkColor4f fc);
+  static constexpr Color FromSkColor4f(SkColor4f fc) { return Color(fc); }
   static constexpr Color FromSkColor(SkColor color) { return Color(color); }
   static constexpr Color FromRGBA32(RGBA32 color) { return Color(color); }
 
@@ -353,11 +365,6 @@ class PLATFORM_EXPORT Color {
   inline bool operator!=(const Color& other) const { return !(*this == other); }
 
   unsigned GetHash() const;
-  // Returns true if the color is of a type that predates CSS Color 4. Includes
-  // rgb(), rgba(), hex color, named color, hsl() and hwb() types. These colors
-  // are always assumed to be in the sRGB color space and interpolate and
-  // serialize differently from other color types.
-  bool IsLegacyColor() const;
 
   // What colorspace space a color wants to interpolate in. This is not
   // equivalent to the colorspace of the color itself.
@@ -378,6 +385,7 @@ class PLATFORM_EXPORT Color {
   FRIEND_TEST_ALL_PREFIXES(BlinkColor, HueInterpolation);
   FRIEND_TEST_ALL_PREFIXES(BlinkColor, Premultiply);
   FRIEND_TEST_ALL_PREFIXES(BlinkColor, Unpremultiply);
+  FRIEND_TEST_ALL_PREFIXES(BlinkColor, ConvertToColorSpace);
   FRIEND_TEST_ALL_PREFIXES(BlinkColor, toSkColor4fValidation);
   FRIEND_TEST_ALL_PREFIXES(BlinkColor, ExportAsXYZD50Floats);
 

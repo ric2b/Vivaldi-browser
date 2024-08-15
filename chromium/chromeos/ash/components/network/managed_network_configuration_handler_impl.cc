@@ -10,7 +10,9 @@
 #include <utility>
 #include <vector>
 
+#include "ash/components/arc/arc_prefs.h"
 #include "ash/constants/ash_features.h"
+#include "ash/constants/ash_pref_names.h"
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
@@ -567,7 +569,7 @@ void ManagedNetworkConfigurationHandlerImpl::SetPolicy(
 
   ApplyOrQueuePolicies(
       userhash, policies->ApplyOncNetworkConfigurationList(network_configs_onc),
-      /*can_affect_other_networks=*/true);
+      /*can_affect_other_networks=*/true, /*options=*/{});
 
   for (auto& observer : observers_)
     observer.PoliciesChanged(userhash);
@@ -587,7 +589,14 @@ bool ManagedNetworkConfigurationHandlerImpl::IsAnyPolicyApplicationRunning()
 void ManagedNetworkConfigurationHandlerImpl::ApplyOrQueuePolicies(
     const std::string& userhash,
     base::flat_set<std::string> modified_policies,
-    bool can_affect_other_networks) {
+    bool can_affect_other_networks,
+    PolicyApplicator::Options options) {
+  // Note that this will default-construct a PolicyApplicationInfo if none
+  // exists for the shill profile identifier by |userhash| yet.
+  PolicyApplicationInfo& policy_application_info =
+      policy_application_info_map_[userhash];
+  policy_application_info.options.Merge(options);
+
   const NetworkProfile* profile =
       network_profile_handler_->GetProfileForUserhash(userhash);
   if (!profile) {
@@ -606,10 +615,6 @@ void ManagedNetworkConfigurationHandlerImpl::ApplyOrQueuePolicies(
     return;
   }
 
-  // Note that this will default-construct a PolicyApplicationInfo if none
-  // exists for the shill profile identifier by |userhash| yet.
-  PolicyApplicationInfo& policy_application_info =
-      policy_application_info_map_[userhash];
   policy_application_info.modified_policy_guids.insert(
       std::make_move_iterator(modified_policies.begin()),
       std::make_move_iterator(modified_policies.end()));
@@ -656,11 +661,16 @@ void ManagedNetworkConfigurationHandlerImpl::StartPolicyApplication(
   base::flat_set<std::string> modified_guids;
   policy_application_info.modified_policy_guids.swap(modified_guids);
 
+  PolicyApplicator::Options options =
+      std::move(policy_application_info.options);
+  policy_application_info.options = {};
+
   policy_application_info.running_policy_applicator =
       std::make_unique<PolicyApplicator>(
           *profile, policies->GetGuidToPolicyMap(),
           policies->GetGlobalNetworkConfig()->Clone(), this,
-          managed_cellular_pref_handler_, std::move(modified_guids));
+          managed_cellular_pref_handler_, std::move(modified_guids),
+          std::move(options));
   policy_application_info.running_policy_applicator->Run();
 }
 
@@ -671,7 +681,8 @@ void ManagedNetworkConfigurationHandlerImpl::SetProfileWideVariableExpansions(
       userhash,
       GetOrCreatePoliciesForUser(userhash)->SetProfileWideExpansions(
           std::move(expansions)),
-      /*can_affect_other_networks=*/false);
+      /*can_affect_other_networks=*/false,
+      /*options=*/{});
 }
 
 bool ManagedNetworkConfigurationHandlerImpl::SetResolvedClientCertificate(
@@ -684,13 +695,18 @@ bool ManagedNetworkConfigurationHandlerImpl::SetResolvedClientCertificate(
   if (!change_had_effect)
     return false;
   ApplyOrQueuePolicies(userhash, {guid},
-                       /*can_affect_other_networks=*/false);
+                       /*can_affect_other_networks=*/false, /*options=*/{});
   return true;
 }
 
 void ManagedNetworkConfigurationHandlerImpl::set_ui_proxy_config_service(
     UIProxyConfigService* ui_proxy_config_service) {
   ui_proxy_config_service_ = ui_proxy_config_service;
+}
+
+void ManagedNetworkConfigurationHandlerImpl::set_user_prefs(
+    PrefService* user_prefs) {
+  user_prefs_ = user_prefs;
 }
 
 void ManagedNetworkConfigurationHandlerImpl::OnProfileAdded(
@@ -709,7 +725,7 @@ void ManagedNetworkConfigurationHandlerImpl::OnProfileAdded(
   // can affect unmanaged networks (see ApplyGlobalPolicyOnUnmanagedEntry in
   // PolicyApplicator), so set can_affect_other_networks to true.
   ApplyOrQueuePolicies(profile.userhash, policies->GetAllPolicyGuids(),
-                       /*can_affect_other_networks=*/true);
+                       /*can_affect_other_networks=*/true, /*options=*/{});
 }
 
 void ManagedNetworkConfigurationHandlerImpl::OnProfileRemoved(
@@ -976,24 +992,17 @@ bool ManagedNetworkConfigurationHandlerImpl::CanRemoveNetworkConfig(
 PolicyTextMessageSuppressionState
 ManagedNetworkConfigurationHandlerImpl::GetAllowTextMessages() const {
   CHECK(features::IsSuppressTextMessagesEnabled());
-  const base::Value::Dict* global_network_config = GetGlobalConfigFromPolicy(
-      std::string() /* no username hash, device policy */);
-
-  if (!global_network_config) {
+  const std::string* allow_text_messages =
+      FindGlobalPolicyString(::onc::global_network_config::kAllowTextMessages);
+  if (!allow_text_messages) {
     return PolicyTextMessageSuppressionState::kUnset;
   }
 
-  const std::string* managed_only_value = global_network_config->FindString(
-      ::onc::global_network_config::kAllowTextMessages);
-  if (!managed_only_value) {
-    return PolicyTextMessageSuppressionState::kUnset;
-  }
-
-  if (*managed_only_value == ::onc::cellular::kTextMessagesAllow) {
+  if (*allow_text_messages == ::onc::cellular::kTextMessagesAllow) {
     return PolicyTextMessageSuppressionState::kAllow;
   }
 
-  if (*managed_only_value == ::onc::cellular::kTextMessagesSuppress) {
+  if (*allow_text_messages == ::onc::cellular::kTextMessagesSuppress) {
     return PolicyTextMessageSuppressionState::kSuppress;
   }
 
@@ -1001,105 +1010,84 @@ ManagedNetworkConfigurationHandlerImpl::GetAllowTextMessages() const {
 }
 
 bool ManagedNetworkConfigurationHandlerImpl::AllowCellularSimLock() const {
-  const base::Value::Dict* global_network_config = GetGlobalConfigFromPolicy(
-      std::string() /* no username hash, device policy */);
-
-  // If |global_network_config| does not exist, default to allowing PIN Locking
-  // SIMs.
-  if (!global_network_config) {
-    return true;
-  }
-
-  const absl::optional<bool> managed_only_value =
-      global_network_config->FindBool(
-          ::onc::global_network_config::kAllowCellularSimLock);
-  return managed_only_value.value_or(true);
+  return FindGlobalPolicyBool(
+             ::onc::global_network_config::kAllowCellularSimLock)
+      .value_or(true);
 }
 
 bool ManagedNetworkConfigurationHandlerImpl::AllowCellularHotspot() const {
-  const base::Value::Dict* global_network_config = GetGlobalConfigFromPolicy(
-      std::string() /* no username hash, device policy */);
-
-  // If |global_network_config| does not exist, default to allowing cellular
-  // hotspot
-  if (!global_network_config) {
-    return true;
-  }
-
-  const absl::optional<bool> managed_only_value =
-      global_network_config->FindBool(
-          ::onc::global_network_config::kAllowCellularHotspot);
-  return managed_only_value.value_or(true);
+  return FindGlobalPolicyBool(
+             ::onc::global_network_config::kAllowCellularHotspot)
+      .value_or(true);
 }
 
 bool ManagedNetworkConfigurationHandlerImpl::AllowOnlyPolicyCellularNetworks()
     const {
-  const base::Value::Dict* global_network_config = GetGlobalConfigFromPolicy(
-      std::string() /* no username hash, device policy */);
-  if (!global_network_config) {
-    return false;
-  }
-
-  const absl::optional<bool> managed_only_value =
-      global_network_config->FindBool(
-          ::onc::global_network_config::kAllowOnlyPolicyCellularNetworks);
-  return managed_only_value.value_or(false);
+  return FindGlobalPolicyBool(
+             ::onc::global_network_config::kAllowOnlyPolicyCellularNetworks)
+      .value_or(false);
 }
 
 bool ManagedNetworkConfigurationHandlerImpl::AllowOnlyPolicyWiFiToConnect()
     const {
-  const base::Value::Dict* global_network_config = GetGlobalConfigFromPolicy(
-      std::string() /* no username hash, device policy */);
-  if (!global_network_config) {
-    return false;
-  }
-
-  const absl::optional<bool> managed_only_value =
-      global_network_config->FindBool(
-          ::onc::global_network_config::kAllowOnlyPolicyWiFiToConnect);
-  return managed_only_value.value_or(false);
+  return FindGlobalPolicyBool(
+             ::onc::global_network_config::kAllowOnlyPolicyWiFiToConnect)
+      .value_or(false);
 }
 
 bool ManagedNetworkConfigurationHandlerImpl::
     AllowOnlyPolicyWiFiToConnectIfAvailable() const {
-  const base::Value::Dict* global_network_config = GetGlobalConfigFromPolicy(
-      std::string() /* no username hash, device policy */);
-  if (!global_network_config) {
-    return false;
-  }
-
-  // Check if policy is enabled.
-  const absl::optional<bool> available_only_value =
-      global_network_config->FindBool(
-          ::onc::global_network_config::
-              kAllowOnlyPolicyWiFiToConnectIfAvailable);
-  return available_only_value.value_or(false);
+  return FindGlobalPolicyBool(::onc::global_network_config::
+                                  kAllowOnlyPolicyWiFiToConnectIfAvailable)
+      .value_or(false);
 }
 
 bool ManagedNetworkConfigurationHandlerImpl::
     AllowOnlyPolicyNetworksToAutoconnect() const {
-  const base::Value::Dict* global_network_config = GetGlobalConfigFromPolicy(
-      std::string() /* no username hash, device policy */);
-  if (!global_network_config) {
+  return FindGlobalPolicyBool(::onc::global_network_config::
+                                  kAllowOnlyPolicyNetworksToAutoconnect)
+      .value_or(false);
+}
+
+bool ManagedNetworkConfigurationHandlerImpl::RecommendedValuesAreEphemeral()
+    const {
+  DCHECK(policy_util::AreEphemeralNetworkPoliciesEnabled());
+  return FindGlobalPolicyBool(
+             ::onc::global_network_config::kRecommendedValuesAreEphemeral)
+      .value_or(false);
+}
+
+bool ManagedNetworkConfigurationHandlerImpl::
+    UserCreatedNetworkConfigurationsAreEphemeral() const {
+  DCHECK(policy_util::AreEphemeralNetworkPoliciesEnabled());
+  return FindGlobalPolicyBool(::onc::global_network_config::
+                                  kUserCreatedNetworkConfigurationsAreEphemeral)
+      .value_or(false);
+}
+
+bool ManagedNetworkConfigurationHandlerImpl::IsProhibitedFromConfiguringVpn()
+    const {
+  if (!user_prefs_ ||
+      !user_prefs_->FindPreference(arc::prefs::kAlwaysOnVpnPackage) ||
+      !user_prefs_->FindPreference(arc::prefs::kAlwaysOnVpnLockdown) ||
+      !user_prefs_->FindPreference(prefs::kVpnConfigAllowed)) {
     return false;
   }
 
-  const absl::optional<bool> autoconnect_value =
-      global_network_config->FindBool(
-          ::onc::global_network_config::kAllowOnlyPolicyNetworksToAutoconnect);
-  return autoconnect_value.value_or(false);
+  // When an admin Activate Always ON VPN for all user traffic with an Android
+  // VPN, arc::prefs::kAlwaysOnVpnPackage will be non empty, and
+  // arc::prefs::kAlwaysOnVpnLockdown will be true. If additionally, the admin
+  // prohibits users from disconnecting from a VPN manually,
+  // prefs::kVpnConfigAllowed becomes false. See go/test-cros-vpn-policies.
+  return !user_prefs_->GetString(arc::prefs::kAlwaysOnVpnPackage).empty() &&
+         user_prefs_->GetBoolean(arc::prefs::kAlwaysOnVpnLockdown) &&
+         !user_prefs_->GetBoolean(prefs::kVpnConfigAllowed);
 }
 
 std::vector<std::string>
 ManagedNetworkConfigurationHandlerImpl::GetBlockedHexSSIDs() const {
-  const base::Value::Dict* global_network_config = GetGlobalConfigFromPolicy(
-      std::string() /* no username hash, device policy */);
-  if (!global_network_config) {
-    return std::vector<std::string>();
-  }
-
-  const base::Value::List* blocked_value = global_network_config->FindList(
-      ::onc::global_network_config::kBlockedHexSSIDs);
+  const base::Value::List* blocked_value =
+      FindGlobalPolicyList(::onc::global_network_config::kBlockedHexSSIDs);
   if (!blocked_value) {
     return std::vector<std::string>();
   }
@@ -1419,6 +1407,58 @@ void ManagedNetworkConfigurationHandlerImpl::NotifyPolicyAppliedToNetwork(
 
   for (auto& observer : observers_)
     observer.PolicyAppliedToNetwork(service_path);
+}
+
+absl::optional<bool>
+ManagedNetworkConfigurationHandlerImpl::FindGlobalPolicyBool(
+    std::string_view key) const {
+  const base::Value::Dict* global_network_config = GetGlobalConfigFromPolicy(
+      std::string() /* no username hash, device policy */);
+
+  if (!global_network_config) {
+    return {};
+  }
+
+  return global_network_config->FindBool(key);
+}
+
+const base::Value::List*
+ManagedNetworkConfigurationHandlerImpl::FindGlobalPolicyList(
+    std::string_view key) const {
+  const base::Value::Dict* global_network_config = GetGlobalConfigFromPolicy(
+      std::string() /* no username hash, device policy */);
+
+  if (!global_network_config) {
+    return nullptr;
+  }
+
+  return global_network_config->FindList(key);
+}
+
+const std::string*
+ManagedNetworkConfigurationHandlerImpl::FindGlobalPolicyString(
+    std::string_view key) const {
+  const base::Value::Dict* global_network_config = GetGlobalConfigFromPolicy(
+      std::string() /* no username hash, device policy */);
+
+  if (!global_network_config) {
+    return nullptr;
+  }
+
+  return global_network_config->FindString(key);
+}
+
+void ManagedNetworkConfigurationHandlerImpl::
+    TriggerEphemeralNetworkConfigActions() {
+  DCHECK(policy_util::AreEphemeralNetworkPoliciesEnabled());
+
+  PolicyApplicator::Options options;
+  options.reset_recommended_managed_configs = RecommendedValuesAreEphemeral();
+  options.remove_unmanaged_configs =
+      UserCreatedNetworkConfigurationsAreEphemeral();
+  ApplyOrQueuePolicies(
+      /*userhash=*/std::string(), /*modified_policies=*/{},
+      /*can_affect_other_networks=*/true, std::move(options));
 }
 
 }  // namespace ash

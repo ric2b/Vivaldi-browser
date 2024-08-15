@@ -7,6 +7,7 @@
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/i18n/time_formatting.h"
 #include "base/json/json_reader.h"
 #include "base/memory/singleton.h"
 #include "base/path_service.h"
@@ -14,7 +15,6 @@
 #include "base/strings/string_piece.h"
 #include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
-#include "base/time/time_to_iso8601.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
@@ -174,7 +174,7 @@ void AdverseAdFilterListService::OnBlocklistDownloadDone(
     const base::Time now = base::Time::Now();
 
     prefs->SetString(vivaldiprefs::kPrivacyAdverseAdBlockLastUpdate,
-                     base::TimeToISO8601(now));
+                     base::TimeFormatAsIso8601(now));
 
     int interval =
         prefs->GetInteger(vivaldiprefs::kPrivacyAdverseAdBlockUpdateInterval);

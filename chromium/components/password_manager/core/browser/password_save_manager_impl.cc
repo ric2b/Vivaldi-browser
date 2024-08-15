@@ -846,7 +846,8 @@ void PasswordSaveManagerImpl::UploadVotesAndMetrics(
   // TODO(crbug.com/959776): Get rid of this method, by passing
   // |pending_credentials_| directly to MaybeSendSingleUsernameVotes.
   votes_uploader_->CalculateUsernamePromptEditState(
-      /*saved_username=*/pending_credentials_.username_value);
+      /*saved_username=*/pending_credentials_.username_value,
+      parsed_submitted_form.all_alternative_usernames);
 
   if (IsNewLogin()) {
     metrics_util::LogNewlySavedPasswordMetrics(
@@ -935,7 +936,7 @@ bool PasswordSaveManagerImpl::ShouldStoreGeneratedPasswordsInAccountStore()
   if (account_store_form_saver_ &&
       client_->GetPasswordFeatureManager()
               ->ComputePasswordAccountStorageUsageLevel() ==
-          metrics_util::PasswordAccountStorageUsageLevel::
+          features_util::PasswordAccountStorageUsageLevel::
               kUsingAccountStorage) {
     return true;
   }

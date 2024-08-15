@@ -25,7 +25,7 @@ namespace {
 
 // Snap |bounds| if within floating-point numeric limits of an integral rect.
 void PreserveNearIntegralBounds(gfx::RectF& bounds) {
-  constexpr float kTolerance = 1e-5f;
+  constexpr float kTolerance = 1e-3f;
   if (std::abs(std::round(bounds.x()) - bounds.x()) <= kTolerance &&
       std::abs(std::round(bounds.y()) - bounds.y()) <= kTolerance &&
       std::abs(std::round(bounds.right()) - bounds.right()) <= kTolerance &&
@@ -122,7 +122,7 @@ std::unique_ptr<JSONObject> PendingLayer::ToJSON() const {
                    VectorAsJSONArray(offset_of_decomposited_transforms_));
   result->SetArray("paint_chunks", chunks_.ToJSON());
   result->SetBoolean("draws_content", DrawsContent());
-  result->SetBoolean("is_solid_color", solid_color_chunk_index_ != kNotFound);
+  result->SetBoolean("is_solid_color", IsSolidColor());
   result->SetString("hit_test_opaqueness",
                     cc::HitTestOpaquenessToString(hit_test_opaqueness_));
   return result;
@@ -618,6 +618,25 @@ void PendingLayer::UpdateSolidColorLayer(PendingLayer* old_pending_layer) {
   UpdateCcLayerHitTestOpaqueness();
   cc_layer_->SetBackgroundColor(GetSolidColor());
   cc_layer_->SetIsDrawable(draws_content_);
+}
+
+bool PendingLayer::UsesSolidColorLayer() const {
+  if (!RuntimeEnabledFeatures::SolidColorLayersEnabled() || !IsSolidColor()) {
+    return false;
+  }
+  // We need a PictureLayer for the backdrop filter mask.
+  if (property_tree_state_.Effect()
+          .RequiresCompositingForBackdropFilterMask()) {
+    return false;
+  }
+#if BUILDFLAG(IS_MAC)
+  // TODO(crbug.com/922899): Additionally, on Mac, we require that the color is
+  // opaque due to the bug. Remove this condition once that bug is fixed.
+  if (GetSolidColor().fA != 1.0f) {
+    return false;
+  }
+#endif  // BUILDFLAG(IS_MAC)
+  return true;
 }
 
 SkColor4f PendingLayer::GetSolidColor() const {

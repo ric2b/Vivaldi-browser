@@ -15,7 +15,7 @@
 #include <utility>
 
 #include "absl/log/absl_check.h"
-#include "absl/log/log.h"
+#include "absl/log/absl_log.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -179,7 +179,7 @@ absl::Status GlContext::CreateContextInternal(EGLContext share_context,
 }
 
 absl::Status GlContext::CreateContext(EGLContext share_context) {
-  ASSIGN_OR_RETURN(display_, GetInitializedEglDisplay());
+  MP_ASSIGN_OR_RETURN(display_, GetInitializedEglDisplay());
 
   auto status = CreateContextInternal(share_context, 3);
   if (!status.ok()) {
@@ -294,7 +294,7 @@ absl::Status GlContext::SetCurrentContextBinding(
 #if !MEDIAPIPE_DISABLE_PTHREADS
   EnsureEglThreadRelease();
 #else
-  LOG(WARNING) << __func__ << ": make sure this thread releases EGL resources!";
+  ABSL_LOG(WARNING) << __func__ << ": make sure this thread releases EGL resources!";
 #endif
   EGLDisplay display = new_binding.display;
   if (display == EGL_NO_DISPLAY) {

@@ -30,6 +30,17 @@ TestStructuredMetricsProvider::TestStructuredMetricsProvider() {
   }
 }
 
+TestStructuredMetricsProvider::TestStructuredMetricsProvider(
+    std::unique_ptr<StructuredMetricsRecorder> recorder)
+    : structured_metrics_recorder_(std::move(recorder)) {
+  system_profile_provider_ = std::make_unique<MetricsProvider>();
+  structured_metrics_provider_ =
+      std::unique_ptr<StructuredMetricsProvider>(new StructuredMetricsProvider(
+          /*write_delay=*/base::Seconds(0),
+          structured_metrics_recorder_.get()));
+  Recorder::GetInstance()->AddObserver(this);
+}
+
 TestStructuredMetricsProvider::~TestStructuredMetricsProvider() {
   Recorder::GetInstance()->RemoveObserver(this);
 }
@@ -103,12 +114,6 @@ void TestStructuredMetricsProvider::OnEventRecord(const Event& event) {
 
 void TestStructuredMetricsProvider::OnReportingStateChanged(bool enabled) {
   structured_metrics_provider_->recorder().OnReportingStateChanged(enabled);
-}
-
-absl::optional<int> TestStructuredMetricsProvider::LastKeyRotation(
-    uint64_t project_name_hash) {
-  return structured_metrics_provider_->recorder().LastKeyRotation(
-      project_name_hash);
 }
 
 void TestStructuredMetricsProvider::AddProfilePath(

@@ -262,19 +262,6 @@ void VivaldiUIWebContentsDelegate::PrimaryMainFrameRenderProcessGone(
   }
 }
 
-bool VivaldiUIWebContentsDelegate::OnMessageReceived(
-    const IPC::Message& message,
-    content::RenderFrameHost* sender) {
-  bool handled = true;
-  IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(VivaldiUIWebContentsDelegate, message,
-                                   sender)
-    IPC_MESSAGE_HANDLER(ExtensionHostMsg_UpdateDraggableRegions,
-                        UpdateDraggableRegions)
-    IPC_MESSAGE_UNHANDLED(handled = false)
-  IPC_END_MESSAGE_MAP()
-  return handled;
-}
-
 void VivaldiUIWebContentsDelegate::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->IsInPrimaryMainFrame() ||
@@ -298,15 +285,6 @@ void VivaldiUIWebContentsDelegate::DidFinishNavigation(
   // will run the callback set in WindowPrivateCreateFunction and then remove
   // it.
   window_->OnDidFinishNavigation(/*success=*/true);
-}
-
-void VivaldiUIWebContentsDelegate::UpdateDraggableRegions(
-    content::RenderFrameHost* sender,
-    const std::vector<extensions::DraggableRegion>& regions) {
-  // Only process events for the main frame.
-  if (!sender->GetParent()) {
-    window_->UpdateDraggableRegions(regions);
-  }
 }
 
 void VivaldiUIWebContentsDelegate::DocumentOnLoadCompletedInPrimaryMainFrame() {

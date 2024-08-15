@@ -13,6 +13,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
 #include "base/strings/string_piece_forward.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
@@ -248,16 +249,31 @@ void ReplaceVariables(const VariableResolver& resolver,
   configuration = std::move(replaced_configuration);
 }
 
-void RecursivelySearchAndReplaceVariables(
-    const VariableResolver& resolver,
-    base::Value::Dict& managedConfiguration) {
-  for (auto [key, configuration] : managedConfiguration) {
-    if (configuration.is_dict()) {
-      // Recursive call for dictionary values.
-      RecursivelySearchAndReplaceVariables(resolver, configuration.GetDict());
-    } else if (configuration.is_string()) {
-      ReplaceVariables(resolver, configuration.GetString());
-    }
+void ReplaceVariables(const VariableResolver& resolver,
+                      base::Value& configuration);
+
+void ReplaceVariables(const VariableResolver& resolver,
+                      base::Value::Dict& configuration) {
+  for (auto entry : configuration) {
+    ReplaceVariables(resolver, entry.second);
+  }
+}
+
+void ReplaceVariables(const VariableResolver& resolver,
+                      base::Value::List& configuration) {
+  for (auto& entry : configuration) {
+    ReplaceVariables(resolver, entry);
+  }
+}
+
+void ReplaceVariables(const VariableResolver& resolver,
+                      base::Value& configuration) {
+  if (configuration.is_dict()) {
+    ReplaceVariables(resolver, configuration.GetDict());
+  } else if (configuration.is_string()) {
+    ReplaceVariables(resolver, configuration.GetString());
+  } else if (configuration.is_list()) {
+    ReplaceVariables(resolver, configuration.GetList());
   }
 }
 
@@ -285,7 +301,7 @@ void RecursivelyReplaceManagedConfigurationVariables(
     base::Value::Dict& managedConfiguration) {
   const VariableResolver resolver =
       BuildVariableResolver(profile, device_attributes);
-  RecursivelySearchAndReplaceVariables(resolver, managedConfiguration);
+  ReplaceVariables(resolver, managedConfiguration);
 }
 
 }  // namespace arc

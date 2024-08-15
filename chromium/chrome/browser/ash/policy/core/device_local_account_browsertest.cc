@@ -107,7 +107,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/grit/chromium_strings.h"
+#include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/components/dbus/session_manager/fake_session_manager_client.h"
 #include "chromeos/ash/components/login/auth/public/user_context.h"
@@ -122,6 +122,7 @@
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/policy_service.h"
+#include "components/policy/core/common/policy_types.h"
 #include "components/policy/policy_constants.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
 #include "components/prefs/pref_service.h"
@@ -370,7 +371,8 @@ const base::Value* RefreshAndWaitForPolicies(
   PolicyChangeRegistrar policy_registrar(policy_service, ns);
   TestFuture<const base::Value*, const base::Value*> future;
   policy_registrar.Observe("string", future.GetRepeatingCallback());
-  policy_service->RefreshPolicies(base::OnceClosure());
+  policy_service->RefreshPolicies(base::OnceClosure(),
+                                  PolicyFetchReason::kTest);
   return std::get<1>(future.Take());
 }
 
@@ -951,7 +953,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, DisplayName) {
   DeviceLocalAccountPolicyBroker* broker =
       GetDeviceLocalAccountPolicyBroker(account_id_1_);
   ASSERT_TRUE(broker);
-  broker->core()->client()->FetchPolicy();
+  broker->core()->client()->FetchPolicy(PolicyFetchReason::kTest);
   WaitForDisplayName(account_id_1_.GetUserEmail(), kDisplayName2);
 
   // Verify that the new display name is shown in the UI.
@@ -1008,7 +1010,8 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, AccountListChange) {
       em::DeviceLocalAccountInfoProto::ACCOUNT_TYPE_PUBLIC_SESSION);
 
   policy_test_server_mixin_.UpdateDevicePolicy(policy);
-  g_browser_process->policy_service()->RefreshPolicies(base::OnceClosure());
+  g_browser_process->policy_service()->RefreshPolicies(
+      base::OnceClosure(), PolicyFetchReason::kTest);
 
   // Make sure the second device-local account disappears.
   base::RunLoop().RunUntilIdle();
@@ -1853,7 +1856,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, MultipleRecommendedLocales) {
   DeviceLocalAccountPolicyBroker* broker =
       GetDeviceLocalAccountPolicyBroker(account_id_1_);
   ASSERT_TRUE(broker);
-  broker->core()->client()->FetchPolicy();
+  broker->core()->client()->FetchPolicy(PolicyFetchReason::kTest);
   WaitForPublicSessionLocalesChange(account_id_1_);
 
   // Verify that the new list of locales is shown in the UI.
@@ -1876,7 +1879,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, MultipleRecommendedLocales) {
   SetRecommendedLocales(kRecommendedLocales1, std::size(kRecommendedLocales1));
 
   UploadAndInstallDeviceLocalAccountPolicy();
-  broker->core()->client()->FetchPolicy();
+  broker->core()->client()->FetchPolicy(PolicyFetchReason::kTest);
   WaitForPublicSessionLocalesChange(account_id_1_);
 
   // Verify that the manually selected locale is still selected.
@@ -2258,7 +2261,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, SessionLengthLimit) {
     DeviceLocalAccountPolicyBroker* broker =
         GetDeviceLocalAccountPolicyBroker(account_id_1_);
     ASSERT_TRUE(broker);
-    broker->core()->client()->FetchPolicy();
+    broker->core()->client()->FetchPolicy(PolicyFetchReason::kTest);
   }
   // Ensure the SessionLengthLimit is updated.
   LocalStateValueWaiter(prefs::kSessionLengthLimit, base::Value(kTwoHoursInMs))
@@ -2882,9 +2885,9 @@ IN_PROC_BROWSER_TEST_P(AmbientAuthenticationManagedGuestSessionTest,
 INSTANTIATE_TEST_SUITE_P(
     AmbientAuthAllPolicyValuesTest,
     AmbientAuthenticationManagedGuestSessionTest,
-    testing::Values(net::AmbientAuthAllowedProfileTypes::REGULAR_ONLY,
-                    net::AmbientAuthAllowedProfileTypes::INCOGNITO_AND_REGULAR,
-                    net::AmbientAuthAllowedProfileTypes::GUEST_AND_REGULAR,
-                    net::AmbientAuthAllowedProfileTypes::ALL));
+    testing::Values(net::AmbientAuthAllowedProfileTypes::kRegularOnly,
+                    net::AmbientAuthAllowedProfileTypes::kIncognitoAndRegular,
+                    net::AmbientAuthAllowedProfileTypes::kGuestAndRegular,
+                    net::AmbientAuthAllowedProfileTypes::kAll));
 
 }  // namespace policy

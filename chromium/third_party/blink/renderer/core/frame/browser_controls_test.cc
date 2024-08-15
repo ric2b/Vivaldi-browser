@@ -588,31 +588,6 @@ TEST_F(BrowserControlsTest, MAYBE(PageScaleHasNoImpact)) {
             GetFrame()->View()->GetScrollableArea()->GetScrollOffset());
 }
 
-// Some scroll deltas result in a shownRatio that can't be realized in a
-// floating-point number. Make sure that if the browser controls aren't fully
-// scrolled, scrollBy doesn't return any excess delta. i.e. There should be no
-// slippage between the content and browser controls.
-TEST_F(BrowserControlsTest, MAYBE(FloatingPointSlippage)) {
-  WebViewImpl* web_view = Initialize();
-  GetWebView()->SetDefaultPageScaleLimits(0.25f, 5);
-  web_view->SetPageScaleFactor(2.0);
-
-  // Initialize browser controls to be shown.
-  web_view->ResizeWithBrowserControls(web_view->MainFrameViewWidget()->Size(),
-                                      50.f, 0, true);
-  web_view->GetBrowserControls().SetShownRatio(1, 1);
-
-  web_view->GetBrowserControls().ScrollBegin();
-  EXPECT_FLOAT_EQ(50.f, web_view->GetBrowserControls().ContentOffset());
-
-  // This will result in a 20px scroll to the browser controls so the show ratio
-  // will be 30/50 == 0.6 which is not representible in a float. Make sure
-  // that scroll still consumes the whole delta.
-  ScrollOffset remaining_delta =
-      web_view->GetBrowserControls().ScrollBy(ScrollOffset(0, 10));
-  EXPECT_EQ(0, remaining_delta.y());
-}
-
 // Scrollable subregions should scroll before browser controls
 TEST_F(BrowserControlsTest, MAYBE(ScrollableSubregionScrollFirst)) {
   WebViewImpl* web_view = Initialize("overflow-scrolling.html");
@@ -1117,6 +1092,72 @@ TEST_F(BrowserControlsSimTest, MAYBE(AffectLayoutHeightWhenConstrained)) {
   EXPECT_FLOAT_EQ(200.f, fixed_pos->getBoundingClientRect()->height());
 
   EXPECT_EQ(400, GetDocument().GetFrame()->View()->GetLayoutSize().height());
+}
+
+// Ensure that browser controls affect layout of viewport constrained
+// position: sticky elements.
+TEST_F(BrowserControlsSimTest, MAYBE(AffectViewportConstrainedSticky)) {
+  SimRequest request("https://example.com/test.html", "text/html");
+  LoadURL("https://example.com/test.html");
+  request.Complete(R"HTML(
+    <!DOCTYPE html>
+      <style>
+        #sticky {
+          position: sticky;
+          bottom: 0px;
+        }
+        .spacer {
+          height: 1000px;
+        }
+      </style>
+    <div class="spacer"></div>
+    <div id="sticky"></div>
+    <div class="spacer"></div>
+  )HTML");
+  Compositor().BeginFrame();
+
+  WebView().ResizeWithBrowserControls(gfx::Size(400, 300), 100.f, 0, true);
+  Compositor().LayerTreeHost()->UpdateBrowserControlsState(
+      cc::BrowserControlsState::kBoth, cc::BrowserControlsState::kShown, false);
+  Compositor().BeginFrame();
+
+  Element* sticky_pos =
+      GetDocument().getElementById(WebString::FromUTF8("sticky"));
+  ASSERT_EQ(100.f, WebView().GetBrowserControls().ContentOffset());
+  ASSERT_EQ(300, GetDocument().GetFrame()->View()->GetLayoutSize().height());
+  EXPECT_FLOAT_EQ(300.f, sticky_pos->getBoundingClientRect()->bottom());
+
+  // Hide the browser controls.
+  VerticalScroll(-100.f);
+  WebView().ResizeWithBrowserControls(gfx::Size(400, 400), 100.f, 0, false);
+  Compositor().BeginFrame();
+  ASSERT_EQ(300, GetDocument().GetFrame()->View()->GetLayoutSize().height());
+  EXPECT_FLOAT_EQ(400.f, sticky_pos->getBoundingClientRect()->bottom());
+
+  // Now lock the controls in a hidden state. The layout and elements should
+  // resize without a WebView::resize.
+  Compositor().LayerTreeHost()->UpdateBrowserControlsState(
+      cc::BrowserControlsState::kHidden, cc::BrowserControlsState::kBoth,
+      false);
+  Compositor().BeginFrame();
+  EXPECT_EQ(400, GetDocument().GetFrame()->View()->GetLayoutSize().height());
+  EXPECT_FLOAT_EQ(400.f, sticky_pos->getBoundingClientRect()->bottom());
+
+  // Unlock the controls, the sizes should change even though the controls are
+  // still hidden.
+  Compositor().LayerTreeHost()->UpdateBrowserControlsState(
+      cc::BrowserControlsState::kBoth, cc::BrowserControlsState::kBoth, false);
+  Compositor().BeginFrame();
+  EXPECT_EQ(300, GetDocument().GetFrame()->View()->GetLayoutSize().height());
+  EXPECT_FLOAT_EQ(400.f, sticky_pos->getBoundingClientRect()->bottom());
+
+  // Now lock the controls in a shown state.
+  Compositor().LayerTreeHost()->UpdateBrowserControlsState(
+      cc::BrowserControlsState::kShown, cc::BrowserControlsState::kBoth, false);
+  WebView().ResizeWithBrowserControls(gfx::Size(400, 300), 100.f, 0, true);
+  Compositor().BeginFrame();
+  EXPECT_EQ(300, GetDocument().GetFrame()->View()->GetLayoutSize().height());
+  EXPECT_FLOAT_EQ(300.f, sticky_pos->getBoundingClientRect()->bottom());
 }
 
 // Ensure that browser controls do not affect "static" viewport units

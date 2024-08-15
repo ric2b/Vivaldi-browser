@@ -27,6 +27,7 @@ class BLINK_EXPORT WebAXContext {
   ~WebAXContext();
 
   bool HasActiveDocument() const;
+  bool HasAXObjectCache() const;
 
   const ui::AXMode& GetAXMode() const;
 
@@ -61,15 +62,9 @@ class BLINK_EXPORT WebAXContext {
   // Returns an empty WebAXObject if no root object is present.
   WebAXObject GetPluginRoot();
 
-  void Freeze();
-
-  void Thaw();
-
   bool SerializeEntireTree(size_t max_node_count,
                            base::TimeDelta timeout,
                            ui::AXTreeUpdate* response);
-
-  void MarkAllImageAXObjectsDirty();
 
   // Serialize all AXObjects that are dirty (have changed their state since
   // the last serialization) into |updates|. (Heuristically) skips

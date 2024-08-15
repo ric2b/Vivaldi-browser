@@ -36,10 +36,6 @@
 #include "ui/gtk/gtk_util.h"
 #include "ui/gtk/printing/printing_gtk_util.h"
 
-#if BUILDFLAG(USE_CUPS)
-#include "printing/mojom/print.mojom.h"  // nogncheck
-#endif
-
 using printing::PageRanges;
 using printing::PrintSettings;
 
@@ -139,7 +135,7 @@ class GtkPrinterList {
   // - Querying for non-existent printers like 'Print to PDF'.
   ScopedGObject<GtkPrinter> GetPrinterWithName(const std::string& name) {
     if (name.empty()) {
-      return ScopedGObject<GtkPrinter>();
+      return nullptr;
     }
 
     for (ScopedGObject<GtkPrinter>& printer : printers_) {
@@ -148,17 +144,14 @@ class GtkPrinterList {
       }
     }
 
-    return ScopedGObject<GtkPrinter>();
+    return nullptr;
   }
 
  private:
   // Callback function used by gtk_enumerate_printers() to get all printer.
   static gboolean SetPrinter(GtkPrinter* printer, gpointer data) {
     GtkPrinterList* printer_list = reinterpret_cast<GtkPrinterList*>(data);
-    ScopedGObject<GtkPrinter> scoped_printer = WrapGObject(printer);
-
-    printer_list->printers_.push_back(scoped_printer);
-
+    printer_list->printers_.push_back(WrapGObject(printer));
     return FALSE;
   }
 
@@ -377,10 +370,9 @@ void PrintDialogGtk::LoadPrintSettings(const PrintSettings& settings) {
           printing::kLinuxSystemPrintDialogDataPrinter);
   CHECK(printer_name);
 
-  GError* error = nullptr;
   auto printer_list = std::make_unique<GtkPrinterList>();
   printer_ = printer_list->GetPrinterWithName(*printer_name);
-  CHECK(printer_.get());
+  CHECK(printer_);
 
   if (!gtk_settings_) {
     gtk_settings_ = gtk_print_settings_copy(GetLastUsedSettings().settings());
@@ -389,6 +381,7 @@ void PrintDialogGtk::LoadPrintSettings(const PrintSettings& settings) {
     page_setup_ = gtk_page_setup_new();
   }
 
+  GError* error = nullptr;
   ScopedGKeyFile settings_key_file =
       GetGKeyFileFromDict(settings.system_print_dialog_data(),
                           printing::kLinuxSystemPrintDialogDataPrintSettings);
@@ -451,7 +444,10 @@ void PrintDialogGtk::ShowDialog(
                                           has_selection);
   gtk_print_unix_dialog_set_settings(GTK_PRINT_UNIX_DIALOG(dialog_),
                                      gtk_settings_);
-  g_signal_connect(dialog_, "response", G_CALLBACK(OnResponseThunk), this);
+  // Unretained is safe since we own `signal_`.
+  signal_ = ScopedGSignal(
+      dialog_, "response",
+      base::BindRepeating(&PrintDialogGtk::OnResponse, base::Unretained(this)));
   gtk_widget_show(dialog_);
 
   gtk::GtkUi::GetPlatform()->ShowGtkWindow(GTK_WINDOW(dialog_));
@@ -460,17 +456,13 @@ void PrintDialogGtk::ShowDialog(
 void PrintDialogGtk::PrintDocument(const printing::MetafilePlayer& metafile,
                                    const std::u16string& document_name) {
 #if DCHECK_IS_ON()
-#if BUILDFLAG(ENABLE_OOP_PRINTING)
-  const bool kOopPrinting =
-      printing::features::kEnableOopPrintDriversJobPrint.Get();
-#else
-  const bool kOopPrinting = false;
-#endif  // BUILDFLAG(ENABLE_OOP_PRINTING)
+  bool oop_printing = context_->process_behavior() !=
+                      printing::PrintingContext::ProcessBehavior::kOopDisabled;
 
   // For in-browser printing, this runs on the print worker thread, so it does
   // not block the UI thread.  For OOP it runs on the service document task
   // runner.
-  DCHECK_EQ(owning_task_runner()->RunsTasksInCurrentSequence(), kOopPrinting);
+  DCHECK_EQ(owning_task_runner()->RunsTasksInCurrentSequence(), oop_printing);
 #endif  // DCHECK_IS_ON()
 
   // The document printing tasks can outlive the PrintingContext that created
@@ -508,9 +500,7 @@ void PrintDialogGtk::ReleaseDialog() {
 }
 
 void PrintDialogGtk::OnResponse(GtkWidget* dialog, int response_id) {
-  int num_matched_handlers = g_signal_handlers_disconnect_by_func(
-      dialog_, reinterpret_cast<gpointer>(&OnResponseThunk), this);
-  CHECK_EQ(1, num_matched_handlers);
+  signal_.Reset();
 
   gtk_widget_hide(dialog_);
   if (reenable_parent_events_) {

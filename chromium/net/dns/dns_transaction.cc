@@ -115,6 +115,10 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
 
 const char kDnsOverHttpResponseContentType[] = "application/dns-message";
 
+// The maximum size of the DNS message for DoH, per
+// https://datatracker.ietf.org/doc/html/rfc8484#section-6
+const int64_t kDnsOverHttpResponseMaximumSize = 65535;
+
 // Count labels in the fully-qualified name in DNS format.
 int CountLabels(base::span<const uint8_t> name) {
   size_t count = 0;
@@ -539,10 +543,16 @@ class DnsHTTPAttempt : public DnsAttempt, public URLRequest::Delegate {
 
     if (request->response_headers()->HasHeader(
             HttpRequestHeaders::kContentLength)) {
+      if (request_->response_headers()->GetContentLength() >
+          kDnsOverHttpResponseMaximumSize) {
+        ResponseCompleted(ERR_DNS_MALFORMED_RESPONSE);
+        return;
+      }
+
       buffer_->SetCapacity(request_->response_headers()->GetContentLength() +
                            1);
     } else {
-      buffer_->SetCapacity(66560);  // 64kb.
+      buffer_->SetCapacity(kDnsOverHttpResponseMaximumSize + 1);
     }
 
     DCHECK(buffer_->data());
@@ -577,6 +587,11 @@ class DnsHTTPAttempt : public DnsAttempt, public URLRequest::Delegate {
     DCHECK_GE(bytes_read, 0);
 
     if (bytes_read > 0) {
+      if (buffer_->offset() + bytes_read > kDnsOverHttpResponseMaximumSize) {
+        ResponseCompleted(ERR_DNS_MALFORMED_RESPONSE);
+        return;
+      }
+
       buffer_->set_offset(buffer_->offset() + bytes_read);
 
       if (buffer_->RemainingCapacity() == 0) {
@@ -1097,37 +1112,36 @@ class DnsOverHttpsProbeRunner : public DnsProbeRunner {
                 /*original_domain_name=*/kDohProbeHostname,
                 /*request_port=*/0);
 
-        if (!results.has_value()) {
-          return;
-        }
+        if (results.has_value()) {
+          for (const auto& result : results.value()) {
+            if (result->type() == HostResolverInternalResult::Type::kData &&
+                !result->AsData().endpoints().empty()) {
+              // The DoH probe queries don't go through the standard DnsAttempt
+              // path, so the ServerStats have not been updated yet.
+              context_->RecordServerSuccess(
+                  doh_server_index, /*is_doh_server=*/true, session_.get());
+              context_->RecordRtt(doh_server_index, /*is_doh_server=*/true,
+                                  base::TimeTicks::Now() - query_start_time, rv,
+                                  session_.get());
+              success = true;
 
-        for (const auto& result : results.value()) {
-          if (result->type() == HostResolverInternalResult::Type::kData &&
-              !result->AsData().endpoints().empty()) {
-            // The DoH probe queries don't go through the standard DnsAttempt
-            // path, so the ServerStats have not been updated yet.
-            context_->RecordServerSuccess(
-                doh_server_index, /*is_doh_server=*/true, session_.get());
-            context_->RecordRtt(doh_server_index, /*is_doh_server=*/true,
-                                base::TimeTicks::Now() - query_start_time, rv,
-                                session_.get());
-            success = true;
-
-            // Do not delete the ProbeStats and cancel the probe sequence. It
-            // will cancel itself on the next scheduled ContinueProbe() call if
-            // the server is still available. This way, the backoff schedule
-            // will be maintained if a server quickly becomes unavailable again
-            // before that scheduled call.
-            return;
+              // Do not delete the ProbeStats and cancel the probe sequence. It
+              // will cancel itself on the next scheduled ContinueProbe() call
+              // if the server is still available. This way, the backoff
+              // schedule will be maintained if a server quickly becomes
+              // unavailable again before that scheduled call.
+              break;
+            }
           }
         }
       }
     }
 
     base::UmaHistogramLongTimes(
-        base::StringPrintf("Net.DNS.ProbeSequence.%s.%s.AttemptTime",
-                           network_change ? "NetworkChange" : "ConfigChange",
-                           success ? "Success" : "Failure"),
+        base::JoinString({"Net.DNS.ProbeSequence",
+                          network_change ? "NetworkChange" : "ConfigChange",
+                          success ? "Success" : "Failure", "AttemptTime"},
+                         "."),
         base::TimeTicks::Now() - sequence_start_time);
   }
 
@@ -1156,7 +1170,7 @@ class DnsTransactionImpl : public DnsTransaction,
   DnsTransactionImpl(DnsSession* session,
                      std::string hostname,
                      uint16_t qtype,
-                     const NetLogWithSource& net_log,
+                     const NetLogWithSource& parent_net_log,
                      const OptRecordRdata* opt_rdata,
                      bool secure,
                      SecureDnsMode secure_dns_mode,
@@ -1169,11 +1183,14 @@ class DnsTransactionImpl : public DnsTransaction,
         secure_(secure),
         secure_dns_mode_(secure_dns_mode),
         fast_timeout_(fast_timeout),
-        net_log_(net_log),
+        net_log_(NetLogWithSource::Make(NetLog::Get(),
+                                        NetLogSourceType::DNS_TRANSACTION)),
         resolve_context_(resolve_context->AsSafeRef()) {
     DCHECK(session_.get());
     DCHECK(!hostname_.empty());
     DCHECK(!IsIPLiteral(hostname_));
+    parent_net_log.AddEventReferencingSource(NetLogEventType::DNS_TRANSACTION,
+                                             net_log_.source());
   }
 
   DnsTransactionImpl(const DnsTransactionImpl&) = delete;

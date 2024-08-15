@@ -15,7 +15,7 @@
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/password_manager/account_password_store_factory.h"
-#include "chrome/browser/password_manager/password_store_factory.h"
+#include "chrome/browser/password_manager/profile_password_store_factory.h"
 #include "chrome/browser/power_bookmarks/power_bookmark_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -25,9 +25,10 @@
 #include "chrome/browser/signin/about_signin_internals_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/spellchecker/spellcheck_factory.h"
-#include "chrome/browser/sync/bookmark_sync_service_factory.h"
+#include "chrome/browser/sync/account_bookmark_sync_service_factory.h"
 #include "chrome/browser/sync/chrome_sync_client.h"
 #include "chrome/browser/sync/device_info_sync_service_factory.h"
+#include "chrome/browser/sync/local_or_syncable_bookmark_sync_service_factory.h"
 #include "chrome/browser/sync/model_type_store_service_factory.h"
 #include "chrome/browser/sync/send_tab_to_self_sync_service_factory.h"
 #include "chrome/browser/sync/session_sync_service_factory.h"
@@ -109,7 +110,7 @@ VivaldiSyncServiceFactory::VivaldiSyncServiceFactory() : SyncServiceFactory() {
   // when it is shut down.  Specify those dependencies here to build the proper
   // destruction order.
   DependsOn(BookmarkModelFactory::GetInstance());
-  DependsOn(BookmarkSyncServiceFactory::GetInstance());
+  DependsOn(AccountBookmarkSyncServiceFactory::GetInstance());
   DependsOn(BookmarkUndoServiceFactory::GetInstance());
   DependsOn(browser_sync::UserEventServiceFactory::GetInstance());
   DependsOn(ConsentAuditorFactory::GetInstance());
@@ -117,11 +118,12 @@ VivaldiSyncServiceFactory::VivaldiSyncServiceFactory() : SyncServiceFactory() {
   DependsOn(FaviconServiceFactory::GetInstance());
   DependsOn(HistoryServiceFactory::GetInstance());
   DependsOn(IdentityManagerFactory::GetInstance());
+  DependsOn(LocalOrSyncableBookmarkSyncServiceFactory::GetInstance());
   DependsOn(ModelTypeStoreServiceFactory::GetInstance());
 #if !BUILDFLAG(IS_ANDROID)
   DependsOn(PasskeyModelFactory::GetInstance());
 #endif  // !BUILDFLAG(IS_ANDROID)
-  DependsOn(PasswordStoreFactory::GetInstance());
+  DependsOn(ProfilePasswordStoreFactory::GetInstance());
   DependsOn(PowerBookmarkServiceFactory::GetInstance());
   DependsOn(SecurityEventRecorderFactory::GetInstance());
   DependsOn(SendTabToSelfSyncServiceFactory::GetInstance());
@@ -154,7 +156,8 @@ VivaldiSyncServiceFactory::VivaldiSyncServiceFactory() : SyncServiceFactory() {
 
 VivaldiSyncServiceFactory::~VivaldiSyncServiceFactory() {}
 
-KeyedService* VivaldiSyncServiceFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+VivaldiSyncServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
   syncer::SyncServiceImpl::InitParams init_params;
 
@@ -162,7 +165,6 @@ KeyedService* VivaldiSyncServiceFactory::BuildServiceInstanceFor(
 
   DCHECK(!profile->IsOffTheRecord());
 
-  init_params.is_regular_profile_for_uma = profile->IsRegularProfile();
   init_params.sync_client =
       std::make_unique<browser_sync::ChromeSyncClient>(profile);
   init_params.url_loader_factory = profile->GetDefaultStoragePartition()
@@ -211,14 +213,14 @@ KeyedService* VivaldiSyncServiceFactory::BuildServiceInstanceFor(
 
   sync_service->Initialize();
 
-  auto password_store = PasswordStoreFactory::GetForProfile(
+  auto password_store = ProfilePasswordStoreFactory::GetForProfile(
       profile, ServiceAccessType::EXPLICIT_ACCESS);
   // PasswordStoreInterface may be null in tests.
   if (password_store) {
     password_store->OnSyncServiceInitialized(sync_service.get());
   }
 
-  return sync_service.release();
+  return sync_service;
 }
 
 }  // namespace vivaldi

@@ -101,12 +101,6 @@ AX_BASE_EXPORT bool IsUiaProviderEnabled();
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 AX_BASE_EXPORT bool IsDictationOfflineAvailable();
 
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(
-    kExperimentalAccessibilityChromeVoxOobeDialogImprovements);
-
-AX_BASE_EXPORT bool
-IsExperimentalAccessibilityChromeVoxOobeDialogImprovementsEnabled();
-
 // Enables Context Checking with the accessibility Dictation feature.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(
     kExperimentalAccessibilityDictationContextChecking);
@@ -123,20 +117,13 @@ AX_BASE_EXPORT BASE_DECLARE_FEATURE(
 // enabled.
 AX_BASE_EXPORT bool IsExperimentalAccessibilityGoogleTtsLanguagePacksEnabled();
 
-// Enables the experimental color enhancements settings.
+// Enables downloading Google TTS High Quality voices.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(
-    kExperimentalAccessibilityColorEnhancementSettings);
+    kExperimentalAccessibilityGoogleTtsHighQualityVoices);
 
-// Returns true if the experimental color enhancements settings are enabled.
+// Returns true if downloading High Quality Google TTS voices is enabled.
 AX_BASE_EXPORT bool
-AreExperimentalAccessibilityColorEnhancementSettingsEnabled();
-
-// Enables ChromeVox settings page migration from extension options page to
-// Chrome OS settings page.
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityChromeVoxPageMigration);
-
-// Returns true if ChromeVox settings page migration is enabled.
-AX_BASE_EXPORT bool IsAccessibilityChromeVoxPageMigrationEnabled();
+IsExperimentalAccessibilityGoogleTtsHighQualityVoicesEnabled();
 
 // Enables Dictation keyboard improvements.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(
@@ -144,12 +131,6 @@ AX_BASE_EXPORT BASE_DECLARE_FEATURE(
 
 // Returns true if Dictation keyboard improvements are enabled.
 AX_BASE_EXPORT bool IsAccessibilityDictationKeyboardImprovementsEnabled();
-
-// Enables AccessibilitySelectToSpeakPrefsMigration.
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilitySelectToSpeakPrefsMigration);
-
-// Returns true if AccessibilitySelectToSpeakPrefsMigration enabled.
-AX_BASE_EXPORT bool IsAccessibilitySelectToSpeakPrefsMigrationEnabled();
 
 // Enables AccessibilitySelectToSpeakHoverTextImprovements.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(
@@ -170,12 +151,12 @@ AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityGameFaceIntegration);
 
 // Returns true if the GameFace integration is enabled.
 AX_BASE_EXPORT bool IsAccessibilityGameFaceIntegrationEnabled();
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // A feature that makes PDFs displayed in the ChromeOS Media App (AKA Backlight)
 // accessible by performing OCR on the images for each page.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kBacklightOcr);
 AX_BASE_EXPORT bool IsBacklightOcrEnabled();
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Enables Get Image Descriptions to augment existing images labels,
 // rather than only provide descriptions for completely unlabeled images.
@@ -232,6 +213,17 @@ AX_BASE_EXPORT BASE_DECLARE_FEATURE(kReadAnythingWithScreen2x);
 // distills web pages using an ML model.
 AX_BASE_EXPORT bool IsReadAnythingWithScreen2xEnabled();
 
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kDataCollectionModeForScreen2x);
+
+// If enabled, the browser will open with read_anything open in the side panel,
+// and calls distill only once we receive navigation's load-complete event.
+// This is because the browser is only being opened to render one webpage, for
+// the sake of generating training data for Screen2x data collection. The
+// browser is intended to be closed by the user who launches Chrome once the
+// first distill call finishes executing. This feature should be used along
+// with 'ScreenAIDebugModeEnabled=true' and --no-sandbox.
+AX_BASE_EXPORT bool IsDataCollectionModeForScreen2xEnabled();
+
 // If enabled, ScreenAI library writes some debug data in /tmp.
 AX_BASE_EXPORT bool IsScreenAIDebugModeEnabled();
 
@@ -271,6 +263,22 @@ AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityService);
 AX_BASE_EXPORT bool IsAccessibilityServiceEnabled();
 
 #endif  // !BUILDFLAG(IS_ANDROID)
+
+#if BUILDFLAG(IS_MAC)
+// Enables the NSAccessibilityRemoteUIElement's RemoteUIApp. We need to set
+// NSAccessibilityRemoteUIElement's RemoteUIApp to YES, which is to fix some
+// a11y bugs in PWA Mac.
+// It is a temporary feature flag, and will be removed once browser with this
+// feature enabled can run stably. The reason we're so careful is because a
+// previous CL that enabling NSAccessibilityRemoteUIElement's RemoteUIApp caused
+// chromium to hang. With the feature flag, once chromium encounters a bug due
+// to this we can urgently disable it. See https://crbug.com/1491329
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityRemoteUIApp);
+
+// Returns true if the NSAccessibilityRemoteUIElement's RemoteUIApp is enabled.
+AX_BASE_EXPORT bool IsAccessibilityRemoteUIAppEnabled();
+
+#endif  // BUILDFLAG(IS_MAC)
 
 }  // namespace features
 

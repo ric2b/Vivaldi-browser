@@ -19,13 +19,16 @@
 #include "net/base/load_flags.h"
 #include "net/cookies/cookie_partition_key.h"
 #include "net/http/http_status_code.h"
+#include "net/log/net_log_values.h"
 #include "services/network/cors/cors_url_loader_factory.h"
 #include "services/network/cors/cors_util.h"
 #include "services/network/masked_domain_list/network_service_resource_block_list.h"
 #include "services/network/network_context.h"
 #include "services/network/network_service_memory_cache.h"
+#include "services/network/private_network_access_checker.h"
 #include "services/network/public/cpp/cors/cors.h"
 #include "services/network/public/cpp/cors/origin_access_list.h"
+#include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/header_util.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "services/network/public/cpp/record_ontransfersizeupdate_utils.h"
@@ -111,7 +114,7 @@ base::Value::Dict NetLogCorsURLLoaderStartParams(
   return base::Value::Dict()
       .Set("url", request.url.possibly_invalid_spec())
       .Set("method", request.method)
-      .Set("headers", request.headers.ToString())
+      .Set("headers", net::NetLogStringValue(request.headers.ToString()))
       .Set("is_revalidating", request.is_revalidating)
       .Set("cors_preflight_policy", cors_preflight_policy);
 }
@@ -398,7 +401,8 @@ void CorsURLLoader::Start() {
 }
 
 bool CorsURLLoader::ShouldBlockRequestForAfpExperiment(GURL request_url) {
-  if (context_ && context_->network_service() &&
+  if (context_ && context_->AfpBlockListExperimentEnabled() &&
+      context_->network_service() &&
       context_->network_service()->network_service_resource_block_list()) {
     return context_->network_service()
         ->network_service_resource_block_list()
@@ -461,8 +465,10 @@ void CorsURLLoader::FollowRedirect(
   }
   request_.headers.MergeFrom(modified_headers);
 
-  if (base::Contains(removed_headers, kSharedStorageWritableHeader)) {
-    request_.shared_storage_writable = false;
+  if (GetSecSharedStorageWritableHeader(modified_headers)) {
+    request_.shared_storage_writable_eligible = true;
+  } else if (base::Contains(removed_headers, kSecSharedStorageWritableHeader)) {
+    request_.shared_storage_writable_eligible = false;
   }
 
   if (!allow_any_cors_exempt_header_ &&
@@ -881,12 +887,19 @@ void CorsURLLoader::StartRequest() {
   // need_pna_permission check in the code base.
   const mojom::ClientSecurityState* state = GetClientSecurityState();
   const bool needs_pna_permission =
-      base::FeatureList::IsEnabled(
-          features::kPrivateNetworkAccessPermissionPrompt) &&
-      state && state->is_web_secure_context &&
-      !IsUrlPotentiallyTrustworthy(request_.url);
+      state && PrivateNetworkAccessChecker::NeedPermission(
+                   request_.url, state->is_web_secure_context,
+                   request_.target_address_space);
   if (needs_pna_permission &&
       url_loader_network_service_observer_->is_bound()) {
+    // Fail the request if `targetAddressSpace` on fetch option is not the same
+    // as the real target address space.
+    if (request_.target_address_space != mojom::IPAddressSpace::kUnknown &&
+        request_.target_address_space != request_.target_ip_address_space) {
+      HandleComplete(URLLoaderCompletionStatus(
+          CorsErrorStatus(mojom::CorsError::kInvalidPrivateNetworkAccess)));
+      return;
+    }
     (*url_loader_network_service_observer_)
         ->Clone(remote_observer.InitWithNewPipeAndPassReceiver());
   }
@@ -897,8 +910,8 @@ void CorsURLLoader::StartRequest() {
       PreflightController::WithTrustedHeaderClient(
           options_ & mojom::kURLLoadOptionUseHeaderClient),
       context_->cors_non_wildcard_request_headers_support(),
-      GetPrivateNetworkAccessPreflightBehavior(), tainted_,
-      net::NetworkTrafficAnnotationTag(traffic_annotation_),
+      GetPrivateNetworkAccessPreflightBehavior(request_.target_address_space),
+      tainted_, net::NetworkTrafficAnnotationTag(traffic_annotation_),
       network_loader_factory_, isolation_info_, CloneClientSecurityState(),
       weak_devtools_observer_factory_.GetWeakPtr(), net_log_,
       context_->acam_preflight_spec_conformant(), std::move(remote_observer));
@@ -956,7 +969,8 @@ absl::optional<URLLoaderCompletionStatus> CorsURLLoader::ConvertPreflightResult(
 
   // Private Network Access warning: ignore net and CORS errors.
   if (net_error == net::OK || sending_pna_only_warning_preflight_) {
-    CHECK(ShouldIgnorePrivateNetworkAccessErrors());
+    CHECK(
+        ShouldIgnorePrivateNetworkAccessErrors(request_.target_address_space));
     CHECK_EQ(*reason, PreflightRequiredReason::kPrivateNetworkAccess);
 
     // Record the existence of the warning so that we can report it to
@@ -1099,7 +1113,12 @@ void CorsURLLoader::HandleComplete(URLLoaderCompletionStatus status) {
   if (devtools_observer_ && status.cors_error_status) {
     ReportCorsErrorToDevTools(*status.cors_error_status);
   }
-  if (devtools_observer_ && status.should_report_corb_blocking) {
+  // ORB "v0.1" (and earlier) signal CORB/ORB-related errors with a flag.
+  // ORB "v0.2" (and later) use a network error code. We should always report
+  // the error-code style error to DevTools, since it has a less spammy
+  // way of displaying them compared to just dumping them on the console.
+  if (devtools_observer_ && (status.should_report_corb_blocking ||
+                             status.error_code == net::ERR_BLOCKED_BY_ORB)) {
     ReportCorbErrorToDevTools();
   }
 
@@ -1128,7 +1147,8 @@ void CorsURLLoader::HandleComplete(URLLoaderCompletionStatus status) {
       // private network access, then we rely on `PreflightController` to ignore
       // PNA-specific preflight errors during this second preflight request.
       sending_pna_only_warning_preflight_ =
-          ShouldIgnorePrivateNetworkAccessErrors() &&
+          ShouldIgnorePrivateNetworkAccessErrors(
+              request_.target_address_space) &&
           !(NeedsPreflight(request_).has_value() && fetch_cors_flag_);
 
       network_client_receiver_.reset();
@@ -1286,15 +1306,26 @@ mojom::ClientSecurityStatePtr CorsURLLoader::CloneClientSecurityState() const {
   return state->Clone();
 }
 
-bool CorsURLLoader::ShouldIgnorePrivateNetworkAccessErrors() const {
+bool CorsURLLoader::ShouldIgnorePrivateNetworkAccessErrors(
+    mojom::IPAddressSpace target_address_space) const {
   const mojom::ClientSecurityState* state = GetClientSecurityState();
-  return state && state->private_network_request_policy ==
-                      mojom::PrivateNetworkRequestPolicy::kPreflightWarn;
+  if (!state) {
+    return false;
+  }
+  // When the PNA permission prompt shown, we should always respect the
+  // preflight results, otherwise it would be a bypass of mixed content checker.
+  if (PrivateNetworkAccessChecker::NeedPermission(
+          request_.url, state->is_web_secure_context, target_address_space)) {
+    return false;
+  }
+  return state->private_network_request_policy ==
+         mojom::PrivateNetworkRequestPolicy::kPreflightWarn;
 }
 
 PrivateNetworkAccessPreflightBehavior
-CorsURLLoader::GetPrivateNetworkAccessPreflightBehavior() const {
-  if (!ShouldIgnorePrivateNetworkAccessErrors()) {
+CorsURLLoader::GetPrivateNetworkAccessPreflightBehavior(
+    mojom::IPAddressSpace target_address_space) const {
+  if (!ShouldIgnorePrivateNetworkAccessErrors(target_address_space)) {
     return PrivateNetworkAccessPreflightBehavior::kEnforce;
   }
   if (sending_pna_only_warning_preflight_) {

@@ -9,9 +9,11 @@
 #include <string>
 
 #include "base/command_line.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
+#include "chrome/browser/predictors/lcp_critical_path_predictor/lcp_critical_path_predictor_util.h"
 #include "chrome/browser/predictors/loading_predictor.h"
 #include "chrome/browser/predictors/loading_predictor_factory.h"
 #include "chrome/browser/predictors/predictors_enums.h"
@@ -30,6 +32,7 @@
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/loader/lcp_critical_path_predictor_util.h"
 #include "third_party/blink/public/mojom/lcp_critical_path_predictor/lcp_critical_path_predictor.mojom.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom.h"
 
@@ -152,21 +155,48 @@ bool ShouldConsultOptimizationGuide(const GURL& current_main_frame_url,
          url::Origin::Create(previous_main_frame_url);
 }
 
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class LcppHintStatus {
+  kSucceedToSet = 0,
+  kNoLcppData = 1,
+  kInvalidLcppStat = 2,
+  kConversionFailure = 3,
+  kMaxValue = kConversionFailure,
+};
+
 // Attach LCP Critical Path Predictor hint to NavigationHandle, so that it
 // would be sent to the renderer process upon navigation commit.
 void MaybeSetLCPPNavigationHint(content::NavigationHandle& navigation_handle,
                                 LoadingPredictor& predictor) {
-  if (base::FeatureList::IsEnabled(
-          blink::features::kLCPCriticalPathPredictor)) {
-    std::vector<std::string> lcp_element_locators =
-        predictor.resource_prefetch_predictor()->PredictLcpElementLocators(
-            navigation_handle.GetURL());
-    if (!lcp_element_locators.empty()) {
-      // TODO(crbug.com/1419756):: Plumb lcp_influencer_scripts from
-      // resource_prefetch_predictor.
-      navigation_handle.SetLCPPNavigationHint(
-          blink::mojom::LCPCriticalPathPredictorNavigationTimeHint(
-              std::move(lcp_element_locators), {}));
+  if (blink::LcppEnabled()) {
+    const GURL& navigation_url = navigation_handle.GetURL();
+    absl::optional<LcppData> lcpp_data =
+        predictor.resource_prefetch_predictor()->GetLcppData(navigation_url);
+    if (!lcpp_data) {
+      base::UmaHistogramEnumeration(
+          "LoadingPredictor.SetLCPPNavigationHint.Status",
+          LcppHintStatus::kNoLcppData);
+      return;
+    }
+    if (!IsValidLcppStat(lcpp_data->lcpp_stat())) {
+      base::UmaHistogramEnumeration(
+          "LoadingPredictor.SetLCPPNavigationHint.Status",
+          LcppHintStatus::kInvalidLcppStat);
+      return;
+    }
+    absl::optional<blink::mojom::LCPCriticalPathPredictorNavigationTimeHint>
+        hint = ConvertLcppDataToLCPCriticalPathPredictorNavigationTimeHint(
+            *lcpp_data);
+    if (hint) {
+      navigation_handle.SetLCPPNavigationHint(*hint);
+      base::UmaHistogramEnumeration(
+          "LoadingPredictor.SetLCPPNavigationHint.Status",
+          LcppHintStatus::kSucceedToSet);
+    } else {
+      base::UmaHistogramEnumeration(
+          "LoadingPredictor.SetLCPPNavigationHint.Status",
+          LcppHintStatus::kConversionFailure);
     }
   }
 }

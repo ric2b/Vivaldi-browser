@@ -9,12 +9,12 @@
 
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
-#include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "base/types/optional_util.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/content_settings/core/common/content_settings_utils.h"
 #include "components/content_settings/core/common/cookie_settings_base.h"
 #include "net/base/network_delegate.h"
 #include "net/base/schemeful_site.h"
@@ -34,8 +34,8 @@ const ContentSettingPatternSource* FindMatchingSetting(
     const GURL& primary_url,
     const GURL& secondary_url,
     const ContentSettingsForOneType& settings) {
-  // We assume `settings` is sorted in order of precedence, so we use the first
-  // matching rule we find.
+  // We assume `settings` is sorted in order of precedence, so we use the
+  // first matching rule we find.
   const auto& entry = base::ranges::find_if(
       settings, [&](const ContentSettingPatternSource& entry) {
         // The primary pattern is for the request URL; the secondary pattern
@@ -70,6 +70,15 @@ bool ShouldExcludeThirdPartyCookiePhaseout(const bool block_third_party_cookies,
          !is_cookie_partitioned && !is_explicit_setting;
 }
 
+bool IsValidType(ContentSettingsType type) {
+  // Metadata exceptions are updated separately by
+  // tpcd::metadata::UpdaterService.
+  if (type == ContentSettingsType::TPCD_METADATA_GRANTS) {
+    return true;
+  }
+  return CookieSettings::GetContentSettingsTypes().contains(type);
+}
+
 }  // namespace
 
 // static
@@ -94,11 +103,36 @@ net::NetworkDelegate::PrivacySetting CookieSettings::PrivacySetting(
 }
 
 CookieSettings::CookieSettings() {
-  // Allow cookies by default until we receive CookieSettings.
-  set_content_settings({});
+  // Initialize content_settings_ until we receive data.
+  for (auto type : GetContentSettingsTypes()) {
+    set_content_settings(type, {});
+  }
+  // Metadata grants are relevant for CookieSettings but not synced
+  // automatically.
+  set_content_settings(ContentSettingsType::TPCD_METADATA_GRANTS, {});
 }
 
 CookieSettings::~CookieSettings() = default;
+
+void CookieSettings::set_content_settings(
+    ContentSettingsType type,
+    const ContentSettingsForOneType& settings) {
+  CHECK(IsValidType(type)) << static_cast<int>(type);
+  content_settings_[type] = settings;
+  if (type == ContentSettingsType::COOKIES) {
+    // Ensure that a default cookie setting is specified.
+    if (settings.empty() ||
+        settings.back().primary_pattern != ContentSettingsPattern::Wildcard() ||
+        settings.back().secondary_pattern !=
+            ContentSettingsPattern::Wildcard()) {
+      content_settings_[type].emplace_back(ContentSettingsPattern::Wildcard(),
+                                           ContentSettingsPattern::Wildcard(),
+                                           base::Value(CONTENT_SETTING_ALLOW),
+                                           /*source=*/std::string(),
+                                           /*incognito=*/false);
+    }
+  }
+}
 
 DeleteCookiePredicate CookieSettings::CreateDeleteCookieOnExitPredicate()
     const {
@@ -106,7 +140,7 @@ DeleteCookiePredicate CookieSettings::CreateDeleteCookieOnExitPredicate()
     return DeleteCookiePredicate();
   return base::BindRepeating(&CookieSettings::ShouldDeleteCookieOnExit,
                              base::Unretained(this),
-                             std::cref(content_settings_));
+                             GetContentSettings(ContentSettingsType::COOKIES));
 }
 
 bool CookieSettings::ShouldIgnoreSameSiteRestrictions(
@@ -141,7 +175,8 @@ bool CookieSettings::IsCookieAccessible(
       }
     } else {
       if (ShouldExcludeThirdPartyCookiePhaseout(
-              net::cookie_util::IsForceThirdPartyCookieBlockingEnabled(),
+              net::cookie_util::IsForceThirdPartyCookieBlockingEnabled() ||
+                  tracking_protection_enabled_for_3pcd_,
               is_third_party_request, cookie.IsPartitioned(),
               setting_with_metadata.is_explicit_setting())) {
         cookie_inclusion_status->AddExclusionReason(
@@ -181,18 +216,6 @@ net::NetworkDelegate::PrivacySetting CookieSettings::IsPrivacyModeEnabled(
     net::CookieSettingOverrides overrides) const {
   return PrivacySetting(GetCookieSettingWithMetadata(
       url, site_for_cookies, base::OptionalToPtr(top_frame_origin), overrides));
-}
-
-CookieSettings::ThirdPartyBlockingScope
-CookieSettings::GetThirdPartyBlockingScope(const GURL& first_party_url) const {
-  // If cookies are allowed for the first-party URL then we allow
-  // partitioned cross-site cookies.
-  if (const ContentSettingPatternSource* match = FindMatchingSetting(
-          first_party_url, first_party_url, content_settings_);
-      !match || match->GetContentSetting() == CONTENT_SETTING_ALLOW) {
-    return ThirdPartyBlockingScope::kUnpartitionedOnly;
-  }
-  return ThirdPartyBlockingScope::kUnpartitionedAndPartitioned;
 }
 
 CookieSettings::CookieSettingWithMetadata
@@ -240,7 +263,8 @@ bool CookieSettings::AnnotateAndMoveUserBlockedCookies(
     } else {
       // Use a different exclusion reason when the 3pc is blocked by browser.
       if (ShouldExcludeThirdPartyCookiePhaseout(
-              net::cookie_util::IsForceThirdPartyCookieBlockingEnabled(),
+              net::cookie_util::IsForceThirdPartyCookieBlockingEnabled() ||
+                  tracking_protection_enabled_for_3pcd_,
               is_third_party_request, cookie.cookie.IsPartitioned(),
               setting_with_metadata.is_explicit_setting())) {
         cookie.access_result.status.AddExclusionReason(
@@ -262,7 +286,8 @@ bool CookieSettings::AnnotateAndMoveUserBlockedCookies(
     if (!IsCookieAllowed(cookie.cookie, setting_with_metadata)) {
       // Use a different exclusion reason when the 3pc is blocked by browser.
       if (ShouldExcludeThirdPartyCookiePhaseout(
-              net::cookie_util::IsForceThirdPartyCookieBlockingEnabled(),
+              net::cookie_util::IsForceThirdPartyCookieBlockingEnabled() ||
+                  tracking_protection_enabled_for_3pcd_,
               is_third_party_request, cookie.cookie.IsPartitioned(),
               setting_with_metadata.is_explicit_setting())) {
         cookie.access_result.status.AddExclusionReason(
@@ -271,6 +296,12 @@ bool CookieSettings::AnnotateAndMoveUserBlockedCookies(
         // User has a explicit setting to block 3pc.
         cookie.access_result.status.AddExclusionReason(
             net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
+      }
+      if (setting_with_metadata.BlockedByThirdPartyCookieBlocking() &&
+          first_party_set_metadata.AreSitesInSameFirstPartySet()) {
+        cookie.access_result.status.AddExclusionReason(
+            net::CookieInclusionStatus::
+                EXCLUDE_THIRD_PARTY_BLOCKED_WITHIN_FIRST_PARTY_SET);
       }
     }
   }
@@ -290,31 +321,16 @@ bool CookieSettings::AnnotateAndMoveUserBlockedCookies(
 }
 
 bool CookieSettings::HasSessionOnlyOrigins() const {
-  return base::ranges::any_of(content_settings_, [](const auto& entry) {
-    return entry.GetContentSetting() == CONTENT_SETTING_SESSION_ONLY;
-  });
+  return base::ranges::any_of(
+      GetContentSettings(ContentSettingsType::COOKIES), [](const auto& entry) {
+        return entry.GetContentSetting() == CONTENT_SETTING_SESSION_ONLY;
+      });
 }
 
 const ContentSettingsForOneType& CookieSettings::GetContentSettings(
     ContentSettingsType type) const {
-  switch (type) {
-    case ContentSettingsType::COOKIES:
-      return content_settings_;
-    case ContentSettingsType::STORAGE_ACCESS:
-      return storage_access_grants_;
-    case ContentSettingsType::TOP_LEVEL_STORAGE_ACCESS:
-      return top_level_storage_access_grants_;
-    case ContentSettingsType::LEGACY_COOKIE_ACCESS:
-      return settings_for_legacy_cookie_access_;
-    case ContentSettingsType::TPCD_SUPPORT:
-      return settings_for_3pcd_;
-    case ContentSettingsType::TPCD_METADATA_GRANTS:
-      return settings_for_3pcd_metadata_grants_;
-    default:
-      // Only implements types that are actually used by CookieSettings since
-      // settings need to be copied to the network service.
-      NOTREACHED_NORETURN() << static_cast<int>(type);
-  }
+  CHECK(IsValidType(type)) << static_cast<int>(type);
+  return content_settings_.at(type);
 }
 
 ContentSetting CookieSettings::GetContentSetting(
@@ -348,6 +364,10 @@ bool CookieSettings::IsThirdPartyCookiesAllowedScheme(
 
 bool CookieSettings::ShouldBlockThirdPartyCookies() const {
   return block_third_party_cookies_;
+}
+
+bool CookieSettings::MitigationsEnabledFor3pcd() const {
+  return mitigations_enabled_for_3pcd_;
 }
 
 bool CookieSettings::IsStorageAccessApiEnabled() const {

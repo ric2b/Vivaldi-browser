@@ -2,9 +2,14 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+if (is_chromeos) {
+  import("//build/config/chromeos/ui_mode.gni")
+}
+
 if (is_android) {
   import("//build/config/android/config.gni")
   import("//build/config/android/rules.gni")
+  import("//third_party/jni_zero/jni_zero.gni")
 }
 
 source_set("public") {
@@ -44,6 +49,7 @@ source_set("public") {
     "//components/flags_ui",
     "//components/keyed_service/core",
   ]
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
   if (is_android) {
     sources += [
@@ -58,6 +64,17 @@ source_set("public") {
     sources += [
       "ios_promo_feature_configuration.cc",
       "ios_promo_feature_configuration.h",
+    ]
+  }
+
+  if (is_chromeos && is_chromeos_ash) {
+    sources += [
+      "scalable_iph_feature_configurations.cc",
+      "scalable_iph_feature_configurations.h",
+    ]
+    deps += [
+      "//ash/constants",
+      "//chromeos/ash/components/scalable_iph:constants",
     ]
   }
 }
@@ -90,8 +107,8 @@ if (is_android) {
     deps = [
       ":jni_headers",
       "//base:base_java",
-      "//base:jni_java",
       "//third_party/androidx:androidx_annotation_annotation_java",
+      "//third_party/jni_zero:jni_zero_java",
     ]
 
     srcjar_deps = [

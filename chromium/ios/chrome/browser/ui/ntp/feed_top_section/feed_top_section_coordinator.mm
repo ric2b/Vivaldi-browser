@@ -16,7 +16,7 @@
 #import "ios/chrome/browser/signin/chrome_account_manager_service.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
-#import "ios/chrome/browser/sync/sync_service_factory.h"
+#import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/browser/ui/authentication/signin_presenter.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
 #import "ios/chrome/browser/ui/ntp/feed_top_section/feed_top_section_mediator.h"
@@ -84,8 +84,7 @@
                           syncService:syncService
                           accessPoint:signin_metrics::AccessPoint::
                                           ACCESS_POINT_NTP_FEED_TOP_PROMO
-                            presenter:self
-                   baseViewController:self.feedTopSectionViewController];
+                            presenter:self];
 
     if (base::FeatureList::IsEnabled(
             syncer::kReplaceSyncPromosWithSignInPromos)) {
@@ -120,17 +119,22 @@
 
 - (void)signinPromoHasChangedVisibility:(BOOL)visible {
   if (!self.isSignInPromoEnabled ||
-      self.isSigninPromoVisibleOnScreen == visible ||
-      !self.feedTopSectionViewController.shouldShowSigninPromo) {
+      self.isSigninPromoVisibleOnScreen == visible) {
+    return;
+  }
+  // Early return if the current promo State is SigninPromoViewState::kClosed
+  // since the visibility shouldn't be updated if the Promo has been closed.
+  // TODO(b/1494171): Update visibility methods to properlyhandle close actions.
+  if (self.signinPromoMediator.signinPromoViewState ==
+      SigninPromoViewState::kClosed) {
     return;
   }
   if (visible) {
     [self.signinPromoMediator signinPromoViewIsVisible];
-    self.isSigninPromoVisibleOnScreen = visible;
   } else {
     [self.signinPromoMediator signinPromoViewIsHidden];
-    self.isSigninPromoVisibleOnScreen = visible;
   }
+  self.isSigninPromoVisibleOnScreen = visible;
 }
 
 #pragma mark - SigninPresenter

@@ -80,7 +80,6 @@ class ReadableStream;
 class RecordTest;
 class ScriptPromiseResolver;
 class ScriptState;
-class ScrollState;
 class SequenceTest;
 class ShadowRoot;
 class StaticSelection;
@@ -350,8 +349,6 @@ class Internals final : public ScriptWrappable {
 
   unsigned numberOfScrollableAreas(Document*);
 
-  bool isPageBoxVisible(Document*, int page_number);
-
   InternalSettings* settings() const;
   InternalRuntimeFlags* runtimeFlags() const;
   unsigned workerThreadCount() const;
@@ -394,16 +391,6 @@ class Internals final : public ScriptWrappable {
   String pageProperty(String,
                       unsigned,
                       ExceptionState& = ASSERT_NO_EXCEPTION) const;
-  String pageSizeAndMarginsInPixels(
-      unsigned,
-      int,
-      int,
-      int,
-      int,
-      int,
-      int,
-      ExceptionState& = ASSERT_NO_EXCEPTION) const;
-
   float pageScaleFactor(ExceptionState&);
   void setPageScaleFactor(float scale_factor, ExceptionState&);
   void setPageScaleFactorLimits(float min_scale_factor,
@@ -528,10 +515,7 @@ class Internals final : public ScriptWrappable {
 
   void forceLoseCanvasContext(OffscreenCanvas* offscreencanvas,
                               const String& context_type);
-
-  void setScrollChain(ScrollState*,
-                      const HeapVector<Member<Element>>& elements,
-                      ExceptionState&);
+  void disableCanvasAcceleration(HTMLCanvasElement* canvas);
 
   String selectedHTMLForClipboard();
   String selectedTextForClipboard();

@@ -203,26 +203,6 @@ void PrerenderCancellationReason::ReportMetrics(
   }
 }
 
-std::string PrerenderCancellationReason::ToDevtoolReasonString() const {
-  switch (final_status_) {
-    case PrerenderFinalStatus::kInactivePageRestriction:
-      CHECK(absl::holds_alternative<uint64_t>(explanation_));
-      // TODO(https://crbug.com/1328365): It seems we have to return an integer.
-      // And devtool has to handle it based on the enum.xml, as the content
-      // layer cannot know about the enums added by the embedder layer.
-      return std::string();
-    case PrerenderFinalStatus::kMojoBinderPolicy:
-      CHECK(absl::holds_alternative<std::string>(explanation_));
-      return absl::get<std::string>(explanation_);
-    case PrerenderFinalStatus::kDidFailLoad:
-      CHECK(absl::holds_alternative<int32_t>(explanation_));
-      return std::string();
-    default:
-      CHECK(absl::holds_alternative<absl::monostate>(explanation_));
-      return std::string();
-  }
-}
-
 absl::optional<std::string>
 PrerenderCancellationReason::DisallowedMojoInterface() const {
   switch (final_status_) {
@@ -263,24 +243,6 @@ void RecordFailedPrerenderFinalStatus(
     ukm::builders::PrerenderPageLoad(attributes.initiator_ukm_id)
         .SetFinalStatus(static_cast<int>(cancellation_reason.final_status()))
         .Record(ukm::UkmRecorder::Get());
-  }
-
-  // Browser initiated prerendering doesn't report cancellation reasons to the
-  // DevTools as it doesn't have the initiator frame associated with DevTools
-  // agents.
-  if (!attributes.IsBrowserInitiated()) {
-    auto* ftn = FrameTreeNode::GloballyFindByID(
-        attributes.initiator_frame_tree_node_id);
-    CHECK(ftn);
-    // TODO(https://crbug.com/1332377): Discuss with devtools to finalize the
-    // message protocol.
-    if (attributes.initiator_devtools_navigation_token.has_value()) {
-      devtools_instrumentation::DidCancelPrerender(
-          ftn, attributes.prerendering_url,
-          attributes.initiator_devtools_navigation_token.value(),
-          cancellation_reason.final_status(),
-          cancellation_reason.ToDevtoolReasonString());
-    }
   }
 }
 
@@ -452,25 +414,14 @@ void RecordPrerenderActivationCommitDeferTime(
       time_delta);
 }
 
-void RecordBlockedByClientResourceType(
-    network::mojom::RequestDestination request_destination,
-    PrerenderTriggerType trigger_type,
-    const std::string& embedder_histogram_suffix) {
-  base::UmaHistogramEnumeration(
-      GenerateHistogramName(
-          "Prerender.Experimental.ResourceLoadingBlockedByClientByType",
-          trigger_type, embedder_histogram_suffix),
-      request_destination);
-}
-
 void RecordReceivedPrerendersPerPrimaryPageChangedCount(
     int number,
     PrerenderTriggerType trigger_type,
     const std::string& eagerness_category) {
   base::UmaHistogramCounts100(
-      GenerateHistogramName(
-          "Prerender.Experimental.ReceivedPrerendersPerPrimaryPageChangedCount",
-          trigger_type, /*embedder_suffix=*/"") +
+      GenerateHistogramName("Prerender.Experimental."
+                            "ReceivedPrerendersPerPrimaryPageChangedCount2",
+                            trigger_type, /*embedder_suffix=*/"") +
           "." + eagerness_category,
       number);
 }

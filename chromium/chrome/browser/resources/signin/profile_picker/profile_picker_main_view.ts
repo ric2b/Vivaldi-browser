@@ -13,8 +13,9 @@ import './profile_card.js';
 import './profile_picker_shared.css.js';
 import './strings.m.js';
 
-import {listenOnce} from '//resources/js/util_ts.js';
+import {listenOnce} from '//resources/js/util.js';
 import {CrCheckboxElement} from 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
+import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {afterNextRender, DomRepeat, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -34,6 +35,8 @@ export interface ProfilePickerMainViewElement {
     profilesContainer: HTMLElement,
     wrapper: HTMLElement,
     profiles: DomRepeat,
+    forceSigninErrorDialog: CrDialogElement,
+
   };
 }
 
@@ -114,6 +117,9 @@ export class ProfilePickerMainViewElement extends
         'profiles-list-changed', this.handleProfilesListChanged_.bind(this));
     this.addWebUiListener(
         'profile-removed', this.handleProfileRemoved_.bind(this));
+    this.addWebUiListener(
+        'display-force-signin-error-dialog',
+        () => this.showForceSigninErrorDialog());
     this.manageProfilesBrowserProxy_.initializeMainView();
   }
 
@@ -163,12 +169,10 @@ export class ProfilePickerMainViewElement extends
   }
 
   /**
-   * Handler for when the profiles list are updated.
+   * Initializes the drag delegate, making sure to clear a previously existing
+   * one.
    */
-  private handleProfilesListChanged_(profilesList: ProfileState[]) {
-    this.profilesListLoaded_ = true;
-    this.profilesList_ = profilesList;
-
+  private initializeDragDelegate_() {
     if (loadTimeData.getBoolean('profilesReorderingEnabled')) {
       if (this.dragDelegate_) {
         this.dragDelegate_.clearListeners();
@@ -177,13 +181,21 @@ export class ProfilePickerMainViewElement extends
       this.dragDelegate_ = new DragDropReorderTileListDelegate(
           this, this, 'profilesList_', this.profilesList_.length,
           this.dragDuration_);
-
-      listenOnce(this, 'dom-change', () => {
-        afterNextRender(this, () => {
-          this.dragDelegate_!.initializeListeners();
-        });
-      });
     }
+  }
+
+  /**
+   * Handler for when the profiles list are updated.
+   */
+  private handleProfilesListChanged_(profilesList: ProfileState[]) {
+    this.profilesListLoaded_ = true;
+    this.profilesList_ = profilesList;
+
+    listenOnce(this, 'dom-change', () => {
+      afterNextRender(this, () => {
+        this.initializeDragDelegate_();
+      });
+    });
   }
 
   /**
@@ -220,6 +232,8 @@ export class ProfilePickerMainViewElement extends
         break;
       }
     }
+
+    this.initializeDragDelegate_();
   }
 
   private computeHideAskOnStartup_(): boolean {
@@ -237,7 +251,7 @@ export class ProfilePickerMainViewElement extends
   }
 
   // @override
-  onDradEnd(initialIndex: number, finalIndex: number): void {
+  onDragEnd(initialIndex: number, finalIndex: number): void {
     this.manageProfilesBrowserProxy_.updateProfileOrder(
         initialIndex, finalIndex);
   }
@@ -258,6 +272,14 @@ export class ProfilePickerMainViewElement extends
 
   getProfileListForTesting(): ProfileState[] {
     return this.profilesList_;
+  }
+
+  showForceSigninErrorDialog(): void {
+    this.$.forceSigninErrorDialog.showModal();
+  }
+
+  private onForceSigninErrorDialogOkButtonClicked_(): void {
+    this.$.forceSigninErrorDialog.close();
   }
 }
 

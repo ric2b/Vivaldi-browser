@@ -16,8 +16,6 @@
 #import "ios/ui/settings/tabs/vivaldi_tab_setting_prefs.h"
 // End Vivaldi
 
-@protocol TabStripContaining;
-
 @interface TabStripLegacyCoordinator ()
 @property(nonatomic, assign) BOOL started;
 @property(nonatomic, strong) TabStripController* tabStripController;
@@ -33,11 +31,6 @@
 - (instancetype)initWithBrowser:(Browser*)browser {
   DCHECK(browser);
   return [super initWithBaseViewController:nil browser:browser];
-}
-
-- (UIView<TabStripContaining>*)view {
-  DCHECK(self.started);
-  return [self.tabStripController view];
 }
 
 - (void)setPresentationProvider:(id<TabStripPresentation>)presentationProvider {

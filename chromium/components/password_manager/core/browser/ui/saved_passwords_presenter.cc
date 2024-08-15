@@ -23,14 +23,11 @@
 #include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
-#include "components/password_manager/core/browser/form_parsing/form_data_parser.h"
-#include "components/password_manager/core/browser/import/csv_password.h"
 #include "components/password_manager/core/browser/passkey_credential.h"
 #include "components/password_manager/core/browser/password_form.h"
-#include "components/password_manager/core/browser/password_list_sorter.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
-#include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/ui/credential_ui_entry.h"
+#include "components/password_manager/core/browser/ui/credential_utils.h"
 #include "components/password_manager/core/browser/ui/password_undo_helper.h"
 #include "components/password_manager/core/browser/ui/passwords_grouper.h"
 #include "components/password_manager/core/common/password_manager_features.h"
@@ -39,11 +36,13 @@
 #include "url/gurl.h"
 
 namespace {
-using password_manager::metrics_util::IsDisplayNameChanged;
-using password_manager::metrics_util::IsPasswordChanged;
-using password_manager::metrics_util::IsPasswordNoteChanged;
-using password_manager::metrics_util::IsUsernameChanged;
-using password_manager::metrics_util::PasswordNoteAction;
+
+using IsUsernameChanged = base::StrongAlias<class IsUsernameChangedTag, bool>;
+using IsDisplayNameChanged =
+    base::StrongAlias<class IsDisplayNameChangedTag, bool>;
+using IsPasswordChanged = base::StrongAlias<class IsPasswordChangedTag, bool>;
+using IsPasswordNoteChanged =
+    base::StrongAlias<class IsPasswordNoteChangedTag, bool>;
 using PasswordNote = password_manager::PasswordNote;
 using Store = password_manager::PasswordForm::Store;
 using EditResult = password_manager::SavedPasswordsPresenter::EditResult;
@@ -179,8 +178,9 @@ void SavedPasswordsPresenter::UndoLastRemoval() {
 SavedPasswordsPresenter::AddResult
 SavedPasswordsPresenter::GetExpectedAddResult(
     const CredentialUIEntry& credential) const {
-  if (!password_manager_util::IsValidPasswordURL(credential.GetURL()))
+  if (!IsValidPasswordURL(credential.GetURL())) {
     return AddResult::kInvalid;
+  }
   if (credential.password.empty())
     return AddResult::kInvalid;
 
@@ -471,6 +471,10 @@ void SavedPasswordsPresenter::OnPasskeysChanged() {
       weak_ptr_factory_.GetWeakPtr(), PasswordStoreChangeList()));
 }
 
+void SavedPasswordsPresenter::OnPasskeyModelShuttingDown() {
+  passkey_store_observation_.Reset();
+}
+
 void SavedPasswordsPresenter::OnGetPasswordStoreResults(
     std::vector<std::unique_ptr<PasswordForm>> results) {
   // This class overrides OnGetPasswordStoreResultsFrom() (the version of this
@@ -523,7 +527,7 @@ void SavedPasswordsPresenter::AddForms(const std::vector<PasswordForm>& forms,
     // TODO(crbug.com/1359392): Consider replacing |sort_key_to_password_forms_|
     // when grouping is launched.
     sort_key_to_password_forms_.insert(
-        std::make_pair(CreateSortKey(form, IgnoreStore(true)), form));
+        std::make_pair(CreateSortKey(CredentialUIEntry(form)), form));
   }
 
 #if BUILDFLAG(IS_ANDROID)

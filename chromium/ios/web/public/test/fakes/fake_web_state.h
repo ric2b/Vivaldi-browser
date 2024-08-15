@@ -30,6 +30,7 @@ namespace web {
 class FakeWebState : public WebState {
  public:
   FakeWebState();
+  explicit FakeWebState(WebStateID unique_identifier);
   ~FakeWebState() override;
 
   // WebState implementation.
@@ -71,7 +72,7 @@ class FakeWebState : public WebState {
   void LoadData(NSData* data, NSString* mime_type, const GURL& url) override;
   void ExecuteUserJavaScript(NSString* javaScript) override;
   NSString* GetStableIdentifier() const override;
-  SessionID GetUniqueIdentifier() const override;
+  WebStateID GetUniqueIdentifier() const override;
   const std::string& GetContentsMimeType() const override;
   bool ContentIsHTML() const override;
   const std::u16string& GetTitle() const override;
@@ -116,6 +117,7 @@ class FakeWebState : public WebState {
   id<CRWFindInteraction> GetFindInteraction() final API_AVAILABLE(ios(16));
   id GetActivityItem() API_AVAILABLE(ios(16.4)) final;
   UIColor* GetThemeColor() final;
+  UIColor* GetUnderPageBackgroundColor() final;
 
   void AddPolicyDecider(WebStatePolicyDecider* decider) override;
   void RemovePolicyDecider(WebStatePolicyDecider* decider) override;
@@ -183,7 +185,7 @@ class FakeWebState : public WebState {
  private:
   BrowserState* browser_state_ = nullptr;
   NSString* stable_identifier_ = nil;
-  const SessionID unique_identifier_;
+  const WebStateID unique_identifier_;
   bool web_usage_enabled_ = true;
   bool is_realized_ = true;
   bool is_loading_ = false;

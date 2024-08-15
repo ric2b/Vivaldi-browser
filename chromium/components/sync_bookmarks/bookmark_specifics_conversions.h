@@ -15,7 +15,6 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace bookmarks {
-class BookmarkModel;
 class BookmarkNode;
 }  // namespace bookmarks
 
@@ -35,6 +34,8 @@ class FaviconService;
 
 namespace sync_bookmarks {
 
+class BookmarkModelView;
+
 // Canonicalize |node_title| similar to legacy client's implementation by
 // truncating and the appending ' ' in some cases.
 std::string FullTitleToLegacyCanonicalizedTitle(const std::string& node_title);
@@ -45,7 +46,7 @@ bool IsBookmarkEntityReuploadNeeded(
 
 sync_pb::EntitySpecifics CreateSpecificsFromBookmarkNode(
     const bookmarks::BookmarkNode* node,
-    bookmarks::BookmarkModel* model,
+    BookmarkModelView* model,
     const sync_pb::UniquePosition& unique_position,
     bool force_favicon_load);
 
@@ -56,7 +57,7 @@ const bookmarks::BookmarkNode* CreateBookmarkNodeFromSpecifics(
     const sync_pb::BookmarkSpecifics& specifics,
     const bookmarks::BookmarkNode* parent,
     size_t index,
-    bookmarks::BookmarkModel* model,
+    BookmarkModelView* model,
     favicon::FaviconService* favicon_service);
 
 // Updates the bookmark node |node| with the data in |specifics|. Callers must
@@ -64,7 +65,7 @@ const bookmarks::BookmarkNode* CreateBookmarkNodeFromSpecifics(
 void UpdateBookmarkNodeFromSpecifics(
     const sync_pb::BookmarkSpecifics& specifics,
     const bookmarks::BookmarkNode* node,
-    bookmarks::BookmarkModel* model,
+    BookmarkModelView* model,
     favicon::FaviconService* favicon_service);
 
 // Convnience function that returns BookmarkSpecifics::URL or
@@ -81,7 +82,7 @@ sync_pb::BookmarkSpecifics::Type GetProtoTypeFromBookmarkNode(
 const bookmarks::BookmarkNode* ReplaceBookmarkNodeUuid(
     const bookmarks::BookmarkNode* node,
     const base::Uuid& guid,
-    bookmarks::BookmarkModel* model);
+    BookmarkModelView* model);
 
 // Checks if a bookmark specifics represents a valid bookmark. Valid specifics
 // must not be empty, non-folders must contains a valid url, and all keys in the

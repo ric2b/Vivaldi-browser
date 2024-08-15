@@ -53,8 +53,8 @@ class GuestOsSharedUsbDevicesAddDialog extends
         type: Object,
         value() {
           return {
-            'vm_name': '',
-            'container_name': '',
+            vm_name: '',
+            container_name: '',
           };
         },
       },
@@ -94,7 +94,7 @@ class GuestOsSharedUsbDevicesAddDialog extends
     this.browserProxy_ = GuestOsBrowserProxyImpl.getInstance();
   }
 
-  override connectedCallback() {
+  override connectedCallback(): void {
     super.connectedCallback();
     this.$.dialog.showModal();
     microTask.run(() => {

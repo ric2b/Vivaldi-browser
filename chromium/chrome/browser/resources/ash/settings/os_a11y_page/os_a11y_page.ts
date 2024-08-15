@@ -80,17 +80,6 @@ export class OsSettingsA11yPageElement extends OsSettingsA11yPageElementBase {
       },
 
       /**
-       * Whether ChromeVox page migration is enabled.
-       */
-      isAccessibilityChromeVoxPageMigrationEnabled_: {
-        type: Boolean,
-        value() {
-          return loadTimeData.getBoolean(
-              'isAccessibilityChromeVoxPageMigrationEnabled');
-        },
-      },
-
-      /**
        * Whether the user is in kiosk mode.
        */
       isKioskModeActive_: {
@@ -131,7 +120,6 @@ export class OsSettingsA11yPageElement extends OsSettingsA11yPageElementBase {
   private isKioskModeActive_: boolean;
   private section_: Section;
   private showAccessibilityLabelsSetting_: boolean;
-  private isAccessibilityChromeVoxPageMigrationEnabled_: boolean;
 
   constructor() {
     super();
@@ -142,7 +130,7 @@ export class OsSettingsA11yPageElement extends OsSettingsA11yPageElementBase {
     this.browserProxy_ = OsA11yPageBrowserProxyImpl.getInstance();
   }
 
-  override ready() {
+  override ready(): void {
     super.ready();
 
     if (routes.A11Y_TEXT_TO_SPEECH) {
@@ -177,7 +165,7 @@ export class OsSettingsA11yPageElement extends OsSettingsA11yPageElementBase {
     this.browserProxy_.a11yPageReady();
   }
 
-  override currentRouteChanged(newRoute: Route, prevRoute?: Route) {
+  override currentRouteChanged(newRoute: Route, prevRoute?: Route): void {
     super.currentRouteChanged(newRoute, prevRoute);
 
     if (newRoute === this.route) {

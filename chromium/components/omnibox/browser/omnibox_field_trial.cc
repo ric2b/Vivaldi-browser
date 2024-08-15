@@ -13,6 +13,7 @@
 #include "base/feature_list.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -162,8 +163,8 @@ std::string GetValueForRuleInContextFromVariationParams(
 }
 
 OmniboxFieldTrial::MLConfig& GetMLConfigInternal() {
-  static OmniboxFieldTrial::MLConfig s_config;
-  return s_config;
+  static base::NoDestructor<OmniboxFieldTrial::MLConfig> s_config;
+  return *s_config;
 }
 
 bool IsKoreanLocale(const std::string& locale) {
@@ -553,65 +554,21 @@ bool OmniboxFieldTrial::IsActionsUISimplificationEnabled() {
   return base::FeatureList::IsEnabled(omnibox::kOmniboxActionsUISimplification);
 }
 
+bool OmniboxFieldTrial::IsKeywordModeRefreshEnabled() {
+  return base::FeatureList::IsEnabled(omnibox::kOmniboxKeywordModeRefresh);
+}
+
+const base::FeatureParam<bool>
+    OmniboxFieldTrial::kActionsUISimplificationIncludeRealbox(
+        &omnibox::kOmniboxActionsUISimplification,
+        "ActionsUISimplificationIncludeRealbox",
+        true);
+
 const base::FeatureParam<bool>
     OmniboxFieldTrial::kActionsUISimplificationTrimExtra(
         &omnibox::kOmniboxActionsUISimplification,
         "ActionsUISimplificationTrimExtra",
         true);
-
-bool OmniboxFieldTrial::IsFuzzyUrlSuggestionsEnabled() {
-  return base::FeatureList::IsEnabled(omnibox::kOmniboxFuzzyUrlSuggestions);
-}
-
-const base::FeatureParam<bool>
-    OmniboxFieldTrial::kFuzzyUrlSuggestionsCounterfactual(
-        &omnibox::kOmniboxFuzzyUrlSuggestions,
-        "FuzzyUrlSuggestionsCounterfactual",
-        false);
-
-const base::FeatureParam<bool>
-    OmniboxFieldTrial::kFuzzyUrlSuggestionsLowEndBypass(
-        &omnibox::kOmniboxFuzzyUrlSuggestions,
-        "FuzzyUrlSuggestionsLowEndBypass",
-        false);
-
-const base::FeatureParam<bool> OmniboxFieldTrial::kFuzzyUrlSuggestionsTranspose(
-    &omnibox::kOmniboxFuzzyUrlSuggestions,
-    "FuzzyUrlSuggestionsTranspose",
-    true);
-
-const base::FeatureParam<int>
-    OmniboxFieldTrial::kFuzzyUrlSuggestionsMinInputLength(
-        &omnibox::kOmniboxFuzzyUrlSuggestions,
-        "FuzzyUrlSuggestionsMinInputLength",
-        3);
-
-// Note about this default, which produces good results for most inputs:
-// Using 10% reasonably took a 1334 relevance match down to 1200,
-// but was harmful to HQP suggestions: as soon as a '.' was
-// appended, a bunch of ~800 navsuggest results overtook a better
-// HQP result that was bumped down to ~770. Using 5% lets this
-// result compete in the navsuggest range.
-const base::FeatureParam<int> OmniboxFieldTrial::kFuzzyUrlSuggestionsPenaltyLow(
-    &omnibox::kOmniboxFuzzyUrlSuggestions,
-    "FuzzyUrlSuggestionsPenaltyLow",
-    5);
-
-// Keeping the default for high penalty equal to preserve current behavior, but
-// this is the parameter most likely to need tuning for very short inputs.
-const base::FeatureParam<int>
-    OmniboxFieldTrial::kFuzzyUrlSuggestionsPenaltyHigh(
-        &omnibox::kOmniboxFuzzyUrlSuggestions,
-        "FuzzyUrlSuggestionsPenaltyHigh",
-        5);
-
-// The default value of zero means "no taper", and only the lowest penalty
-// will be applied.
-const base::FeatureParam<int>
-    OmniboxFieldTrial::kFuzzyUrlSuggestionsPenaltyTaperLength(
-        &omnibox::kOmniboxFuzzyUrlSuggestions,
-        "FuzzyUrlSuggestionsPenaltyTaperLength",
-        0);
 
 bool OmniboxFieldTrial::IsOnDeviceHeadSuggestEnabledForIncognito() {
   return base::FeatureList::IsEnabled(omnibox::kOnDeviceHeadProviderIncognito);
@@ -681,6 +638,10 @@ const base::FeatureParam<double>
         &omnibox::kSquareSuggestIcons,
         "OmniboxSquareSuggestIconEntitiesScale",
         0.8722);
+const base::FeatureParam<bool> OmniboxFieldTrial::kSquareSuggestIconWeather(
+    &omnibox::kSquareSuggestIcons,
+    "OmniboxSquareSuggestIconWeather",
+    true);
 
 bool OmniboxFieldTrial::IsUniformRowHeightEnabled() {
   return base::FeatureList::IsEnabled(omnibox::kUniformRowHeight);
@@ -830,18 +791,6 @@ const char OmniboxFieldTrial::kOnDeviceHeadModelLocaleConstraint[] =
 int OmniboxFieldTrial::kDefaultMinimumTimeBetweenSuggestQueriesMs = 100;
 
 namespace OmniboxFieldTrial {
-
-// Autocomplete stability.
-
-const base::FeatureParam<bool>
-    kAutocompleteStabilityUpdateResultDebounceFromLastRun(
-        &omnibox::kUpdateResultDebounce,
-        "AutocompleteStabilityUpdateResultDebounceFromLastRun",
-        false);
-const base::FeatureParam<int> kAutocompleteStabilityUpdateResultDebounceDelay(
-    &omnibox::kUpdateResultDebounce,
-    "AutocompleteStabilityUpdateResultDebounceDelay",
-    200);
 
 // Local history zero-prefix (aka zero-suggest) and prefix suggestions:
 
@@ -1006,6 +955,27 @@ const base::FeatureParam<bool> kDomainSuggestionsAlternativeScoring(
     "DomainSuggestionsAlternativeScoring",
     false);
 
+const base::FeatureParam<omnibox::CompanyEntityIconAdjustmentGroup>::Option
+    kCompanyEntityIconAdjustmentGroupOptions[] = {
+        {omnibox::CompanyEntityIconAdjustmentGroup::kLeastAggressive,
+         "least-aggressive"},
+        {omnibox::CompanyEntityIconAdjustmentGroup::kModerate, "moderate"},
+        {omnibox::CompanyEntityIconAdjustmentGroup::kMostAggressive,
+         "most-aggressive"},
+};
+
+const base::FeatureParam<omnibox::CompanyEntityIconAdjustmentGroup>
+    kCompanyEntityIconAdjustmentGroup{
+        &omnibox::kCompanyEntityIconAdjustment,
+        "OmniboxCompanyEntityAdjustmentGroup",
+        omnibox::CompanyEntityIconAdjustmentGroup::kLeastAggressive,
+        &kCompanyEntityIconAdjustmentGroupOptions};
+
+const base::FeatureParam<bool> kCompanyEntityIconAdjustmentCounterfactual(
+    &omnibox::kCompanyEntityIconAdjustment,
+    "CompanyEntityIconAdjustmentCounterfactual",
+    false);
+
 // ---------------------------------------------------------
 // ML Relevance Scoring ->
 
@@ -1062,7 +1032,7 @@ const base::FeatureParam<std::string> kMlUrlScoringMaxMatchesByProvider(
 // If true, synchronously runs the ML model for a batch of urls.
 const base::FeatureParam<bool> kMlSyncBatchUrlScoring(&omnibox::kMlUrlScoring,
                                                       "MlSyncBatchUrlScoring",
-                                                      false);
+                                                      true);
 
 MLConfig::MLConfig() {
   log_url_scoring_signals =
@@ -1070,6 +1040,14 @@ MLConfig::MLConfig() {
   enable_scoring_signals_annotators =
       kEnableScoringSignalsAnnotatorsForLogging.Get() ||
       kEnableScoringSignalsAnnotatorsForMlScoring.Get();
+  shortcut_document_signals =
+      base::FeatureParam<bool>(&omnibox::kLogUrlScoringSignals,
+                               "MlUrlScoringShortcutDocumentSignals", false)
+          .Get() ||
+      base::FeatureParam<bool>(&omnibox::kMlUrlScoring,
+                               "MlUrlScoringShortcutDocumentSignals", false)
+          .Get();
+
   ml_url_scoring = base::FeatureList::IsEnabled(omnibox::kMlUrlScoring);
   ml_sync_batch_url_scoring = kMlSyncBatchUrlScoring.Get();
   ml_url_scoring_counterfactual = kMlUrlScoringCounterfactual.Get();
@@ -1084,6 +1062,8 @@ MLConfig::MLConfig() {
 }
 
 MLConfig::MLConfig(const MLConfig&) = default;
+
+MLConfig& MLConfig::operator=(const MLConfig& other) = default;
 
 ScopedMLConfigForTesting::ScopedMLConfigForTesting()
     : original_config_(std::make_unique<MLConfig>(GetMLConfig())) {
@@ -1158,7 +1138,7 @@ const base::FeatureParam<bool> kRealboxSecondaryZeroSuggestCounterfactual(
 const base::FeatureParam<bool> kOmniboxModernizeVisualUpdateMergeClipboardOnNTP(
     &omnibox::kOmniboxModernizeVisualUpdate,
     "modernize_visual_update_merge_clipboard_on_ntp",
-    false);
+    true);
 // <- Android UI Revamp
 // ---------------------------------------------------------
 // Touch Down Trigger For Prefetch ->

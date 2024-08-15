@@ -26,7 +26,9 @@
 #include "chrome/browser/web_applications/extensions_manager.h"
 #include "chrome/browser/web_applications/externally_managed_app_manager.h"
 #include "chrome/browser/web_applications/file_utils_wrapper.h"
+#include "chrome/browser/web_applications/generated_icon_fix_manager.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_installation_manager.h"
+#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_update_manager.h"
 #include "chrome/browser/web_applications/manifest_update_manager.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/os_integration/web_app_file_handler_manager.h"
@@ -40,7 +42,6 @@
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_database_factory.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
-#include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_origin_association_manager.h"
@@ -53,11 +54,11 @@
 #include "chrome/browser/web_applications/web_app_ui_manager.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/browser/web_applications/web_contents/web_contents_manager.h"
+#include "components/webapps/common/web_app_id.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
-#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_update_manager.h"
 #include "chrome/browser/web_applications/web_app_run_on_os_login_manager.h"
 #endif
 
@@ -229,12 +230,12 @@ WebAppProvider::isolated_web_app_installation_manager() {
   return *isolated_web_app_installation_manager_;
 }
 
-#if BUILDFLAG(IS_CHROMEOS)
 IsolatedWebAppUpdateManager& WebAppProvider::iwa_update_manager() {
   CheckIsConnected();
   return *iwa_update_manager_;
 }
 
+#if BUILDFLAG(IS_CHROMEOS)
 WebAppRunOnOsLoginManager& WebAppProvider::run_on_os_login_manager() {
   CheckIsConnected();
   return *web_app_run_on_os_login_manager_;
@@ -292,6 +293,10 @@ ExtensionsManager& WebAppProvider::extensions_manager() {
   return *extensions_manager_;
 }
 
+GeneratedIconFixManager& WebAppProvider::generated_icon_fix_manager() {
+  return *generated_icon_fix_manager_;
+}
+
 AbstractWebAppDatabaseFactory& WebAppProvider::database_factory() {
   return *database_factory_;
 }
@@ -302,9 +307,7 @@ void WebAppProvider::Shutdown() {
   ui_manager_->Shutdown();
   externally_managed_app_manager_->Shutdown();
   manifest_update_manager_->Shutdown();
-#if BUILDFLAG(IS_CHROMEOS)
   iwa_update_manager_->Shutdown();
-#endif
   install_manager_->Shutdown();
   icon_manager_->Shutdown();
   install_finalizer_->Shutdown();
@@ -332,10 +335,9 @@ void WebAppProvider::CreateSubsystems(Profile* profile) {
   web_app_policy_manager_ = std::make_unique<WebAppPolicyManager>(profile);
   isolated_web_app_installation_manager_ =
       std::make_unique<IsolatedWebAppInstallationManager>(*profile);
-#if BUILDFLAG(IS_CHROMEOS)
   iwa_update_manager_ = std::make_unique<IsolatedWebAppUpdateManager>(*profile);
-#endif
   extensions_manager_ = std::make_unique<ExtensionsManager>(profile);
+  generated_icon_fix_manager_ = std::make_unique<GeneratedIconFixManager>();
 
   database_factory_ = std::make_unique<WebAppDatabaseFactory>(profile);
 
@@ -400,12 +402,13 @@ void WebAppProvider::ConnectSubsystems() {
   command_manager_->SetProvider(pass_key, *this);
   command_scheduler_->SetProvider(pass_key, *this);
   isolated_web_app_installation_manager_->SetProvider(pass_key, *this);
-#if BUILDFLAG(IS_CHROMEOS)
   iwa_update_manager_->SetProvider(pass_key, *this);
+#if BUILDFLAG(IS_CHROMEOS)
   web_app_run_on_os_login_manager_->SetProvider(pass_key, *this);
 #endif
   icon_manager_->SetProvider(pass_key, *this);
   translation_manager_->SetProvider(pass_key, *this);
+  generated_icon_fix_manager_->SetProvider(pass_key, *this);
 
   connected_ = true;
 }
@@ -453,12 +456,11 @@ void WebAppProvider::OnSyncBridgeReady() {
       std::move(on_web_app_policy_manager_done_callback));
   isolated_web_app_installation_manager_->Start();
 
-#if BUILDFLAG(IS_CHROMEOS)
   iwa_update_manager_->Start();
-#endif
   manifest_update_manager_->Start();
   os_integration_manager_->Start();
   ui_manager_->Start();
+  generated_icon_fix_manager_->Start();
   command_manager_->Start();
 
   on_registry_ready_.Signal();
@@ -472,7 +474,7 @@ void WebAppProvider::CheckIsConnected() const {
 }
 
 void WebAppProvider::DoMigrateProfilePrefs(Profile* profile) {
-  std::map<AppId, int> sources =
+  std::map<webapps::AppId, int> sources =
       TakeAllWebAppInstallSources(profile->GetPrefs());
   ScopedRegistryUpdate update = sync_bridge_->BeginUpdate();
   for (const auto& iter : sources) {

@@ -224,8 +224,9 @@ void CreditCardAccessoryControllerImpl::OnFillingTriggered(
   // Credit card number fields have a GUID populated to allow deobfuscation
   // before filling.
   if (selection.id().empty()) {
-    GetDriver()->RendererShouldFillFieldWithValue(focused_field_id,
-                                                  selection.text_to_fill());
+    GetDriver()->ApplyFieldAction(mojom::ActionPersistence::kFill,
+                                  mojom::TextReplacement::kReplaceAll,
+                                  focused_field_id, selection.text_to_fill());
     return;
   }
 
@@ -294,7 +295,8 @@ bool CreditCardAccessoryController::AllowedForWebContents(
     }
   }
 
-  return true;
+  return false; // Vivaldi - Possible upstream bug, setting to false to be able
+                // to turn the feature off. Ref. VAB-8034.
 }
 
 // static
@@ -347,8 +349,9 @@ void CreditCardAccessoryControllerImpl::OnCreditCardFetched(
   DCHECK(credit_card);
   DCHECK(GetDriver());
 
-  GetDriver()->RendererShouldFillFieldWithValue(last_focused_field_id_,
-                                                credit_card->number());
+  GetDriver()->ApplyFieldAction(mojom::ActionPersistence::kFill,
+                                mojom::TextReplacement::kReplaceAll,
+                                last_focused_field_id_, credit_card->number());
   last_focused_field_id_ = {};
 }
 

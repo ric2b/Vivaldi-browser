@@ -30,6 +30,7 @@
 #include "base/time/time.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
+#include "components/manta/features.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -203,8 +204,6 @@ void AddStrings(content::WebUIDataSource* source) {
        IDS_PERSONALIZATION_APP_AMBIENT_MODE_DURATION_ONE_HOUR},
       {"ambientModeDurationForever",
        IDS_PERSONALIZATION_APP_AMBIENT_MODE_DURATION_FOREVER},
-      {"ambientModeDurationDescription",
-       IDS_PERSONALIZATION_APP_AMBIENT_MODE_DURATION_DESCRIPTION},
       {"ambientModeTopicSourceTitle",
        IDS_PERSONALIZATION_APP_AMBIENT_MODE_TOPIC_SOURCE_TITLE},
       {"ambientModeTopicSourceGooglePhotos",
@@ -242,9 +241,9 @@ void AddStrings(content::WebUIDataSource* source) {
       {"ambientModeAlbumsSubpageAlbumUnselected",
        IDS_PERSONALIZATION_APP_AMBIENT_MODE_ALBUMS_SUBPAGE_ALBUM_UNSELECTED},
       {"ambientModeLastArtAlbumMessage",
-       IDS_PERONSONALIZATION_APP_AMBIENT_MODE_LAST_ART_ALBUM_MESSAGE},
+       IDS_PERSONALIZATION_APP_AMBIENT_MODE_LAST_ART_ALBUM_MESSAGE},
       {"ambientModeArtAlbumDialogCloseButtonLabel",
-       IDS_PERONSONALIZATION_APP_AMBIENT_MODE_ART_ALBUM_DIALOG_CLOSE_BUTTON_LABEL},
+       IDS_PERSONALIZATION_APP_AMBIENT_MODE_ART_ALBUM_DIALOG_CLOSE_BUTTON_LABEL},
       {"ambientModeAnimationTitle",
        IDS_PERSONALIZATION_APP_AMBIENT_MODE_ANIMATION_TITLE},
       {"ambientModeAnimationSlideshowLabel",
@@ -497,6 +496,13 @@ void PersonalizationAppUI::AddBooleans(content::WebUIDataSource* source) {
 
   source->AddBoolean("isTimeOfDayWallpaperEnabled",
                      features::IsTimeOfDayWallpaperEnabled());
+
+  source->AddBoolean(
+      "isSeaPenEnabled",
+      features::IsSeaPenEnabled() && manta::features::IsMantaServiceEnabled());
+  source->AddBoolean("isSeaPenTextInputEnabled",
+                     features::IsSeaPenTextInputEnabled() &&
+                         manta::features::IsMantaServiceEnabled());
 }
 
 void PersonalizationAppUI::AddIntegers(content::WebUIDataSource* source) {

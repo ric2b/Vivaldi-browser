@@ -4,8 +4,6 @@
 
 #include "third_party/blink/public/common/service_worker/service_worker_router_rule.h"
 
-#include "base/notreached.h"
-
 namespace blink {
 
 bool ServiceWorkerRouterRequestCondition::operator==(
@@ -14,19 +12,14 @@ bool ServiceWorkerRouterRequestCondition::operator==(
          destination == other.destination;
 }
 
+bool ServiceWorkerRouterOrCondition::operator==(
+    const ServiceWorkerRouterOrCondition& other) const {
+  return conditions == other.conditions;
+}
+
 bool ServiceWorkerRouterCondition::operator==(
     const ServiceWorkerRouterCondition& other) const {
-  if (type != other.type) {
-    return false;
-  }
-  switch (type) {
-    case ConditionType::kUrlPattern:
-      return url_pattern == other.url_pattern;
-    case ConditionType::kRequest:
-      return request == other.request;
-    case ConditionType::kRunningStatus:
-      return running_status == other.running_status;
-  }
+  return get() == other.get();
 }
 
 bool ServiceWorkerRouterCacheSource::operator==(
@@ -40,13 +33,13 @@ bool ServiceWorkerRouterSource::operator==(
     return false;
   }
   switch (type) {
-    case SourceType::kNetwork:
+    case Type::kNetwork:
       return network_source == other.network_source;
-    case SourceType::kRace:
+    case Type::kRace:
       return race_source == other.race_source;
-    case SourceType::kFetchEvent:
+    case Type::kFetchEvent:
       return fetch_event_source == other.fetch_event_source;
-    case SourceType::kCache:
+    case Type::kCache:
       return cache_source == other.cache_source;
   }
 }

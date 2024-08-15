@@ -77,7 +77,7 @@ void FakeIdentityRequestDialogController::ShowFailureDialog(
     const IdentityProviderMetadata& idp_metadata,
     DismissCallback dismiss_callback,
     SigninToIdPCallback signin_callback) {
-  title_ = "Confirm IDP Signin";
+  title_ = "Confirm IDP Login";
 }
 
 void FakeIdentityRequestDialogController::ShowErrorDialog(
@@ -87,7 +87,11 @@ void FakeIdentityRequestDialogController::ShowErrorDialog(
     const blink::mojom::RpContext& rp_context,
     const IdentityProviderMetadata& idp_metadata,
     const absl::optional<TokenError>& error,
-    DismissCallback dismiss_callback) {}
+    DismissCallback dismiss_callback,
+    MoreDetailsCallback more_details_callback) {
+  DCHECK(dismiss_callback);
+  std::move(dismiss_callback).Run(DismissReason::kOther);
+}
 
 std::string FakeIdentityRequestDialogController::GetTitle() const {
   return title_;

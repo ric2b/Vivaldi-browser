@@ -27,6 +27,7 @@ include_rules = [
   "+components/link_header_util",
   "+components/metrics",
   "+components/metrics:single_sample_metrics",
+  "+components/miracle_parameter",
   "+components/network_session_configurator/common",
   "+components/offline_pages/buildflags/buildflags.h",
   "+components/offline_pages/core/request_header",
@@ -136,6 +137,9 @@ specific_include_rules = {
   ],
   ".*test_utils\.(h|cc)": [
     "+services/network/test",
+  ],
+  "browser_interface_binders\.cc": [
+    "+components/ml/webnn/features.h",
   ],
   "browser_main_loop\.cc": [
     # TODO(crbug.com/1049894): Remove.

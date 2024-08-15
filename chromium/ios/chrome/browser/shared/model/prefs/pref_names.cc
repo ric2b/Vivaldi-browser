@@ -74,6 +74,11 @@ const char kEnableDoNotTrack[] = "enable_do_not_track";
 // Number of times the First Follow UI has been shown.
 const char kFirstFollowUIShownCount[] = "follow.first_follow_ui_modal_count";
 
+// Number of times the First Follow UI has been shown with Follow UI Update
+// enabled.
+const char kFirstFollowUpdateUIShownCount[] =
+    "follow.first_follow_update_ui_modal_count";
+
 // A dictionary mapping push notification enabled features to their permission
 // to send notifications to the user.
 const char kFeaturePushNotificationPermissions[] =
@@ -193,10 +198,24 @@ const char kIosMagicStackSegmentationSafetyCheckImpressionsSinceFreshness[] =
 const char kIosMagicStackSegmentationTabResumptionImpressionsSinceFreshness[] =
     "ios.magic_stack_segmentation.tab_resumption_freshness";
 
-// Boolean to represent if the parcel tracking opt-in prompt has been displayed
-// for the user.
-const char kIosParcelTrackingOptInPromptDisplayed[] =
+// Boolean to represent if the parcel tracking opt-in prompt has met its display
+// limit for the user. Was previously kIosParcelTrackingOptInPromptDisplayed.
+const char kIosParcelTrackingOptInPromptDisplayLimitMet[] =
     "ios.parcel_tracking.opt_in_prompt_displayed";
+
+// Integer that maps to IOSParcelTrackingOptInStatus, the enum type of the
+// user's preference for automatically tracking parcels.
+const char kIosParcelTrackingOptInStatus[] =
+    "ios.parcel_tracking.opt_in_status";
+
+// Boolean to represent if the user has swiped down on the parcel trackinf
+// opt-in prompt.
+const char kIosParcelTrackingOptInPromptSwipedDown[] =
+    "ios.parcel_tracking.opt_in_prompt_swiped_down";
+
+// Boolean to represent if Parcel Tracking is enabled for enterprise users.
+const char kIosParcelTrackingPolicyEnabled[] =
+    "ios.parcel_tracking.policy_enabled";
 
 // The number of consecutive times the user dismissed the password bottom sheet.
 // This gets reset to 0 whenever the user selects a password from the bottom
@@ -248,14 +267,15 @@ const char kIosSafetyCheckManagerSafeBrowsingCheckResult[] =
 const char kIosSaveToPhotosDefaultGaiaId[] =
     "ios.save_to_photos.default_gaia_id";
 
-// Preference that hold a boolean indicating if the user has already dismissed
-// the sign-in promo in settings view.
-const char kIosSettingsPromoAlreadySeen[] = "ios.settings.promo_already_seen";
+// Bool preference containing whether to skip the account picker when the user
+// saves an image to Google Photos.
+const char kIosSaveToPhotosSkipAccountPicker[] =
+    "ios.save_to_photos.skip_account_picker";
 
-// Integer to represent the number of time the sign-in promo has been displayed
-// in the settings view.
-const char kIosSettingsSigninPromoDisplayedCount[] =
-    "ios.settings.signin_promo_displayed_count";
+// Integer preference indicating whether Save to Photos is enabled by enterprise
+// policy.
+const char kIosSaveToPhotosContextMenuPolicySettings[] =
+    "ios.save_to_photos.context_menu_policy";
 
 // Time preference containing the last run time of the Safety Check (via
 // Settings).
@@ -443,13 +463,13 @@ const char kAutofillBrandingIconAnimationRemainingCount[] =
 const char kAutofillBrandingIconDisplayCount[] =
     "ios.autofill.branding.display_count";
 
-// A boolean used to track whether the user has tapped on any of the keyboard
-// accessories when the autofill branding is visible.
-const char kAutofillBrandingKeyboardAccessoriesTapped[] =
-    "ios.autofill.branding.keyboard_accessory_tapped";
-
 // A boolean used to determine if the Price Tracking UI has been shown.
 const char kPriceNotificationsHasBeenShown[] =
     "ios.price_notifications.has_been_shown";
+
+// A boolean used to determine if the user has entered the password sharing flow
+// from the first run experience screen.
+const char kPasswordSharingFlowHasBeenEntered[] =
+    "ios.password_sharing.flow_entered";
 
 }  // namespace prefs

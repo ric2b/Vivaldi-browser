@@ -96,9 +96,8 @@ void VerifyFormGroupValues(const FormGroup& form_group,
                            bool ignore_status) {
   for (const auto& value : values) {
     SCOPED_TRACE(testing::Message()
-                 << "Expected for type "
-                 << AutofillType::ServerFieldTypeToString(value.type) << "\n\t"
-                 << value.value << " with status "
+                 << "Expected for type " << FieldTypeToStringView(value.type)
+                 << "\n\t" << value.value << " with status "
                  << (ignore_status ? "(ignored)" : "")
                  << value.verification_status << "\nFound:"
                  << "\n\t" << form_group.GetRawInfo(value.type)
@@ -161,34 +160,38 @@ void CreateTestAddressFormData(FormData* form,
   form->submission_event =
       mojom::SubmissionIndicatorEvent::SAME_DOCUMENT_NAVIGATION;
 
-  form->fields.push_back(
-      CreateTestFormField("First Name", "firstname", "", "text"));
+  form->fields.push_back(CreateTestFormField("First Name", "firstname", "",
+                                             FormControlType::kInputText));
   types->push_back({NAME_FIRST});
-  form->fields.push_back(
-      CreateTestFormField("Middle Name", "middlename", "", "text"));
+  form->fields.push_back(CreateTestFormField("Middle Name", "middlename", "",
+                                             FormControlType::kInputText));
   types->push_back({NAME_MIDDLE});
-  form->fields.push_back(
-      CreateTestFormField("Last Name", "lastname", "", "text"));
+  form->fields.push_back(CreateTestFormField("Last Name", "lastname", "",
+                                             FormControlType::kInputText));
   types->push_back({NAME_LAST, NAME_LAST_SECOND});
-  form->fields.push_back(
-      CreateTestFormField("Address Line 1", "addr1", "", "text"));
+  form->fields.push_back(CreateTestFormField("Address Line 1", "addr1", "",
+                                             FormControlType::kInputText));
   types->push_back({ADDRESS_HOME_LINE1});
-  form->fields.push_back(
-      CreateTestFormField("Address Line 2", "addr2", "", "text"));
+  form->fields.push_back(CreateTestFormField("Address Line 2", "addr2", "",
+                                             FormControlType::kInputText));
   types->push_back({ADDRESS_HOME_SUBPREMISE, ADDRESS_HOME_LINE2});
-  form->fields.push_back(CreateTestFormField("City", "city", "", "text"));
+  form->fields.push_back(
+      CreateTestFormField("City", "city", "", FormControlType::kInputText));
   types->push_back({ADDRESS_HOME_CITY});
-  form->fields.push_back(CreateTestFormField("State", "state", "", "text"));
+  form->fields.push_back(
+      CreateTestFormField("State", "state", "", FormControlType::kInputText));
   types->push_back({ADDRESS_HOME_STATE});
-  form->fields.push_back(
-      CreateTestFormField("Postal Code", "zipcode", "", "text"));
+  form->fields.push_back(CreateTestFormField("Postal Code", "zipcode", "",
+                                             FormControlType::kInputText));
   types->push_back({ADDRESS_HOME_ZIP});
-  form->fields.push_back(CreateTestFormField("Country", "country", "", "text"));
+  form->fields.push_back(CreateTestFormField("Country", "country", "",
+                                             FormControlType::kInputText));
   types->push_back({ADDRESS_HOME_COUNTRY});
-  form->fields.push_back(
-      CreateTestFormField("Phone Number", "phonenumber", "", "tel"));
+  form->fields.push_back(CreateTestFormField("Phone Number", "phonenumber", "",
+                                             FormControlType::kInputTelephone));
   types->push_back({PHONE_HOME_WHOLE_NUMBER});
-  form->fields.push_back(CreateTestFormField("Email", "email", "", "email"));
+  form->fields.push_back(
+      CreateTestFormField("Email", "email", "", FormControlType::kInputEmail));
   types->push_back({EMAIL_ADDRESS});
 }
 
@@ -319,23 +322,44 @@ std::string GetStrippedValue(const char* value) {
   return base::UTF16ToUTF8(stripped_value);
 }
 
-Iban GetIban() {
-  Iban iban(base::Uuid::GenerateRandomV4().AsLowercaseString());
+Iban GetLocalIban() {
+  Iban iban(Iban::Guid(base::Uuid::GenerateRandomV4().AsLowercaseString()));
   iban.set_value(base::UTF8ToUTF16(std::string(kIbanValue)));
   iban.set_nickname(u"Nickname for Iban");
   return iban;
 }
 
-Iban GetIban2() {
-  Iban iban;
+Iban GetLocalIban2() {
+  Iban iban(Iban::Guid(base::Uuid::GenerateRandomV4().AsLowercaseString()));
   iban.set_value(base::UTF8ToUTF16(std::string(kIbanValue_1)));
   iban.set_nickname(u"My doctor's IBAN");
   return iban;
 }
 
-Iban GetIbanWithoutNickname() {
-  Iban iban;
-  iban.set_value(base::UTF8ToUTF16(std::string(kIbanValue_2)));
+Iban GetServerIban() {
+  Iban iban(Iban::InstrumentId("1234567"));
+  iban.set_prefix(u"FR76");
+  iban.set_suffix(u"0189");
+  iban.set_length(27);
+  iban.set_nickname(u"My doctor's IBAN");
+  return iban;
+}
+
+Iban GetServerIban2() {
+  Iban iban(Iban::InstrumentId("1234568"));
+  iban.set_prefix(u"BE71");
+  iban.set_suffix(u"8676");
+  iban.set_length(16);
+  iban.set_nickname(u"My sister's IBAN");
+  return iban;
+}
+
+Iban GetServerIban3() {
+  Iban iban(Iban::InstrumentId("1234569"));
+  iban.set_prefix(u"DE91");
+  iban.set_suffix(u"6789");
+  iban.set_length(22);
+  iban.set_nickname(u"My IBAN");
   return iban;
 }
 
@@ -399,12 +423,6 @@ CreditCard GetMaskedServerCard2() {
                           NextMonth().c_str(), NextYear().c_str(), "");
   credit_card.SetNetworkForMaskedCard(kMasterCard);
   credit_card.set_instrument_id(2);
-  return credit_card;
-}
-
-CreditCard GetMaskedServerCardWithCvc() {
-  CreditCard credit_card = GetMaskedServerCard();
-  credit_card.set_cvc(u"123");
   return credit_card;
 }
 
@@ -511,6 +529,11 @@ CreditCard GetRandomCreditCard(CreditCard::RecordType record_type) {
         kNetworks[base::RandInt(0, kNumNetworks - 1)]);
   }
 
+  return credit_card;
+}
+
+CreditCard WithCvc(CreditCard credit_card, std::u16string cvc) {
+  credit_card.set_cvc(cvc);
   return credit_card;
 }
 
@@ -810,29 +833,11 @@ void InitializePossibleTypesAndValidities(
   }
 }
 
-void BasicFillUploadField(AutofillUploadContents::Field* field,
-                          unsigned signature,
-                          const char* name,
-                          const char* control_type,
-                          const char* autocomplete) {
-  field->set_signature(signature);
-  if (name)
-    field->set_name(name);
-  if (control_type)
-    field->set_type(control_type);
-  if (autocomplete)
-    field->set_autocomplete(autocomplete);
-}
-
 void FillUploadField(AutofillUploadContents::Field* field,
                      unsigned signature,
-                     const char* name,
-                     const char* control_type,
-                     const char* autocomplete,
                      unsigned autofill_type,
                      unsigned validity_state) {
-  BasicFillUploadField(field, signature, name, control_type, autocomplete);
-
+  field->set_signature(signature);
   field->add_autofill_type(autofill_type);
 
   auto* type_validities = field->add_autofill_type_validities();
@@ -842,12 +847,9 @@ void FillUploadField(AutofillUploadContents::Field* field,
 
 void FillUploadField(AutofillUploadContents::Field* field,
                      unsigned signature,
-                     const char* name,
-                     const char* control_type,
-                     const char* autocomplete,
                      const std::vector<unsigned>& autofill_types,
                      const std::vector<unsigned>& validity_states) {
-  BasicFillUploadField(field, signature, name, control_type, autocomplete);
+  field->set_signature(signature);
 
   for (unsigned i = 0; i < autofill_types.size(); ++i) {
     field->add_autofill_type(autofill_types[i]);
@@ -864,14 +866,11 @@ void FillUploadField(AutofillUploadContents::Field* field,
 
 void FillUploadField(AutofillUploadContents::Field* field,
                      unsigned signature,
-                     const char* name,
-                     const char* control_type,
-                     const char* autocomplete,
                      unsigned autofill_type,
                      const std::vector<unsigned>& validity_states) {
-  BasicFillUploadField(field, signature, name, control_type, autocomplete);
-
+  field->set_signature(signature);
   field->add_autofill_type(autofill_type);
+
   auto* type_validities = field->add_autofill_type_validities();
   type_validities->set_type(autofill_type);
   for (unsigned i = 0; i < validity_states.size(); ++i)
@@ -936,6 +935,20 @@ std::vector<FormSignature> GetEncodedSignatures(
   std::vector<FormSignature> all_signatures;
   for (const FormStructure* form : forms)
     all_signatures.push_back(form->form_signature());
+  return all_signatures;
+}
+
+std::vector<FormSignature> GetEncodedAlternativeSignatures(
+    const FormStructure& form) {
+  return std::vector<FormSignature>{form.alternative_form_signature()};
+}
+
+std::vector<FormSignature> GetEncodedAlternativeSignatures(
+    const std::vector<FormStructure*>& forms) {
+  std::vector<FormSignature> all_signatures;
+  for (const FormStructure* form : forms) {
+    all_signatures.push_back(form->alternative_form_signature());
+  }
   return all_signatures;
 }
 

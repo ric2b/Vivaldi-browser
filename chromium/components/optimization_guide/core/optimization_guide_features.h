@@ -51,9 +51,9 @@ BASE_DECLARE_FEATURE(kExtractRelatedSearchesFromPrefetchedZPSResponse);
 BASE_DECLARE_FEATURE(kPageContentAnnotationsPersistSalientImageMetadata);
 BASE_DECLARE_FEATURE(kModelStoreUseRelativePath);
 BASE_DECLARE_FEATURE(kOptimizationGuidePersonalizedFetching);
-BASE_DECLARE_FEATURE(kOptimizationGuideHintsURLKeyedCacheDropFragments);
 BASE_DECLARE_FEATURE(kQueryInMemoryTextEmbeddings);
 BASE_DECLARE_FEATURE(kOptimizationGuidePredictionModelKillswitch);
+BASE_DECLARE_FEATURE(kOptimizationGuideModelExecution);
 
 // Enables use of task runner with trait CONTINUE_ON_SHUTDOWN for page content
 // annotations on-device models.
@@ -152,18 +152,18 @@ size_t MaxConcurrentBatchUpdateFetches();
 // Service that should be allowed for navigations.
 size_t MaxConcurrentPageNavigationFetches();
 
-// Returns the minimum number of seconds to randomly delay before starting to
-// fetch for hints for active tabs.
-int ActiveTabsHintsFetchRandomMinDelaySecs();
+// Returns the minimum random delay before starting to fetch for hints for
+// active tabs.
+base::TimeDelta ActiveTabsHintsFetchRandomMinDelay();
 
-// Returns the maximum number of seconds to randomly delay before starting to
-// fetch for hints for active tabs.
-int ActiveTabsHintsFetchRandomMaxDelaySecs();
+// Returns the maximum random delay before starting to fetch for hints for
+// active tabs.
+base::TimeDelta ActiveTabsHintsFetchRandomMaxDelay();
 
 // Returns whether fetching hints for active tabs should happen on deferred
 // startup. Otherwise active tabs hints will be fetched after a random interval
-// between ActiveTabsHintsFetchRandomMinDelaySecs() and
-// ActiveTabsHintsFetchRandomMaxDelaySecs().
+// between ActiveTabsHintsFetchRandomMinDelay() and
+// ActiveTabsHintsFetchRandomMaxDelay().
 bool ShouldDeferStartupActiveTabsHintsFetch();
 
 // The amount of time host model features will be considered fresh enough
@@ -212,16 +212,13 @@ bool ShouldOverrideOptimizationTargetDecisionForMetricsPurposes(
 // |request_context|.
 bool ShouldEnablePersonalizedMetadata(proto::RequestContext request_context);
 
-// Returns the OAuth scopes to use for personalized metadata.
-std::set<std::string> GetOAuthScopesForPersonalizedMetadata();
+// Returns the minimum random delay before starting to fetch for prediction
+// models and host model features.
+base::TimeDelta PredictionModelFetchRandomMinDelay();
 
-// Returns the minimum number of seconds to randomly delay before starting to
-// fetch for prediction models and host model features.
-int PredictionModelFetchRandomMinDelaySecs();
-
-// Returns the maximum number of seconds to randomly delay before starting to
-// fetch for prediction models and host model features.
-int PredictionModelFetchRandomMaxDelaySecs();
+// Returns the maximum random delay before starting to fetch for prediction
+// models and host model features.
+base::TimeDelta PredictionModelFetchRandomMaxDelay();
 
 // Returns the time to wait before retrying a failed fetch for prediction
 // models.
@@ -286,7 +283,8 @@ bool ShouldExecuteTextEmbeddingModelOnPageContent(const std::string& locale);
 
 // Returns whether page metadata should be retrieved from the remote
 // Optimization Guide service.
-bool RemotePageMetadataEnabled();
+bool RemotePageMetadataEnabled(const std::string& locale,
+                               const std::string& country_code);
 
 // Returns the minimum score associated with a category for it to be persisted.
 // Will be a value from 0 to 100, inclusive.
@@ -349,10 +347,8 @@ bool ShouldCheckFailedComponentVersionPref();
 bool IsInstallWideModelStoreEnabled();
 
 // Whether to persist salient image metadata for each visit.
-bool ShouldPersistSalientImageMetadata();
-
-// Whether to drop fragments for the URL-keyed hint cache key.
-bool ShouldDropFragmentsForURLKeyedHintCacheKey();
+bool ShouldPersistSalientImageMetadata(const std::string& locale,
+                                       const std::string& country_code);
 
 // Returns whether to query text embeddings coming from history service.
 bool ShouldQueryEmbeddings();
@@ -361,6 +357,9 @@ bool ShouldQueryEmbeddings();
 // killswitch, and this model should be stopped serving immediately.
 std::map<proto::OptimizationTarget, std::set<int64_t>>
 GetPredictionModelVersionsInKillSwitch();
+
+// Returns the OAuth scopes to use for model execution.
+std::set<std::string> GetOAuthScopesForModelExecution();
 
 }  // namespace features
 }  // namespace optimization_guide

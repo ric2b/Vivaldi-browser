@@ -2,7 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "content/browser/indexed_db/indexed_db_dispatcher_host.h"
+// TODO(crbug.com/843764): `IndexedDBDispatcherHost` has been removed, but
+// surprisingly this file did not actually rely on it. These tests, many of
+// which are disabled, should be cleaned up and merged into other unit tests,
+// such as `IndexedDBTest`.
+
+// #include "content/browser/indexed_db/indexed_db_dispatcher_host.h"
 
 #include <tuple>
 
@@ -29,7 +34,6 @@
 #include "content/browser/indexed_db/indexed_db_database_callbacks.h"
 #include "content/browser/indexed_db/indexed_db_factory.h"
 #include "content/browser/indexed_db/indexed_db_factory_client.h"
-#include "content/browser/indexed_db/indexed_db_leveldb_env.h"
 #include "content/browser/indexed_db/indexed_db_pending_connection.h"
 #include "content/browser/indexed_db/mock_mojo_indexed_db_database_callbacks.h"
 #include "content/browser/indexed_db/mock_mojo_indexed_db_factory_client.h"
@@ -203,8 +207,9 @@ class IndexedDBDispatcherHostTest : public testing::Test {
     context_impl_->IDBTaskRunner()->PostTask(
         FROM_HERE, base::BindLambdaForTesting([&]() {
           context_impl_->BindIndexedDB(
-              blink::StorageKey::CreateFromStringForTesting(kOrigin),
-              mojo::PendingAssociatedRemote<
+              storage::BucketLocator::ForDefaultBucket(
+                  blink::StorageKey::CreateFromStringForTesting(kOrigin)),
+              mojo::PendingRemote<
                   storage::mojom::IndexedDBClientStateChecker>(),
               idb_mojo_factory_.BindNewPipeAndPassReceiver());
           loop.Quit();

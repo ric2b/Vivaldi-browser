@@ -9,6 +9,7 @@
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -190,7 +191,7 @@ class ServiceWorkerSubresourceLoader::StreamWaiter
   void OnAborted() override { owner_->OnBodyReadingComplete(net::ERR_ABORTED); }
 
  private:
-  ServiceWorkerSubresourceLoader* owner_;
+  raw_ptr<ServiceWorkerSubresourceLoader, ExperimentalRenderer> owner_;
   mojo::Receiver<blink::mojom::ServiceWorkerStreamCallback> receiver_;
 };
 
@@ -234,14 +235,12 @@ bool ServiceWorkerSubresourceLoader::StartRaceNetworkRequest() {
   mojo::PendingRemote<network::mojom::URLLoaderClient> forwarding_client;
   forwarded_race_network_request_url_loader_factory_.emplace(
       forwarding_client.InitWithNewPipeAndPassReceiver(),
-      resource_request_.url);
+      network::SharedURLLoaderFactory::Create(fallback_factory_->Clone()));
 
   DCHECK(!race_network_request_loader_client_);
-  race_network_request_loader_client_.emplace(
-      resource_request_, weak_factory_.GetWeakPtr(),
-      std::move(forwarding_client),
-      network::features::GetDataPipeDefaultAllocationSize(
-          network::features::DataPipeAllocationSize::kLargerSizeIfPossible));
+  race_network_request_loader_client_.emplace(resource_request_,
+                                              weak_factory_.GetWeakPtr(),
+                                              std::move(forwarding_client));
 
   // If the initial state is not kWaitForBody, that means creating data pipes
   // failed. Do not start RaceNetworkRequest this case.
@@ -374,7 +373,7 @@ void ServiceWorkerSubresourceLoader::DispatchFetchEvent() {
     // TODO(crbug.com/1371756): support other sources in the full form.
     // https://github.com/yoshisatoyanagisawa/service-worker-static-routing-api/blob/main/final-form.md
     switch (sources[0].type) {
-      case blink::ServiceWorkerRouterSource::SourceType::kNetwork:
+      case blink::ServiceWorkerRouterSource::Type::kNetwork:
         // Network fallback is requested.
         fallback_factory_->CreateLoaderAndStart(
             url_loader_receiver_.Unbind(), request_id_, options_,
@@ -382,13 +381,13 @@ void ServiceWorkerSubresourceLoader::DispatchFetchEvent() {
             traffic_annotation_);
         delete this;
         return;
-      case blink::ServiceWorkerRouterSource::SourceType::kRace:
+      case blink::ServiceWorkerRouterSource::Type::kRace:
         race_network_request_mode = kForced;
         break;
-      case blink::ServiceWorkerRouterSource::SourceType::kFetchEvent:
+      case blink::ServiceWorkerRouterSource::Type::kFetchEvent:
         race_network_request_mode = kSkipped;
         break;
-      case blink::ServiceWorkerRouterSource::SourceType::kCache:
+      case blink::ServiceWorkerRouterSource::Type::kCache:
         controller_connector_->CallCacheStorageMatch(
             sources[0].cache_source->cache_name,
             blink::mojom::FetchAPIRequest::From(resource_request_),
@@ -767,6 +766,13 @@ void ServiceWorkerSubresourceLoader::StartResponse(
       return;
     case FetchResponseFrom::kAutoPreloadHandlingFallback:
       NOTREACHED_NORETURN();
+  }
+
+  // Cancel the in-flight request processing for the fallback.
+  if (commit_responsibility() == FetchResponseFrom::kServiceWorker &&
+      race_network_request_loader_client_) {
+    race_network_request_loader_client_->CancelWriteData(
+        commit_responsibility());
   }
   RecordFetchResponseFrom();
 
@@ -1374,7 +1380,9 @@ void ServiceWorkerSubresourceLoader::DidCacheStorageMatch(
   timing->respond_with_settled_time = base::TimeTicks::Now();
   switch (result->which()) {
     case blink::mojom::MatchResult::Tag::kStatus:  // error fallback.
-      // TODO(crbug.com/1371756): add UMA to track cases other than not found.
+      base::UmaHistogramEnumeration(
+          "ServiceWorker.StaticRouter.Subresource.CacheStorageError",
+          result->get_status());
       OnFallback(absl::nullopt, std::move(timing));
       return;
     case blink::mojom::MatchResult::Tag::kResponse:  // we got fetch response.

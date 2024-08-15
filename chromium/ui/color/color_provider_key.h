@@ -32,6 +32,27 @@ struct COMPONENT_EXPORT(COLOR_PROVIDER_KEY) ColorProviderKey {
     kNormal,
     kHigh,
   };
+  // ForcedColors key applies contrast themes based on the user’s preferences or
+  // system settings.
+  enum class ForcedColors {
+    kNone,
+    // Forced colors is simulated by the Devtools “Emulate Forced Colors”
+    // setting.
+    // https://developer.chrome.com/docs/devtools/rendering/emulate-css/#emulate-css-media-feature-forced-colors.
+    kEmulated,
+    // Forced colors is activated by the system’s high contrast mode on Windows.
+    // https://support.microsoft.com/en-us/windows/change-color-contrast-in-windows-fedc744c-90ac-69df-aed5-c8a90125e696
+    kActive,
+    // Forced colors is activated by the browser's Page colors feature across
+    // platforms. kDusk and kDesert themes map to defaults available on Windows
+    // 11 [1], while kBlack and kWhite are themes available in Windows 10 [2].
+    // [1] https://support.microsoft.com/en-us/windows/change-color-contrast-in-windows-fedc744c-90ac-69df-aed5-c8a90125e696
+    // [2] https://support.microsoft.com/en-us/windows/change-color-contrast-in-windows-fedc744c-90ac-69df-aed5-c8a90125e696#WindowsVersion=Windows_10
+    kDusk,
+    kDesert,
+    kBlack,
+    kWhite,
+  };
   enum class ElevationMode {
     kLow,
     kHigh,
@@ -106,36 +127,24 @@ struct COMPONENT_EXPORT(COLOR_PROVIDER_KEY) ColorProviderKey {
     ThemeType theme_type_;
   };
 
-  ColorProviderKey();  // For test convenience.
-
-  // TODO(tluk): Switch to using named initializers so clients can set only the
-  // necessary parameters on the key.
-  ColorProviderKey(
-      ColorMode color_mode,
-      ContrastMode contrast_mode,
-      SystemTheme system_theme,
-      FrameType frame_type,
-      FrameStyle = FrameStyle::kDefault,
-      UserColorSource user_color_source = UserColorSource::kAccent,
-      absl::optional<SkColor> user_color = absl::nullopt,
-      absl::optional<SchemeVariant> scheme_variant = absl::nullopt,
-      scoped_refptr<ThemeInitializerSupplier> custom_theme = nullptr);
-
+  ColorProviderKey();
   ColorProviderKey(const ColorProviderKey&);
   ColorProviderKey& operator=(const ColorProviderKey&);
-
+  ColorProviderKey(ColorProviderKey&&);
+  ColorProviderKey& operator=(ColorProviderKey&&);
   ~ColorProviderKey();
 
-  ColorMode color_mode;
-  ContrastMode contrast_mode;
-  ElevationMode elevation_mode;
-  SystemTheme system_theme;
-  FrameType frame_type;
-  FrameStyle frame_style;
-  UserColorSource user_color_source;
-  absl::optional<SkColor> user_color;
-  absl::optional<SchemeVariant> scheme_variant;
-  scoped_refptr<ThemeInitializerSupplier> custom_theme;
+  ColorMode color_mode = ColorMode::kLight;
+  ContrastMode contrast_mode = ContrastMode::kNormal;
+  ForcedColors forced_colors = ForcedColors::kNone;
+  ElevationMode elevation_mode = ElevationMode::kLow;
+  SystemTheme system_theme = SystemTheme::kDefault;
+  FrameType frame_type = FrameType::kChromium;
+  FrameStyle frame_style = FrameStyle::kDefault;
+  UserColorSource user_color_source = UserColorSource::kAccent;
+  absl::optional<SkColor> user_color = absl::nullopt;
+  absl::optional<SchemeVariant> scheme_variant = absl::nullopt;
+  scoped_refptr<ThemeInitializerSupplier> custom_theme = nullptr;
   // Only dereferenced when populating the ColorMixer. After that, used to
   // compare addresses during lookup.
   raw_ptr<InitializerSupplier, AcrossTasksDanglingUntriaged> app_controller =
@@ -144,13 +153,14 @@ struct COMPONENT_EXPORT(COLOR_PROVIDER_KEY) ColorProviderKey {
   bool operator<(const ColorProviderKey& other) const {
     auto* lhs_app_controller = app_controller.get();
     auto* rhs_app_controller = other.app_controller.get();
-    return std::tie(color_mode, contrast_mode, elevation_mode, system_theme,
-                    frame_type, frame_style, user_color_source, user_color,
-                    scheme_variant, custom_theme, lhs_app_controller) <
-           std::tie(other.color_mode, other.contrast_mode, other.elevation_mode,
-                    other.system_theme, other.frame_type, other.frame_style,
-                    other.user_color_source, other.user_color,
-                    other.scheme_variant, other.custom_theme,
+    return std::tie(color_mode, contrast_mode, forced_colors, elevation_mode,
+                    system_theme, frame_type, frame_style, user_color_source,
+                    user_color, scheme_variant, custom_theme,
+                    lhs_app_controller) <
+           std::tie(other.color_mode, other.contrast_mode, other.forced_colors,
+                    other.elevation_mode, other.system_theme, other.frame_type,
+                    other.frame_style, other.user_color_source,
+                    other.user_color, other.scheme_variant, other.custom_theme,
                     rhs_app_controller);
   }
 };

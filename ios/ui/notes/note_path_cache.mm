@@ -2,12 +2,12 @@
 
 #import "ios/ui/notes/note_path_cache.h"
 
+#import "components/notes/note_node.h"
+#import "components/notes/notes_model.h"
 #import "components/pref_registry/pref_registry_syncable.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/ui/notes/note_utils_ios.h"
-#import "notes/note_node.h"
-#import "notes/notes_model.h"
 #import "prefs/vivaldi_pref_names.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)

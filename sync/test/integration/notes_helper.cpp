@@ -9,7 +9,7 @@
 #include "chrome/browser/sync/test/integration/multi_client_status_change_checker.h"
 #include "chrome/browser/sync/test/integration/sync_datatype_helper.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
-#include "notes/notes_factory.h"
+#include "components/notes/notes_factory.h"
 #include "ui/base/models/tree_node_iterator.h"
 
 using vivaldi::NotesModelFactory;
@@ -58,8 +58,8 @@ bool NodesMatch(const NoteNode* node_a, const NoteNode* node_b) {
   if (node_a->parent()->GetIndexOf(node_a) !=
       node_b->parent()->GetIndexOf(node_b)) {
     LOG(ERROR) << "Index mismatch: "
-               << node_a->parent()->GetIndexOf(node_a).value()
-               << " vs. " << node_b->parent()->GetIndexOf(node_b).value();
+               << node_a->parent()->GetIndexOf(node_a).value() << " vs. "
+               << node_b->parent()->GetIndexOf(node_b).value();
     return false;
   }
   return true;

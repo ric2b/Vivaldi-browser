@@ -4,26 +4,31 @@
 
 #include "chromeos/ash/components/language_packs/handwriting.h"
 
+#include <algorithm>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "base/containers/span.h"
 #include "base/functional/bind.h"
+#include "base/memory/ref_counted.h"
 #include "base/strings/string_split.h"
+#include "chromeos/ash/components/language_packs/language_packs_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/ime/ash/extension_ime_util.h"
 #include "ui/base/ime/ash/fake_input_method_delegate.h"
 #include "ui/base/ime/ash/input_method_descriptor.h"
-#include "ui/base/ime/ash/input_method_manager.h"
-#include "ui/base/ime/ash/input_method_util.h"
+#include "ui/base/ime/ash/mock_input_method_manager.h"
 
 namespace ash::language_packs {
 
 namespace {
 
+using ::ash::input_method::InputMethodManager;
+using ::ash::input_method::InputMethodUtil;
+using ::ash::input_method::MockInputMethodManager;
 using ::testing::Eq;
 using ::testing::IsEmpty;
 using ::testing::Optional;
@@ -31,57 +36,15 @@ using ::testing::UnorderedElementsAre;
 
 class HandwritingTest : public testing::Test {};
 
-absl::optional<std::string> GetSecondUnderscorePart(
-    const std::string& engine_id) {
-  std::vector<std::string> split = base::SplitString(
-      engine_id, "_", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
-  if (split.size() < 2) {
-    return absl::nullopt;
-  } else {
-    return split[1];
+// Populates proto message DlcsWithContent with the given list of dlc_ids.
+// All fields other than `id` are left as default.
+dlcservice::DlcsWithContent CreateDlcsWithContent(
+    const std::vector<std::string>& dlc_ids) {
+  dlcservice::DlcsWithContent output;
+  for (const auto& dlc_id : dlc_ids) {
+    output.add_dlc_infos()->set_id(dlc_id);
   }
-}
-
-TEST_F(HandwritingTest, MapIdsToHandwritingLocalesNoInput) {
-  EXPECT_THAT(
-      MapIdsToHandwritingLocales(
-          {}, base::BindRepeating([](const std::string& unused_engine_id)
-                                      -> absl::optional<std::string> {
-            ADD_FAILURE() << "engine_id_to_handwriting_locale was called";
-            return "en";
-          })),
-      IsEmpty());
-}
-
-TEST_F(HandwritingTest, MapIdsToHandwritingLocalesAllToNullopt) {
-  EXPECT_THAT(MapIdsToHandwritingLocales(
-                  {{"qwerty_en", "qwertz_de"}},
-                  base::BindRepeating([](const std::string& unused_engine_id)
-                                          -> absl::optional<std::string> {
-                    return absl::nullopt;
-                  })),
-              IsEmpty());
-}
-
-TEST_F(HandwritingTest, MapIdsToHandwritingLocalesAllToUniqueStrings) {
-  EXPECT_THAT(
-      MapIdsToHandwritingLocales({{"qwerty_en", "qwertz_de"}},
-                                 base::BindRepeating(GetSecondUnderscorePart)),
-      UnorderedElementsAre("en", "de"));
-}
-
-TEST_F(HandwritingTest, MapIdsToHandwritingLocalesRepeatedString) {
-  EXPECT_THAT(
-      MapIdsToHandwritingLocales({{"qwerty_en", "qzertz_de", "qwertz_en"}},
-                                 base::BindRepeating(GetSecondUnderscorePart)),
-      UnorderedElementsAre("en", "de"));
-}
-
-TEST_F(HandwritingTest, MapIdsToHandwritingLocalesSomeNullopt) {
-  EXPECT_THAT(
-      MapIdsToHandwritingLocales({{"qwerty_en", "nohandwriting", "qwertz_de"}},
-                                 base::BindRepeating(GetSecondUnderscorePart)),
-      UnorderedElementsAre("en", "de"));
+  return output;
 }
 
 struct PartialDescriptor {
@@ -181,7 +144,7 @@ TEST_F(HandwritingTest, MapEngineIdsToHandwritingLocalesIntegration) {
   input_method::InputMethodUtil* util = delegate_util.util();
 
   EXPECT_THAT(
-      MapIdsToHandwritingLocales(
+      MapThenFilterStrings(
           {{"xkb:de::ger", "xkb:us::eng", "xkb:gb:extd:eng", "xkb:fr::fra"}},
           base::BindRepeating(MapEngineIdToHandwritingLocale, util)),
       UnorderedElementsAre("en", "fr"));
@@ -267,7 +230,7 @@ TEST_F(HandwritingTest, MapInputMethodIdsToHandwritingLocalesIntegration) {
   input_method::InputMethodUtil* util = delegate_util.util();
 
   EXPECT_THAT(
-      MapIdsToHandwritingLocales(
+      MapThenFilterStrings(
           {{extension_ime_util::GetInputMethodIDByEngineID("xkb:de::ger"),
             extension_ime_util::GetInputMethodIDByEngineID("xkb:us::eng"),
             extension_ime_util::GetInputMethodIDByEngineID("xkb:gb:extd:eng"),
@@ -305,6 +268,38 @@ INSTANTIATE_TEST_SUITE_P(
     [](const testing::TestParamInfo<HandwritingLocaleToDlcTest::ParamType>&
            info) { return info.param.test_name; });
 
+struct DlcToHandwritingLocaleTestCase {
+  std::string test_name;
+  std::string_view dlc_id;
+  absl::optional<std::string> expected;
+};
+
+class DlcToHandwritingLocaleTest
+    : public HandwritingTest,
+      public testing::WithParamInterface<DlcToHandwritingLocaleTestCase> {};
+
+TEST_P(DlcToHandwritingLocaleTest, Test) {
+  const DlcToHandwritingLocaleTestCase& test_case = GetParam();
+
+  EXPECT_EQ(DlcToHandwritingLocale(test_case.dlc_id), test_case.expected);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    DlcToHandwritingLocaleTests,
+    DlcToHandwritingLocaleTest,
+    testing::ValuesIn<DlcToHandwritingLocaleTestCase>(
+        {{"InvalidEmpty", "", absl::nullopt},
+         {"InvalidEn", "handwriting-en", absl::nullopt},
+         {"InvalidCy", "handwriting-cy", absl::nullopt},
+         {"InvalidDeDe", "handwriting-de-DE", absl::nullopt},
+         {"InvalidTypoDe", "handwritting-de", absl::nullopt},
+         {"InvalidTtsEnUs", "tts-en-us", absl::nullopt},
+         {"InvalidDeWithoutPrefix", "de", absl::nullopt},
+         {"ValidDe", "handwriting-de", "de"},
+         {"ValidZhHk", "handwriting-zh-HK", "zh-HK"}}),
+    [](const testing::TestParamInfo<DlcToHandwritingLocaleTest::ParamType>&
+           info) { return info.param.test_name; });
+
 struct IsHandwritingDlcTestCase {
   std::string test_name;
   std::string_view dlc_id;
@@ -337,6 +332,33 @@ INSTANTIATE_TEST_SUITE_P(
     [](const testing::TestParamInfo<IsHandwritingDlcTest::ParamType>& info) {
       return info.param.test_name;
     });
+
+TEST_F(HandwritingTest, FilterHandwritingDlcsDefault) {
+  EXPECT_THAT(
+      ConvertDlcsWithContentToHandwritingLocales(dlcservice::DlcsWithContent()),
+      IsEmpty());
+}
+
+TEST_F(HandwritingTest, FilterHandwritingDlcsNotHandwriting) {
+  const dlcservice::DlcsWithContent dlcs_without_handwriting =
+      CreateDlcsWithContent({"tts-en-us", "grammar-it"});
+
+  EXPECT_THAT(
+      ConvertDlcsWithContentToHandwritingLocales(dlcs_without_handwriting),
+      IsEmpty());
+}
+
+TEST_F(HandwritingTest, FilterHandwritingDlcsVariousEntries) {
+  // "handwriting-cy" refer to Welsh language, which is not a language that is
+  // supported in Handwriting.
+  const dlcservice::DlcsWithContent dlcs_with_some_handwriting =
+      CreateDlcsWithContent({"handwriting-fr", "tts-en-us", "handwriting-it",
+                             "grammar-it", "handwriting-cy"});
+
+  EXPECT_THAT(
+      ConvertDlcsWithContentToHandwritingLocales(dlcs_with_some_handwriting),
+      UnorderedElementsAre("fr", "it"));
+}
 
 }  // namespace
 

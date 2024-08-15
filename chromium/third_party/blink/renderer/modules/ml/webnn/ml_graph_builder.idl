@@ -136,6 +136,7 @@ dictionary MLSplitOptions {
   [RaisesException] MLOperand div(MLOperand a, MLOperand b);
   [RaisesException] MLOperand max(MLOperand a, MLOperand b);
   [RaisesException] MLOperand min(MLOperand a, MLOperand b);
+  [RaisesException] MLOperand pow(MLOperand a, MLOperand b);
 
   // Element-wise unary operations
   [RaisesException] MLOperand abs(MLOperand x);
@@ -150,6 +151,8 @@ dictionary MLSplitOptions {
 
   [RaisesException] MLOperand hardSwish(MLOperand x);
   [RaisesException] MLActivation hardSwish();
+
+  [RaisesException] MLOperand matmul(MLOperand a, MLOperand b);
 
   [RaisesException] MLOperand leakyRelu(MLOperand x, optional MLLeakyReluOptions options = {});
   [RaisesException] MLActivation leakyRelu(optional MLLeakyReluOptions options = {});

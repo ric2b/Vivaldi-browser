@@ -107,6 +107,8 @@ class NET_EXPORT CookieInclusionStatus {
     EXCLUDE_DISALLOWED_CHARACTER = 24,
     // Cookie is blocked for third-party cookie phaseout.
     EXCLUDE_THIRD_PARTY_PHASEOUT = 25,
+    // Cookie contains no content or only whitespace.
+    EXCLUDE_NO_COOKIE_CONTENT = 26,
 
     // This should be kept last.
     NUM_EXCLUSION_REASONS
@@ -285,6 +287,7 @@ class NET_EXPORT CookieInclusionStatus {
 
   bool operator==(const CookieInclusionStatus& other) const;
   bool operator!=(const CookieInclusionStatus& other) const;
+  bool operator<(const CookieInclusionStatus& other) const;
 
   // Whether the status is to include the cookie, and has no other reasons for
   // exclusion.

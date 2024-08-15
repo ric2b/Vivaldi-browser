@@ -7,7 +7,7 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/sync/sync_observer_bridge.h"
+#import "ios/chrome/browser/sync/model/sync_observer_bridge.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_constants.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_service_delegate.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_table_view_controller_model_delegate.h"
@@ -18,7 +18,6 @@ class PrefService;
 @protocol ManageSyncSettingsCommandHandler;
 @protocol ManageSyncSettingsConsumer;
 @protocol SyncErrorSettingsCommandHandler;
-class SyncSetupService;
 namespace signin {
 class IdentityManager;
 }  // namespace signin
@@ -34,8 +33,6 @@ class SyncService;
 
 // Consumer.
 @property(nonatomic, weak) id<ManageSyncSettingsConsumer> consumer;
-// Sync setup service.
-@property(nonatomic, assign) SyncSetupService* syncSetupService;
 // Command handler.
 @property(nonatomic, weak) id<ManageSyncSettingsCommandHandler> commandHandler;
 // The initial account sync state at the time this mediator gets created.

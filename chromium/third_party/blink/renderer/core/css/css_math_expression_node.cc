@@ -30,6 +30,7 @@
 
 #include "third_party/blink/renderer/core/css/css_math_expression_node.h"
 
+#include <algorithm>
 #include <cfloat>
 #include <numeric>
 
@@ -49,6 +50,7 @@
 #include "third_party/blink/renderer/platform/geometry/calculation_expression_node.h"
 #include "third_party/blink/renderer/platform/geometry/math_functions.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
@@ -235,9 +237,6 @@ absl::optional<PixelsAndPercent> EvaluateValueIfNaNorInfinity(
 }
 
 bool CanEagerlySimplify(const CSSMathExpressionNode* operand) {
-  // Eager Simplification can be expanded to more cases like lengths with
-  // absolute units.
-  // TODO(crbug.com/1050968)
   if (operand->IsOperation()) {
     return false;
   }
@@ -249,6 +248,8 @@ bool CanEagerlySimplify(const CSSMathExpressionNode* operand) {
     case CalculationResultCategory::kCalcFrequency:
     case CalculationResultCategory::kCalcResolution:
       return true;
+    case CalculationResultCategory::kCalcLength:
+      return !CSSPrimitiveValue::IsRelativeUnit(operand->ResolvedUnitType());
     default:
       return false;
   }
@@ -261,6 +262,220 @@ bool CanEagerlySimplify(const CSSMathExpressionOperation::Operands& operands) {
     }
   }
   return true;
+}
+
+using UnitsHashMap = HashMap<CSSPrimitiveValue::UnitType, double>;
+struct CSSMathExpressionNodeWithOperator {
+  DISALLOW_NEW();
+
+ public:
+  CSSMathOperator op;
+  Member<const CSSMathExpressionNode> node;
+
+  CSSMathExpressionNodeWithOperator(CSSMathOperator op,
+                                    const CSSMathExpressionNode* node)
+      : op(op), node(node) {}
+
+  void Trace(Visitor* visitor) const { visitor->Trace(node); }
+};
+using UnitsVector = HeapVector<CSSMathExpressionNodeWithOperator>;
+
+bool IsNumericNodeWithDoubleValue(const CSSMathExpressionNode* node) {
+  return node->IsNumericLiteral() && HasDoubleValue(node->ResolvedUnitType());
+}
+
+const CSSMathExpressionNode* MaybeNegateFirstNode(
+    CSSMathOperator op,
+    const CSSMathExpressionNode* node) {
+  // If first node's operator is -, negate the value.
+  if (IsNumericNodeWithDoubleValue(node) && op == CSSMathOperator::kSubtract) {
+    return CSSMathExpressionNumericLiteral::Create(-node->DoubleValue(),
+                                                   node->ResolvedUnitType());
+  }
+  return node;
+}
+
+CSSMathOperator MaybeChangeOperatorSignIfNesting(bool is_in_nesting,
+                                                 CSSMathOperator outer_op,
+                                                 CSSMathOperator current_op) {
+  // For the cases like "a - (b + c)" we need to turn + c into - c.
+  if (is_in_nesting && outer_op == CSSMathOperator::kSubtract &&
+      current_op == CSSMathOperator::kAdd) {
+    return CSSMathOperator::kSubtract;
+  }
+  // For the cases like "a - (b - c)" we need to turn - c into + c.
+  if (is_in_nesting && outer_op == CSSMathOperator::kSubtract &&
+      current_op == CSSMathOperator::kSubtract) {
+    return CSSMathOperator::kAdd;
+  }
+  // No need to change the sign.
+  return current_op;
+}
+
+CSSMathExpressionNodeWithOperator MaybeReplaceNodeWithCombined(
+    const CSSMathExpressionNode* node,
+    CSSMathOperator op,
+    const UnitsHashMap& units_map) {
+  if (!node->IsNumericLiteral()) {
+    return {op, node};
+  }
+  CSSPrimitiveValue::UnitType unit_type = node->ResolvedUnitType();
+  auto it = units_map.find(unit_type);
+  if (it != units_map.end()) {
+    double value = it->value;
+    CSSMathOperator new_op =
+        value < 0.0f ? CSSMathOperator::kSubtract : CSSMathOperator::kAdd;
+    CSSMathExpressionNode* new_node =
+        CSSMathExpressionNumericLiteral::Create(std::abs(value), unit_type);
+    return {new_op, new_node};
+  }
+  return {op, node};
+}
+
+// This function combines numeric values that have double value and are of the
+// same unit type together in numeric_children and saves all the non add/sub
+// operation children and their correct simplified operator in all_children.
+void CombineNumericChildrenFromNode(const CSSMathExpressionNode* root,
+                                    CSSMathOperator op,
+                                    UnitsHashMap& numeric_children,
+                                    UnitsVector& all_children,
+                                    bool is_in_nesting = false) {
+  const CSSPrimitiveValue::UnitType unit_type = root->ResolvedUnitType();
+  // Go deeper inside the operation node if possible.
+  if (auto* operation = DynamicTo<CSSMathExpressionOperation>(root);
+      operation && operation->IsAddOrSubtract()) {
+    const CSSMathOperator operation_op = operation->OperatorType();
+    is_in_nesting |= operation->IsNestedCalc();
+    // Nest from the left (first op) to the right (second op).
+    CombineNumericChildrenFromNode(operation->GetOperands().front(), op,
+                                   numeric_children, all_children,
+                                   is_in_nesting);
+    // Change the sign of expression, if we are nesting (inside brackets).
+    op = MaybeChangeOperatorSignIfNesting(is_in_nesting, op, operation_op);
+    CombineNumericChildrenFromNode(operation->GetOperands().back(), op,
+                                   numeric_children, all_children,
+                                   is_in_nesting);
+    return;
+  }
+  // If we have numeric with double value - combine under one unit type.
+  if (IsNumericNodeWithDoubleValue(root)) {
+    double value = op == CSSMathOperator::kAdd ? root->DoubleValue()
+                                               : -root->DoubleValue();
+    if (auto it = numeric_children.find(unit_type);
+        it != numeric_children.end()) {
+      it->value += value;
+    } else {
+      numeric_children.insert(unit_type, value);
+    }
+  }
+  // Save all non add/sub operations.
+  all_children.emplace_back(CSSMathExpressionNodeWithOperator(op, root));
+}
+
+// This function follows:
+// https://drafts.csswg.org/css-values-4/#calc-simplification
+// As in Blink the math expression tree is binary, we need to collect all the
+// elements of this tree together and create a new tree as a result.
+CSSMathExpressionNode* MaybeSimplifySumNode(
+    const CSSMathExpressionOperation* root) {
+  CHECK(root->IsAddOrSubtract());
+  CHECK_EQ(root->GetOperands().size(), 2u);
+  // Hash map of numeric literal values of the same type, that can be
+  // combined together.
+  UnitsHashMap numeric_children;
+  // Vector of all non add/sub operation children.
+  UnitsVector all_children;
+  // Collect all the numeric literal values together.
+  // Note: using kAdd here as the operator for the first child
+  // (e.g. a - b = +a - b, a + b = +a + b)
+  CombineNumericChildrenFromNode(root, CSSMathOperator::kAdd, numeric_children,
+                                 all_children);
+  // Form the final node.
+  HashSet<CSSPrimitiveValue::UnitType> used_units;
+  CSSMathExpressionNode* final_node = nullptr;
+  for (const auto& child : all_children) {
+    auto [op, node] =
+        MaybeReplaceNodeWithCombined(child.node, child.op, numeric_children);
+    CSSPrimitiveValue::UnitType unit_type = node->ResolvedUnitType();
+    // Skip already used unit types, as they have been already combined.
+    if (IsNumericNodeWithDoubleValue(node)) {
+      if (used_units.Contains(unit_type)) {
+        continue;
+      }
+      used_units.insert(unit_type);
+    }
+    if (!final_node) {
+      // First child.
+      final_node = MaybeNegateFirstNode(op, node)->Copy();
+      continue;
+    }
+    final_node = MakeGarbageCollected<CSSMathExpressionOperation>(
+        final_node, node, op, root->Category(),
+        root->CanBeResolvedWithConversionData());
+  }
+  return final_node;
+}
+
+CSSMathExpressionNode* MaybeDistributeArithmeticOperation(
+    const CSSMathExpressionNode* left_side,
+    const CSSMathExpressionNode* right_side,
+    CSSMathOperator op) {
+  if (op != CSSMathOperator::kMultiply && op != CSSMathOperator::kDivide) {
+    return nullptr;
+  }
+  // NOTE: we should not simplify num * (fn + fn), all the operands inside
+  // the sum should be numeric.
+  // Case (Op1 + Op2) * Num.
+  auto* left_operation = DynamicTo<CSSMathExpressionOperation>(left_side);
+  auto* right_numeric = DynamicTo<CSSMathExpressionNumericLiteral>(right_side);
+  if (left_operation && left_operation->IsAddOrSubtract() &&
+      left_operation->AllOperandsAreNumeric() && right_numeric &&
+      right_numeric->Category() == CalculationResultCategory::kCalcNumber) {
+    auto* new_left_side =
+        CSSMathExpressionOperation::CreateArithmeticOperationSimplified(
+            left_operation->GetOperands().front(), right_side, op);
+    auto* new_right_side =
+        CSSMathExpressionOperation::CreateArithmeticOperationSimplified(
+            left_operation->GetOperands().back(), right_side, op);
+    CSSMathExpressionNode* operation =
+        CSSMathExpressionOperation::CreateArithmeticOperationSimplified(
+            new_left_side, new_right_side, left_operation->OperatorType());
+    // Note: setting SetIsNestedCalc is needed, as we can be in this situation:
+    // A - B * (C + D)
+    //     /\/\/\/\/\ - we are B * (C + D)
+    // and we don't know about the -, as it's another operation,
+    // so make the simplified operation nested to end up with:
+    // A - (B * C + B * D).
+    operation->SetIsNestedCalc();
+    return operation;
+  }
+  // Case Num * (Op1 + Op2). But don't do num / (Op1 + Op2), as it can invert
+  // the type.
+  auto* right_operation = DynamicTo<CSSMathExpressionOperation>(right_side);
+  auto* left_numeric = DynamicTo<CSSMathExpressionNumericLiteral>(left_side);
+  if (right_operation && right_operation->IsAddOrSubtract() &&
+      right_operation->AllOperandsAreNumeric() && left_numeric &&
+      left_numeric->Category() == CalculationResultCategory::kCalcNumber &&
+      op != CSSMathOperator::kDivide) {
+    auto* new_right_side =
+        CSSMathExpressionOperation::CreateArithmeticOperationSimplified(
+            left_side, right_operation->GetOperands().front(), op);
+    auto* new_left_side =
+        CSSMathExpressionOperation::CreateArithmeticOperationSimplified(
+            left_side, right_operation->GetOperands().back(), op);
+    CSSMathExpressionNode* operation =
+        CSSMathExpressionOperation::CreateArithmeticOperationSimplified(
+            new_right_side, new_left_side, right_operation->OperatorType());
+    // Note: setting SetIsNestedCalc is needed, as we can be in this situation:
+    // A - (C + D) * B
+    //     /\/\/\/\/\ - we are (C + D) * B
+    // and we don't know about the -, as it's another operation,
+    // so make the simplified operation nested to end up with:
+    // A - (B * C + B * D).
+    operation->SetIsNestedCalc();
+    return operation;
+  }
+  return nullptr;
 }
 
 }  // namespace
@@ -360,7 +575,7 @@ CSSMathExpressionNumericLiteral::ComputeValueInCanonicalUnit() const {
       if (CSSPrimitiveValue::IsRelativeUnit(value_->GetType())) {
         return absl::nullopt;
       }
-      U_FALLTHROUGH;
+      [[fallthrough]];
     case kCalcAngle:
     case kCalcTime:
     case kCalcFrequency:
@@ -559,6 +774,12 @@ static bool DetermineCanBeSimplifiedWithConversionData(
 
 // ------ Start of CSSMathExpressionOperation member functions ------
 
+bool CSSMathExpressionOperation::AllOperandsAreNumeric() const {
+  return std::all_of(
+      operands_.begin(), operands_.end(),
+      [](const CSSMathExpressionNode* op) { return op->IsNumericLiteral(); });
+}
+
 // static
 CSSMathExpressionNode* CSSMathExpressionOperation::CreateArithmeticOperation(
     const CSSMathExpressionNode* left_side,
@@ -631,6 +852,10 @@ CSSMathExpressionOperation::CreateComparisonFunctionSimplified(
         EvaluateOperator(canonical_values, op), canonical_unit);
   }
 
+  if (operands.size() == 1) {
+    return operands.front()->Copy();
+  }
+
   const bool can_be_resolved_with_conversion_data =
       DetermineCanBeSimplifiedWithConversionData(operands);
   return MakeGarbageCollected<CSSMathExpressionOperation>(
@@ -676,6 +901,15 @@ static double ResolveAtan2(const CSSMathExpressionNode* y_node,
   }
   CSSPrimitiveValue::UnitType y_type = y_node->ResolvedUnitType();
   CSSPrimitiveValue::UnitType x_type = x_node->ResolvedUnitType();
+
+  // TODO(crbug.com/1392594): We ignore parameters in complex relative units
+  // (e.g., 1rem + 1px) until they can be supported.
+  if (y_type == CSSPrimitiveValue::UnitType::kUnknown ||
+      x_type == CSSPrimitiveValue::UnitType::kUnknown) {
+    error = true;
+    return 0;
+  }
+
   if (IsRelativeLength(y_type) || IsRelativeLength(x_type)) {
     // TODO(crbug.com/1392594): Relative length units are currently hard
     // to resolve. We ignore the units for now, so that
@@ -701,10 +935,6 @@ CSSMathExpressionNode*
 CSSMathExpressionOperation::CreateTrigonometricFunctionSimplified(
     Operands&& operands,
     CSSValueID function_id) {
-  if (!RuntimeEnabledFeatures::CSSTrigonometricFunctionsEnabled()) {
-    return nullptr;
-  }
-
   double value;
   auto unit_type = CSSPrimitiveValue::UnitType::kUnknown;
   bool error = false;
@@ -940,6 +1170,11 @@ CSSMathExpressionOperation::CreateArithmeticOperationSimplified(
     const CSSMathExpressionNode* left_side,
     const CSSMathExpressionNode* right_side,
     CSSMathOperator op) {
+  if (CSSMathExpressionNode* result =
+          MaybeDistributeArithmeticOperation(left_side, right_side, op)) {
+    return result;
+  }
+
   if (left_side->IsMathFunction() || right_side->IsMathFunction()) {
     return CreateArithmeticOperation(left_side, right_side, op);
   }
@@ -1400,7 +1635,8 @@ String CSSMathExpressionOperation::CustomCSSText() const {
 
       const bool left_side_needs_parentheses =
           (operands_[0]->IsOperation() && !operands_[0]->IsMathFunction()) &&
-          operator_ != CSSMathOperator::kAdd;
+          operator_ != CSSMathOperator::kAdd &&
+          operator_ != CSSMathOperator::kSubtract;
       if (left_side_needs_parentheses) {
         result.Append('(');
       }
@@ -1870,8 +2106,6 @@ class CSSMathExpressionNodeParser {
       case CSSValueID::kClamp:
       case CSSValueID::kCalc:
       case CSSValueID::kWebkitCalc:
-        return true;
-      // TODO(crbug.com/1190444): Add other trigonometric functions
       case CSSValueID::kSin:
       case CSSValueID::kCos:
       case CSSValueID::kTan:
@@ -1879,7 +2113,7 @@ class CSSMathExpressionNodeParser {
       case CSSValueID::kAcos:
       case CSSValueID::kAtan:
       case CSSValueID::kAtan2:
-        return RuntimeEnabledFeatures::CSSTrigonometricFunctionsEnabled();
+        return true;
       case CSSValueID::kPow:
       case CSSValueID::kSqrt:
       case CSSValueID::kHypot:
@@ -2010,7 +2244,6 @@ class CSSMathExpressionNodeParser {
       case CSSValueID::kAsin:
       case CSSValueID::kAcos:
       case CSSValueID::kAtan:
-        DCHECK(RuntimeEnabledFeatures::CSSTrigonometricFunctionsEnabled());
         max_argument_count = 1;
         break;
       case CSSValueID::kPow:
@@ -2043,7 +2276,6 @@ class CSSMathExpressionNodeParser {
         min_argument_count = 2;
         break;
       case CSSValueID::kAtan2:
-        DCHECK(RuntimeEnabledFeatures::CSSTrigonometricFunctionsEnabled());
         max_argument_count = 2;
         min_argument_count = 2;
         break;
@@ -2094,14 +2326,23 @@ class CSSMathExpressionNodeParser {
       case CSSValueID::kWebkitCalc:
         return const_cast<CSSMathExpressionNode*>(nodes.front().Get());
       case CSSValueID::kMin:
-        return CSSMathExpressionOperation::CreateComparisonFunctionSimplified(
-            std::move(nodes), CSSMathOperator::kMin);
       case CSSValueID::kMax:
-        return CSSMathExpressionOperation::CreateComparisonFunctionSimplified(
-            std::move(nodes), CSSMathOperator::kMax);
-      case CSSValueID::kClamp:
-        return CSSMathExpressionOperation::CreateComparisonFunctionSimplified(
-            std::move(nodes), CSSMathOperator::kClamp);
+      case CSSValueID::kClamp: {
+        CSSMathOperator op = CSSMathOperator::kMin;
+        if (function_id == CSSValueID::kMax) {
+          op = CSSMathOperator::kMax;
+        }
+        if (function_id == CSSValueID::kClamp) {
+          op = CSSMathOperator::kClamp;
+        }
+        CSSMathExpressionNode* node =
+            CSSMathExpressionOperation::CreateComparisonFunctionSimplified(
+                std::move(nodes), op);
+        if (node) {
+          context_.Count(WebFeature::kCSSComparisonFunctions);
+        }
+        return node;
+      }
       case CSSValueID::kSin:
       case CSSValueID::kCos:
       case CSSValueID::kTan:
@@ -2109,7 +2350,6 @@ class CSSMathExpressionNodeParser {
       case CSSValueID::kAcos:
       case CSSValueID::kAtan:
       case CSSValueID::kAtan2:
-        DCHECK(RuntimeEnabledFeatures::CSSTrigonometricFunctionsEnabled());
         return CSSMathExpressionOperation::
             CreateTrigonometricFunctionSimplified(std::move(nodes),
                                                   function_id);
@@ -2354,6 +2594,12 @@ class CSSMathExpressionNodeParser {
 
       if (!result) {
         return nullptr;
+      }
+    }
+
+    if (auto* operation = DynamicTo<CSSMathExpressionOperation>(result)) {
+      if (operation->IsAddOrSubtract()) {
+        result = MaybeSimplifySumNode(operation);
       }
     }
 
@@ -2641,3 +2887,6 @@ CSSMathExpressionNode* CSSMathExpressionNode::ParseMathFunction(
 }
 
 }  // namespace blink
+
+WTF_ALLOW_CLEAR_UNUSED_SLOTS_WITH_MEM_FUNCTIONS(
+    blink::CSSMathExpressionNodeWithOperator)

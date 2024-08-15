@@ -2,6 +2,19 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+source_set("prefs") {
+  sources = [
+    "pref_backed_boolean.h",
+    "pref_backed_boolean.mm",
+  ]
+  deps = [
+    "//base",
+    "//components/prefs",
+    "//ios/chrome/browser/shared/model/utils",
+    "//ui/base",
+  ]
+}
+
 source_set("pref_names") {
   sources = [
     "pref_names.cc",
@@ -40,6 +53,7 @@ source_set("browser_prefs") {
     "//components/optimization_guide/core",
     "//components/password_manager/core/browser",
     "//components/payments/core",
+    "//components/plus_addresses",
     "//components/policy/core/browser",
     "//components/policy/core/common",
     "//components/pref_registry",
@@ -66,19 +80,23 @@ source_set("browser_prefs") {
     "//components/web_resource",
     "//ios/chrome/app:variations_app_state_agent",
     "//ios/chrome/browser/first_run",
-    "//ios/chrome/browser/geolocation",
-    "//ios/chrome/browser/memory",
+    "//ios/chrome/browser/geolocation/model",
+    "//ios/chrome/browser/memory/model",
     "//ios/chrome/browser/metrics",
+    "//ios/chrome/browser/metrics:constants",
     "//ios/chrome/browser/net",
     "//ios/chrome/browser/ntp:set_up_list_prefs",
-    "//ios/chrome/browser/ntp_tiles/tab_resumption:tab_resumption_prefs",
+    "//ios/chrome/browser/ntp_tiles/model/tab_resumption:tab_resumption_prefs",
+    "//ios/chrome/browser/parcel_tracking:prefs",
+    "//ios/chrome/browser/photos:policy",
     "//ios/chrome/browser/policy:policy_util",
-    "//ios/chrome/browser/prerender:prerender_pref",
+    "//ios/chrome/browser/prerender/model:prerender_pref",
     "//ios/chrome/browser/push_notification:push_notification_service",
-    "//ios/chrome/browser/safety_check:constants",
+    "//ios/chrome/browser/safety_check/model:constants",
     "//ios/chrome/browser/shared/model/browser_state",
     "//ios/chrome/browser/shared/public/features",
     "//ios/chrome/browser/signin",
+    "//ios/chrome/browser/ui/app_store_rating",
     "//ios/chrome/browser/ui/authentication",
     "//ios/chrome/browser/ui/authentication/history_sync",
     "//ios/chrome/browser/ui/authentication/signin",
@@ -89,11 +107,26 @@ source_set("browser_prefs") {
     "//ios/chrome/browser/ui/first_run:field_trial",
     "//ios/chrome/browser/ui/incognito_reauth:incognito_reauth_scene_agent",
     "//ios/chrome/browser/ui/ntp:field_trial",
+    "//ios/chrome/browser/ui/ntp/metrics:constants",
     "//ios/chrome/browser/ui/reading_list:reading_list_constants",
-    "//ios/chrome/browser/voice:prefs",
+    "//ios/chrome/browser/voice/model:prefs",
     "//ios/chrome/browser/web",
     "//ios/chrome/browser/web/font_size",
     "//ios/web/common:features",
     "//ui/base",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [ "pref_backed_boolean_unittest.mm" ]
+  deps = [
+    ":prefs",
+    "//base",
+    "//components/prefs",
+    "//components/prefs:test_support",
+    "//ios/chrome/browser/shared/model/utils:test_support",
+    "//ios/web/public/test",
+    "//testing/gtest",
   ]
 }

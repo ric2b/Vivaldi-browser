@@ -12,6 +12,8 @@ static_library("sync_notes") {
     "note_model_merger.h",
     "note_model_type_processor.cc",
     "note_model_type_processor.h",
+    "note_model_view.cc",
+    "note_model_view.h",
     "note_remote_updates_handler.cc",
     "note_remote_updates_handler.h",
     "note_specifics_conversions.cc",

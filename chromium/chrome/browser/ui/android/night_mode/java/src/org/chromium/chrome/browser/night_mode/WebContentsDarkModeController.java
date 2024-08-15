@@ -18,7 +18,7 @@ import org.chromium.ui.util.ColorUtils;
 import org.chromium.url.GURL;
 
 // Vivaldi
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
 /**
  * A controller class could enable or disable web content dark mode feature based on the content
@@ -87,7 +87,7 @@ public class WebContentsDarkModeController {
     public static boolean isGlobalUserSettingsEnabled(BrowserContextHandle browserContextHandle) {
         return WebsitePreferenceBridge.isContentSettingEnabled(
                 browserContextHandle, ContentSettingsType.AUTO_DARK_WEB_CONTENT)
-                && SharedPreferencesManager.getInstance().readBoolean(
+                && ChromeSharedPreferences.getInstance().readBoolean(
                 "dark_mode_for_webpages", false); // Vivaldi
     }
 

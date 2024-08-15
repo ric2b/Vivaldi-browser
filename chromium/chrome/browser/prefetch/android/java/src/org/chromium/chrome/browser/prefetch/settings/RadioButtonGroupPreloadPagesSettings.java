@@ -17,6 +17,9 @@ import org.chromium.components.browser_ui.widget.RadioButtonWithDescription;
 import org.chromium.components.browser_ui.widget.RadioButtonWithDescriptionAndAuxButton;
 import org.chromium.components.browser_ui.widget.RadioButtonWithDescriptionLayout;
 
+// Vivaldi
+import android.view.View;
+
 /**
  * A radio button group used for Preload Pages. Currently, it has 3 options:
  * Extended Preloading, Standard Preloading and No Preloading.
@@ -91,6 +94,8 @@ public class RadioButtonGroupPreloadPagesSettings extends Preference
             mExtendedPreloading.setAuxButtonEnabled(true);
             mStandardPreloading.setAuxButtonEnabled(true);
         }
+        // Vivaldi
+        mExtendedPreloading.setVisibility(View.GONE);
     }
 
     @Override

@@ -67,7 +67,8 @@ enum class PasswordStoreOperation {
   kRemoveLoginsByURLAndTimeAsync = 8,
   kRemoveLoginsCreatedBetweenAsync = 9,
   kDisableAutoSignInForOriginsAsync = 10,
-  kClearAllLocalPasswords = 11,
+  // Deprecated
+  // kClearAllLocalPasswords = 11,
 
   // Operation that is non-modifying, but not safe to retry because it is
   // user-visible.
@@ -100,8 +101,6 @@ class PasswordStoreAndroidBackend
 
  private:
   SEQUENCE_CHECKER(main_sequence_checker_);
-
-  class ClearAllLocalPasswordsMetricRecorder;
 
   // Wraps the handler for an asynchronous job (if successful or scheduled to be
   // retried) and invokes the supplied metrics recorded upon completion. An
@@ -166,6 +165,8 @@ class PasswordStoreAndroidBackend
                    base::OnceCallback<void(bool)> completion) override;
   void Shutdown(base::OnceClosure shutdown_completed) override;
   void GetAllLoginsAsync(LoginsOrErrorReply callback) override;
+  void GetAllLoginsWithAffiliationAndBrandingAsync(
+      LoginsOrErrorReply callback) override;
   void GetAutofillableLoginsAsync(LoginsOrErrorReply callback) override;
   void GetAllLoginsForAccountAsync(absl::optional<std::string> account,
                                    LoginsOrErrorReply callback) override;
@@ -197,7 +198,6 @@ class PasswordStoreAndroidBackend
   SmartBubbleStatsStore* GetSmartBubbleStatsStore() override;
   std::unique_ptr<syncer::ProxyModelTypeControllerDelegate>
   CreateSyncControllerDelegate() override;
-  void ClearAllLocalPasswords() override;
   void OnSyncServiceInitialized(syncer::SyncService* sync_service) override;
 
   // Internal method used for implementing the GetAutofillableLoginsAsync method
@@ -327,6 +327,15 @@ class PasswordStoreAndroidBackend
   // Clears |sync_service_| when syncer::SyncServiceObserver::OnSyncShutdown is
   // called.
   void SyncShutdown();
+
+  // If |forms_or_error| contains forms, it retrieves and fills in affiliation
+  // and branding information for Android credentials in the forms and invokes
+  // |callback| with the result. If an error was received instead, it directly
+  // invokes |callback| with it, as no forms could be fetched. Called on
+  // the main sequence.
+  void InjectAffiliationAndBrandingInformation(
+      LoginsOrErrorReply callback,
+      LoginsResultOrError forms_or_error);
 
   // Observer to propagate potential password changes to.
   RemoteChangesReceived stored_passwords_changed_;

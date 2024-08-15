@@ -17,7 +17,9 @@
 #include "net/cookies/cookie_constants.h"
 #include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/cookie_options.h"
+#include "net/cookies/cookie_partition_key.h"
 #include "net/cookies/parsed_cookie.h"
+#include "net/http/http_util.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -920,7 +922,7 @@ TEST(CanonicalCookieTest, CreateWithExpires) {
   // Expires in the past
   base::Time past_date = base::Time::Now() - base::Days(10);
   std::unique_ptr<CanonicalCookie> cookie = CanonicalCookie::Create(
-      url, "A=1; expires=" + base::TimeFormatHTTP(past_date), creation_time,
+      url, "A=1; expires=" + HttpUtil::TimeFormatHTTP(past_date), creation_time,
       server_time, absl::nullopt /* cookie_partition_key */);
   EXPECT_TRUE(cookie.get());
   EXPECT_TRUE(cookie->IsPersistent());
@@ -932,8 +934,8 @@ TEST(CanonicalCookieTest, CreateWithExpires) {
   // Expires in the future
   base::Time future_date = base::Time::Now() + base::Days(10);
   cookie = CanonicalCookie::Create(
-      url, "A=1; expires=" + base::TimeFormatHTTP(future_date), creation_time,
-      server_time, absl::nullopt /* cookie_partition_key */);
+      url, "A=1; expires=" + HttpUtil::TimeFormatHTTP(future_date),
+      creation_time, server_time, absl::nullopt /* cookie_partition_key */);
   EXPECT_TRUE(cookie.get());
   EXPECT_TRUE(cookie->IsPersistent());
   EXPECT_FALSE(cookie->IsExpired(creation_time));
@@ -944,8 +946,8 @@ TEST(CanonicalCookieTest, CreateWithExpires) {
   // Expires in the far future
   future_date = base::Time::Now() + base::Days(800);
   cookie = CanonicalCookie::Create(
-      url, "A=1; expires=" + base::TimeFormatHTTP(future_date), creation_time,
-      server_time, absl::nullopt /* cookie_partition_key */);
+      url, "A=1; expires=" + HttpUtil::TimeFormatHTTP(future_date),
+      creation_time, server_time, absl::nullopt /* cookie_partition_key */);
   EXPECT_TRUE(cookie.get());
   EXPECT_TRUE(cookie->IsPersistent());
   EXPECT_FALSE(cookie->IsExpired(creation_time));
@@ -1500,7 +1502,6 @@ TEST(CanonicalCookieTest, IncludeForRequestURL) {
                                  /*delegate_treats_url_as_trustworthy=*/false})
           .status.HasExactlyExclusionReasonsForTesting(
               {CookieInclusionStatus::EXCLUDE_DOMAIN_MISMATCH}));
-
   // Test that cookie with a cookie path that does not match the url path are
   // not included.
   cookie = CanonicalCookie::Create(url, "A=2; Path=/foo/bar", creation_time,
@@ -1521,7 +1522,6 @@ TEST(CanonicalCookieTest, IncludeForRequestURL) {
               CookieAccessParams{net::CookieAccessSemantics::UNKNOWN,
                                  /*delegate_treats_url_as_trustworthy=*/false})
           .status.IsInclude());
-
   // Test that a secure cookie is not included for a non secure URL.
   GURL secure_url("https://www.example.com");
   cookie = CanonicalCookie::Create(secure_url, "A=2; Secure", creation_time,
@@ -1587,8 +1587,6 @@ TEST(CanonicalCookieTest, IncludeForRequestURL) {
   EXPECT_TRUE(result.status.IsInclude());
   EXPECT_FALSE(result.status.ShouldWarn());
 
-  //
-
   // Test that http only cookies are only included if the include httponly flag
   // is set on the cookie options.
   options.set_include_httponly();
@@ -1627,7 +1625,6 @@ void VerifyIncludeForRequestURLTestCases(
     CookieAccessSemantics access_semantics,
     std::vector<IncludeForRequestURLTestCase> test_cases) {
   GURL url("https://example.test");
-
   for (const auto& test : test_cases) {
     base::Time creation_time = base::Time::Now() - test.creation_time_delta;
     std::unique_ptr<CanonicalCookie> cookie = CanonicalCookie::Create(
@@ -1998,6 +1995,71 @@ TEST(CanonicalCookieTest, IncludeForRequestURLSameSite) {
   }
 }
 
+TEST(CanonicalCookieTest, TestFirstPartyPartitionedAndCrossSiteContext) {
+  std::string histogram_name =
+      "Cookie.FirstPartyPartitioned.HasCrossSiteAncestor";
+  base::Time current_time = base::Time::Now();
+  base::HistogramTester histogram_tester;
+  GURL url("https://www.example.com");
+  GURL url2("https://wwwnottheSame.com");
+  CookieOptions options;
+
+  auto make_cookie = [current_time](const auto& partition_key) {
+    return CanonicalCookie::CreateUnsafeCookieForTesting(
+        "A", "2", "www.example.com", "/test", current_time, base::Time(),
+        base::Time(), base::Time(), true /*secure*/, true /*httponly*/,
+        CookieSameSite::NO_RESTRICTION, COOKIE_PRIORITY_DEFAULT, false,
+        partition_key);
+  };
+
+  auto no_partition_key_cookie = make_cookie(absl::nullopt);
+  auto partitioned_cookie =
+      make_cookie(CookiePartitionKey::FromURLForTesting(GURL(url)));
+  auto nonced_partition_key_cookie =
+      make_cookie(CookiePartitionKey::FromURLForTesting(
+          GURL(url), base::UnguessableToken::Create()));
+  auto different_site_partition_key_cookie =
+      make_cookie(CookiePartitionKey::FromURLForTesting(GURL(url2)));
+
+  histogram_tester.ExpectBucketCount(histogram_name, true, 0);
+  histogram_tester.ExpectBucketCount(histogram_name, false, 0);
+  no_partition_key_cookie->IncludeForRequestURL(
+      url, options,
+      CookieAccessParams{CookieAccessSemantics::NONLEGACY, false});
+
+  histogram_tester.ExpectBucketCount(histogram_name, true, 0);
+  histogram_tester.ExpectBucketCount(histogram_name, false, 0);
+
+  partitioned_cookie->IncludeForRequestURL(
+      url, options,
+      CookieAccessParams{CookieAccessSemantics::NONLEGACY, false});
+  histogram_tester.ExpectBucketCount(histogram_name, true, 1);
+  histogram_tester.ExpectBucketCount(histogram_name, false, 0);
+
+  nonced_partition_key_cookie->IncludeForRequestURL(
+      url, options,
+      CookieAccessParams{CookieAccessSemantics::NONLEGACY, false});
+  histogram_tester.ExpectBucketCount(histogram_name, true, 1);
+  histogram_tester.ExpectBucketCount(histogram_name, false, 0);
+
+  different_site_partition_key_cookie->IncludeForRequestURL(
+      url, options,
+      CookieAccessParams{CookieAccessSemantics::NONLEGACY, false});
+  histogram_tester.ExpectBucketCount(histogram_name, true, 1);
+  histogram_tester.ExpectBucketCount(histogram_name, false, 0);
+
+  // Show that a cookie in a non-CROSS_SITE context registers as false.
+  options.set_same_site_cookie_context(
+      net::CookieOptions::SameSiteCookieContext(
+          net::CookieOptions::SameSiteCookieContext::ContextType::
+              SAME_SITE_LAX));
+
+  partitioned_cookie->IncludeForRequestURL(
+      url, options,
+      CookieAccessParams{CookieAccessSemantics::NONLEGACY, false});
+  histogram_tester.ExpectBucketCount(histogram_name, true, 1);
+  histogram_tester.ExpectBucketCount(histogram_name, false, 1);
+}
 // Test that SameSite=None requires Secure.
 TEST(CanonicalCookieTest, IncludeCookiesWithoutSameSiteMustBeSecure) {
   GURL url("https://www.example.com");
@@ -3028,11 +3090,16 @@ TEST(CanonicalCookieTest, IsCanonical) {
                    ->IsCanonical());
 
   // Separator in domain.
-  EXPECT_FALSE(CanonicalCookie::CreateUnsafeCookieForTesting(
-                   "A", "B", ";x.y", "/path", base::Time(), base::Time(),
-                   base::Time(), base::Time(), false, false,
-                   CookieSameSite::NO_RESTRICTION, COOKIE_PRIORITY_LOW, false)
-                   ->IsCanonical());
+  //
+  // TODO(https://crbug.com/1416013): The character ';' is permitted in the URL
+  // host. That makes IsCanonical() return true here. However, previously,
+  // IsCanonical() used to false because ';' was a forbidden character. We need
+  // to verify whether this change is acceptable or not.
+  EXPECT_TRUE(CanonicalCookie::CreateUnsafeCookieForTesting(
+                  "A", "B", ";x.y", "/path", base::Time(), base::Time(),
+                  base::Time(), base::Time(), false, false,
+                  CookieSameSite::NO_RESTRICTION, COOKIE_PRIORITY_LOW, false)
+                  ->IsCanonical());
 
   // Garbage in domain.
   EXPECT_FALSE(CanonicalCookie::CreateUnsafeCookieForTesting(
@@ -4025,7 +4092,7 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       CookieSameSite::NO_RESTRICTION, COOKIE_PRIORITY_DEFAULT,
       false /*same_party*/, absl::nullopt /*partition_key*/, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_FAILURE_TO_STORE}));
+      {CookieInclusionStatus::EXCLUDE_NO_COOKIE_CONTENT}));
 
   // Check that value can contain an equal sign, even when no name is present.
   // Note that in newer drafts of RFC6265bis, it is specified that a cookie with
@@ -4361,7 +4428,8 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       COOKIE_PRIORITY_DEFAULT, true /*same_party*/,
       absl::nullopt /*partition_key*/, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_FAILURE_TO_STORE,
+      {CookieInclusionStatus::EXCLUDE_NO_COOKIE_CONTENT,
+       CookieInclusionStatus::EXCLUDE_FAILURE_TO_STORE,
        CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN}));
 
   // Check that RFC6265bis name + value string length limits are enforced.
@@ -5990,6 +6058,49 @@ TEST(CanonicalCookieTest, TestDoubleUnderscorePrefixHistogram) {
   histograms.ExpectTotalCount(kDoubleUnderscorePrefixHistogram, 8);
   histograms.ExpectBucketCount(kDoubleUnderscorePrefixHistogram, false, 6);
   histograms.ExpectBucketCount(kDoubleUnderscorePrefixHistogram, true, 2);
+}
+
+TEST(CanonicalCookieTest, IsThirdPartyPartitioned) {
+  // Partitioned cookie in 3p context.
+  EXPECT_TRUE(CanonicalCookie::CreateUnsafeCookieForTesting(
+                  "A", "B", "x.y", "/foo/bar", base::Time(), base::Time(),
+                  base::Time(), base::Time(), /*secure=*/true,
+                  /*httponly=*/false, CookieSameSite::UNSPECIFIED,
+                  COOKIE_PRIORITY_LOW,
+                  /*same_party=*/false,
+                  CookiePartitionKey::FromURLForTesting(
+                      GURL("https://toplevelsite.com")))
+                  ->IsThirdPartyPartitioned());
+
+  // Partitioned cookie in 1p context.
+  EXPECT_FALSE(CanonicalCookie::CreateUnsafeCookieForTesting(
+                   "A", "B", "x.y", "/foo/bar", base::Time(), base::Time(),
+                   base::Time(), base::Time(), /*secure=*/true,
+                   /*httponly=*/false, CookieSameSite::UNSPECIFIED,
+                   COOKIE_PRIORITY_LOW,
+                   /*same_party=*/false,
+                   CookiePartitionKey::FromURLForTesting(GURL("https://x.y")))
+                   ->IsThirdPartyPartitioned());
+
+  // Nonced-partitioned cookie should always be 3p context.
+  auto partition_key_with_nonce =
+      absl::make_optional(CookiePartitionKey::FromURLForTesting(
+          GURL("https://x.y"), base::UnguessableToken::Create()));
+  EXPECT_TRUE(CanonicalCookie::CreateUnsafeCookieForTesting(
+                  "A", "B", "x.y", "/foo/bar", base::Time(), base::Time(),
+                  base::Time(), base::Time(), /*secure=*/true,
+                  /*httponly=*/false, CookieSameSite::UNSPECIFIED,
+                  COOKIE_PRIORITY_LOW,
+                  /*same_party=*/false, partition_key_with_nonce)
+                  ->IsThirdPartyPartitioned());
+
+  // Unpartitioned cookie.
+  EXPECT_FALSE(CanonicalCookie::CreateUnsafeCookieForTesting(
+                   "A", "B", "x.y", "/foo/bar", base::Time(), base::Time(),
+                   base::Time(), base::Time(), /*secure=*/false,
+                   /*httponly=*/false, CookieSameSite::NO_RESTRICTION,
+                   COOKIE_PRIORITY_LOW, /*same_party=*/false)
+                   ->IsThirdPartyPartitioned());
 }
 
 }  // namespace net

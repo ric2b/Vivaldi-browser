@@ -7,12 +7,16 @@ update_target("//chrome/browser:browser") {
     "//vivaldi/components:adverse_adblocking",
     "//vivaldi/components/bookmarks:bookmark_locales_include",
     "//vivaldi/components/content_injection",
+    "//vivaldi/components/notes",
+    "//vivaldi/components/notes:browser",
     "//vivaldi/components/request_filter",
     "//vivaldi/components/ad_blocker",
     "//vivaldi/components/page_actions",
   ]
   allow_circular_includes_from += [
     "//vivaldi/components:adverse_adblocking",
+    "//vivaldi/components/notes",
+    "//vivaldi/components/notes:browser",
     "//vivaldi/components/request_filter",
     "//vivaldi/components/ad_blocker",
   ]
@@ -42,6 +46,7 @@ if (vivaldi_build_tests) {
       deps += [
         "//vivaldi/components/ad_blocker:unit_tests",
         "//vivaldi/components/datasource:dataurl_unit_tests",
+        "//vivaldi/components/notes:unit_tests",
       ]
   }
 }
@@ -51,4 +56,14 @@ update_template_instance("//components/feed/core/proto:proto_v2") {
     deps = []
   }
   deps += [ "//components/feed/core/proto:proto_ios_shared_v2" ]
+}
+
+update_target("//chrome:dependencies") {
+  public_deps += [ "//vivaldi/components/notes:browser" ]
+}
+
+if (is_android) {
+  update_target("//chrome:chrome_android_core") {
+    deps += [ "//vivaldi/components/notes" ]
+  }
 }

@@ -248,9 +248,6 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
                      originator_client_item_id:
                          (const std::string&)originator_client_item_id;
 
-// Injects a typed URL to the sync FakeServer.
-- (void)addFakeSyncServerTypedURL:(const GURL&)URL;
-
 // Injects a HISTORY visit to the sync FakeServer.
 - (void)addFakeSyncServerHistoryVisit:(const GURL&)URL;
 
@@ -357,6 +354,9 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
 
 // Returns the number of browsers.
 - (NSUInteger)browserCount [[nodiscard]];
+
+// Returns the number of the realized web states from the existing web states.
+- (NSInteger)realizedWebStatesCount [[nodiscard]];
 
 // Returns the index of active tab in normal (non-incognito) mode.
 - (NSUInteger)indexOfActiveNormalTab;
@@ -683,17 +683,11 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
 // Returns YES if UKM feature is enabled.
 - (BOOL)isUKMEnabled [[nodiscard]];
 
-// Returns YES if kSynthesizedRestoreSessionEnabled feature is enabled.
-- (BOOL)isSynthesizedRestoreSessionEnabled [[nodiscard]];
-
 // Returns YES if kTestFeature is enabled.
 - (BOOL)isTestFeatureEnabled;
 
 // Returns YES if DemographicMetricsReporting feature is enabled.
 - (BOOL)isDemographicMetricsReportingEnabled [[nodiscard]];
-
-// Returns YES if the SyncEnableHistoryDataType feature is enabled.
-- (BOOL)isSyncHistoryDataTypeEnabled [[nodiscard]];
 
 // Returns YES if the ReplaceSyncPromosWithSignInPromos feature is enabled.
 - (BOOL)isReplaceSyncWithSigninEnabled [[nodiscard]];
@@ -763,10 +757,13 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
 #pragma mark - Default Utilities (EG2)
 
 // Stores a value for the provided key in NSUserDefaults.
-- (void)setUserDefaultObject:(id)value forKey:(NSString*)defaultName;
+- (void)setUserDefaultsObject:(id)value forKey:(NSString*)defaultName;
 
 // Removes the object for `key` in NSUserDefault.
-- (void)removeUserDefaultObjectForKey:(NSString*)key;
+- (void)removeUserDefaultsObjectForKey:(NSString*)key;
+
+// Returns the object for `key` in NSUserDefault.
+- (id)userDefaultsObjectForKey:(NSString*)key;
 
 #pragma mark - Pref Utilities (EG2)
 
@@ -790,6 +787,10 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
 // State contains the preferences that are shared between all browser states.
 - (void)setStringValue:(const std::string&)value
      forLocalStatePref:(const std::string&)prefName;
+
+// Sets the bool value for the local state pref with `prefName`. Local
+// State contains the preferences that are shared between all browser states.
+- (void)setBoolValue:(BOOL)value forLocalStatePref:(const std::string&)prefName;
 
 // Gets the value of a user pref in the original browser state.
 - (bool)userBooleanPref:(const std::string&)prefName;

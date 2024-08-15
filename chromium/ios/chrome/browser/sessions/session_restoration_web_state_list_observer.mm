@@ -133,11 +133,11 @@ void SessionRestorationWebStateListObserver::DetachWebState(
   // Otherwise, list it as orphaned unless it is closed and or serializable
   // (as the WebStateList where it is inserted can just serialize it to get
   // the state).
-  const SessionID session_id = detached_web_state->GetUniqueIdentifier();
-  if (base::Contains(inserted_web_states_, session_id)) {
-    inserted_web_states_.erase(session_id);
+  const web::WebStateID identifier = detached_web_state->GetUniqueIdentifier();
+  if (base::Contains(inserted_web_states_, identifier)) {
+    inserted_web_states_.erase(identifier);
   } else if (!is_closing && !CanSerializeWebState(detached_web_state)) {
-    detached_web_states_.insert(session_id);
+    detached_web_states_.insert(identifier);
   }
 
   // Stop observing the detached WebState. If it is inserted in another
@@ -154,8 +154,8 @@ void SessionRestorationWebStateListObserver::AttachWebState(
           &SessionRestorationWebStateListObserver::MarkWebStateDirty,
           base::Unretained(this)));
 
-  // If the newly attached `WebState` can be serialized, the mark it as dirty
-  // to force its serialization, otherwise adtop it (this will allow re-using
+  // If the newly attached `WebState` can be serialized, then mark it as dirty
+  // to force its serialization, otherwise adopt it (this will allow re-using
   // the existing data on disk).
   if (CanSerializeWebState(attached_web_state)) {
     MarkWebStateDirty(attached_web_state);

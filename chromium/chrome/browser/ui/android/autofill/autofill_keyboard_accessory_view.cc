@@ -133,13 +133,8 @@ void AutofillKeyboardAccessoryView::SuggestionSelected(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     jint list_index) {
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillKeyboardAccessoryAcceptanceDelayThreshold)) {
     controller_->AcceptSuggestion(list_index, base::TimeTicks::Now());
-  } else {
-    controller_->AcceptSuggestionWithoutThreshold(list_index);
   }
-}
 
 void AutofillKeyboardAccessoryView::DeletionRequested(
     JNIEnv* env,
@@ -162,6 +157,20 @@ void AutofillKeyboardAccessoryView::ViewDismissed(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
   controller_->ViewDestroyed();
+}
+
+// static
+base::WeakPtr<AutofillPopupView> AutofillPopupView::Create(
+    base::WeakPtr<AutofillPopupController> controller) {
+  auto adapter = std::make_unique<AutofillKeyboardAccessoryAdapter>(controller);
+  auto accessory_view = std::make_unique<AutofillKeyboardAccessoryView>(
+      adapter->GetWeakPtrToAdapter());
+  if (!accessory_view->Initialize()) {
+    return nullptr;  // Don't create an adapter without initialized view.
+  }
+
+  adapter->SetAccessoryView(std::move(accessory_view));
+  return adapter.release()->GetWeakPtr();
 }
 
 }  // namespace autofill

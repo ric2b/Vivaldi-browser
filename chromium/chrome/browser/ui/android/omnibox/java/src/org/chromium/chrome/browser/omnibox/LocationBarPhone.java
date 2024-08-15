@@ -17,18 +17,14 @@ import org.chromium.base.TraceEvent;
 // Vivaldi
 import org.chromium.build.BuildConfig;
 
-/**
- * A location bar implementation specific for smaller/phone screens.
- */
+/** A location bar implementation specific for smaller/phone screens. */
 /*Vivaldi*/ public class LocationBarPhone extends LocationBarLayout {
     private static final int ACTION_BUTTON_TOUCH_OVERFLOW_LEFT = 15;
 
     private View mUrlBar;
     private View mStatusView;
 
-    /**
-     * Constructor used to inflate from XML.
-     */
+    /** Constructor used to inflate from XML. */
     public LocationBarPhone(Context context, AttributeSet attrs) {
         super(context, attrs);
     }
@@ -48,9 +44,13 @@ import org.chromium.build.BuildConfig;
         mCompositeTouchDelegate.addDelegateForDescendantView(touchDelegate);
 
         if (OmniboxFeatures.shouldShowModernizeVisualUpdate(getContext())) {
-            setPaddingRelative(getContext().getResources().getDimensionPixelSize(
-                                       R.dimen.location_bar_start_padding_modern),
-                    getPaddingTop(), getPaddingEnd(), getPaddingBottom());
+            setPaddingRelative(
+                    getContext()
+                            .getResources()
+                            .getDimensionPixelSize(R.dimen.location_bar_start_padding_modern),
+                    getPaddingTop(),
+                    getPaddingEnd(),
+                    getPaddingBottom());
         }
     }
 
@@ -66,8 +66,11 @@ import org.chromium.build.BuildConfig;
             if (mUrlBar.getLeft() < mUrlActionContainer.getLeft()) {
                 canvas.clipRect(0, 0, (int) mUrlActionContainer.getX(), getBottom());
             } else {
-                canvas.clipRect(mUrlActionContainer.getX() + mUrlActionContainer.getWidth(), 0,
-                        getWidth(), getBottom());
+                canvas.clipRect(
+                        mUrlActionContainer.getX() + mUrlActionContainer.getWidth(),
+                        0,
+                        getWidth(),
+                        getBottom());
             }
             needsCanvasRestore = true;
         }

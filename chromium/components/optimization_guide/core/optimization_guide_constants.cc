@@ -19,6 +19,9 @@ const char kOptimizationGuideServiceGetHintsDefaultURL[] =
 const char kOptimizationGuideServiceGetModelsDefaultURL[] =
     KNOWN_404("/v1:GetModels");
 
+const char kOptimizationGuideServiceModelExecutionDefaultURL[] =
+    "https://chromemodelexecution-pa.googleapis.com/v1:Execute";
+
 const char kLoadedHintLocalHistogramString[] =
     "OptimizationGuide.LoadedHint.Result";
 

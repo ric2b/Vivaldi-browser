@@ -19,10 +19,12 @@
 #include "chrome/browser/sessions/session_restore_delegate.h"
 #include "chrome/browser/sessions/session_service.h"
 #include "chrome/browser/sessions/session_service_utils.h"
+#include "components/datasource/vivaldi_image_store.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/sessions/core/session_command.h"
 #include "components/sessions/core/session_constants.h"
 #include "components/sessions/core/session_service_commands.h"
+
 
 namespace vivaldi {
 
@@ -56,11 +58,11 @@ class VivaldiSessionService {
 
   bool ShouldTrackWindow(Browser* browser);
   void ScheduleCommand(std::unique_ptr<sessions::SessionCommand> command);
-  void BuildCommandsForTab(const SessionID& window_id,
-                           content::WebContents* tab,
-                           int index_in_window,
-                           bool is_pinned);
-  void BuildCommandsForBrowser(Browser* browser, std::vector<int>& ids);
+
+  void BuildCommandsForBrowser(Browser* browser,
+      const std::vector<int>& ids,
+      const vivaldi_image_store::Batch &batch);
+
   bool Save(const base::FilePath& file_name);
   int  Load(const base::FilePath& file_name,
             Browser* browser,
@@ -72,7 +74,15 @@ class VivaldiSessionService {
     std::vector<std::unique_ptr<sessions::SessionWindow>>& windows,
     std::vector<std::unique_ptr<sessions::SessionTab>>& tabs);
 
+  std::vector<std::string> CollectThumbnailUrls(Browser* browser, const std::vector<int>& ids);
+
  private:
+  void BuildCommandsForTab(const SessionID& window_id,
+                           content::WebContents* tab,
+                           int index_in_window,
+                           bool is_pinned);
+
+  void BuildCommandsForTabs(Browser* browser, const std::vector<int>& ids);
   void ResetFile(const base::FilePath& file_name);
   base::File* OpenAndWriteHeader(const base::FilePath& path);
   bool AppendCommandsToFile(

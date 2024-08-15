@@ -136,10 +136,9 @@ Vp9Decoder::Vp9Decoder(std::unique_ptr<IvfParser> ivf_parser,
                        gfx::Size display_resolution)
     : VideoDecoder::VideoDecoder(std::move(v4l2_ioctl), display_resolution),
       ivf_parser_(std::move(ivf_parser)),
-      vp9_parser_(
-          std::make_unique<Vp9Parser>(/*parsing_compressed_header=*/true)),
       supports_compressed_headers_(
-          v4l2_ioctl_->QueryCtrl(V4L2_CID_STATELESS_VP9_COMPRESSED_HDR)) {
+          v4l2_ioctl_->QueryCtrl(V4L2_CID_STATELESS_VP9_COMPRESSED_HDR)),
+      vp9_parser_(std::make_unique<Vp9Parser>(supports_compressed_headers_)) {
   DCHECK(v4l2_ioctl_);
 
   // This control was landed in v5.17 and is pretty much a marker that the
@@ -526,11 +525,6 @@ VideoDecoder::Result Vp9Decoder::DecodeNextFrame(const int frame_number,
   }
 
   v4l2_ioctl_->DQBuf(OUTPUT_queue_, &buffer_id);
-
-  // TODO(stevecho): With current VP9 API, VIDIOC_G_EXT_CTRLS ioctl call is
-  // needed when forward probabilities update is used. With new VP9 API landing
-  // in kernel 5.17, VIDIOC_G_EXT_CTRLS ioctl call is no longer needed, see:
-  // https://lwn.net/Articles/855419/
 
   v4l2_ioctl_->MediaRequestIocReinit(OUTPUT_queue_);
 

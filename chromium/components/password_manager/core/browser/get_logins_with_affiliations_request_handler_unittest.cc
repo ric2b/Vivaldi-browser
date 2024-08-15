@@ -380,6 +380,54 @@ TEST_F(GetLoginsWithAffiliationsRequestHandlerTest,
           kBetterMatchesExist,
       1);
 }
+
+TEST_F(GetLoginsWithAffiliationsRequestHandlerTest,
+       PslMatchInExtensionListButAffiliatedTest) {
+  base::test::ScopedFeatureList feature_list(
+      features::kUseExtensionListForPSLMatching);
+  backend()->AddLoginAsync(
+      *CreateForm("https://a.slack.com/", u"test", u"test"), base::DoNothing());
+  backend()->AddLoginAsync(
+      *CreateForm("https://b.slack.com/", u"test2", u"test"),
+      base::DoNothing());
+  backend()->AddLoginAsync(
+      *CreateForm("https://c.slack.com/", u"test3", u"test"),
+      base::DoNothing());
+  RunUntilIdle();
+
+  EXPECT_CALL(affiliation_service(), GetPSLExtensions)
+      .WillOnce(RunOnceCallback<0>(std::vector<std::string>{"slack.com"}));
+  std::vector<Facet> facets;
+  facets.emplace_back(
+      FacetURI::FromPotentiallyInvalidSpec("https://a.slack.com/"));
+  facets.emplace_back(
+      FacetURI::FromPotentiallyInvalidSpec("https://b.slack.com/"));
+  EXPECT_CALL(affiliation_service(), GetAffiliationsAndBranding)
+      .WillRepeatedly(RunOnceCallback<2>(facets, true));
+
+  GroupedFacets group;
+  group.facets.emplace_back(FacetURI::FromPotentiallyInvalidSpec(kTestWebURL));
+  EXPECT_CALL(affiliation_service(), GetGroupingInfo)
+      .WillOnce(RunOnceCallback<1>(std::vector<GroupedFacets>{group}));
+
+  base::MockCallback<LoginsOrErrorReply> result_callback;
+  PasswordFormDigest observed_form = CreateFormDigest("https://a.slack.com/");
+  GetLoginsWithAffiliationsRequestHandler(
+      observed_form, backend(), &match_helper(), result_callback.Get());
+
+  std::vector<std::unique_ptr<PasswordForm>> expected_forms;
+  expected_forms.push_back(
+      CreateForm("https://a.slack.com/", u"test", u"test"));
+  expected_forms.back()->match_type = PasswordForm::MatchType::kExact;
+  expected_forms.push_back(
+      CreateForm("https://b.slack.com/", u"test2", u"test"));
+  // The second form is only affiliated not PSL matched.
+  expected_forms.back()->match_type = PasswordForm::MatchType::kAffiliated;
+
+  EXPECT_CALL(result_callback, Run(LoginsResultsOrErrorAre(&expected_forms)));
+  RunUntilIdle();
+}
+
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 TEST_F(GetLoginsWithAffiliationsRequestHandlerTest, AffiliatedMatchHelperNull) {
@@ -435,6 +483,56 @@ TEST_F(GetLoginsWithAffiliationsRequestHandlerTest,
   expected_forms.push_back(
       CreateForm("https://a.slack.com/", u"test", u"test"));
   expected_forms.back()->match_type = PasswordForm::MatchType::kExact;
+
+  EXPECT_CALL(result_callback, Run(LoginsResultsOrErrorAre(&expected_forms)));
+  RunUntilIdle();
+}
+
+TEST_F(GetLoginsWithAffiliationsRequestHandlerTest,
+       TrimUsernameOnlyCredentials) {
+  PasswordForm username_only;
+  username_only.scheme = PasswordForm::Scheme::kUsernameOnly;
+  username_only.signon_realm = kAffiliatedAndroidApp;
+  username_only.username_value = u"test";
+  username_only.in_store = PasswordForm::Store::kProfileStore;
+
+  PasswordForm federated_credential;
+  federated_credential.in_store = PasswordForm::Store::kProfileStore;
+  federated_credential.scheme = PasswordForm::Scheme::kUsernameOnly;
+  federated_credential.signon_realm = kAffiliatedAndroidApp;
+  federated_credential.username_value = u"test";
+  federated_credential.federation_origin =
+      url::Origin::Create(GURL("https://google.com/"));
+  federated_credential.skip_zero_click = false;
+
+  backend()->AddLoginAsync(username_only, base::DoNothing());
+  backend()->AddLoginAsync(federated_credential, base::DoNothing());
+  RunUntilIdle();
+
+  EXPECT_CALL(affiliation_service(), GetPSLExtensions)
+      .WillOnce(RunOnceCallback<0>(std::vector<std::string>()));
+  std::vector<Facet> facets;
+  facets.emplace_back(FacetURI::FromPotentiallyInvalidSpec(kAffiliatedWebURL));
+  facets.emplace_back(
+      FacetURI::FromPotentiallyInvalidSpec(kAffiliatedAndroidApp));
+  EXPECT_CALL(affiliation_service(), GetAffiliationsAndBranding)
+      .WillOnce(RunOnceCallback<2>(facets, true));
+  GroupedFacets group;
+  group.facets.emplace_back(
+      FacetURI::FromPotentiallyInvalidSpec(kAffiliatedWebURL));
+  EXPECT_CALL(affiliation_service(), GetGroupingInfo)
+      .WillOnce(RunOnceCallback<1>(std::vector<GroupedFacets>{group}));
+
+  base::MockCallback<LoginsOrErrorReply> result_callback;
+  PasswordFormDigest observed_form = CreateFormDigest(kAffiliatedWebURL);
+  GetLoginsWithAffiliationsRequestHandler(
+      observed_form, backend(), &match_helper(), result_callback.Get());
+
+  std::vector<std::unique_ptr<PasswordForm>> expected_forms;
+  expected_forms.push_back(
+      std::make_unique<PasswordForm>(federated_credential));
+  expected_forms.back()->match_type = PasswordForm::MatchType::kAffiliated;
+  expected_forms.back()->skip_zero_click = true;
 
   EXPECT_CALL(result_callback, Run(LoginsResultsOrErrorAre(&expected_forms)));
   RunUntilIdle();

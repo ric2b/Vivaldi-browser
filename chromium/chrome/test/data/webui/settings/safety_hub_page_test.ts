@@ -6,20 +6,29 @@
 import 'chrome://settings/lazy_load.js';
 
 import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
-import {CardInfo, CardState, ContentSettingsTypes, SafetyHubBrowserProxyImpl, SafetyHubEvent, SettingsSafetyHubPageElement} from 'chrome://settings/lazy_load.js';
-import {PasswordManagerImpl, PasswordManagerPage, Router, routes} from 'chrome://settings/settings.js';
+import {CardInfo, CardState, ContentSettingsTypes, SafetyHubBrowserProxyImpl, SafetyHubEvent,SettingsSafetyHubPageElement} from 'chrome://settings/lazy_load.js';
+import {LifetimeBrowserProxyImpl, MetricsBrowserProxyImpl, PasswordManagerImpl, PasswordManagerPage, Router, routes} from 'chrome://settings/settings.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {isChildVisible} from 'chrome://webui-test/test_util.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
+import {TestLifetimeBrowserProxy} from './test_lifetime_browser_proxy.js';
 import {TestSafetyHubBrowserProxy} from './test_safety_hub_browser_proxy.js';
 import {TestPasswordManagerProxy} from './test_password_manager_proxy.js';
+import {TestMetricsBrowserProxy} from './test_metrics_browser_proxy.js';
 // clang-format on
 
 suite('SafetyHubPage', function() {
   let testElement: SettingsSafetyHubPageElement;
+  let lifetimeBrowserProxy: TestLifetimeBrowserProxy;
   let safetyHubBrowserProxy: TestSafetyHubBrowserProxy;
   let passwordManagerProxy: TestPasswordManagerProxy;
+  let metricsBrowserProxy: TestMetricsBrowserProxy;
+
+  const notificationPermissionMockData = [{
+    origin: 'www.example.com',
+    notificationInfoString: 'About 1 notifications a day',
+  }];
 
   const unusedSitePermissionMockData = [{
     origin: 'www.example.com',
@@ -51,9 +60,14 @@ suite('SafetyHubPage', function() {
     safetyHubBrowserProxy.setVersionCardData(versionCardMockData);
     safetyHubBrowserProxy.setSafeBrowsingCardData(safeBrowsingCardMockData);
     SafetyHubBrowserProxyImpl.setInstance(safetyHubBrowserProxy);
+    metricsBrowserProxy = new TestMetricsBrowserProxy();
+    MetricsBrowserProxyImpl.setInstance(metricsBrowserProxy);
 
     passwordManagerProxy = new TestPasswordManagerProxy();
     PasswordManagerImpl.setInstance(passwordManagerProxy);
+
+    lifetimeBrowserProxy = new TestLifetimeBrowserProxy();
+    LifetimeBrowserProxyImpl.setInstance(lifetimeBrowserProxy);
 
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
     testElement = document.createElement('settings-safety-hub-page');
@@ -61,31 +75,75 @@ suite('SafetyHubPage', function() {
     return flushTasks();
   });
 
-  test('No Recommendation State Visibility', async function() {
-    // The element is visible when there is nothing to review.
-    assertTrue(isChildVisible(testElement, '#emptyStateModule'));
+  function assertNoRecommendationState(shouldBeVisible: boolean) {
+    assertEquals(
+        shouldBeVisible, isChildVisible(testElement, '#emptyStateModule'));
+    assertEquals(
+        shouldBeVisible, isChildVisible(testElement, '#userEducationModule'));
+  }
 
-    // The element becomes hidden if the is any module that needs attention.
-    webUIListenerCallback(
-        SafetyHubEvent.UNUSED_PERMISSIONS_MAYBE_CHANGED,
-        unusedSitePermissionMockData);
-    await flushTasks();
-    assertFalse(isChildVisible(testElement, '#emptyStateModule'));
+  test(
+      'No Recommendation State Visibility With Unused Site Permissions Module',
+      async function() {
+        // The element is visible when there is nothing to review.
+        assertNoRecommendationState(true);
 
-    // Once hidden, it remains hidden as other modules are visible.
-    webUIListenerCallback(SafetyHubEvent.UNUSED_PERMISSIONS_MAYBE_CHANGED, []);
-    await flushTasks();
-    assertFalse(isChildVisible(testElement, '#emptyStateModule'));
-  });
+        // The element becomes hidden if the is any module that needs attention.
+        webUIListenerCallback(
+            SafetyHubEvent.UNUSED_PERMISSIONS_MAYBE_CHANGED,
+            unusedSitePermissionMockData);
+        await flushTasks();
+        assertNoRecommendationState(false);
+
+        // Once hidden, it remains hidden as other modules are visible.
+        webUIListenerCallback(
+            SafetyHubEvent.UNUSED_PERMISSIONS_MAYBE_CHANGED, []);
+        await flushTasks();
+        assertNoRecommendationState(false);
+      });
+
+  test(
+      'No Recommendation State Visibility With Notification Permissions Module',
+      async function() {
+        // The element is visible when there is nothing to review.
+        assertNoRecommendationState(true);
+
+        // The element becomes hidden if the is any module that needs attention.
+        webUIListenerCallback(
+            SafetyHubEvent.NOTIFICATION_PERMISSIONS_MAYBE_CHANGED,
+            notificationPermissionMockData);
+        await flushTasks();
+        assertNoRecommendationState(false);
+
+        // Once hidden, it remains hidden as other modules are visible.
+        webUIListenerCallback(
+            SafetyHubEvent.NOTIFICATION_PERMISSIONS_MAYBE_CHANGED, []);
+        await flushTasks();
+        assertNoRecommendationState(false);
+      });
+
+  test(
+      'No Recommendation State Visibility With Extensions Module',
+      async function() {
+        // The element is visible when there is nothing to review.
+        assertTrue(isChildVisible(testElement, '#emptyStateModule'));
+
+        // The element becomes hidden if the is any module that needs attention.
+        webUIListenerCallback(SafetyHubEvent.EXTENSIONS_CHANGED, 1);
+        await flushTasks();
+        assertFalse(isChildVisible(testElement, '#emptyStateModule'));
+
+        // Returns when extension module goes away.
+        webUIListenerCallback(SafetyHubEvent.EXTENSIONS_CHANGED, 0);
+        await flushTasks();
+        assertTrue(isChildVisible(testElement, '#emptyStateModule'));
+      });
 
   test('Unused Site Permissions Module Visibility', async function() {
     // The element is not visible when there is nothing to review.
-    safetyHubBrowserProxy.setUnusedSitePermissions([]);
-    testElement = document.createElement('settings-safety-hub-page');
-    document.body.appendChild(testElement);
-    await flushTasks();
-    assertFalse(
-        isChildVisible(testElement, 'settings-unused-site-permissions'));
+    const unusedSitePermissionsElementTag =
+        'settings-safety-hub-unused-site-permissions';
+    assertFalse(isChildVisible(testElement, unusedSitePermissionsElementTag));
 
     // The element becomes visible if the list of permissions is no longer
     // empty.
@@ -93,21 +151,63 @@ suite('SafetyHubPage', function() {
         SafetyHubEvent.UNUSED_PERMISSIONS_MAYBE_CHANGED,
         unusedSitePermissionMockData);
     await flushTasks();
-    assertTrue(isChildVisible(
-        testElement, 'settings-safety-hub-unused-site-permissions'));
+    assertTrue(isChildVisible(testElement, unusedSitePermissionsElementTag));
 
     // Once visible, it remains visible regardless of list length.
     webUIListenerCallback(SafetyHubEvent.UNUSED_PERMISSIONS_MAYBE_CHANGED, []);
     await flushTasks();
-    assertTrue(isChildVisible(
-        testElement, 'settings-safety-hub-unused-site-permissions'));
+    assertTrue(isChildVisible(testElement, unusedSitePermissionsElementTag));
 
     webUIListenerCallback(
         SafetyHubEvent.UNUSED_PERMISSIONS_MAYBE_CHANGED,
         unusedSitePermissionMockData);
     await flushTasks();
-    assertTrue(isChildVisible(
-        testElement, 'settings-safety-hub-unused-site-permissions'));
+    assertTrue(isChildVisible(testElement, unusedSitePermissionsElementTag));
+  });
+
+  test('Notification Permissions Module Visibility', async function() {
+    // The element is not visible when there is nothing to review.
+    const notificationPermissionsElementTag =
+        'settings-safety-hub-notification-permissions-module';
+    assertFalse(isChildVisible(testElement, notificationPermissionsElementTag));
+
+    // The element becomes visible if the list of permissions is no longer
+    // empty.
+    webUIListenerCallback(
+        SafetyHubEvent.NOTIFICATION_PERMISSIONS_MAYBE_CHANGED,
+        notificationPermissionMockData);
+    await flushTasks();
+    assertTrue(isChildVisible(testElement, notificationPermissionsElementTag));
+
+    // Once visible, it remains visible regardless of list length.
+    webUIListenerCallback(
+        SafetyHubEvent.NOTIFICATION_PERMISSIONS_MAYBE_CHANGED, []);
+    await flushTasks();
+    assertTrue(isChildVisible(testElement, notificationPermissionsElementTag));
+
+    webUIListenerCallback(
+        SafetyHubEvent.NOTIFICATION_PERMISSIONS_MAYBE_CHANGED,
+        notificationPermissionMockData);
+    await flushTasks();
+    assertTrue(isChildVisible(testElement, notificationPermissionsElementTag));
+  });
+
+  test('Extensions Module Visibility', async function() {
+    // The element is not visible when there is nothing to review.
+    assertFalse(
+        isChildVisible(testElement, 'settings-safety-hub-extensions-module'));
+
+    // The element becomes visible if the there are extensions to review.
+    webUIListenerCallback(SafetyHubEvent.EXTENSIONS_CHANGED, 2);
+    await flushTasks();
+    assertTrue(
+        isChildVisible(testElement, 'settings-safety-hub-extensions-module'));
+
+    // Once visible, it goes away if all extensions are handled.
+    webUIListenerCallback(SafetyHubEvent.EXTENSIONS_CHANGED, 0);
+    await flushTasks();
+    assertFalse(
+        isChildVisible(testElement, 'settings-safety-hub-extensions-module'));
   });
 
   test('Password Card', async function() {
@@ -115,11 +215,11 @@ suite('SafetyHubPage', function() {
 
     // Card header and subheader should be what the browser proxy provides.
     assertEquals(
-        testElement.$.passwords!.shadowRoot!.querySelector(
-                                                '#header')!.textContent!.trim(),
+        testElement.$.passwords.shadowRoot!.querySelector(
+                                               '#header')!.textContent!.trim(),
         passwordCardMockData.header);
     assertEquals(
-        testElement.$.passwords!.shadowRoot!.querySelector('#subheader')!
+        testElement.$.passwords.shadowRoot!.querySelector('#subheader')!
             .textContent!.trim(),
         passwordCardMockData.subheader);
   });
@@ -130,6 +230,28 @@ suite('SafetyHubPage', function() {
     // Ensure the Password Manager Check-up page is shown.
     const param = await passwordManagerProxy.whenCalled('showPasswordManager');
     assertEquals(PasswordManagerPage.CHECKUP, param);
+
+    // Ensure the card state on click metrics are recorded.
+    const result =
+        await metricsBrowserProxy.whenCalled('recordSafetyHubCardStateClicked');
+    assertEquals('Settings.SafetyHub.PasswordsCard.StatusOnClick', result[0]);
+    assertEquals(passwordCardMockData.state, result[1]);
+  });
+
+  test('Password Card Clicked via Enter', async function() {
+    testElement.$.passwords.dispatchEvent(
+        new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}));
+    // Ensure the Password Manager Check-up page is shown.
+    const param = await passwordManagerProxy.whenCalled('showPasswordManager');
+    assertEquals(PasswordManagerPage.CHECKUP, param);
+  });
+
+  test('Password Card Clicked via Space', async function() {
+    testElement.$.passwords.dispatchEvent(
+        new KeyboardEvent('keydown', {key: ' ', bubbles: true}));
+    // Ensure the Password Manager Check-up page is shown.
+    const param = await passwordManagerProxy.whenCalled('showPasswordManager');
+    assertEquals(PasswordManagerPage.CHECKUP, param);
   });
 
   test('Version Card', async function() {
@@ -137,18 +259,61 @@ suite('SafetyHubPage', function() {
 
     // Card header and subheader should be what the browser proxy provides.
     assertEquals(
-        testElement.$.version!.shadowRoot!.querySelector(
-                                              '#header')!.textContent!.trim(),
+        testElement.$.version.shadowRoot!.querySelector(
+                                             '#header')!.textContent!.trim(),
         versionCardMockData.header);
     assertEquals(
-        testElement.$.version!.shadowRoot!.querySelector('#subheader')!
-            .textContent!.trim(),
+        testElement.$.version.shadowRoot!.querySelector(
+                                             '#subheader')!.textContent!.trim(),
         versionCardMockData.subheader);
   });
 
-  test('Version Card Clicked', function() {
+  test('Version Card Clicked When No Update Waiting', async function() {
     testElement.$.version.click();
 
+    // Ensure the About page is shown.
+    assertEquals(routes.ABOUT, Router.getInstance().getCurrentRoute());
+
+    // Ensure the card state on click metrics are recorded.
+    const result =
+        await metricsBrowserProxy.whenCalled('recordSafetyHubCardStateClicked');
+    assertEquals('Settings.SafetyHub.VersionCard.StatusOnClick', result[0]);
+    assertEquals(versionCardMockData.state, result[1]);
+  });
+
+  test('Version Card Clicked When Update Waiting', async function() {
+    const versionCardMockData: CardInfo = {
+      header: 'Chrome is not up to date',
+      subheader: 'Relaunch to update',
+      state: CardState.WARNING,
+    };
+    safetyHubBrowserProxy.setVersionCardData(versionCardMockData);
+    testElement = document.createElement('settings-safety-hub-page');
+    document.body.appendChild(testElement);
+    await flushTasks();
+
+    testElement.$.version.click();
+
+    // Ensure the card state on click metrics are recorded.
+    const result =
+        await metricsBrowserProxy.whenCalled('recordSafetyHubCardStateClicked');
+    assertEquals('Settings.SafetyHub.VersionCard.StatusOnClick', result[0]);
+    assertEquals(versionCardMockData.state, result[1]);
+
+    // Ensure the browser is restarted.
+    return lifetimeBrowserProxy.whenCalled('relaunch');
+  });
+
+  test('Version Card Clicked via Enter', async function() {
+    testElement.$.passwords.dispatchEvent(
+        new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}));
+    // Ensure the About page is shown.
+    assertEquals(routes.ABOUT, Router.getInstance().getCurrentRoute());
+  });
+
+  test('Version Card Clicked via Space', async function() {
+    testElement.$.passwords.dispatchEvent(
+        new KeyboardEvent('keydown', {key: ' ', bubbles: true}));
     // Ensure the About page is shown.
     assertEquals(routes.ABOUT, Router.getInstance().getCurrentRoute());
   });
@@ -158,19 +323,45 @@ suite('SafetyHubPage', function() {
 
     // Card header and subheader should be what the browser proxy provides.
     assertEquals(
-        testElement.$.safeBrowsing!.shadowRoot!.querySelector('#header')!
+        testElement.$.safeBrowsing.shadowRoot!.querySelector('#header')!
             .textContent!.trim(),
         safeBrowsingCardMockData.header);
     assertEquals(
-        testElement.$.safeBrowsing!.shadowRoot!.querySelector('#subheader')!
+        testElement.$.safeBrowsing.shadowRoot!.querySelector('#subheader')!
             .textContent!.trim(),
         safeBrowsingCardMockData.subheader);
   });
 
-  test('Safe Browsing Card Clicked', function() {
+  test('Safe Browsing Card Clicked', async function() {
     testElement.$.safeBrowsing.click();
 
     // Ensure the Security Settings page is shown.
     assertEquals(routes.SECURITY, Router.getInstance().getCurrentRoute());
+
+    // Ensure the card state on click metrics are recorded.
+    const result =
+        await metricsBrowserProxy.whenCalled('recordSafetyHubCardStateClicked');
+    assertEquals(
+        'Settings.SafetyHub.SafeBrowsingCard.StatusOnClick', result[0]);
+    assertEquals(safeBrowsingCardMockData.state, result[1]);
+  });
+
+  test('Safe Browsing Card Clicked via Enter', async function() {
+    testElement.$.passwords.dispatchEvent(
+        new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}));
+    // Ensure the Security Settings page is shown.
+    assertEquals(routes.SECURITY, Router.getInstance().getCurrentRoute());
+  });
+
+  test('Safe Browsing Card Clicked via Space', async function() {
+    testElement.$.passwords.dispatchEvent(
+        new KeyboardEvent('keydown', {key: ' ', bubbles: true}));
+    // Ensure the Security Settings page is shown.
+    assertEquals(routes.SECURITY, Router.getInstance().getCurrentRoute());
+  });
+
+  test('Dismiss all menu notifications on page load', async function() {
+    Router.getInstance().navigateTo(routes.SAFETY_HUB);
+    await safetyHubBrowserProxy.whenCalled('dismissActiveMenuNotification');
   });
 });

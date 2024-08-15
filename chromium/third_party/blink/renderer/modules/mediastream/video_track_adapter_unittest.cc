@@ -8,6 +8,7 @@
 
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/numerics/ranges.h"
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
@@ -280,7 +281,7 @@ class VideoTrackAdapterFixtureTest : public ::testing::Test {
             base::BindRepeating(
                 &VideoTrackAdapterFixtureTest::OnEncodedVideoFrameDelivered,
                 base::Unretained(this)),
-            /*crop_version_callback=*/base::DoNothing(),
+            /*sub_capture_target_version_callback=*/base::DoNothing(),
             /*settings_callback=*/base::DoNothing(),
             /*format_callback=*/base::DoNothing(), adapter_settings));
   }
@@ -302,7 +303,6 @@ class VideoTrackAdapterFixtureTest : public ::testing::Test {
           FROM_HERE,
           base::BindOnce(&VideoTrackAdapter::DeliverFrameOnVideoTaskRunner,
                          adapter_, frame,
-                         std::vector<scoped_refptr<media::VideoFrame>>(),
                          estimated_capture_time));
     };
 
@@ -318,17 +318,16 @@ class VideoTrackAdapterFixtureTest : public ::testing::Test {
 
   void OnFrameDelivered(
       scoped_refptr<media::VideoFrame> frame,
-      std::vector<scoped_refptr<media::VideoFrame>> scaled_frames,
       base::TimeTicks estimated_capture_time) {
     if (frame_validation_callback_) {
-      frame_validation_callback_.Run(frame, {}, estimated_capture_time);
+      frame_validation_callback_.Run(frame, estimated_capture_time);
       frame_processed_.Signal();
     }
   }
 
-  void OnFrameDropped() {
+  void OnFrameDropped(media::VideoCaptureFrameDropReason reason) {
     if (frame_dropped_callback_) {
-      frame_dropped_callback_.Run();
+      frame_dropped_callback_.Run(reason);
       frame_processed_.Signal();
     }
   }
@@ -359,19 +358,19 @@ class VideoTrackAdapterFixtureTest : public ::testing::Test {
 
     SetFrameValidationCallback(base::BindLambdaForTesting(
         [&](scoped_refptr<media::VideoFrame> frame,
-            std::vector<scoped_refptr<media::VideoFrame>> scaled_frames,
             base::TimeTicks estimated_capture_time) {
           num_delivered++;
           if (num_delivered + num_dropped == num_frames) {
             did_process_all_frames.Signal();
           }
         }));
-    SetFrameDroppedCallback(base::BindLambdaForTesting([&]() {
-      num_dropped++;
-      if (num_delivered + num_dropped == num_frames) {
-        did_process_all_frames.Signal();
-      }
-    }));
+    SetFrameDroppedCallback(
+        base::BindLambdaForTesting([&](media::VideoCaptureFrameDropReason) {
+          num_dropped++;
+          if (num_delivered + num_dropped == num_frames) {
+            did_process_all_frames.Signal();
+          }
+        }));
 
     for (int i = 0; i < num_frames; ++i) {
       auto frame = CreateTestFrame(
@@ -419,7 +418,6 @@ class VideoTrackAdapterFixtureTest : public ::testing::Test {
     ConfigureTrack(cropped_settings);
     auto check_settings =
         [&](scoped_refptr<media::VideoFrame> frame,
-            std::vector<scoped_refptr<media::VideoFrame>> scaled_frames,
             base::TimeTicks estimated_capture_time) {
           EXPECT_FALSE(frame->visible_rect().x() & 1);
           EXPECT_FALSE(frame->visible_rect().y() & 1);
@@ -468,7 +466,6 @@ TEST_F(VideoTrackAdapterFixtureTest, DeliverFrame_GpuMemoryBuffer) {
   ConfigureTrack(settings_nonscaled);
   auto check_nonscaled =
       [&](scoped_refptr<media::VideoFrame> frame,
-          std::vector<scoped_refptr<media::VideoFrame>> scaled_frames,
           base::TimeTicks estimated_capture_time) {
         // We should get the original frame as-is here.
         EXPECT_EQ(frame->storage_type(),
@@ -487,7 +484,6 @@ TEST_F(VideoTrackAdapterFixtureTest, DeliverFrame_GpuMemoryBuffer) {
   ConfigureTrack(settings_scaled);
   auto check_scaled =
       [&](scoped_refptr<media::VideoFrame> frame,
-          std::vector<scoped_refptr<media::VideoFrame>> scaled_frames,
           base::TimeTicks estimated_capture_time) {
         // The original frame should be wrapped in a new frame, with
         // |kDesiredSize| exposed as natural size of the wrapped frame.
@@ -590,7 +586,6 @@ TEST_F(VideoTrackAdapterFixtureTest,
   // The delivered frame for the first track should have a portrait orientation.
   auto check_portrait =
       [&](scoped_refptr<media::VideoFrame> frame,
-          std::vector<scoped_refptr<media::VideoFrame>> scaled_frames,
           base::TimeTicks estimated_capture_time) {
         // We should get the original frame as-is here.
         EXPECT_EQ(frame->storage_type(),
@@ -626,7 +621,7 @@ TEST_F(VideoTrackAdapterFixtureTest,
           /*frame_callback=*/base::DoNothing(),
           /*notify_dropped_frame_callback=*/base::DoNothing(),
           /*encoded_frame_callback=*/base::DoNothing(),
-          /*crop_version_callback=*/base::DoNothing(),
+          /*sub_capture_target_version_callback=*/base::DoNothing(),
           /*settings_callback=*/base::BindLambdaForTesting(check_dimensions),
           /*track_callback=*/base::DoNothing(), adapter_settings));
   settings_callback_run_.Wait();
@@ -788,7 +783,7 @@ class VideoTrackAdapterEncodedTest : public ::testing::Test {
           base::BindRepeating(
               &VideoTrackAdapterEncodedTest::OnEncodedVideoFrameDelivered,
               base::Unretained(this)),
-          /*crop_version_callback=*/base::DoNothing(),
+          /*sub_capture_target_version_callback=*/base::DoNothing(),
           /*settings_callback=*/base::DoNothing(),
           /*track_callback=*/base::DoNothing(), VideoTrackAdapterSettings());
     });
@@ -807,9 +802,8 @@ class VideoTrackAdapterEncodedTest : public ::testing::Test {
     run_loop.Run();
   }
 
-  MOCK_METHOD3(OnFrameDelivered,
+  MOCK_METHOD2(OnFrameDelivered,
                void(scoped_refptr<media::VideoFrame> frame,
-                    std::vector<scoped_refptr<media::VideoFrame>> scaled_frames,
                     base::TimeTicks estimated_capture_time));
   MOCK_METHOD2(OnEncodedVideoFrameDelivered,
                void(scoped_refptr<EncodedVideoFrame>,
@@ -820,7 +814,7 @@ class VideoTrackAdapterEncodedTest : public ::testing::Test {
       platform_support_;
   base::Thread render_thread_;
   WebMediaStreamSource web_source_;
-  MockMediaStreamVideoSource* mock_source_;
+  raw_ptr<MockMediaStreamVideoSource, DanglingUntriaged> mock_source_;
   scoped_refptr<VideoTrackAdapter> adapter_;
 };
 

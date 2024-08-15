@@ -284,13 +284,16 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   __weak __typeof__(self) weakSelf = self;
   [self.delegate importPasskey:fileSelected
-      completionHandler:^(BOOL success) {
+      completionHandler:^(NSString* errorMessage) {
     dispatch_async(dispatch_get_main_queue(), ^{
-      if (!success) {
-        [weakSelf showPasswordWrongMessage];
+      if ([errorMessage length]) {
+        [weakSelf showErrorCellWithMessage:errorMessage
+                                   section:SectionIdentifierEncryptionPassword
+                                  itemType:ItemTypeError];
       }
     });
   }];
+  [fileSelected stopAccessingSecurityScopedResource];
 }
 
 #pragma mark - Private Methods

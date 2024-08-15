@@ -62,9 +62,13 @@ class LayoutCounter : public LayoutText {
     NOT_DESTROYED();
     return counter_->Identifier();
   }
+  void SetCounterNode(CounterNode* counter_node) {
+    NOT_DESTROYED();
+    counter_node_ = counter_node;
+  }
   CounterNode* GetCounterNode() const {
     NOT_DESTROYED();
-    return counter_node_;
+    return counter_node_.Get();
   }
 
   // These functions are static so that any LayoutObject can call them.

@@ -111,6 +111,9 @@
 // Returns the number of open browsers.
 + (NSUInteger)browserCount [[nodiscard]];
 
+// Returns the number of the realized web states from the existing web states.
++ (NSInteger)realizedWebStatesCount [[nodiscard]];
+
 // Simulates a backgrounding.
 // If not succeed returns an NSError indicating  why the
 // operation failed, otherwise nil.
@@ -394,9 +397,6 @@
                      originator_client_item_id:
                          (NSString*)originator_client_item_id;
 
-// Injects a typed URL to the sync FakeServer.
-+ (void)addFakeSyncServerTypedURL:(NSString*)URL;
-
 // Injects a HISTORY visit to the sync FakeServer.
 + (void)addFakeSyncServerHistoryVisit:(NSURL*)URL;
 
@@ -501,17 +501,11 @@
 // Returns YES if UKM feature is enabled.
 + (BOOL)isUKMEnabled [[nodiscard]];
 
-// Returns YES if kSynthesizedRestoreSessionEnabled feature is enabled.
-+ (BOOL)isSynthesizedRestoreSessionEnabled [[nodiscard]];
-
 // Returns YES if kTestFeature is enabled.
 + (BOOL)isTestFeatureEnabled;
 
 // Returns YES if DemographicMetricsReporting feature is enabled.
 + (BOOL)isDemographicMetricsReportingEnabled [[nodiscard]];
-
-// Returns YES if the SyncEnableHistoryDataType feature is enabled.
-+ (BOOL)isSyncHistoryDataTypeEnabled [[nodiscard]];
 
 // Returns YES if the ReplaceSyncPromosWithSignInPromos feature is enabled.
 + (BOOL)isReplaceSyncWithSigninEnabled [[nodiscard]];
@@ -570,10 +564,13 @@
 #pragma mark - Default Utilities (EG2)
 
 // Stores a value for the provided key in NSUserDefaults.
-+ (void)setUserDefaultObject:(id)value forKey:(NSString*)defaultName;
++ (void)setUserDefaultsObject:(id)value forKey:(NSString*)defaultName;
 
 // Removes the object for the provided `key` in NSUserDefaults.
-+ (void)removeUserDefaultObjectForKey:(NSString*)key;
++ (void)removeUserDefaultsObjectForKey:(NSString*)key;
+
+// Returns the value for provided key from NSUserDefaults.
++ (id)userDefaultsObjectForKey:(NSString*)key;
 
 #pragma mark - Pref Utilities (EG2)
 
@@ -594,6 +591,10 @@
 // Sets the string value for the local state pref with `prefName`. Local State
 // contains the preferences that are shared between all browser states.
 + (void)setStringValue:(NSString*)value forLocalStatePref:(NSString*)prefName;
+
+// Sets the bool value for the local state pref with `prefName`. Local State
+// contains the preferences that are shared between all browser states.
++ (void)setBoolValue:(BOOL)value forLocalStatePref:(NSString*)prefName;
 
 // Gets the value of a user pref in the original browser state. Returns a
 // base::Value encoded as a JSON string. If the pref was not registered,

@@ -36,6 +36,8 @@ using vivaldi::IsVivaldiRunning;
   NSArray<NSLayoutConstraint*>* _compactConstraints;
   NSArray<NSLayoutConstraint*>* _floatingConstraints;
   NSLayoutConstraint* _largeNewTabButtonBottomAnchor;
+  TabGridNewTabButton* _smallNewTabButton;
+  TabGridNewTabButton* _largeNewTabButton;
   UIBarButtonItem* _doneButton;
   UIBarButtonItem* _closeAllOrUndoButton;
   UIBarButtonItem* _editButton;

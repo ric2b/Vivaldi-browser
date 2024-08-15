@@ -18,7 +18,6 @@
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/geo/autofill_country.h"
 #include "components/autofill/core/browser/webdata/autofill_change.h"
-#include "components/autofill/core/browser/webdata/autofill_entry.h"
 #include "components/autofill/core/browser/webdata/autofill_table.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/search_engines/keyword_table.h"
@@ -108,7 +107,7 @@ class WebDatabaseMigrationTest : public testing::Test {
   // Returns true if the file exists and is read successfully, false otherwise.
   bool GetWebDatabaseData(const base::FilePath& file, std::string* contents) {
     base::FilePath source_path;
-    base::PathService::Get(base::DIR_SOURCE_ROOT, &source_path);
+    base::PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, &source_path);
     source_path = source_path.AppendASCII("components");
     source_path = source_path.AppendASCII("test");
     source_path = source_path.AppendASCII("data");
@@ -140,7 +139,7 @@ class WebDatabaseMigrationTest : public testing::Test {
   base::ScopedTempDir temp_dir_;
 };
 
-const int WebDatabaseMigrationTest::kCurrentTestedVersionNumber = 117;
+const int WebDatabaseMigrationTest::kCurrentTestedVersionNumber = 120;
 
 void WebDatabaseMigrationTest::LoadDatabase(
     const base::FilePath::StringType& file) {
@@ -191,7 +190,7 @@ TEST_F(WebDatabaseMigrationTest, MigrateEmptyToCurrent) {
     EXPECT_TRUE(connection.DoesTableExist("autofill"));
     EXPECT_TRUE(connection.DoesTableExist("local_addresses"));
     EXPECT_TRUE(connection.DoesTableExist("credit_cards"));
-    EXPECT_TRUE(connection.DoesTableExist("ibans"));
+    EXPECT_TRUE(connection.DoesTableExist("local_ibans"));
     EXPECT_TRUE(connection.DoesTableExist("keywords"));
     EXPECT_TRUE(connection.DoesTableExist("meta"));
     EXPECT_TRUE(connection.DoesTableExist("token_service"));
@@ -751,7 +750,7 @@ TEST_F(WebDatabaseMigrationTest, MigrateVersion103ToCurrent) {
   }
 }
 
-// Tests addition of new table 'ibans'.
+// Tests addition of new table 'local_ibans'.
 TEST_F(WebDatabaseMigrationTest, MigrateVersion104ToCurrent) {
   ASSERT_NO_FATAL_FAILURE(LoadDatabase(FILE_PATH_LITERAL("version_104.sql")));
 
@@ -782,8 +781,8 @@ TEST_F(WebDatabaseMigrationTest, MigrateVersion104ToCurrent) {
     // Check version.
     EXPECT_EQ(kCurrentTestedVersionNumber, VersionFromConnection(&connection));
 
-    // The ibans table should exist.
-    EXPECT_TRUE(connection.DoesTableExist("ibans"));
+    // The local_ibans table should exist.
+    EXPECT_TRUE(connection.DoesTableExist("local_ibans"));
   }
 }
 
@@ -822,10 +821,10 @@ TEST_F(WebDatabaseMigrationTest, MigrateVersion105ToCurrent) {
     // Check version.
     EXPECT_EQ(kCurrentTestedVersionNumber, VersionFromConnection(&connection));
 
-    // The ibans table should exist with guid as primary key.
-    EXPECT_TRUE(connection.DoesTableExist("ibans"));
+    // The local_ibans table should exist with guid as primary key.
+    EXPECT_TRUE(connection.DoesTableExist("local_ibans"));
     ASSERT_NE(connection.GetSchema().find(
-                  "CREATE TABLE ibans (guid VARCHAR PRIMARY KEY"),
+                  "CREATE TABLE \"local_ibans\" (guid VARCHAR PRIMARY KEY"),
               std::string::npos);
   }
 }
@@ -1086,7 +1085,7 @@ TEST_F(WebDatabaseMigrationTest, MigrateVersion113ToCurrent) {
   }
 }
 
-// Tests that the IBAN value column is encrypted in ibans table.
+// Tests that the IBAN value column is encrypted in local_ibans table.
 TEST_F(WebDatabaseMigrationTest, MigrateVersion114ToCurrent) {
   ASSERT_NO_FATAL_FAILURE(LoadDatabase(FILE_PATH_LITERAL("version_114.sql")));
   {
@@ -1104,8 +1103,8 @@ TEST_F(WebDatabaseMigrationTest, MigrateVersion114ToCurrent) {
     ASSERT_TRUE(sql::MetaTable::DoesTableExist(&connection));
 
     EXPECT_EQ(kCurrentTestedVersionNumber, VersionFromConnection(&connection));
-    EXPECT_TRUE(connection.DoesColumnExist("ibans", "value_encrypted"));
-    EXPECT_FALSE(connection.DoesColumnExist("ibans", "value"));
+    EXPECT_TRUE(connection.DoesColumnExist("local_ibans", "value_encrypted"));
+    EXPECT_FALSE(connection.DoesColumnExist("local_ibans", "value"));
   }
 }
 
@@ -1168,5 +1167,101 @@ TEST_F(WebDatabaseMigrationTest, MigrateVersion116ToCurrent) {
         connection.DoesColumnExist("contact_info_type_tokens", "observations"));
     EXPECT_TRUE(connection.DoesColumnExist("local_addresses_type_tokens",
                                            "observations"));
+  }
+}
+
+TEST_F(WebDatabaseMigrationTest, MigrateVersion117ToCurrent) {
+  ASSERT_NO_FATAL_FAILURE(LoadDatabase(FILE_PATH_LITERAL("version_117.sql")));
+  {
+    sql::Database connection;
+    ASSERT_TRUE(connection.Open(GetDatabasePath()));
+    ASSERT_TRUE(sql::MetaTable::DoesTableExist(&connection));
+
+    EXPECT_EQ(117, VersionFromConnection(&connection));
+    EXPECT_TRUE(connection.DoesTableExist("payments_upi_vpa"));
+  }
+  DoMigration();
+  {
+    sql::Database connection;
+    ASSERT_TRUE(connection.Open(GetDatabasePath()));
+    ASSERT_TRUE(sql::MetaTable::DoesTableExist(&connection));
+
+    EXPECT_EQ(kCurrentTestedVersionNumber, VersionFromConnection(&connection));
+    EXPECT_FALSE(connection.DoesTableExist("payments_upi_vpa"));
+  }
+}
+
+// Tests addition of new tables 'masked_ibans' and `masked_iban_metadata`, also
+// test that `ibans` has been renamed to `local_ibans`.
+TEST_F(WebDatabaseMigrationTest, MigrateVersion118ToCurrent) {
+  ASSERT_NO_FATAL_FAILURE(LoadDatabase(FILE_PATH_LITERAL("version_118.sql")));
+
+  // Verify pre-conditions.
+  {
+    sql::Database connection;
+    ASSERT_TRUE(connection.Open(GetDatabasePath()));
+    ASSERT_TRUE(sql::MetaTable::DoesTableExist(&connection));
+    EXPECT_EQ(118, VersionFromConnection(&connection));
+
+    EXPECT_FALSE(connection.DoesTableExist("masked_ibans"));
+    EXPECT_FALSE(connection.DoesTableExist("masked_ibans_metadata"));
+    EXPECT_TRUE(connection.DoesTableExist("ibans"));
+    EXPECT_FALSE(connection.DoesTableExist("local_ibans"));
+  }
+
+  DoMigration();
+
+  // Verify post-conditions.
+  {
+    sql::Database connection;
+    ASSERT_TRUE(connection.Open(GetDatabasePath()));
+    ASSERT_TRUE(sql::MetaTable::DoesTableExist(&connection));
+
+    // Check version.
+    EXPECT_EQ(kCurrentTestedVersionNumber, VersionFromConnection(&connection));
+
+    // The `masked_ibans` and `masked_iban_metadata` tables should exist.
+    EXPECT_TRUE(connection.DoesTableExist("masked_ibans"));
+    EXPECT_TRUE(connection.DoesTableExist("masked_ibans_metadata"));
+    // The `ibans` table should be renamed to `local_ibans`.
+    EXPECT_TRUE(connection.DoesTableExist("local_ibans"));
+    EXPECT_FALSE(connection.DoesTableExist("ibans"));
+  }
+}
+
+TEST_F(WebDatabaseMigrationTest, MigrationVersion119ToCurrent) {
+  ASSERT_NO_FATAL_FAILURE(LoadDatabase(FILE_PATH_LITERAL("version_119.sql")));
+  // Verify pre-conditions.
+  {
+    sql::Database connection;
+    ASSERT_TRUE(connection.Open(GetDatabasePath()));
+    ASSERT_TRUE(sql::MetaTable::DoesTableExist(&connection));
+
+    // Check version.
+    EXPECT_EQ(119, VersionFromConnection(&connection));
+
+    EXPECT_FALSE(connection.DoesTableExist("bank_accounts"));
+    EXPECT_FALSE(connection.DoesTableExist("payment_instruments"));
+    EXPECT_FALSE(connection.DoesTableExist("payment_instruments_metadata"));
+    EXPECT_FALSE(
+        connection.DoesTableExist("payment_instrument_supported_rails"));
+  }
+
+  DoMigration();
+
+  // Verify post-conditions.
+  {
+    sql::Database connection;
+    ASSERT_TRUE(connection.Open(GetDatabasePath()));
+    ASSERT_TRUE(sql::MetaTable::DoesTableExist(&connection));
+
+    // Check version.
+    EXPECT_EQ(kCurrentTestedVersionNumber, VersionFromConnection(&connection));
+
+    EXPECT_TRUE(connection.DoesTableExist("bank_accounts"));
+    EXPECT_TRUE(connection.DoesTableExist("payment_instruments"));
+    EXPECT_TRUE(connection.DoesTableExist("payment_instruments_metadata"));
+    EXPECT_TRUE(
+        connection.DoesTableExist("payment_instrument_supported_rails"));
   }
 }

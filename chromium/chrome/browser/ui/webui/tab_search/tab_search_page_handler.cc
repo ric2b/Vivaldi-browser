@@ -38,7 +38,11 @@
 #include "chrome/browser/ui/webui/metrics_reporter/metrics_reporter.h"
 #include "chrome/browser/ui/webui/tab_search/tab_search_prefs.h"
 #include "chrome/browser/ui/webui/util/image_util.h"
+#include "chrome/browser/user_education/user_education_service.h"
+#include "chrome/browser/user_education/user_education_service_factory.h"
 #include "chrome/common/webui_url_constants.h"
+#include "components/user_education/common/tutorial_identifier.h"
+#include "components/user_education/common/tutorial_service.h"
 #include "ui/base/l10n/time_format.h"
 #include "ui/color/color_provider.h"
 
@@ -157,6 +161,22 @@ void TabSearchPageHandler::CloseTab(int32_t tab_id) {
   // Do not add code past this point.
 }
 
+void TabSearchPageHandler::AcceptTabOrganization(
+    int32_t session_id,
+    int32_t organization_id,
+    const std::string& name,
+    std::vector<tab_search::mojom::TabPtr> tabs) {
+  // TODO(dpenning): Implement this
+  Browser* browser = chrome::FindLastActive();
+  browser->profile()->GetPrefs()->SetBoolean(
+      tab_search_prefs::kTabOrganizationShowFRE, false);
+}
+
+void TabSearchPageHandler::RejectTabOrganization(int32_t session_id,
+                                                 int32_t organization_id) {
+  // TODO(dpenning): Implement this
+}
+
 void TabSearchPageHandler::GetProfileData(GetProfileDataCallback callback) {
   TRACE_EVENT0("browser", "TabSearchPageHandler:GetProfileTabs");
   auto profile_tabs = CreateProfileData();
@@ -181,6 +201,13 @@ void TabSearchPageHandler::GetProfileData(GetProfileDataCallback callback) {
   }
 
   std::move(callback).Run(std::move(profile_tabs));
+}
+
+void TabSearchPageHandler::GetTabOrganizationSession(
+    GetTabOrganizationSessionCallback callback) {
+  auto session = tab_search::mojom::TabOrganizationSession::New();
+  // TODO(dpenning): Fill out session
+  std::move(callback).Run(std::move(session));
 }
 
 absl::optional<TabSearchPageHandler::TabDetails>
@@ -242,6 +269,10 @@ void TabSearchPageHandler::OpenRecentlyClosedEntry(int32_t session_id) {
       WindowOpenDisposition::NEW_FOREGROUND_TAB);
 }
 
+void TabSearchPageHandler::RequestTabOrganization() {
+  // TODO(dpenning): Implement this
+}
+
 void TabSearchPageHandler::SaveRecentlyClosedExpandedPref(bool expanded) {
   Profile::FromWebUI(web_ui_)->GetPrefs()->SetBoolean(
       tab_search_prefs::kTabSearchRecentlyClosedSectionExpanded, expanded);
@@ -250,6 +281,33 @@ void TabSearchPageHandler::SaveRecentlyClosedExpandedPref(bool expanded) {
       "Tabs.TabSearch.RecentlyClosedSectionToggleAction",
       expanded ? TabSearchRecentlyClosedToggleAction::kExpand
                : TabSearchRecentlyClosedToggleAction::kCollapse);
+}
+
+void TabSearchPageHandler::SetTabIndex(int32_t index) {
+  Profile::FromWebUI(web_ui_)->GetPrefs()->SetInteger(
+      tab_search_prefs::kTabSearchTabIndex, index);
+}
+
+void TabSearchPageHandler::StartTabGroupTutorial() {
+  // Close the tab search bubble if showing.
+  auto embedder = webui_controller_->embedder();
+  if (embedder) {
+    embedder->CloseUI();
+  }
+
+  const Browser* const browser = chrome::FindLastActive();
+  auto* const user_education_service =
+      UserEducationServiceFactory::GetForBrowserContext(browser->profile());
+  user_education::TutorialService* const tutorial_service =
+      user_education_service ? &user_education_service->tutorial_service()
+                             : nullptr;
+  CHECK(tutorial_service);
+
+  const ui::ElementContext context = browser->window()->GetElementContext();
+  CHECK(context);
+
+  user_education::TutorialIdentifier tutorial_id = kTabGroupTutorialId;
+  tutorial_service->StartTutorial(tutorial_id, context);
 }
 
 void TabSearchPageHandler::ShowUI() {
@@ -598,7 +656,7 @@ void TabSearchPageHandler::TabChangedAt(content::WebContents* contents,
   // out the changes we are not interested in.
   if (change_type != TabChangeType::kAll)
     return;
-  Browser* browser = chrome::FindBrowserWithWebContents(contents);
+  Browser* browser = chrome::FindBrowserWithTab(contents);
   if (!browser)
     return;
   Browser* active_browser = chrome::FindLastActive();
@@ -616,6 +674,13 @@ void TabSearchPageHandler::TabChangedAt(content::WebContents* contents,
   tab_update_info->in_active_window = (browser == active_browser);
   tab_update_info->tab = GetTab(browser->tab_strip_model(), contents, index);
   page_->TabUpdated(std::move(tab_update_info));
+}
+
+void TabSearchPageHandler::OnTabOrganizationSessionChanged() {
+  auto session = tab_search::mojom::TabOrganizationSession::New();
+  // TODO(dpenning): Fill out session
+  session->state = tab_search::mojom::TabOrganizationState::kNotStarted;
+  page_->TabOrganizationSessionUpdated(std::move(session));
 }
 
 void TabSearchPageHandler::ScheduleDebounce() {

@@ -45,20 +45,21 @@
 #include "third_party/blink/renderer/core/html/html_marquee_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/layout/box_layout_extra_input.h"
+#include "third_party/blink/renderer/core/layout/flex/layout_flexible_box.h"
 #include "third_party/blink/renderer/core/layout/hit_test_location.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/layout_inline.h"
 #include "third_party/blink/renderer/core/layout/layout_object_inlines.h"
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
-#include "third_party/blink/renderer/core/layout/ng/flex/layout_ng_flexible_box.h"
+#include "third_party/blink/renderer/core/layout/mathml/layout_mathml_block.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_block_flow.h"
 #include "third_party/blink/renderer/core/layout/ng/legacy_layout_tree_walking.h"
-#include "third_party/blink/renderer/core/layout/ng/mathml/layout_ng_mathml_block.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_disable_side_effects_scope.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
-#include "third_party/blink/renderer/core/layout/ng/svg/layout_ng_svg_text.h"
+#include "third_party/blink/renderer/core/layout/svg/layout_svg_text.h"
 #include "third_party/blink/renderer/core/layout/text_autosizer.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/scrolling/root_scroller_controller.h"
@@ -90,6 +91,11 @@ LayoutBlock::LayoutBlock(ContainerNode* node)
 void LayoutBlock::Trace(Visitor* visitor) const {
   visitor->Trace(children_);
   LayoutBox::Trace(visitor);
+}
+
+bool LayoutBlock::IsLayoutNGObject() const {
+  NOT_DESTROYED();
+  return true;
 }
 
 void LayoutBlock::RemoveFromGlobalMaps() {
@@ -180,7 +186,7 @@ void LayoutBlock::StyleDidChange(StyleDifference diff,
           old_style &&
           (IsStackingContext(*old_style) != IsStackingContext(new_style));
       for (LayoutBox* box : *View()->SvgTextDescendantsMap().at(this)) {
-        To<LayoutNGSVGText>(box)->SetNeedsTextMetricsUpdate();
+        To<LayoutSVGText>(box)->SetNeedsTextMetricsUpdate();
         if (GetNode() == GetDocument().documentElement() ||
             stacking_context_changed) {
           box->SetNeedsLayout(layout_invalidation_reason::kStyleChange);
@@ -218,7 +224,7 @@ void LayoutBlock::AddChildBeforeDescendant(LayoutObject* new_child,
     if (new_child->IsInline() ||
         (new_child->IsFloatingOrOutOfFlowPositioned() &&
          (StyleRef().IsDeprecatedFlexboxUsingFlexLayout() ||
-          (!IsFlexibleBoxIncludingNG() && !IsLayoutNGGrid()))) ||
+          (!IsFlexibleBox() && !IsLayoutGrid()))) ||
         before_descendant->Parent()->SlowFirstChild() != before_descendant) {
       before_descendant_container->AddChild(new_child, before_descendant);
     } else {
@@ -262,7 +268,7 @@ void LayoutBlock::AddChild(LayoutObject* new_child,
   if (new_child->IsInline() ||
       (new_child->IsFloatingOrOutOfFlowPositioned() &&
        (StyleRef().IsDeprecatedFlexboxUsingFlexLayout() ||
-        (!IsFlexibleBoxIncludingNG() && !IsLayoutNGGrid())))) {
+        (!IsFlexibleBox() && !IsLayoutGrid())))) {
     // If we're inserting an inline child but all of our children are blocks,
     // then we have to make sure it is put into an anomyous block box. We try to
     // use an existing anonymous box if possible, otherwise a new one is created
@@ -311,52 +317,33 @@ void LayoutBlock::RemoveLeftoverAnonymousBlock(LayoutBlock* child) {
   child->Destroy();
 }
 
-void LayoutBlock::AddVisualOverflowFromChildren() {
-  NOT_DESTROYED();
-  // It is an error to call this function on a LayoutBlock that it itself inside
-  // a display-locked subtree.
-  DCHECK(!DisplayLockUtilities::LockedAncestorPreventingPrePaint(*this));
-  if (ChildPrePaintBlockedByDisplayLock())
-    return;
-
-  DCHECK(!NeedsLayout());
-
-  if (ChildrenInline())
-    To<LayoutBlockFlow>(this)->AddVisualOverflowFromInlineChildren();
-  else
-    AddVisualOverflowFromBlockChildren();
-}
-
-void LayoutBlock::ComputeVisualOverflow() {
-  NOT_DESTROYED();
-  DCHECK(!SelfNeedsFullLayout());
-
-  LayoutRect previous_visual_overflow_rect = VisualOverflowRect();
-  ClearVisualOverflow();
-  AddVisualOverflowFromChildren();
-  AddVisualEffectOverflow();
-
-  if (VisualOverflowRect() != previous_visual_overflow_rect) {
-    InvalidateIntersectionObserverCachedRects();
-    SetShouldCheckForPaintInvalidation();
-    GetFrameView()->SetIntersectionObservationState(LocalFrameView::kDesired);
-  }
-}
-
-void LayoutBlock::AddVisualOverflowFromBlockChildren() {
-  NOT_DESTROYED();
-  for (LayoutBox* child = FirstChildBox(); child;
-       child = child->NextSiblingBox()) {
-    if (child->IsOutOfFlowPositioned() || child->IsColumnSpanAll()) {
-      continue;
-    }
-
-    AddVisualOverflowFromChild(*child);
-  }
-}
-
 void LayoutBlock::Paint(const PaintInfo& paint_info) const {
   NOT_DESTROYED();
+
+  // When |this| is NG block fragmented, the painter should traverse fragments
+  // instead of |LayoutObject|, because this function cannot handle block
+  // fragmented objects. We can come here only when |this| cannot traverse
+  // fragments, or the parent is legacy.
+  DCHECK(IsMonolithic() || !CanTraversePhysicalFragments() ||
+         !Parent()->CanTraversePhysicalFragments());
+  // We may get here in multiple-fragment cases if the object is repeated
+  // (inside table headers and footers, for instance).
+  DCHECK(PhysicalFragmentCount() <= 1u ||
+         GetPhysicalFragment(0)->BreakToken()->IsRepeated());
+
+  // Avoid painting dirty objects because descendants maybe already destroyed.
+  if (UNLIKELY(NeedsLayout() && !ChildLayoutBlockedByDisplayLock())) {
+    NOTREACHED();
+    return;
+  }
+
+  if (PhysicalFragmentCount()) {
+    const NGPhysicalBoxFragment* fragment = GetPhysicalFragment(0);
+    DCHECK(fragment);
+    NGBoxFragmentPainter(*fragment).Paint(paint_info);
+    return;
+  }
+
   NOTREACHED_NORETURN();
 }
 
@@ -439,7 +426,7 @@ void LayoutBlock::RemovePositionedObjects(LayoutObject* stay_within) {
 
 void LayoutBlock::AddSvgTextDescendant(LayoutBox& svg_text) {
   NOT_DESTROYED();
-  DCHECK(IsA<LayoutNGSVGText>(svg_text));
+  DCHECK(IsA<LayoutSVGText>(svg_text));
   auto result = View()->SvgTextDescendantsMap().insert(this, nullptr);
   if (result.is_new_entry) {
     result.stored_value->value =
@@ -451,7 +438,7 @@ void LayoutBlock::AddSvgTextDescendant(LayoutBox& svg_text) {
 
 void LayoutBlock::RemoveSvgTextDescendant(LayoutBox& svg_text) {
   NOT_DESTROYED();
-  DCHECK(IsA<LayoutNGSVGText>(svg_text));
+  DCHECK(IsA<LayoutSVGText>(svg_text));
   TrackedDescendantsMap& map = View()->SvgTextDescendantsMap();
   auto it = map.find(this);
   if (it == map.end())
@@ -470,6 +457,30 @@ LayoutUnit LayoutBlock::TextIndentOffset() const {
   if (StyleRef().TextIndent().IsPercentOrCalc())
     cw = ContentLogicalWidth();
   return MinimumValueForLength(StyleRef().TextIndent(), cw);
+}
+
+bool LayoutBlock::NodeAtPoint(HitTestResult& result,
+                              const HitTestLocation& hit_test_location,
+                              const PhysicalOffset& accumulated_offset,
+                              HitTestPhase phase) {
+  NOT_DESTROYED();
+
+  // See |Paint()|.
+  DCHECK(IsMonolithic() || !CanTraversePhysicalFragments() ||
+         Parent()->CanTraversePhysicalFragments());
+  // We may get here in multiple-fragment cases if the object is repeated
+  // (inside table headers and footers, for instance).
+  DCHECK(PhysicalFragmentCount() <= 1u ||
+         GetPhysicalFragment(0)->BreakToken()->IsRepeated());
+
+  if (PhysicalFragmentCount()) {
+    const NGPhysicalBoxFragment* fragment = GetPhysicalFragment(0);
+    DCHECK(fragment);
+    return NGBoxFragmentPainter(*fragment).NodeAtPoint(
+        result, hit_test_location, accumulated_offset, phase);
+  }
+
+  return false;
 }
 
 bool LayoutBlock::HitTestChildren(HitTestResult& result,
@@ -660,7 +671,7 @@ inline bool LayoutBlock::IsInlineBoxWrapperActuallyChild() const {
          EditingIgnoresContent(*GetNode());
 }
 
-LayoutRect LayoutBlock::LocalCaretRect(
+PhysicalRect LayoutBlock::LocalCaretRect(
     int caret_offset,
     LayoutUnit* extra_width_to_end_of_line) const {
   NOT_DESTROYED();
@@ -673,7 +684,16 @@ LayoutRect LayoutBlock::LocalCaretRect(
   const ComputedStyle& style = StyleRef();
   const bool is_horizontal = style.IsHorizontalWritingMode();
 
-  LayoutRect caret_rect;
+  if (RuntimeEnabledFeatures::EmptyCaretInVerticalEnabled()) {
+    LayoutUnit inline_size = is_horizontal ? Size().width : Size().height;
+    LogicalRect caret_rect = LogicalRect(
+        LocalCaretRectForEmptyElement(inline_size, TextIndentOffset()));
+    if (extra_width_to_end_of_line) {
+      *extra_width_to_end_of_line = inline_size - caret_rect.InlineEndOffset();
+    }
+    return CreateWritingModeConverter().ToPhysical(caret_rect);
+  }
+  DeprecatedLayoutRect caret_rect;
   if (is_horizontal) {
     caret_rect =
         LocalCaretRectForEmptyElement(Size().width, TextIndentOffset());
@@ -690,7 +710,7 @@ LayoutRect LayoutBlock::LocalCaretRect(
     }
   }
 
-  return caret_rect;
+  return PhysicalRect(caret_rect);
 }
 
 void LayoutBlock::AddOutlineRects(OutlineRectCollector& collector,
@@ -770,12 +790,12 @@ LayoutBlock* LayoutBlock::CreateAnonymousWithParentAndDisplay(
   LayoutBlock* layout_block;
   if (new_display == EDisplay::kFlex) {
     layout_block =
-        MakeGarbageCollected<LayoutNGFlexibleBox>(/* element */ nullptr);
+        MakeGarbageCollected<LayoutFlexibleBox>(/* element */ nullptr);
   } else if (new_display == EDisplay::kGrid) {
-    layout_block = MakeGarbageCollected<LayoutNGGrid>(/* element */ nullptr);
+    layout_block = MakeGarbageCollected<LayoutGrid>(/* element */ nullptr);
   } else if (new_display == EDisplay::kBlockMath) {
     layout_block =
-        MakeGarbageCollected<LayoutNGMathMLBlock>(/* element */ nullptr);
+        MakeGarbageCollected<LayoutMathMLBlock>(/* element */ nullptr);
   } else {
     DCHECK(new_display == EDisplay::kBlock ||
            new_display == EDisplay::kFlowRoot);
@@ -786,31 +806,25 @@ LayoutBlock* LayoutBlock::CreateAnonymousWithParentAndDisplay(
   return layout_block;
 }
 
-void LayoutBlock::RecalcChildVisualOverflow() {
+RecalcLayoutOverflowResult LayoutBlock::RecalcLayoutOverflow() {
   NOT_DESTROYED();
-  DCHECK(!IsTable() || IsLayoutNGObject());
-  // It is an error to call this function on a LayoutBlock that it itself inside
-  // a display-locked subtree.
-  DCHECK(!DisplayLockUtilities::LockedAncestorPreventingPrePaint(*this));
-  if (ChildPrePaintBlockedByDisplayLock())
-    return;
-
-  if (ChildrenInline()) {
-    SECURITY_DCHECK(IsLayoutBlockFlow());
-    To<LayoutBlockFlow>(this)->RecalcInlineChildrenVisualOverflow();
-  } else {
-    for (LayoutBox* box = FirstChildBox(); box; box = box->NextSiblingBox()) {
-      box->RecalcNormalFlowChildVisualOverflowIfNeeded();
-    }
-  }
+  DCHECK(!NGDisableSideEffectsScope::IsDisabled());
+  return RecalcLayoutOverflowNG();
 }
 
 void LayoutBlock::RecalcVisualOverflow() {
   NOT_DESTROYED();
-  DCHECK(!CanUseFragmentsForVisualOverflow());
-  DCHECK(!IsLayoutMultiColumnSet());
-  RecalcChildVisualOverflow();
-  ComputeVisualOverflow();
+  if (!PhysicalFragmentCount()) {
+    ClearVisualOverflow();
+    return;
+  }
+
+  DCHECK(CanUseFragmentsForVisualOverflow());
+  DCHECK(!DisplayLockUtilities::LockedAncestorPreventingPrePaint(*this));
+  for (const NGPhysicalBoxFragment& fragment : PhysicalFragments()) {
+    DCHECK(fragment.CanUseFragmentsForInkOverflow());
+    fragment.GetMutableForPainting().RecalcInkOverflow();
+  }
 }
 
 }  // namespace blink

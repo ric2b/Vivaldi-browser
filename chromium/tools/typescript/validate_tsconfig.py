@@ -127,11 +127,13 @@ def validateJavaScriptAllowed(source_dir, out_dir, is_ios):
       'chrome/browser/resources/chromeos/accessibility',
       'chrome/test/data/webui',
       'chrome/test/data/webui/chromeos',
-      'chrome/test/data/webui/cr_components/chromeos',
-      'chrome/test/data/webui/settings/chromeos',
-      # TODO(https://crbug.com/1002798): Migrate Mojo bindings to TypeScript and
+      'chrome/test/data/webui/chromeos/ash_common',
+      # TODO(b/305287898): Migrate scanning app tests to Typescript and
       # remove exception.
-      'content/browser/resources/gpu',
+      'chrome/test/data/webui/chromeos/scanning',
+      'chrome/test/data/webui/cr_components/chromeos',
+      'chrome/test/data/webui/nearby_share',
+      'chrome/test/data/webui/settings/chromeos',
       'components/policy/resources/webui',
       'ui/webui/resources/js',
       'ui/webui/resources/mojo',

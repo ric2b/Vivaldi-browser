@@ -72,7 +72,9 @@ class FileSystemAccessObserverHost
       absl::variant<std::unique_ptr<FileSystemAccessDirectoryHandleImpl>,
                     std::unique_ptr<FileSystemAccessFileHandleImpl>> handle,
       ObserveCallback callback,
-      std::unique_ptr<FileSystemAccessWatcherManager::Observation> observation);
+      base::expected<
+          std::unique_ptr<FileSystemAccessWatcherManager::Observation>,
+          blink::mojom::FileSystemAccessErrorPtr> observation_or_error);
 
   void OnHostReceiverDisconnect();
 
@@ -94,7 +96,7 @@ class FileSystemAccessObserverHost
   // Connection owned by a FileSystemObserver object. When the
   // FileSystemObserver is destroyed, this instance will remove itself from the
   // manager.
-  // TODO(https://crbug.com/1019297): Make the lifetime not depend on GC.
+  // TODO(https://crbug.com/1488875): Make the lifetime not depend on GC.
   mojo::Receiver<blink::mojom::FileSystemAccessObserverHost> host_receiver_
       GUARDED_BY_CONTEXT(sequence_checker_);
 

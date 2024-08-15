@@ -650,7 +650,7 @@ struct URLLoaderOptions {
         std::move(trust_token_observer), std::move(url_loader_network_observer),
         std::move(devtools_observer), std::move(accept_ch_frame_observer),
         cookie_setting_overrides, std::move(attribution_request_helper),
-        shared_storage_writable);
+        shared_storage_writable_eligible);
   }
 
   int32_t options = mojom::kURLLoadOptionNone;
@@ -674,7 +674,7 @@ struct URLLoaderOptions {
   mojo::PendingRemote<mojom::AcceptCHFrameObserver> accept_ch_frame_observer =
       mojo::NullRemote();
   net::CookieSettingOverrides cookie_setting_overrides;
-  bool shared_storage_writable = false;
+  bool shared_storage_writable_eligible = false;
 
  private:
   bool used = false;
@@ -980,7 +980,7 @@ class URLLoaderTest : public testing::Test {
   // Returns the path of the requested file in the test data directory.
   base::FilePath GetTestFilePath(const std::string& file_name) {
     base::FilePath file_path;
-    base::PathService::Get(base::DIR_SOURCE_ROOT, &file_path);
+    base::PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, &file_path);
     file_path = file_path.Append(FILE_PATH_LITERAL("services"));
     file_path = file_path.Append(FILE_PATH_LITERAL("test"));
     file_path = file_path.Append(FILE_PATH_LITERAL("data"));
@@ -3339,7 +3339,7 @@ TEST_F(URLLoaderTest, NoSSLInfoOnComplete) {
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_EXPIRED);
   ASSERT_TRUE(https_server.Start());
-  EXPECT_EQ(net::ERR_INSECURE_RESPONSE, Load(https_server.GetURL("/")));
+  EXPECT_EQ(net::ERR_CERT_DATE_INVALID, Load(https_server.GetURL("/")));
   EXPECT_FALSE(client()->completion_status().ssl_info.has_value());
 }
 
@@ -3350,7 +3350,7 @@ TEST_F(URLLoaderTest, SSLInfoOnComplete) {
   https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_EXPIRED);
   ASSERT_TRUE(https_server.Start());
   set_send_ssl_for_cert_error();
-  EXPECT_EQ(net::ERR_INSECURE_RESPONSE, Load(https_server.GetURL("/")));
+  EXPECT_EQ(net::ERR_CERT_DATE_INVALID, Load(https_server.GetURL("/")));
   ASSERT_TRUE(client()->completion_status().ssl_info.has_value());
   EXPECT_TRUE(client()->completion_status().ssl_info.value().cert);
   EXPECT_EQ(net::CERT_STATUS_DATE_INVALID,
@@ -3986,12 +3986,14 @@ class MockCookieObserver : public network::mojom::CookieAccessObserver {
   void OnCookiesAccessed(std::vector<network::mojom::CookieAccessDetailsPtr>
                              details_vector) override {
     for (auto& details : details_vector) {
-      if (access_type_ && access_type_ != details->type) {
-        continue;
-      }
+      for (size_t i = 0; i < details->count; ++i) {
+        if (access_type_ && access_type_ != details->type) {
+          continue;
+        }
 
-      for (const auto& cookie_with_status : details->cookie_list) {
-        observed_cookies_.emplace_back(details, cookie_with_status);
+        for (const auto& cookie_with_status : details->cookie_list) {
+          observed_cookies_.emplace_back(details, cookie_with_status);
+        }
       }
     }
     if (wait_for_cookie_count_ &&
@@ -4278,9 +4280,6 @@ TEST_F(URLLoaderTest, SetAuth) {
       context(), DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), request,
       client()->CreateRemote());
-  base::RunLoop().RunUntilIdle();
-
-  ASSERT_TRUE(url_loader);
 
   client()->RunUntilResponseBodyArrived();
   EXPECT_TRUE(client()->has_received_response());
@@ -4318,9 +4317,6 @@ TEST_F(URLLoaderTest, CancelAuth) {
       context(), DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), request,
       client()->CreateRemote());
-  base::RunLoop().RunUntilIdle();
-
-  ASSERT_TRUE(url_loader);
 
   client()->RunUntilResponseBodyArrived();
   EXPECT_TRUE(client()->has_received_response());
@@ -4358,9 +4354,6 @@ TEST_F(URLLoaderTest, TwoChallenges) {
       context(), DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), request,
       client()->CreateRemote());
-  base::RunLoop().RunUntilIdle();
-
-  ASSERT_TRUE(url_loader);
 
   client()->RunUntilResponseBodyArrived();
   EXPECT_TRUE(client()->has_received_response());
@@ -4399,9 +4392,6 @@ TEST_F(URLLoaderTest, NoAuthRequiredForFavicon) {
       context(), DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), request,
       client()->CreateRemote());
-  base::RunLoop().RunUntilIdle();
-
-  ASSERT_TRUE(url_loader);
 
   client()->RunUntilResponseBodyArrived();
   EXPECT_TRUE(client()->has_received_response());
@@ -4439,9 +4429,6 @@ TEST_F(URLLoaderTest, HttpAuthResponseHeadersAvailable) {
       context(), DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), request,
       client()->CreateRemote());
-  base::RunLoop().RunUntilIdle();
-
-  ASSERT_TRUE(url_loader);
 
   client()->RunUntilResponseBodyArrived();
 
@@ -4619,9 +4606,6 @@ TEST_F(URLLoaderTest, ClientAuthDestroyResponder) {
       loader.BindNewPipeAndPassReceiver(), request, client()->CreateRemote());
   client_cert_observer.set_url_loader_remote(&loader);
 
-  RunUntilIdle();
-  ASSERT_TRUE(url_loader);
-
   client()->RunUntilComplete();
 
   EXPECT_EQ(net::ERR_SSL_CLIENT_AUTH_CERT_NEEDED,
@@ -4656,9 +4640,6 @@ TEST_F(URLLoaderTest, ClientAuthCancelConnection) {
       loader.BindNewPipeAndPassReceiver(), request, client()->CreateRemote());
   client_cert_observer.set_url_loader_remote(&loader);
 
-  RunUntilIdle();
-  ASSERT_TRUE(url_loader);
-
   client()->RunUntilComplete();
 
   EXPECT_EQ(net::ERR_FAILED, client()->completion_status().error_code);
@@ -4691,11 +4672,6 @@ TEST_F(URLLoaderTest, ClientAuthCancelCertificateSelection) {
       context(), DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), request,
       client()->CreateRemote());
-
-  RunUntilIdle();
-  ASSERT_TRUE(url_loader);
-
-  EXPECT_EQ(0, client_cert_observer.on_certificate_requested_counter());
 
   client()->RunUntilComplete();
 
@@ -4737,11 +4713,6 @@ TEST_F(URLLoaderTest, ClientAuthNoCertificate) {
       context(), DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), request,
       client()->CreateRemote());
-
-  RunUntilIdle();
-  ASSERT_TRUE(url_loader);
-
-  EXPECT_EQ(0, client_cert_observer.on_certificate_requested_counter());
 
   client()->RunUntilComplete();
 
@@ -4788,12 +4759,6 @@ TEST_F(URLLoaderTest, ClientAuthCertificateWithValidSignature) {
       loader.InitWithNewPipeAndPassReceiver(), request,
       client()->CreateRemote());
 
-  RunUntilIdle();
-  ASSERT_TRUE(url_loader);
-
-  EXPECT_EQ(0, client_cert_observer.on_certificate_requested_counter());
-  EXPECT_EQ(0, private_key->sign_count());
-
   client()->RunUntilComplete();
 
   EXPECT_EQ(1, client_cert_observer.on_certificate_requested_counter());
@@ -4839,12 +4804,6 @@ TEST_F(URLLoaderTest, ClientAuthCertificateWithInvalidSignature) {
       context(), DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), request,
       client()->CreateRemote());
-
-  RunUntilIdle();
-  ASSERT_TRUE(url_loader);
-
-  EXPECT_EQ(0, client_cert_observer.on_certificate_requested_counter());
-  EXPECT_EQ(0, private_key->sign_count());
 
   client()->RunUntilComplete();
 
@@ -7380,10 +7339,12 @@ class SharedStorageRequestHelperURLLoaderTest : public URLLoaderTest {
     return {"clear, set;value=v;key=k", "append;value=a;key=b, delete;key=k"};
   }
 
-  void SetURLLoaderOptionsForSharedStorageRequest() {
+  void SetURLLoaderOptionsForSharedStorageRequest(
+      bool shared_storage_writable_eligible) {
     observer_ = std::make_unique<SharedStorageTestURLLoaderNetworkObserver>();
     url_loader_options_.url_loader_network_observer = observer_->Bind();
-    url_loader_options_.shared_storage_writable = true;
+    url_loader_options_.shared_storage_writable_eligible =
+        shared_storage_writable_eligible;
   }
 
   void WaitForHeadersReceived(size_t expected_total) {
@@ -7406,7 +7367,8 @@ TEST_F(SharedStorageRequestHelperURLLoaderTest, SimpleRequest) {
   const url::Origin kTestOrigin = url::Origin::Create(kRequestUrl);
   ResourceRequest request = CreateResourceRequest("GET", kRequestUrl);
 
-  SetURLLoaderOptionsForSharedStorageRequest();
+  SetURLLoaderOptionsForSharedStorageRequest(
+      /*shared_storage_writable_eligible=*/true);
 
   url_loader_ = url_loader_options_.MakeURLLoader(
       context(), DeleteLoaderCallback(&delete_run_loop_, &url_loader_),
@@ -7438,7 +7400,8 @@ TEST_F(SharedStorageRequestHelperURLLoaderTest, SimpleRedirect) {
   const url::Origin kTestOrigin = url::Origin::Create(kRequestUrl);
   ResourceRequest request = CreateResourceRequest("GET", kRequestUrl);
 
-  SetURLLoaderOptionsForSharedStorageRequest();
+  SetURLLoaderOptionsForSharedStorageRequest(
+      /*shared_storage_writable_eligible=*/true);
 
   url_loader_ = url_loader_options_.MakeURLLoader(
       context(), DeleteLoaderCallback(&delete_run_loop_, &url_loader_),
@@ -7462,8 +7425,8 @@ TEST_F(SharedStorageRequestHelperURLLoaderTest, SimpleRedirect) {
                           /*ignore_if_present=*/absl::nullopt)));
 
   // Follow redirect is called by the client. Even if the shared storage request
-  // helper adds/remove headers, `FollowRedirect()` would/can still be called by
-  // the client without headers changes.
+  // helper updates headers, `FollowRedirect()` could still be called by the
+  // client without headers changes.
   url_loader_->FollowRedirect(/*removed_headers=*/{}, /*modified_headers=*/{},
                               /*modified_cors_exempt_headers=*/{},
                               absl::nullopt);
@@ -7481,7 +7444,8 @@ TEST_F(SharedStorageRequestHelperURLLoaderTest, MultipleRedirects) {
   const url::Origin kTestOrigin = url::Origin::Create(kRequestUrl);
   ResourceRequest request = CreateResourceRequest("GET", kRequestUrl);
 
-  SetURLLoaderOptionsForSharedStorageRequest();
+  SetURLLoaderOptionsForSharedStorageRequest(
+      /*shared_storage_writable_eligible=*/true);
 
   url_loader_ = url_loader_options_.MakeURLLoader(
       context(), DeleteLoaderCallback(&delete_run_loop_, &url_loader_),
@@ -7507,8 +7471,8 @@ TEST_F(SharedStorageRequestHelperURLLoaderTest, MultipleRedirects) {
   client()->ClearHasReceivedRedirect();
 
   // Follow redirect is called by the client. Even if the shared storage request
-  // helper adds/remove headers, `FollowRedirect()` would/can still be called by
-  // the client without headers changes.
+  // helper updates headers, `FollowRedirect()` could still be called by the
+  // client without headers changes.
   url_loader_->FollowRedirect(/*removed_headers=*/{}, /*modified_headers=*/{},
                               /*modified_cors_exempt_headers=*/{},
                               absl::nullopt);
@@ -7519,8 +7483,8 @@ TEST_F(SharedStorageRequestHelperURLLoaderTest, MultipleRedirects) {
   EXPECT_EQ(observer_->headers_received().size(), 1u);
 
   // Follow redirect is called by the client. Even if the shared storage request
-  // helper adds/remove headers, `FollowRedirect()` would/can still be called by
-  // the client without headers changes.
+  // helper updates headers, `FollowRedirect()` could still be called by the
+  // client without headers changes.
   url_loader_->FollowRedirect(/*removed_headers=*/{}, /*modified_headers=*/{},
                               /*modified_cors_exempt_headers=*/{},
                               absl::nullopt);
@@ -7553,7 +7517,8 @@ TEST_F(SharedStorageRequestHelperURLLoaderTest, CrossSiteRedirect) {
       url::Origin::Create(test_server_.GetURL(kCrossOriginHostname, "/"));
   ResourceRequest request = CreateResourceRequest("GET", kRequestUrl);
 
-  SetURLLoaderOptionsForSharedStorageRequest();
+  SetURLLoaderOptionsForSharedStorageRequest(
+      /*shared_storage_writable_eligible=*/true);
 
   url_loader_ = url_loader_options_.MakeURLLoader(
       context(), DeleteLoaderCallback(&delete_run_loop_, &url_loader_),
@@ -7567,8 +7532,8 @@ TEST_F(SharedStorageRequestHelperURLLoaderTest, CrossSiteRedirect) {
   EXPECT_TRUE(observer_->headers_received().empty());
 
   // Follow redirect is called by the client. Even if the shared storage request
-  // helper adds/remove headers, `FollowRedirect()` would/can still be called by
-  // the client without headers changes.
+  // helper updates headers, `FollowRedirect()` could still be called by the
+  // client without headers changes.
   url_loader_->FollowRedirect(/*removed_headers=*/{}, /*modified_headers=*/{},
                               /*modified_cors_exempt_headers=*/{},
                               absl::nullopt);
@@ -7597,7 +7562,8 @@ TEST_F(SharedStorageRequestHelperURLLoaderTest, RedirectNoLongerEligible) {
   const url::Origin kTestOrigin = url::Origin::Create(kRequestUrl);
   ResourceRequest request = CreateResourceRequest("GET", kRequestUrl);
 
-  SetURLLoaderOptionsForSharedStorageRequest();
+  SetURLLoaderOptionsForSharedStorageRequest(
+      /*shared_storage_writable_eligible=*/true);
 
   url_loader_ = url_loader_options_.MakeURLLoader(
       context(), DeleteLoaderCallback(&delete_run_loop_, &url_loader_),
@@ -7610,21 +7576,71 @@ TEST_F(SharedStorageRequestHelperURLLoaderTest, RedirectNoLongerEligible) {
   // Simulate having permission revoked by the client, the effect of which is
   // the request header is removed.
   std::vector<std::string> removed_headers(
-      {std::string(kSharedStorageWritableHeader.data(),
-                   kSharedStorageWritableHeader.size())});
+      {std::string(kSecSharedStorageWritableHeader.data(),
+                   kSecSharedStorageWritableHeader.size())});
   url_loader_->FollowRedirect(removed_headers,
                               /*modified_headers=*/{},
                               /*modified_cors_exempt_headers=*/{},
                               absl::nullopt);
 
-  // The `SharedStorageRequestHelper` has `shared_storage_writable_` now set to
-  // false because the request header was removed.
-  EXPECT_FALSE(
-      url_loader_->shared_storage_request_helper()->shared_storage_writable());
+  // The `SharedStorageRequestHelper` has `shared_storage_writable_eligible_`
+  // now set to false because the request header was removed.
+  EXPECT_FALSE(url_loader_->shared_storage_request_helper()
+                   ->shared_storage_writable_eligible());
   client()->RunUntilComplete();
 
   // No shared storage headers are received.
   EXPECT_TRUE(observer_->headers_received().empty());
+
+  delete_run_loop_.Run();
+}
+
+TEST_F(SharedStorageRequestHelperURLLoaderTest, RedirectBecomesEligible) {
+  const char kHostname[] = "a.test";
+  const GURL kRequestUrl = test_server_.GetURL(
+      kHostname, "/shared_storage/redirect/new?shared_storage/write.html");
+  const url::Origin kTestOrigin = url::Origin::Create(kRequestUrl);
+  ResourceRequest request = CreateResourceRequest("GET", kRequestUrl);
+
+  SetURLLoaderOptionsForSharedStorageRequest(
+      /*shared_storage_writable_eligible=*/false);
+
+  url_loader_ = url_loader_options_.MakeURLLoader(
+      context(), DeleteLoaderCallback(&delete_run_loop_, &url_loader_),
+      loader_remote_.InitWithNewPipeAndPassReceiver(), request,
+      client()->CreateRemote());
+
+  client()->RunUntilRedirectReceived();
+  ASSERT_TRUE(client()->has_received_redirect());
+
+  // Simulate having permission restored by the client, the effect of which is
+  // the request header is added.
+  net::HttpRequestHeaders modified_headers;
+  modified_headers.SetHeader(kSecSharedStorageWritableHeader,
+                             kSecSharedStorageWritableValue);
+  url_loader_->FollowRedirect(/*removed_headers=*/{}, modified_headers,
+                              /*modified_cors_exempt_headers=*/{},
+                              absl::nullopt);
+
+  // The `SharedStorageRequestHelper` has `shared_storage_writable_eligible_`
+  // now set to true because the request header was added.
+  EXPECT_TRUE(url_loader_->shared_storage_request_helper()
+                  ->shared_storage_writable_eligible());
+  client()->RunUntilComplete();
+
+  WaitForHeadersReceived(1);
+
+  EXPECT_EQ(observer_->headers_received().size(), 1u);
+  EXPECT_EQ(observer_->headers_received().front().first, kTestOrigin);
+  EXPECT_THAT(
+      observer_->headers_received().front().second,
+      ElementsAre(
+          std::make_tuple(mojom::SharedStorageOperationType::kClear,
+                          /*key=*/absl::nullopt, /*value=*/absl::nullopt,
+                          /*ignore_if_present=*/absl::nullopt),
+          std::make_tuple(mojom::SharedStorageOperationType::kSet,
+                          /*key=*/"k", /*value=*/"v",
+                          /*ignore_if_present=*/absl::nullopt)));
 
   delete_run_loop_.Run();
 }

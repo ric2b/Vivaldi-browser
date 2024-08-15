@@ -1,0 +1,439 @@
+---
+breadcrumbs:
+- - /chromium-os/developer-library/reference
+  - Chromium OS > Developer Library > Reference
+page_name: chromeos-gn
+title: GN in ChromeOS
+---
+
+New packages should use
+[GN](https://gn.googlesource.com/gn/+/HEAD/docs/reference.md) as their build
+system.
+
+See the official [step-by-step introduction](
+https://gn.googlesource.com/gn/+/HEAD/docs/quick_start.md#Step_by_step) for
+the GN basics. This article discusses ChromeOS specific stuff.
+
+[TOC]
+
+## How to build your package with GN
+
+Example: [arc/adbd/BUILD.gn](https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/arc/adbd/BUILD.gn)
+
+-   Put `BUILD.gn` in your package directory, which is determined by
+    `PLATFORM_SUBDIR` in your ebuild. Existence of `BUILD.gn` indicates to the
+    platform2 build system that GN should be used to build this package.
+-   Have a target named `"all"` in the `BUILD.gn`. It's the root target built
+    by the platform2 build system. Typically it's a `group` target depends on
+    all the targets to be built.
+-   `common-mk/` contains common templates or common settings, which your build
+    files can utilize.
+    -   `pkg_config.gni` defines the `pkg_config` rule to generate configs for
+        package dependencies.
+    -   `BUILDCONFIG.gn` defines the default configs for each target type (e.g.
+        executable). You can remove default configs in individual target with
+        `configs -=` if needed.
+        ([example](https://crrev.com/d2f92d07e9b0950157b7ce3a0f70cfee72fe76e7/hammerd/BUILD.gn#39))
+
+## How to write ebuilds
+
+Example: [arc-adbd-9999.ebuild](
+https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/HEAD/chromeos-base/arc-adbd/arc-adbd-9999.ebuild)
+
+Note we should add `.gn` in `CROS_WORKON_SUBTREE` so that the platform2 build
+system can access the file.
+
+### Packages outside platform2
+
+For packages outside platform2, use `CROS_WORKON_DESTDIR` to copy the
+package under `<workspace>/platform2/` while building it.
+([example](https://crrev.com/2bee6447043f11d39c61d2c3ea0b02287793dcf9/chromeos-base/update_engine/update_engine-9999.ebuild#8))
+
+## How to install files
+
+### Installing Targets defined in BUILD.gn
+
+A file built by a GN target, either by `executable`, `shared_library` or
+`static_library`, can be installed by specifying `install_path`.
+
+A target that install the output must be a dependency of `group("all")`.
+
+#### Variable
+
+*   `install_path`
+    *   An install destination path.
+
+#### Installing executable targets
+
+*   `install_path` must end in `bin` or `sbin`.
+*   When you specify the `install_path` simply as `bin`,
+    the binary will be installed into `/usr/bin`.
+
+    ```gn
+    executable("executable_target") {
+        sources = [ "source.cc" ]
+        install_path = "bin"
+    }
+    ```
+
+    is equivalent to
+
+    ```bash
+    dobin ${OUT}/executable_target
+    ```
+
+*   If you want to change the destination, you can specify the absolute path.
+
+    ```gn
+    executable("executable_target") {
+        sources = [ "source.cc" ]
+        install_path = "/sbin"
+    }
+    ```
+
+    is equivalent to
+
+    ```bash
+    into /
+    dosbin ${OUT}/executable_target
+    ```
+
+#### Installing Shared Library Targets
+
+Installing shared library requires specifying `install_path` in the
+`shared_library` target.
+
+*   The `install_path` must end in `lib`.
+*   When you specify the `install_path` simply as `lib`, the correct
+    ABI-specific libdir (e.g. `/usr/lib` or `/usr/lib64`) will be used.
+
+    ```gn
+    shared_library("libtarget") {
+        sources = [ "source.cc" ]
+        install_path = "lib"
+    }
+    ```
+
+    is equivalent to
+
+    ```bash
+    dolib.so ${OUT}/lib/libtarget
+    ```
+
+*   If you want to change the destination, you can specify the absolute path.
+
+    ```gn
+    shared_library("libtarget") {
+        sources = [ "source.cc" ]
+        install_path = "/usr/local/lib"
+    }
+    ```
+
+    is equivalent to
+
+    ```bash
+    into /usr/local
+    dolib.so ${OUT}/lib/libtarget
+    ```
+
+#### Installing Static Library Targets
+
+Installing static libraries requires specifying `install_path` in the
+`static_library` target.
+
+*   The `install_path` must end in `lib`.
+*   When you specify the `install_path` simply as `lib`,
+    it installs into `/usr/lib`.
+
+    ```gn
+    static_library("libtarget") {
+        sources = [ "source.cc" ]
+        install_path = "lib"
+    }
+    ```
+
+    is equivalent to
+
+    ```bash
+    dolib.a ${OUT}/libtarget
+    ```
+
+*   If you want to change the destination, you can specify the absolute path.
+
+    ```gn
+    static_library("libtarget") {
+        sources = [ "source.cc" ]
+        install_path = "/usr/local/lib"
+    }
+    ```
+
+    is equivalent to
+
+    ```bash
+    into /usr/local
+    dolib.a ${OUT}/libtarget
+    ```
+
+### Installing files not defined in BUILD.gn
+
+You can install files that are not generated by GN and ninja by using
+`install_config` target.
+
+#### Variables
+
+*   `sources` (required)
+    *   A list of files to be installed.
+*   `install_path` (optional)
+    *   An install destination path or an alias that maps to a
+    corresponding destination path.
+        *   default: `/`
+        *   `dbus_system_d` - `/etc/dbus-1/system.d`
+        *   `dbus_system_services` - `/usr/share/dbus-1/system-services`
+        *   `minijail_conf` - `/usr/share/minijail`
+        *   `seccomp_policy` - `/usr/share/policy`
+        *   `tmpfilesd` - `/usr/lib/tmpfiles.d`
+        *   `tmpfiled_ondemand` - `/usr/lib/tmpfiles.d/on-demand`
+        *   `upstart` - `/etc/init`
+*   `recursive` (optional)
+    *   A boolean, indicating whether to install files recursively.
+    *   default: `false`
+*   `options` (optional)
+    *   A string of options for installing files.
+    *   default: `"-m0644"`
+*   `outputs` (optional)
+    *   A list of new file names, if sources should be renamed too.
+    *   When not specified, original names are used.
+*   `symlinks` (optional)
+    *   A list of symbolic links to be created.
+    *   When install_path is specified, links are created in
+        `${install_path}/${symlink}`
+
+#### Usage
+
+*   To install files, add `install_config` into dependency tree of
+    `group("all")`.
+
+    ```gn
+    install_config("install_init") {
+        sources = [ "init/initialize.conf" ]
+        install_path = "upstart"
+    }
+    ```
+
+    is equivalent to
+
+    ```bash
+    insinto /etc/init
+    doins init/initialize.conf
+    ```
+
+*   To install files recursively, set `recursive` to `true`.
+
+    ```gn
+    install_config("install_rec") {
+        sources = [ "source_directory" ]
+        install_path = "/usr/local"
+        recursive = true
+    }
+    ```
+
+    is equivalent to
+
+    ```bash
+    insinto /usr/local
+    doins -r source_directory
+    ```
+
+*   When you want to change owner or permission, specify `options`.
+
+    ```gn
+    install_config("install_exe") {
+        sources = [ "source" ]
+        install_path = "/usr/local"
+        options = "-m0755"
+    }
+    ```
+
+    is equivalent to
+
+    ```bash
+    insinto /usr/local
+    insopts -m0755
+    doins source
+    ```
+
+*   When you want to install multiple files, specify sources all together.
+
+    ```gn
+    install_config("install_init") {
+        sources = [
+            "init/initialize1.conf",
+            "init/initialize2.conf",
+        ]
+        install_path = "upstart"
+    }
+    ```
+
+    is equivalent to
+
+    ```bash
+    insinto /etc/init
+    doins init/initialize.conf
+    ```
+
+*   When you want to use `newins` command, specify new file name as `outputs`.
+
+    ```gn
+    install_config("install_policy") {
+        sources = [ "policy/configuration.policy" ]
+        outputs = [ "newfilename.policy" ]
+        install_path = "seccomp_policy"
+    }
+    ```
+
+    is equivalent to
+
+    ```bash
+    insinto /usr/share/policy
+    newins policy/configuration.policy newfilename.policy
+    ```
+
+*   `outputs` are also used for installing multiple files.
+
+    ```gn
+    install_config("install_multiple_new") {
+        sources = [
+            "old.policy",
+            "another_old.policy",
+        ]
+        outputs = [
+            "new1.policy",
+            "new2.policy",
+        ]
+        install_path = "seccomp_policy"
+    }
+    ```
+
+    is equivalent to
+
+    ```bash
+    insinto /usr/share/policy
+    newins old.policy new1.policy
+    newins another_old.policy new2.policy
+    ```
+
+*   `symlinks` parameter is similar to `outputs`, but it creates symbolic link
+    by `dosym`.
+
+    ```gn
+    install_config("install_sym") {
+        sources = [ "source" ]
+        symlinks = [ "symlink" ]
+    }
+    ```
+
+    is equivalent to
+
+    ```bash
+    dosym source symlink
+    ```
+
+*   When `install_path` is specified, it is added to the head of `symlinks`.
+
+    ```gn
+    install_config("install_sym") {
+        sources = [ "source" ]
+        symlinks = [ "symlink" ]
+        install_path = "/path/to/install"
+    }
+    ```
+
+    is equivalent to
+
+    ```bash
+    dosym source /path/to/install/symlink
+    ```
+
+## How to check USE flags in GN
+
+In GN files, USE flags can be referred as `use.foo`.
+([example](https://crrev.com/d2f92d07e9b0950157b7ce3a0f70cfee72fe76e7/hammerd/BUILD.gn#12))
+
+Only allowed USE flags can be used. If you need to use new USE flags, update:
+-   `_IUSE` constant in `platform2/common-mk/platform2.py`
+    ([example](https://crrev.com/c/1605185/5/common-mk/platform2.py))
+    -   You will also need to add the new USE flag to your targeted packages'
+        ebuild file.
+        ([example](https://crrev.com/c/3890515))
+    -   If you want the USE flag to work across packages, then you need to
+        modify platform.eclass as well.
+        ([example](https://crrev.com/c/3599438))
+-   `IUSE` variable in your ebuild file
+    ([example](https://crrev.com/c/1617184))
+
+You can confirm that the USE flag is available for your package by running
+```
+equery-{board} uses {package-name}
+```
+
+## How to write unit tests
+
+`use.test` flag is set to true on unit testing. Enclose test only targets with
+`if (use.test) {}` to reduce compile time on production.
+The test targets are typically executables which depend on `//common-mk:test` to
+use gtest and gmock.
+
+How to run unit tests doesn't change: In chroot, run
+`cros_workon --board=$BOARD start $package_name` if you haven't. Then run
+
+```
+FEATURES=test emerge-$BOARD $package_name
+```
+
+Prepend `VERBOSE=1` to see GN and ninja commands (plus other logs).
+
+### Declaring tests in BUILD.gn
+
+*   A unit test executable can be run in the test phase by specifying `run_test = true` in the
+    executable target.
+
+    ```gn
+    executable("test_target") {
+        sources = [ "source.cc" ]
+        run_test = true
+    }
+    ```
+
+    is equivalent to
+
+    ```bash
+    platform_test "run" "${OUT}/test_target"
+    ```
+
+*   When you want to specify config, you can use `test_config` variable.
+
+    ```gn
+    executable("test_target") {
+        sources = [ "source.cc" ]
+        run_test = true
+        test_config = {
+            run_as_root = true
+            gtest_filter = ".RunAsRoot*-"
+        }
+    }
+    ```
+
+    is equivalent to
+
+    ```bash
+    platform_test "run" "${OUT}/test_target" "1" "*.RunAsRoot*-"
+    ```
+
+## FAQ
+
+### How to create standalone static library?
+
+Static libraries are compiled with thin archive enabled by default i.e. not standalone.
+Remove `use_thin_archive` from configs and add `nouse_thin_archive` to generate a standalone static library ([example](https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/glib-bridge/BUILD.gn#25)).
+
+TODO(crbug.com/991440): consider making standalone library the default and replace static_library with source_set whenever possible.

@@ -103,6 +103,10 @@ BubbleFrameView::BubbleFrameView(const gfx::Insets& title_margins,
   main_image_->SetVisible(false);
   subtitle_->SetVisible(false);
 
+  if (features::IsChromeRefresh2023()) {
+    default_title_->SetTextStyle(style::STYLE_HEADLINE_4);
+  }
+
   auto minimize = CreateMinimizeButton(base::BindRepeating(
       [](BubbleFrameView* view, const ui::Event& event) {
         if (view->input_protector_.IsPossiblyUnintendedInteraction(event))
@@ -212,8 +216,9 @@ bool BubbleFrameView::GetClientMask(const gfx::Size& size, SkPath* path) const {
   const gfx::RoundedCornersF corner_radii = GetClientCornerRadii();
 
   // If corner radii are all zero we do not need to apply a mask.
-  if (corner_radii.IsEmpty())
+  if (corner_radii.IsEmpty()) {
     return false;
+  }
 
   // Format is upper-left x, upper-left y, upper-right x, and so forth,
   // clockwise around the boundary.
@@ -226,10 +231,12 @@ bool BubbleFrameView::GetClientMask(const gfx::Size& size, SkPath* path) const {
 }
 
 int BubbleFrameView::NonClientHitTest(const gfx::Point& point) {
-  if (!bounds().Contains(point))
+  if (!bounds().Contains(point)) {
     return HTNOWHERE;
-  if (hit_test_transparent_)
+  }
+  if (hit_test_transparent_) {
     return HTTRANSPARENT;
+  }
 #if !BUILDFLAG(IS_WIN)
   // Windows will automatically create a tooltip for the button based on
   // the HTCLOSE or the HTMINBUTTON
@@ -246,8 +253,9 @@ int BubbleFrameView::NonClientHitTest(const gfx::Point& point) {
   if (bubble_border_->shadow() != BubbleBorder::NO_SHADOW)
     round_contents_bounds.Outset(BubbleBorder::kBorderThicknessDip);
   gfx::RectF rectf_point(point.x(), point.y(), 1, 1);
-  if (!round_contents_bounds.Contains(rectf_point))
+  if (!round_contents_bounds.Contains(rectf_point)) {
     return HTTRANSPARENT;
+  }
 
   if (point.y() < title_container_->bounds().bottom()) {
     auto* dialog_delegate = GetWidget()->widget_delegate()->AsDialogDelegate();
@@ -348,12 +356,14 @@ void BubbleFrameView::SetTitleView(std::unique_ptr<View> title_view) {
 }
 
 void BubbleFrameView::UpdateSubtitle() {
-  if (!subtitle_)
+  if (!subtitle_) {
     return;
+  }
   views::BubbleDialogDelegate* const bubble_delegate =
       GetWidget()->widget_delegate()->AsBubbleDialogDelegate();
-  if (!bubble_delegate)
+  if (!bubble_delegate) {
     return;
+  }
   // Subtitle anchors and margins rely heavily on Title being visible.
   subtitle_->SetVisible(!bubble_delegate->GetSubtitle().empty() &&
                         default_title_->GetVisible());
@@ -364,8 +374,9 @@ void BubbleFrameView::UpdateSubtitle() {
 void BubbleFrameView::UpdateMainImage() {
   views::BubbleDialogDelegate* const bubble_delegate =
       GetWidget()->widget_delegate()->AsBubbleDialogDelegate();
-  if (!bubble_delegate)
+  if (!bubble_delegate) {
     return;
+  }
   const ui::ImageModel& model = bubble_delegate->GetMainImage();
   if (model.IsEmpty()) {
     main_image_->SetVisible(false);
@@ -373,28 +384,50 @@ void BubbleFrameView::UpdateMainImage() {
     // This max increase is the difference between the 448 and 320 snapping
     // points in ChromeLayoutProvider, but they are not publicly visible in that
     // API. We set the size of the main image so that the dialog increases in
-    // size exactly one snapping point. At the point of writing this means that
-    // we are using a 112x112px image.
+    // size exactly one snapping point.
     // Ideally this would be handled inside the ImageView, but we do cropping
     // and scaling outside (through ScaleAspectRatioAndCropCenter). We should
     // consider moving that functionality into ImageView or ImageModel without
     // having to specify an external size before painting.
     constexpr int kMainImageDialogWidthIncrease = 128;
-    constexpr int kBorderInsets = 16;
-    constexpr int kMainImageDimension =
-        kMainImageDialogWidthIncrease - kBorderInsets;
+    constexpr int kBorderMargin = 16;
     constexpr int kBorderStrokeThickness = 1;
+
+    // Under CR2023, use the `title_margins_` for the outer margins between the
+    // content and the visible frame border. `border_insets` is the space
+    // outside the visible border mask that incorporates the rounded corners.
+    // This will ensure that the *perceived* margin will be what is expected
+    // since the origin for the view is outside the visible border.
+    // For pre-CR2023, there should be no visual change.
+    const int border_margin_left =
+        features::IsChromeRefresh2023() ? title_margins_.left() : kBorderMargin;
+    const int border_margin_top =
+        features::IsChromeRefresh2023() ? title_margins_.top() : kBorderMargin;
+    const gfx::Insets border_insets = GetBorder()->GetInsets();
+    const int main_image_dimension = kMainImageDialogWidthIncrease -
+                                     border_insets.left() - border_margin_left -
+                                     kBorderStrokeThickness;
+    const int image_inset_left =
+        features::IsChromeRefresh2023()
+            ? border_insets.left() + border_margin_left
+            : border_margin_left - kBorderStrokeThickness;
+    const int image_inset_top =
+        features::IsChromeRefresh2023()
+            ? border_insets.top() + border_margin_top
+            : border_margin_top - kBorderStrokeThickness;
+    const gfx::Insets image_insets =
+        gfx::Insets::TLBR(image_inset_top, image_inset_left, border_margin_top,
+                          border_margin_left);
 
     const int border_radius = LayoutProvider::Get()->GetCornerRadiusMetric(
         Emphasis::kHigh, gfx::Size());
     main_image_->SetImage(
         gfx::ImageSkiaOperations::CreateCroppedCenteredRoundRectImage(
-            gfx::Size(kMainImageDimension, kMainImageDimension),
+            gfx::Size(main_image_dimension, main_image_dimension),
             border_radius - 2 * kBorderStrokeThickness,
             model.GetImage().AsImageSkia()));
     main_image_->SetBorder(views::CreateRoundedRectBorder(
-        kBorderStrokeThickness, border_radius,
-        gfx::Insets(kBorderInsets - kBorderStrokeThickness),
+        kBorderStrokeThickness, border_radius, image_insets,
         GetColorProvider()
             ? GetColorProvider()->GetColor(ui::kColorBubbleBorder)
             : gfx::kPlaceholderColor));
@@ -407,13 +440,15 @@ void BubbleFrameView::SetProgress(absl::optional<double> progress) {
   bool visible = progress.has_value();
   progress_indicator_->SetVisible(visible);
   progress_indicator_->GetViewAccessibility().OverrideIsIgnored(!visible);
-  if (progress)
+  if (progress) {
     progress_indicator_->SetValue(progress.value());
+  }
 }
 
 absl::optional<double> BubbleFrameView::GetProgress() const {
-  if (progress_indicator_->GetVisible())
+  if (progress_indicator_->GetVisible()) {
     return progress_indicator_->GetValue();
+  }
   return absl::nullopt;
 }
 
@@ -443,8 +478,9 @@ gfx::Size BubbleFrameView::GetMaximumSize() const {
   // Allow BubbleFrameView dialogs to be resizable on Mac.
   if (GetWidget()->widget_delegate()->CanResize()) {
     gfx::Size client_size = GetWidget()->client_view()->GetMaximumSize();
-    if (client_size.IsEmpty())
+    if (client_size.IsEmpty()) {
       return client_size;
+    }
     return GetWindowBoundsForClientBounds(gfx::Rect(client_size)).size();
   }
 #endif  // BUILDFLAG(IS_MAC)
@@ -469,41 +505,36 @@ void BubbleFrameView::Layout() {
 
   gfx::Rect bounds = contents_bounds;
   bounds.Inset(title_margins_);
-
-  // Lay out the close and the minimize button.
-  gfx::Point buttons_top_right;
-  if (GetButtonsPositioning() == ButtonsPositioning::kOnFrameEdge) {
-    // The buttons are positioned on the upper trailing corner of the bubble.
-    const int buttons_on_frame_edge_margin =
-        LayoutProvider::Get()->GetDistanceMetric(DISTANCE_CLOSE_BUTTON_MARGIN);
-    buttons_top_right =
-        gfx::Point(contents_bounds.right() - buttons_on_frame_edge_margin,
-                   contents_bounds.y() + buttons_on_frame_edge_margin);
-  } else {
-    CHECK_EQ(GetButtonsPositioning(), ButtonsPositioning::kInTitleRow);
-    // The buttons are positioned at the end of the title row.
-    buttons_top_right = gfx::Point(bounds.right(), bounds.y());
-  }
-  gfx::Rect buttons_rect(buttons_top_right, gfx::Size());
+  gfx::Point button_area_top_right = GetButtonAreaTopRight();
+  // Position each button according to the top-right corner.
+  gfx::Rect button_area_rect(button_area_top_right, gfx::Size());
   for (Button* button : {close_, minimize_}) {
     if (!button->GetVisible()) {
       continue;
     }
     // Add spacing between buttons.
-    if (button == minimize_) {
-      buttons_rect.Outset(
+    if (button == minimize_ && close_->GetVisible()) {
+      button_area_rect.Outset(
           gfx::Outsets::TLBR(0,
                              LayoutProvider::Get()->GetDistanceMetric(
                                  DISTANCE_RELATED_BUTTON_HORIZONTAL),
                              0, 0));
     }
-    button->SetPosition(
-        gfx::Point(buttons_rect.x() - button->width(), buttons_rect.y()));
-    buttons_rect.Union(button->bounds());
+    button->SetPosition(gfx::Point(button_area_rect.x() - button->width(),
+                                   button_area_rect.y()));
+    button_area_rect.Union(button->bounds());
   }
-  // Add a left margin that equals the right margin.
-  buttons_rect.Outset(gfx::Outsets::TLBR(
-      0, contents_bounds.right() - buttons_rect.right(), 0, 0));
+
+  // Add spacing between the title and buttons.
+  if (!button_area_rect.IsEmpty()) {
+    button_area_rect.Outset(
+        gfx::Outsets::TLBR(0,
+                           LayoutProvider::Get()->GetDistanceMetric(
+                               DISTANCE_RELATED_LABEL_HORIZONTAL),
+                           0, 0));
+  }
+
+  DCHECK_EQ(button_area_rect.size(), GetButtonAreaSize());
 
   // Lay out the header.
   gfx::Rect header_rect = contents_bounds;
@@ -520,8 +551,9 @@ void BubbleFrameView::Layout() {
   const int title_label_x = bounds.x() + title_icon_pref_size.width() +
                             title_icon_padding + GetMainImageLeftInsets();
   int title_label_right = bounds.right();
-  if (!buttons_rect.IsEmpty() && buttons_rect.bottom() > header_rect.bottom()) {
-    title_label_right = std::min(title_label_right, buttons_rect.x());
+  if (!button_area_rect.IsEmpty() &&
+      button_area_rect.bottom() > header_rect.bottom()) {
+    title_label_right = std::min(title_label_right, button_area_rect.x());
   }
 
   // TODO(tapted): Layout() should skip more surrounding code when !HasTitle().
@@ -579,14 +611,16 @@ void BubbleFrameView::OnThemeChanged() {
 
 void BubbleFrameView::ViewHierarchyChanged(
     const ViewHierarchyChangedDetails& details) {
-  if (details.is_add && details.child == this)
+  if (details.is_add && details.child == this) {
     UpdateClientLayerCornerRadius();
+  }
 
   // We need to update the client view's corner radius whenever the header or
   // footer are added/removed from the bubble frame so that the client view
   // sits flush with both.
-  if (details.parent == this)
+  if (details.parent == this) {
     UpdateClientLayerCornerRadius();
+  }
 
   if (!details.is_add && details.parent == footnote_container_ &&
       footnote_container_->children().size() == 1 &&
@@ -647,8 +681,9 @@ void BubbleFrameView::SetHeaderView(std::unique_ptr<View> view) {
     header_view_ = nullptr;
   }
 
-  if (view)
+  if (view) {
     header_view_ = AddChildViewAt(std::move(view), 0);
+  }
 
   InvalidateLayout();
 }
@@ -666,8 +701,9 @@ void BubbleFrameView::SetFootnoteView(std::unique_ptr<View> view) {
 }
 
 View* BubbleFrameView::GetFootnoteView() const {
-  if (!footnote_container_)
+  if (!footnote_container_) {
     return nullptr;
+  }
 
   DCHECK_EQ(1u, footnote_container_->children().size());
   return footnote_container_->children()[0];
@@ -879,8 +915,9 @@ void BubbleFrameView::MirrorArrowIfOutOfBounds(
     const gfx::Rect& anchor_rect,
     const gfx::Size& client_size,
     const gfx::Rect& available_bounds) {
-  if (available_bounds.IsEmpty())
+  if (available_bounds.IsEmpty()) {
     return;
+  }
   // Check if the bounds don't fit in the available bounds.
   gfx::Rect window_bounds(bubble_border_->GetBounds(anchor_rect, client_size));
   if (GetOverflowLength(available_bounds, window_bounds, vertical) > 0) {
@@ -1014,42 +1051,21 @@ bool BubbleFrameView::TitleRowHasButtons() const {
 }
 
 gfx::Insets BubbleFrameView::GetTitleLabelInsetsFromFrame() const {
-  int header_height = GetHeaderHeightForFrameWidth(GetContentsBounds().width());
-  int insets_right = 0;
-  if (GetButtonsPositioning() == ButtonsPositioning::kOnFrameEdge) {
-    if (GetWidget()->widget_delegate()->ShouldShowCloseButton()) {
-      const int close_margin = LayoutProvider::Get()->GetDistanceMetric(
-          DISTANCE_CLOSE_BUTTON_MARGIN);
-      // Note: |close_margin| is not applied on the bottom of the icon.
-      int close_height = close_margin + close_->height();
-      // Only reserve space if the close button extends over the header.
-      if (close_height > header_height) {
-        insets_right = 2 * close_margin + close_->width();
-      }
-    }
-  } else {
-    CHECK_EQ(GetButtonsPositioning(), ButtonsPositioning::kInTitleRow);
-    // Reserve space for buttons only when they exist in the title row.
-    if (TitleRowHasButtons()) {
-      int buttons_count =
-          GetWidget()->widget_delegate()->ShouldShowCloseButton() +
-          GetWidget()->widget_delegate()->CanMinimize();
-      // Add button width.
-      insets_right = close_->width() * buttons_count;
-      // Add spacing around buttons.
-      if (buttons_count > 0) {
-        insets_right += title_margins_.right() * 2;
-      }
-      // Add spacing between buttons.
-      if (buttons_count == 2) {
-        insets_right += LayoutProvider::Get()->GetDistanceMetric(
-            DISTANCE_RELATED_BUTTON_HORIZONTAL);
-      }
-    }
-  }
+  const gfx::Rect content_bounds = GetContentsBounds();
+  const int header_height =
+      GetHeaderHeightForFrameWidth(content_bounds.width());
+  const gfx::Size button_area_size = GetButtonAreaSize();
+  const gfx::Rect button_area_bounds(
+      GetButtonAreaTopRight() - gfx::Vector2d(button_area_size.width(), 0),
+      button_area_size);
+  // Only reserve space if the button vertically extends over the header.
+  int insets_right = button_area_bounds.bottom() > header_height
+                         ? content_bounds.right() - button_area_bounds.x()
+                         : 0;
 
-  if (!HasTitle())
+  if (!HasTitle()) {
     return gfx::Insets::TLBR(header_height, 0, 0, insets_right);
+  }
 
   insets_right = std::max(insets_right, title_margins_.right());
   const gfx::Size title_icon_pref_size = title_icon_->GetPreferredSize();
@@ -1108,10 +1124,59 @@ void BubbleFrameView::UpdateClientLayerCornerRadius() {
 }
 
 int BubbleFrameView::GetMainImageLeftInsets() const {
-  if (!main_image_->GetVisible())
+  if (!main_image_->GetVisible()) {
     return 0;
+  }
   return main_image_->GetPreferredSize().width() -
          main_image_->GetBorder()->GetInsets().right();
+}
+
+gfx::Point BubbleFrameView::GetButtonAreaTopRight() const {
+  const gfx::Rect contents_bounds = GetContentsBounds();
+
+  // If the buttons are positioned on the upper trailing corner of the bubble.
+  if (GetButtonsPositioning() == ButtonsPositioning::kOnFrameEdge) {
+    const int distance_to_edge =
+        LayoutProvider::Get()->GetDistanceMetric(DISTANCE_CLOSE_BUTTON_MARGIN);
+    return gfx::Point(contents_bounds.right() - distance_to_edge,
+                      contents_bounds.y() + distance_to_edge);
+  }
+
+  // If the buttons are positioned at the end of the title row.
+  DCHECK_EQ(GetButtonsPositioning(), ButtonsPositioning::kInTitleRow);
+
+  gfx::Rect inner_bounds = contents_bounds;
+  inner_bounds.Inset(title_margins_);
+  // Extend the button rect beyond the inner content bounds by the size
+  // of the trailing button's border.
+  // This ensures that when the trailing button is not hovered over, it
+  // appears vertically aligned with the content's trailing edge.
+  return inner_bounds.top_right() +
+         gfx::Vector2d(close_->GetInsets().right(), 0);
+}
+
+gfx::Size BubbleFrameView::GetButtonAreaSize() const {
+  int button_count = 0;
+  if (GetWidget()->widget_delegate()->ShouldShowCloseButton()) {
+    button_count++;
+  }
+  if (GetWidget()->widget_delegate()->CanMinimize()) {
+    button_count++;
+  }
+  if (button_count == 0) {
+    return gfx::Size();
+  }
+
+  int total_width = close_->width() * button_count;
+  // Add left padding.
+  total_width += LayoutProvider::Get()->GetDistanceMetric(
+      DISTANCE_RELATED_LABEL_HORIZONTAL);
+  // Add spacing between buttons.
+  if (button_count == 2) {
+    total_width += LayoutProvider::Get()->GetDistanceMetric(
+        DISTANCE_RELATED_BUTTON_HORIZONTAL);
+  }
+  return gfx::Size(total_width, close_->height());
 }
 
 // static

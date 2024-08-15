@@ -144,16 +144,6 @@ class HistoryPrivateGetTypedHistoryFunction : public HistoryFunction {
   ExtensionFunction::ResponseAction Run() override;
 };
 
-class HistoryPrivateMigrateOldTypedUrlFunction : public HistoryFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("historyPrivate.migrateOldTypedUrl",
-                             HISTORYPRIVATE_MIGRATEOLDTYPEDURL)
-
- private:
-  ~HistoryPrivateMigrateOldTypedUrlFunction() override = default;
-  ExtensionFunction::ResponseAction Run() override;
-};
-
 class HistoryPrivateGetDetailedHistoryFunction : public HistoryFunctionWithCallback {
  public:
   DECLARE_EXTENSION_FUNCTION("historyPrivate.getDetailedHistory",

@@ -9,11 +9,11 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
+#include "components/notes/note_node.h"
+#include "components/notes/notes_factory.h"
+#include "components/notes/notes_model.h"
 #include "importer/imported_notes_entry.h"
 #include "importer/imported_speeddial_entry.h"
-#include "notes/note_node.h"
-#include "notes/notes_factory.h"
-#include "notes/notes_model.h"
 #include "ui/base/l10n/l10n_util.h"
 
 using bookmarks::BookmarkModel;

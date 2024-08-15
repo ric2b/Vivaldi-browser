@@ -37,6 +37,8 @@ const char kTabSearchOpened[] = "tab_search_opened";
 const char kWebUITabStripClosed[] = "webui_tab_strip_closed";
 const char kWebUITabStripOpened[] = "webui_tab_strip_opened";
 
+const char kDesktopNTPModuleUsed[] = "desktop_new_tab_page_modules_used";
+
 const char kDesktopPwaInstalled[] = "desktop_pwa_installed";
 
 const char kFocusHelpBubbleAcceleratorPressed[] =
@@ -48,8 +50,6 @@ const char kFocusHelpBubbleAcceleratorPromoRead[] =
 const char kBatterySaverDialogShown[] = "battery_saver_info_shown";
 
 const char kHighEfficiencyDialogShown[] = "high_efficiency_info_shown";
-
-const char kPerformanceMenuItemActivated[] = "performance_activated";
 
 const char kExtensionsMenuOpenedWhileExtensionHasAccess[] =
     "extensions_menu_opened_while_extension_has_access";
@@ -77,6 +77,8 @@ const char kOverflowMenuNoHorizontalScrollOrAction[] =
     "overflow_menu_no_horizontal_scroll_or_action";
 const char kPriceNotificationsUsed[] = "price_notifications_used";
 const char kDefaultBrowserPromoShown[] = "default_browser_promo_shown";
+const char kDefaultBrowserPromoRemindMeLater[] =
+    "default_browser_promo_remind_me_later";
 const char kPasswordManagerWidgetPromoTriggered[] =
     "password_manager_widget_promo_trigger";
 const char kPasswordManagerWidgetPromoUsed[] =
@@ -107,6 +109,9 @@ const char kHistoryOnOverflowMenuUsed[] = "history_on_overflow_menu_used";
 const char kShareToolbarItemUsed[] = "share_toolbar_item_used";
 const char kDefaultBrowserVideoPromoConditionsMet[] =
     "default_browser_video_promo_conditions_met";
+const char kLensButtonKeyboardUsed[] = "lens_keyboard_used";
+const char kParcelTrackingTriggered[] = "parcel_tracking_triggered";
+const char kParcelTracked[] = "parcel_tracked";
 #endif  // BUILDFLAG(IS_IOS)
 
 #if BUILDFLAG(IS_ANDROID)

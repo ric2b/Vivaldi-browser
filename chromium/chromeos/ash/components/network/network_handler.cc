@@ -8,6 +8,7 @@
 
 #include "ash/constants/ash_features.h"
 #include "base/task/single_thread_task_runner.h"
+#include "chromeos/ash/components/install_attributes/install_attributes.h"
 #include "chromeos/ash/components/network/auto_connect_handler.h"
 #include "chromeos/ash/components/network/cellular_connection_handler.h"
 #include "chromeos/ash/components/network/cellular_esim_installer.h"
@@ -18,6 +19,8 @@
 #include "chromeos/ash/components/network/cellular_policy_handler.h"
 #include "chromeos/ash/components/network/client_cert_resolver.h"
 #include "chromeos/ash/components/network/enterprise_managed_metadata_store.h"
+#include "chromeos/ash/components/network/ephemeral_network_configuration_handler.h"
+#include "chromeos/ash/components/network/ephemeral_network_policies_enablement_handler.h"
 #include "chromeos/ash/components/network/geolocation_handler.h"
 #include "chromeos/ash/components/network/hidden_network_handler.h"
 #include "chromeos/ash/components/network/hotspot_allowed_flag_handler.h"
@@ -34,6 +37,7 @@
 #include "chromeos/ash/components/network/metrics/hotspot_feature_usage_metrics.h"
 #include "chromeos/ash/components/network/metrics/hotspot_metrics_helper.h"
 #include "chromeos/ash/components/network/metrics/vpn_network_metrics_helper.h"
+#include "chromeos/ash/components/network/network_3gpp_handler.h"
 #include "chromeos/ash/components/network/network_activation_handler_impl.h"
 #include "chromeos/ash/components/network/network_cert_loader.h"
 #include "chromeos/ash/components/network/network_certificate_handler.h"
@@ -46,6 +50,7 @@
 #include "chromeos/ash/components/network/network_sms_handler.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
 #include "chromeos/ash/components/network/network_state_handler_observer.h"
+#include "chromeos/ash/components/network/policy_util.h"
 #include "chromeos/ash/components/network/prohibited_technologies_handler.h"
 #include "chromeos/ash/components/network/proxy/ui_proxy_config_service.h"
 #include "chromeos/ash/components/network/stub_cellular_networks_provider.h"
@@ -57,7 +62,10 @@ namespace ash {
 static NetworkHandler* g_network_handler = NULL;
 
 NetworkHandler::NetworkHandler()
-    : task_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()),
+    : was_enterprise_managed_at_startup_(
+          InstallAttributes::IsInitialized() &&
+          InstallAttributes::Get()->IsEnterpriseManaged()),
+      task_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()),
       network_state_handler_(new NetworkStateHandler()) {
   network_device_handler_.reset(new NetworkDeviceHandlerImpl());
   cellular_inhibitor_.reset(new CellularInhibitor());
@@ -103,6 +111,23 @@ NetworkHandler::NetworkHandler()
     text_message_provider_.reset(new TextMessageProvider());
   }
   geolocation_handler_.reset(new GeolocationHandler());
+  if (ash::features::IsCellularCarrierLockEnabled()) {
+    network_3gpp_handler_.reset(new Network3gppHandler());
+  }
+
+  // Only watch ephemeral network policies enablement if ephemeral network
+  // policies should be enabled by the feature or if the device policy to enable
+  // ephemeral network policies should be respected.
+  if (features::AreEphemeralNetworkPoliciesEnabled() ||
+      features::CanEphemeralNetworkPoliciesBeEnabledByPolicy()) {
+    // base::Unretained is safe because
+    // `ephemeral_network_policies_enablement_handler_` is a member of
+    // NetworkHandler so it will be destroyed before `this`.
+    ephemeral_network_policies_enablement_handler_ =
+        std::make_unique<EphemeralNetworkPoliciesEnablementHandler>(
+            base::BindOnce(&NetworkHandler::OnEphemeralNetworkPoliciesEnabled,
+                           base::Unretained(this)));
+  }
 }
 
 NetworkHandler::~NetworkHandler() {
@@ -195,12 +220,18 @@ void NetworkHandler::Init() {
   prohibited_technologies_handler_->Init(
       managed_network_configuration_handler_.get(),
       network_state_handler_.get(), technology_state_controller_.get());
-  network_sms_handler_->Init();
   if (features::IsSuppressTextMessagesEnabled()) {
+    network_sms_handler_->Init(network_state_handler_.get());
+
     text_message_provider_->Init(network_sms_handler_.get(),
                                  managed_network_configuration_handler_.get());
+  } else {
+    network_sms_handler_->Init();
   }
   geolocation_handler_->Init();
+  if (ash::features::IsCellularCarrierLockEnabled()) {
+    network_3gpp_handler_->Init();
+  }
 }
 
 // static
@@ -239,6 +270,8 @@ void NetworkHandler::InitializePrefServices(
       network_profile_handler_.get()));
   managed_network_configuration_handler_->set_ui_proxy_config_service(
       ui_proxy_config_service_.get());
+  managed_network_configuration_handler_->set_user_prefs(
+      logged_in_profile_prefs);
   network_metadata_store_.reset(new NetworkMetadataStore(
       network_configuration_handler_.get(), network_connection_handler_.get(),
       network_state_handler_.get(),
@@ -253,13 +286,24 @@ void NetworkHandler::InitializePrefServices(
     text_message_provider_->SetNetworkMetadataStore(
         network_metadata_store_.get());
   }
+  if (ephemeral_network_policies_enablement_handler_) {
+    ephemeral_network_policies_enablement_handler_->SetDevicePrefs(
+        device_prefs);
+  }
 }
 
 void NetworkHandler::ShutdownPrefServices() {
+  if (ephemeral_network_policies_enablement_handler_) {
+    ephemeral_network_policies_enablement_handler_->SetDevicePrefs(nullptr);
+  }
   cellular_esim_profile_handler_->SetDevicePrefs(nullptr);
   managed_cellular_pref_handler_->SetDevicePrefs(nullptr);
   ui_proxy_config_service_.reset();
+  managed_network_configuration_handler_->set_user_prefs(nullptr);
   hidden_network_handler_->SetNetworkMetadataStore(nullptr);
+  if (features::IsSuppressTextMessagesEnabled()) {
+    text_message_provider_->SetNetworkMetadataStore(nullptr);
+  }
   network_metadata_store_.reset();
 }
 
@@ -382,6 +426,11 @@ GeolocationHandler* NetworkHandler::geolocation_handler() {
   return geolocation_handler_.get();
 }
 
+Network3gppHandler* NetworkHandler::network_3gpp_handler() {
+  DCHECK(ash::features::IsCellularCarrierLockEnabled());
+  return network_3gpp_handler_.get();
+}
+
 ProhibitedTechnologiesHandler*
 NetworkHandler::prohibited_technologies_handler() {
   return prohibited_technologies_handler_.get();
@@ -399,6 +448,14 @@ void NetworkHandler::SetIsEnterpriseManaged(bool is_enterprise_managed) {
     enterprise_managed_metadata_store_->set_is_enterprise_managed(
         is_enterprise_managed);
   }
+}
+
+void NetworkHandler::OnEphemeralNetworkPoliciesEnabled() {
+  DCHECK(policy_util::AreEphemeralNetworkPoliciesEnabled());
+  ephemeral_network_configuration_handler_ =
+      std::make_unique<EphemeralNetworkConfigurationHandler>(
+          managed_network_configuration_handler_.get(),
+          was_enterprise_managed_at_startup_);
 }
 
 }  // namespace ash

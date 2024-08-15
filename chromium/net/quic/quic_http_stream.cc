@@ -25,7 +25,6 @@
 #include "net/quic/quic_http_utils.h"
 #include "net/spdy/spdy_http_utils.h"
 #include "net/ssl/ssl_info.h"
-#include "net/third_party/quiche/src/quiche/quic/core/http/quic_client_promised_info.h"
 #include "net/third_party/quiche/src/quiche/quic/core/http/spdy_utils.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_stream_sequencer.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_utils.h"
@@ -132,7 +131,7 @@ int QuicHttpStream::SendRequest(const HttpRequestHeaders& request_headers,
   }
 
   // Store the serialized request headers.
-  CreateSpdyHeadersFromHttpRequest(*request_info_, request_headers,
+  CreateSpdyHeadersFromHttpRequest(*request_info_, priority_, request_headers,
                                    &request_headers_);
 
   // Store the request body.

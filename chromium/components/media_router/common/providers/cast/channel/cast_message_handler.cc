@@ -75,6 +75,10 @@ InternalMessage::InternalMessage(CastMessageType type,
       message(std::move(message)) {}
 InternalMessage::~InternalMessage() = default;
 
+CastMessageHandler::Observer::~Observer() {
+  CHECK(!IsInObserverList());
+}
+
 CastMessageHandler::CastMessageHandler(CastSocketService* socket_service,
                                        ParseJsonCallback parse_json,
                                        std::string_view user_agent,
@@ -187,33 +191,6 @@ void CastMessageHandler::RequestReceiverStatus(int channel_id) {
   int request_id = NextRequestId();
   SendCastMessageToSocket(socket,
                           CreateReceiverStatusRequest(source_id_, request_id));
-}
-
-Result CastMessageHandler::SendBroadcastMessage(
-    int channel_id,
-    const std::vector<std::string>& app_ids,
-    const BroadcastRequest& request) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  CastSocket* socket = socket_service_->GetSocket(channel_id);
-  if (!socket) {
-    DVLOG(2) << __func__ << ": socket not found: " << channel_id;
-    return Result::kFailed;
-  }
-
-  int request_id = NextRequestId();
-  DVLOG(2) << __func__ << ", channel_id: " << channel_id
-           << ", request_id: " << request_id;
-
-  // Note: Even though the message is formatted like a request, we don't care
-  // about the response, as broadcasts are fire-and-forget.
-  CastMessage message =
-      CreateBroadcastRequest(source_id_, request_id, app_ids, request);
-  if (message.ByteSizeLong() > kMaxCastMessagePayload) {
-    return Result::kFailed;
-  }
-  SendCastMessageToSocket(socket, message);
-  return Result::kOk;
 }
 
 void CastMessageHandler::LaunchSession(

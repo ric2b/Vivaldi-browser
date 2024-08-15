@@ -394,9 +394,6 @@ class ASH_EXPORT WallpaperControllerImpl
 
   void set_allow_shield_for_testing() { allow_shield_for_testing_ = true; }
 
-  // Exposed for testing.
-  base::WallClockTimer& GetUpdateWallpaperTimerForTesting();
-
   WallpaperDriveFsDelegate* drivefs_delegate_for_testing() {
     return drivefs_delegate_.get();
   }
@@ -483,7 +480,6 @@ class ASH_EXPORT WallpaperControllerImpl
 
   // Handler to receive Fetch*Wallpaper variants callbacks.
   void OnWallpaperVariantsFetched(WallpaperType type,
-                                  bool start_daily_refresh_timer,
                                   SetWallpaperCallback callback,
                                   absl::optional<OnlineWallpaperParams> params);
 
@@ -689,28 +685,6 @@ class ASH_EXPORT WallpaperControllerImpl
   // If the user has a Google Photos wallpaper set.
   bool IsGooglePhotosWallpaperSet() const;
 
-  // Starts a wall clock timer, to update the wallpaper 24 hours since the last
-  // wallpaper was set.
-  void StartDailyRefreshTimer();
-
-  // Starts a wall clock timer, to confirm that the current Google Photos
-  // photo set as the wallpaper still exists in the user's library.
-  void StartGooglePhotosStalenessTimer();
-
-  // Starts a wall clock timer to retry fetching a daily refresh wallpaper.
-  void OnFetchDailyWallpaperFailed();
-
-  // Starts a wall clock timer with the specified |delay|.
-  void StartUpdateWallpaperTimer(base::TimeDelta delay);
-
-  // Time to next wallpaper update for daily refresh; 24 hours since last
-  // wallpaper set.
-  base::TimeDelta GetTimeToNextDailyRefreshUpdate() const;
-
-  // Called when `update_wallpaper_timer_` expires to take the appropriate
-  // action for whatever type of wallpaper is currently set.
-  void OnUpdateWallpaperTimerExpired();
-
   // Checks to make sure the currently selected Google Photos wallpaper still
   // exists in the user's Google Photos library.
   void CheckGooglePhotosStaleness(const AccountId& account_id,
@@ -858,6 +832,10 @@ class ASH_EXPORT WallpaperControllerImpl
   base::ScopedObservation<ui::NativeTheme, ui::NativeThemeObserver>
       theme_observation_{this};
 
+  base::ScopedObservation<ScheduledFeature,
+                          ScheduledFeature::CheckpointObserver>
+      daily_refresh_observation_{this};
+
   std::unique_ptr<ui::CompositorLock> compositor_lock_;
 
   std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;
@@ -894,8 +872,6 @@ class ASH_EXPORT WallpaperControllerImpl
   // 'set wallpaper' request. (e.g. when a custom wallpaper decoding fails, a
   // default wallpaper decoding is initiated.)
   std::vector<base::FilePath> decode_requests_for_testing_;
-
-  base::WallClockTimer update_wallpaper_timer_;
 
   base::WeakPtrFactory<WallpaperControllerImpl> weak_factory_{this};
 

@@ -15,9 +15,9 @@ import androidx.annotation.NonNull;
 import org.chromium.base.Callback;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.supplier.LazyOneshotSupplierImpl;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
-import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
@@ -78,7 +78,7 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
     private final TabContentManager mTabContentManager;
     private PropertyModelChangeProcessor mModelChangeProcessor;
     private TabGridDialogCoordinator mTabGridDialogCoordinator;
-    private OneshotSupplierImpl<TabGridDialogMediator.DialogController>
+    private LazyOneshotSupplierImpl<TabGridDialogMediator.DialogController>
             mTabGridDialogControllerSupplier;
     private TabListCoordinator mTabStripCoordinator;
     private TabGroupUiMediator mMediator;
@@ -160,16 +160,10 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
             //  and the dialog here.
             if (mScrimCoordinator != null) {
                 mTabGridDialogControllerSupplier =
-                        new OneshotSupplierImpl<>() {
+                        new LazyOneshotSupplierImpl<>() {
                             @Override
-                            public TabGridDialogMediator.DialogController get() {
+                            public void doSet() {
                                 initTabGridDialogCoordinator();
-                                return mTabGridDialogCoordinator.getDialogController();
-                            }
-
-                            @Override
-                            public boolean hasValue() {
-                                return mTabGridDialogCoordinator != null;
                             }
                         };
             } else {

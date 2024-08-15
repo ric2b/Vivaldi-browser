@@ -14,6 +14,7 @@ import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
+import 'chrome://resources/polymer/v3_0/paper-spinner/paper-spinner-lite.js';
 import './add_input_methods_dialog.js';
 import './add_spellcheck_languages_dialog.js';
 import './os_edit_dictionary_page.js';
@@ -26,7 +27,7 @@ import {SettingsToggleButtonElement} from '/shared/settings/controls/settings_to
 import {PrefsMixin} from 'chrome://resources/cr_components/settings_prefs/prefs_mixin.js';
 import {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
-import {assert} from 'chrome://resources/js/assert_ts.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {DomRepeatEvent, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -139,6 +140,14 @@ export class OsSettingsInputPageElement extends OsSettingsInputPageElementBase {
           return loadTimeData.getBoolean('onDeviceGrammarCheckEnabled');
         },
       },
+
+      languagePacksInSettingsEnabled_: Boolean,
+
+      allowEmojiSuggestion_: Boolean,
+
+      allowOrca_: Boolean,
+
+      allowSuggestionSection_: Boolean,
     };
   }
 
@@ -155,8 +164,10 @@ export class OsSettingsInputPageElement extends OsSettingsInputPageElementBase {
   // Internal properties for mixins.
   // From DeepLinkingMixin.
   override supportedSettingIds = new Set([
-    Setting.kShowInputOptionsInShelf,
     Setting.kAddInputMethod,
+    Setting.kShowEmojiSuggestions,
+    Setting.kShowInputOptionsInShelf,
+    Setting.kShowOrca,
     Setting.kSpellCheck,
   ]);
   // From RouteOriginMixin.
@@ -170,6 +181,13 @@ export class OsSettingsInputPageElement extends OsSettingsInputPageElementBase {
   private onDeviceGrammarCheckEnabled_: boolean;
   private languageSettingsJapaneseEnabled_: boolean;
   private shouldShowLanguagePacksNotice_: boolean;
+  private languagePacksInSettingsEnabled_ =
+      loadTimeData.getBoolean('languagePacksInSettingsEnabled');
+  private readonly allowEmojiSuggestion_: boolean =
+      loadTimeData.getBoolean('allowEmojiSuggestion');
+  private readonly allowOrca_: boolean = loadTimeData.getBoolean('allowOrca');
+  private readonly allowSuggestionSection_: boolean =
+      this.allowOrca_ || this.allowEmojiSuggestion_;
 
   // Computed properties.
   private spellCheckLanguages_: SpellCheckLanguageState[]|undefined;
@@ -609,6 +627,36 @@ export class OsSettingsInputPageElement extends OsSettingsInputPageElementBase {
     }
     if (this.showNextImeShortcutReminder_) {
       this.setPrefValue('ash.shortcut_reminders.next_ime_dismissed', true);
+    }
+  }
+
+  private shouldShowSpinner_(imeId: string): boolean {
+    return this.languagePacksInSettingsEnabled_ &&
+        this.languageHelper.getImeLanguagePackStatus(imeId) ===
+        chrome.inputMethodPrivate.LanguagePackStatus.IN_PROGRESS;
+  }
+
+  private shouldShowLanguagePackError_(imeId: string): boolean {
+    if (!this.languagePacksInSettingsEnabled_) {
+      return false;
+    }
+    const status = this.languageHelper.getImeLanguagePackStatus(imeId);
+    return status ===
+        chrome.inputMethodPrivate.LanguagePackStatus.ERROR_OTHER ||
+        status ===
+        chrome.inputMethodPrivate.LanguagePackStatus.ERROR_NEEDS_REBOOT;
+  }
+
+  private getLanguagePacksErrorMessage_(imeId: string): string {
+    const status = this.languageHelper.getImeLanguagePackStatus(imeId);
+    switch (status) {
+      case chrome.inputMethodPrivate.LanguagePackStatus.ERROR_NEEDS_REBOOT:
+        return this.i18n('inputMethodLanguagePacksNeedsRebootError');
+      case chrome.inputMethodPrivate.LanguagePackStatus.ERROR_OTHER:
+        return this.i18n('inputMethodLanguagePacksGeneralError');
+      default:
+        console.error('Invalid status:', status);
+        return '';
     }
   }
 }

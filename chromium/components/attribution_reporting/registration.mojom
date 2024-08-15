@@ -5,15 +5,12 @@
 module attribution_reporting.mojom;
 
 import "components/attribution_reporting/source_registration_time_config.mojom";
+import "components/attribution_reporting/trigger_data_matching.mojom";
 import "mojo/public/mojom/base/int128.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "services/network/public/mojom/schemeful_site.mojom";
 import "url/mojom/origin.mojom";
 import "url/mojom/url.mojom";
-
-struct DebugKey {
-  uint64 value;
-};
 
 // Encapsulates a potentially trustworthy origin. Equivalent to
 // attribution_reporting::SuitableOrigin.
@@ -70,12 +67,14 @@ struct DestinationSet {
 // Reporting configuration that controls the early reporting time windows for a
 // source.
 struct EventReportWindows {
-  // If `end_times` is non-empty, `start_time_or_window_time` represents the
-  // start time for a report to be attributed to. Otherwise, it represents how
-  // long after source registration an event-level report can be generated with
-  // this source.
-  mojo_base.mojom.TimeDelta start_time_or_window_time;
+  mojo_base.mojom.TimeDelta start_time;
   array<mojo_base.mojom.TimeDelta> end_times;
+};
+
+// Configures a source's output space.
+// https://github.com/WICG/attribution-reporting-api/blob/main/flexible_event_config.md
+struct TriggerConfig {
+  TriggerDataMatching trigger_data_matching;
 };
 
 struct SourceRegistration {
@@ -85,20 +84,17 @@ struct SourceRegistration {
   uint64 source_event_id = 0;
 
   // Specifies how long this source is eligible for attribution.
-  mojo_base.mojom.TimeDelta? expiry;
+  mojo_base.mojom.TimeDelta expiry;
 
-  // Optionally specifies a custom set of report windows determining the time
+  // Specifies a custom set of report windows determining the time
   // bounds of a report being generated with this source.
-  EventReportWindows? event_report_windows;
+  EventReportWindows event_report_windows;
 
-  // Optionally specifies how long after source registration an aggregatable
+  // Specifies how long after source registration an aggregatable
   // report can be generated with this source.
-  mojo_base.mojom.TimeDelta? aggregatable_report_window;
+  mojo_base.mojom.TimeDelta aggregatable_report_window;
 
-  // Optionally specifies how many event-level reports can be generated with
-  // this source, with -1 representing absl::nullopt.
-  //
-  // TODO(crbug.com/657632): Make nullable.
+  // Specifies how many event-level reports can be generated with this source.
   int32 max_event_level_reports;
 
   // Priority for this source.
@@ -106,7 +102,7 @@ struct SourceRegistration {
 
   // A key that is propagated through the Attribution Reporting API for
   // debugging purposes.
-  DebugKey? debug_key;
+  uint64? debug_key;
 
   FilterData filter_data;
 
@@ -114,13 +110,8 @@ struct SourceRegistration {
 
   // Specifies whether to enable verbose debug reporting.
   bool debug_reporting = false;
-};
 
-// Deduplication key set by a reporting origin which prevents duplicate triggers
-// from generating multiple attribution reports for a given source.
-struct TriggerDedupKey {
-  // Arbitrary value for deduplication set by the reporting origin.
-  uint64 value;
+  TriggerConfig trigger_config;
 };
 
 // Mojo representation of the trigger configuration provided by a reporting
@@ -138,7 +129,7 @@ struct EventTriggerData {
 
   // Key which allows deduplication against existing attributions for the same
   // source.
-  TriggerDedupKey? dedup_key;
+  uint64? dedup_key;
 
   FilterPair filters;
 };
@@ -146,7 +137,7 @@ struct EventTriggerData {
 struct AggregatableDedupKey {
   // Key which allows deduplication against existing attributions for the same
   // source.
-  TriggerDedupKey? dedup_key;
+  uint64? dedup_key;
 
   FilterPair filters;
 };
@@ -170,7 +161,7 @@ struct TriggerRegistration {
 
   // A key that is propagated through the Attribution Reporting API for
   // debugging purposes.
-  DebugKey? debug_key;
+  uint64? debug_key;
 
   // List of all aggregatable dedup keys for deduplication against existing
   // aggregatable reports for the same source.

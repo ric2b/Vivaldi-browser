@@ -38,6 +38,7 @@
 #include "third_party/blink/renderer/core/css/css_style_declaration.h"
 #include "third_party/blink/renderer/core/css/css_value.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser.h"
+#include "third_party/blink/renderer/core/css/parser/css_property_parser.h"
 #include "third_party/blink/renderer/core/css/properties/css_property.h"
 #include "third_party/blink/renderer/core/css/property_bitsets.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -219,7 +220,7 @@ NamedPropertySetterResult CSSStyleDeclaration::AnonymousNamedSetter(
   // create a std::string to set the ExceptionState's |property_name| argument,
   // while we can use CSSProperty::GetPropertyName() here (see bug 829408).
   ExceptionState exception_state(
-      script_state->GetIsolate(), ExceptionState::kSetterContext,
+      script_state->GetIsolate(), ExceptionContextType::kAttributeSet,
       "CSSStyleDeclaration",
       CSSProperty::Get(ResolveCSSPropertyID(unresolved_property))
           .GetPropertyName());

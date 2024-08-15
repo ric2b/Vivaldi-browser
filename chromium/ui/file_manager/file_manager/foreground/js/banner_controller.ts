@@ -13,14 +13,16 @@ import {NativeEventTarget as EventTarget} from 'chrome://resources/ash/common/ev
 import {getDriveQuotaMetadata, getSizeStats} from '../../common/js/api.js';
 import {RateLimiter} from '../../common/js/async_util.js';
 import {DialogType} from '../../common/js/dialog_type.js';
+import {getTeamDriveName} from '../../common/js/entry_utils.js';
+import {isDriveFsBulkPinningEnabled, isGoogleOneOfferFilesBannerEligibleAndEnabled} from '../../common/js/flags.js';
 import {storage} from '../../common/js/storage.js';
-import {util} from '../../common/js/util.js';
+import {isNullOrUndefined} from '../../common/js/util.js';
 import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
 import {Crostini} from '../../externs/background/crostini.js';
 import {FakeEntry, FilesAppDirEntry} from '../../externs/files_app_entry_interfaces.js';
 import {State} from '../../externs/ts/state.js';
 import {Store} from '../../externs/ts/store.js';
-import {VolumeInfo} from '../../externs/volume_info.js';
+import type {VolumeInfo} from '../../externs/volume_info.js';
 import {VolumeManager} from '../../externs/volume_manager.js';
 import {getStore} from '../../state/store.js';
 
@@ -42,7 +44,7 @@ import {TAG_NAME as LocalDiskLowSpaceBannerTagName} from './ui/banners/local_dis
 import {TAG_NAME as PhotosWelcomeBannerTagName} from './ui/banners/photos_welcome_banner.js';
 import {TAG_NAME as SharedWithCrostiniPluginVmBanner} from './ui/banners/shared_with_crostini_pluginvm_banner.js';
 import {TAG_NAME as TrashBannerTagName} from './ui/banners/trash_banner.js';
-import {AllowedVolumeOrType, Banner, BANNER_INFINITE_TIME, BannerEvent, MinDiskThreshold} from './ui/banners/types.js';
+import {type AllowedVolumeOrType, Banner, BANNER_INFINITE_TIME, BannerEvent, type MinDiskThreshold} from './ui/banners/types.js';
 
 /**
  * Local storage key suffix for how many times a banner was shown.
@@ -321,14 +323,14 @@ export class BannerController extends EventTarget {
       ]);
 
       const educationalBanners =
-          util.isGoogleOneOfferFilesBannerEligibleAndEnabled() ?
+          isGoogleOneOfferFilesBannerEligibleAndEnabled() ?
           [GoogleOneOfferBannerTagName] :
           [DriveWelcomeBannerTagName];
-      if (util.isDriveFsBulkPinningEnabled()) {
+      if (isDriveFsBulkPinningEnabled()) {
         educationalBanners.push(DriveBulkPinningBannerTagName);
       }
       educationalBanners.push(HoldingSpaceWelcomeBannerTagName);
-      if (!util.isDriveFsBulkPinningEnabled()) {
+      if (!isDriveFsBulkPinningEnabled()) {
         educationalBanners.push(DriveOfflinePinningBannerTagName);
       }
       educationalBanners.push(PhotosWelcomeBannerTagName);
@@ -472,7 +474,7 @@ export class BannerController extends EventTarget {
     const previousSharedDrive = this.currentSharedDrive_;
     this.currentEntry_ = this.directoryModel_.getCurrentDirEntry();
     if (this.currentEntry_) {
-      this.currentSharedDrive_ = util.getTeamDriveName(this.currentEntry_);
+      this.currentSharedDrive_ = getTeamDriveName(this.currentEntry_);
     }
     this.currentRootType_ = this.directoryModel_.getCurrentRootType();
     this.currentVolume_ = this.directoryModel_.getCurrentVolumeInfo();
@@ -1005,8 +1007,8 @@ export function isBelowThreshold(
   if (!threshold || !sizeStats) {
     return false;
   }
-  if (util.isNullOrUndefined(sizeStats.remainingSize) ||
-      util.isNullOrUndefined(sizeStats.totalSize)) {
+  if (isNullOrUndefined(sizeStats.remainingSize) ||
+      isNullOrUndefined(sizeStats.totalSize)) {
     return false;
   }
   if (('minSize' in threshold) && threshold.minSize < sizeStats.remainingSize) {

@@ -118,6 +118,9 @@
       <message name="IDS_IMPORTER_LOCK_TITLE" desc="Dialog title for importer lock dialog">
         Close Browser Before Importing
       </message>
+      <message name="IDS_NEW_NUMBERED_PROFILE_NAME" desc="The name given to a newly created profile. Displayed in wrench menu and settings UI using the --new-profile-management flag.">
+        Profile <ph name="VALUE">$1<ex>1</ex></ph>
+      </message>
       <message name="IDS_PASSWORD_BUBBLES_FOOTER_SYNCED_TO_ACCOUNT" desc="The footer text of the bubbles that offers users to save, update or manage stored passwords in Vivaldi and synced to their Vivaldi account.">
         You can use saved passwords on any device. They're saved to the <ph name="VIVALDI_PASSWORD_MANAGER">$1<ex>Vivaldi Password Manager</ex></ph>.
       </message>

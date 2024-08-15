@@ -187,6 +187,7 @@ const char kIpTypeIpv4Ipv6[] = "IPv4orIPv6";
 const char kApnTypes[] = "ApnTypes";
 const char kApnTypeDefault[] = "Default";
 const char kApnTypeAttach[] = "Attach";
+const char kApnTypeTether[] = "Tether";
 }  // namespace cellular_apn
 
 namespace cellular_found_network {
@@ -554,6 +555,9 @@ const char* const kAllowTextMessages = "AllowTextMessages";
 const char kBlacklistedHexSSIDs[] = "BlacklistedHexSSIDs";  // Deprecated
 const char kBlockedHexSSIDs[] = "BlockedHexSSIDs";
 const char kDisableNetworkTypes[] = "DisableNetworkTypes";
+const char kRecommendedValuesAreEphemeral[] = "RecommendedValuesAreEphemeral";
+const char kUserCreatedNetworkConfigurationsAreEphemeral[] =
+    "UserCreatedNetworkConfigurationsAreEphemeral";
 }  // global_network_config
 
 namespace device_state {

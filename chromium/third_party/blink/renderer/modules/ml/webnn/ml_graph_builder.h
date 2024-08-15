@@ -142,6 +142,9 @@ class MODULES_EXPORT MLGraphBuilder final : public ScriptWrappable {
   MLOperand* min(const MLOperand* a,
                  const MLOperand* b,
                  ExceptionState& exception_state);
+  MLOperand* pow(const MLOperand* a,
+                 const MLOperand* b,
+                 ExceptionState& exception_state);
 
   // Element-wise unary operations
   MLOperand* abs(const MLOperand* input, ExceptionState& exception_state);
@@ -168,6 +171,10 @@ class MODULES_EXPORT MLGraphBuilder final : public ScriptWrappable {
                        ExceptionState& exception_state);
   MLActivation* leakyRelu(const MLLeakyReluOptions* options,
                           ExceptionState& exception_state);
+
+  MLOperand* matmul(const MLOperand* a,
+                    const MLOperand* b,
+                    ExceptionState& exception_state);
 
   MLOperand* pad(const MLOperand* input,
                  const Vector<uint32_t>& beginningPadding,

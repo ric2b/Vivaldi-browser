@@ -46,8 +46,7 @@
     font-weight: 400;
     line-height: 18px;
     margin-bottom: 20px;
-    text-align: justify;
-    text-justify: inter-word;
+    text-align: left;
   }
 
   #attachFilesLabelContainer {
@@ -225,10 +224,11 @@
     <!-- Attach files -->
     <div id="attachFiles">
       <div id="attachFilesLabelContainer">
-        <h2 id="attachFilesLabel">[[i18n('attachFilesLabel')]]</h2>
+        <h2 id="attachFilesLabel">[[getAttachFilesLabel_(feedbackContext)]]</h2>
         <iron-icon icon="os-feedback:info" id="attachFilesIcon"
             class="focusable" tabindex="0"
-            aria-labelledby="attachFilesTooltipContent">
+            aria-labelledby="attachFilesTooltipContent"
+            hidden$="[[!isUserLoggedIn_(feedbackContext)]]">
         </iron-icon>
         <paper-tooltip for="attachFilesIcon" position="top" offset="0" fit-to-visible-bounds>
           <div id="attachFilesTooltipContent">
@@ -248,7 +248,8 @@
           </button>
         </div>
         <!-- Attach a file -->
-        <div id="addFileContainer" class="card-frame">
+        <div id="addFileContainer" class="card-frame"
+            hidden$="[[!isUserLoggedIn_(feedbackContext)]]">
           <file-attachment></file-attachment>
         </div>
       </div>
@@ -343,7 +344,8 @@
       </div>
     </div>
     <!-- Privacy note -->
-    <div id="privacyNote" inner-h-t-m-l="[[privacyNote_]]" class="privacy-note">
+    <div id="privacyNote" inner-h-t-m-l="[[privacyNote_]]"
+        class="privacy-note">
     </div>
     <div id="shareWithPartnerNote" class="privacy-note">
       [[i18n('mayBeShareWithPartnerNote')]]</div>

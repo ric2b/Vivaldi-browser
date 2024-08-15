@@ -14,7 +14,6 @@
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -32,7 +31,6 @@
 #include "extensions/api/window/window_private_api.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/image_loader.h"
-#include "extensions/common/draggable_region.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -66,10 +64,6 @@
 #if BUILDFLAG(IS_WIN)
 #include "browser/win/vivaldi_utils.h"
 #endif  // BUILDFLAG(IS_WIN)
-
-// Colors for the flash screen.
-#define DEFAULT_DARK_BACKGROUND_COLOR SkColorSetARGB(0xFF, 0x2d, 0x2d, 0x2d)
-#define DEFAULT_LIGHT_BACKGROUND_COLOR SkColorSetARGB(0xFF, 0xd2, 0xd2, 0xd2)
 
 namespace {
 
@@ -105,32 +99,33 @@ const int kSmallIconSizeViv = 16;
 
 class VivaldiSplashBackground : public views::Background {
  public:
-  explicit VivaldiSplashBackground(bool show_logo) : show_logo_(show_logo) {}
+  explicit VivaldiSplashBackground(SkColor background_color,
+                                   const gfx::VectorIcon *icon,
+                                   SkColor icon_color)
+      : background_color_(background_color),
+        icon_(icon),
+        icon_color_(icon_color) {}
 
   VivaldiSplashBackground(const VivaldiSplashBackground&) = delete;
   VivaldiSplashBackground& operator=(const VivaldiSplashBackground&) = delete;
 
   void Paint(gfx::Canvas* canvas, views::View* view) const override {
-    ui::NativeTheme* theme = view->GetNativeTheme();
-    if (theme && theme->GetDefaultSystemColorScheme() ==
-                     ui::NativeTheme::ColorScheme::kDark) {
-      canvas->DrawColor(DEFAULT_DARK_BACKGROUND_COLOR);
-    } else {
-      canvas->DrawColor(DEFAULT_LIGHT_BACKGROUND_COLOR);
-    }
+    canvas->DrawColor(background_color_);
 
-    if (show_logo_) {
+    if (icon_ != nullptr) {
       const gfx::Rect& b = view->GetContentsBounds();
       int size = b.width() * 0.16;
       const ui::ThemedVectorIcon& logo = ui::ThemedVectorIcon(
-          &kVivaldiSplashIcon, SkColorSetARGB(0x1A, 0x00, 0x00, 0x00), size);
+          icon_, icon_color_, size);
       canvas->DrawImageInt(logo.GetImageSkia(view->GetColorProvider()),
                            (b.width() - size) / 2, (b.height() - size) / 2);
     }
   }
 
  private:
-  bool show_logo_;
+  SkColor background_color_;
+  const gfx::VectorIcon *icon_;
+  SkColor icon_color_;
 };
 
 }  // namespace
@@ -212,11 +207,37 @@ views::ClientView* VivaldiWindowWidgetDelegate::CreateClientView(
   web_view->SetCanProcessEventsWithinSubtree(false);
   web_view->SetWebContents(contents);
 
+  bool is_private_window = window_->browser()->profile()->IsIncognitoProfile();
   // The purpose of setting a background color for settings & popup windows is
   // to have something to render when resizing windows. Additionally for
   // browser windows is to show splash logo before first content is rendered.
+  SkColor background_color;
+  if (is_private_window) {
+    background_color = SkColorSetRGB(0x23, 0x23, 0x4f);
+  } else {
+    ui::NativeTheme* theme = widget->GetNativeTheme();
+    if (theme && theme->GetDefaultSystemColorScheme() ==
+                    ui::NativeTheme::ColorScheme::kDark) {
+      background_color = SkColorSetRGB(0x2d, 0x2d, 0x2d);
+    } else {
+      background_color = SkColorSetRGB(0xd2, 0xd2, 0xd2);
+    }
+  }
+  const gfx::VectorIcon *icon = nullptr;
+  SkColor icon_color;
   bool show_logo = window_->browser()->is_type_normal();
-  web_view->SetBackground(std::make_unique<VivaldiSplashBackground>(show_logo));
+  if (show_logo) {
+    if (is_private_window) {
+      icon_color = SkColorSetRGB(0x57, 0x55, 0x8D);
+      icon = &kVivaldiSplashGhostIcon;
+    } else {
+      // Will be #282828 for dark mode windows and #bcbcbc for light mode.
+      icon_color = SkColorSetARGB(0x1A, 0x00, 0x00, 0x00);
+      icon = &kVivaldiSplashIcon;
+    }
+  }
+  web_view->SetBackground(std::make_unique<VivaldiSplashBackground>(
+      background_color, icon, icon_color));
 
   // ClientView manages the lifetime of its contents view manually.
   return new VivaldiWindowClientView(widget, web_view.release(), window_);
@@ -356,14 +377,18 @@ bool VivaldiWindowWidgetDelegate::ExecuteWindowsCommand(int command_id) {
 }
 
 void VivaldiWindowWidgetDelegate::WindowClosing() {
-
   Browser* browser = window_->browser();
   if (!browser)
     return;
 
-  int id = browser->session_id().id();
-  ::vivaldi::BroadcastEvent(extensions::vivaldi::window_private::OnWindowClosed::kEventName,
-                            extensions::vivaldi::window_private::OnWindowClosed::Create(id),
-                            browser->profile());
+  if (browser->profile()->IsIncognitoProfile()) {
+    // Delete the thumbnails created by the private Window.
+    VivaldiImageStore::ScheduleRemovalOfUnusedUrlData(browser->profile(), 0);
+  }
 
+  int id = browser->session_id().id();
+  ::vivaldi::BroadcastEvent(
+      extensions::vivaldi::window_private::OnWindowClosed::kEventName,
+      extensions::vivaldi::window_private::OnWindowClosed::Create(id),
+      browser->profile());
 }

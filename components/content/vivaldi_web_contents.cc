@@ -21,8 +21,16 @@ void WebContentsImpl::SetVivExtData(const std::string& viv_ext_data) {
   vivaldi::GetExtDataUpdatedCallbackList().Notify(this);
 }
 
+void WebContentsImpl::SetIgnoreLinkRouting(const bool ignore_link_routing) {
+  ignore_link_routing_ = ignore_link_routing;
+}
+
 const std::string& WebContentsImpl::GetVivExtData() const {
   return viv_ext_data_;
+}
+
+bool WebContentsImpl::GetIgnoreLinkRouting() const {
+  return ignore_link_routing_;
 }
 
 void WebContentsImpl::FrameTreeNodeDestroyed() {

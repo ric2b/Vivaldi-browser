@@ -209,6 +209,14 @@ BOOL ShouldDismissKeyboardOnScroll() {
   }
 }
 
+- (void)toggleOmniboxDebuggerView {
+  if (self.debugInfoViewController.viewIfLoaded.window) {
+    [self dismissViewControllerAnimated:YES completion:nil];
+  } else {
+    [self showDebugUI];
+  }
+}
+
 #pragma mark - Getter/Setter
 
 - (void)setHighlightedIndexPath:(NSIndexPath*)highlightedIndexPath {
@@ -236,7 +244,6 @@ BOOL ShouldDismissKeyboardOnScroll() {
 }
 
 - (OmniboxPopupCarouselCell*)carouselCell {
-  DCHECK(base::FeatureList::IsEnabled(omnibox::kMostVisitedTiles));
   if (!_carouselCell) {
     _carouselCell = [[OmniboxPopupCarouselCell alloc] init];
     _carouselCell.delegate = self;
@@ -357,12 +364,11 @@ BOOL ShouldDismissKeyboardOnScroll() {
                                   omniboxFrame.size.width
                             : 0;
 
-  if (base::FeatureList::IsEnabled(omnibox::kMostVisitedTiles)) {
-    // Adjust the carousel to be aligned with the omnibox textfield.
-    UIEdgeInsets margins = self.carouselCell.layoutMargins;
-    self.carouselCell.layoutMargins =
-        UIEdgeInsetsMake(margins.top, leftMargin, margins.bottom, rightMargin);
-  }
+  // Adjust the carousel to be aligned with the omnibox textfield.
+  UIEdgeInsets margins = self.carouselCell.layoutMargins;
+  self.carouselCell.layoutMargins =
+      UIEdgeInsetsMake(margins.top, leftMargin, margins.bottom, rightMargin);
+
   // Update the headers padding.
   for (NSInteger i = 0; i < self.tableView.numberOfSections; ++i) {
     UITableViewHeaderFooterView* headerView =
@@ -446,8 +452,7 @@ BOOL ShouldDismissKeyboardOnScroll() {
       return YES;
     case OmniboxKeyboardActionLeftArrow:
     case OmniboxKeyboardActionRightArrow:
-      if (base::FeatureList::IsEnabled(omnibox::kMostVisitedTiles) &&
-          self.carouselCell.isHighlighted) {
+      if (self.carouselCell.isHighlighted) {
         return [self.carouselCell canPerformKeyboardAction:keyboardAction];
       }
       return NO;
@@ -691,7 +696,7 @@ BOOL ShouldDismissKeyboardOnScroll() {
 
   // When most visited tiles are enabled, only allow section separator under the
   // verbatim suggestion.
-  if (base::FeatureList::IsEnabled(omnibox::kMostVisitedTiles) && section > 0) {
+  if (section > 0) {
     return FLT_MIN;
   }
 
@@ -704,9 +709,8 @@ BOOL ShouldDismissKeyboardOnScroll() {
   if (section == (tableView.numberOfSections - 1)) {
     return nil;
   }
-  // When most visited tiles are enabled, only allow section separator under the
-  // verbatim suggestion.
-  if (base::FeatureList::IsEnabled(omnibox::kMostVisitedTiles) && section > 0) {
+  // Do not show footer when there is a header for the next section.
+  if (self.currentResult[section + 1].title.length > 0) {
     return nil;
   }
 
@@ -737,7 +741,6 @@ BOOL ShouldDismissKeyboardOnScroll() {
     case SuggestionGroupDisplayStyleDefault:
       return self.currentResult[section].suggestions.count;
     case SuggestionGroupDisplayStyleCarousel:
-      DCHECK(base::FeatureList::IsEnabled(omnibox::kMostVisitedTiles));
       if (self.shouldHideCarousel) {
         return 0;
       }
@@ -859,7 +862,6 @@ BOOL ShouldDismissKeyboardOnScroll() {
       return cell;
     }
     case SuggestionGroupDisplayStyleCarousel: {
-      DCHECK(base::FeatureList::IsEnabled(omnibox::kMostVisitedTiles));
       NSArray<CarouselItem*>* carouselItems = [self
           carouselItemsFromSuggestionGroup:self.currentResult[indexPath.section]
                             groupIndexPath:indexPath];
@@ -956,18 +958,17 @@ BOOL ShouldDismissKeyboardOnScroll() {
 /// Updates the color of the background based on the incognito-ness and the size
 /// class.
 - (void)updateBackgroundColor {
-
-  // Vivaldi: Match the search suggestion view background color with location
-  // bar.
-  if (IsVivaldiRunning()) {
-    self.view.backgroundColor = [UIColor colorNamed:vNTPBackgroundColor];
-  } else {
   ToolbarConfiguration* configuration = [[ToolbarConfiguration alloc]
       initWithStyle:self.incognito ? ToolbarStyle::kIncognito
                                    : ToolbarStyle::kNormal];
 
-  if (IsRegularXRegularSizeClass(self)) {
+  // Vivaldi: Match the search suggestion view background color with location
+  // bar.
+  if (IsVivaldiRunning())
     self.view.backgroundColor = configuration.backgroundColor;
+  else {
+  if (IsRegularXRegularSizeClass(self)) {
+   self.view.backgroundColor = configuration.backgroundColor;
   } else {
     self.view.backgroundColor = [UIColor clearColor];
   }

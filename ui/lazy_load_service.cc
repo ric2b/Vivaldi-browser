@@ -49,7 +49,7 @@ void LazyLoadService::OnLifecycleUnitCreated(
   if (!web_contents->GetUserData(&kLazyLoadIsSafe))
     return;
 
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+  Browser* browser = chrome::FindBrowserWithTab(web_contents);
   if (!browser)
     return;
   // Discard all restored tabs as the activation is now done after the webview

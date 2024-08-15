@@ -8,13 +8,14 @@
 
 namespace blink {
 
-NotRestoredReasons::NotRestoredReasons(String prevented,
-                                       String src,
-                                       String id,
-                                       String name,
-                                       String url,
-                                       Vector<String>* reasons,
-                                       HeapVector<NotRestoredReasons>* children)
+NotRestoredReasons::NotRestoredReasons(
+    String prevented,
+    String src,
+    String id,
+    String name,
+    String url,
+    Vector<String>* reasons,
+    HeapVector<Member<NotRestoredReasons>>* children)
     : prevented_(prevented), src_(src), id_(id), name_(name), url_(url) {
   if (reasons) {
     for (auto reason : *reasons) {
@@ -22,7 +23,7 @@ NotRestoredReasons::NotRestoredReasons(String prevented,
     }
   }
   if (children) {
-    for (NotRestoredReasons& child : *children) {
+    for (auto& child : *children) {
       children_.push_back(child);
     }
   }
@@ -78,7 +79,8 @@ ScriptValue NotRestoredReasons::toJSON(ScriptState* script_state) const {
     builder.AddNull("reasons");
   }
   if (children().has_value()) {
-    Vector<v8::Local<v8::Value>> children_result;
+    v8::LocalVector<v8::Value> children_result(script_state->GetIsolate());
+    children_result.reserve(children_.size());
     for (Member<NotRestoredReasons> child : children_) {
       children_result.push_back(child->toJSON(script_state).V8Value());
     }

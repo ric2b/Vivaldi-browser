@@ -10,6 +10,7 @@
 
 #include "base/no_destructor.h"
 #include "base/strings/stringprintf.h"
+#include "base/types/optional_util.h"
 #include "components/keyed_service/content/browser_context_keyed_service_shutdown_notifier_factory.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -103,8 +104,8 @@ net::RedirectInfo CreateRedirectInfo(
           : net::RedirectInfo::FirstPartyURLPolicy::NEVER_CHANGE_URL,
       original_request.referrer_policy, original_request.referrer.spec(),
       response_code, new_url, referrer_policy_header,
-      false /* insecure_scheme_was_upgraded */, false /* copy_fragment */,
-      false /* is_signed_exchange_fallback_redirect */);
+      /*insecure_scheme_was_upgraded=*/false, /*copy_fragment=*/false,
+      /*is_signed_exchange_fallback_redirect=*/false);
 }
 
 }  // namespace
@@ -535,7 +536,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
 
   net::RedirectInfo redirect_info =
       CreateRedirectInfo(request_, redirect_url_, kInternalRedirectStatusCode,
-                         absl::nullopt /* referrer_policy_header */);
+                         /*referrer_policy_header=*/absl::nullopt);
 
   auto head = network::mojom::URLResponseHead::New();
   std::string headers = base::StringPrintf(
@@ -1081,10 +1082,10 @@ bool RequestFilterProxyingURLLoaderFactory::InProgressRequest::IsRedirectSafe(
         extensions::ExtensionRegistry::Get(factory_->browser_context_)
             ->enabled_extensions()
             .GetByID(to_url.host());
-    if (!extension)
-      return false;
-    return extensions::WebAccessibleResourcesInfo::IsResourceWebAccessible(
-        extension, to_url.path(), original_initiator_);
+    return extension &&
+           extensions::WebAccessibleResourcesInfo::IsResourceWebAccessible(
+               extension, to_url.path(),
+               base::OptionalToPtr(original_initiator_));
   }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
   return content::IsSafeRedirectTarget(from_url, to_url);

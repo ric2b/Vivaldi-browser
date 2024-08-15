@@ -93,7 +93,8 @@ ToolbarButton::ToolbarButton(PressedCallback callback,
   // allocate the property once and modify the value.
   SetProperty(views::kInternalPaddingKey, gfx::Insets());
 
-  if (features::IsChromeRefresh2023()) {
+  if (features::IsChromeRefresh2023() &&
+      base::FeatureList::IsEnabled(features::kChromeRefresh2023TopChromeFont)) {
     label()->SetTextStyle(views::style::STYLE_BODY_4_EMPHASIS);
   }
 
@@ -535,8 +536,10 @@ void ToolbarButton::ShowDropDownMenu(ui::MenuSourceType source_type) {
       model_.get(), base::BindRepeating(&ToolbarButton::OnMenuClosed,
                                         base::Unretained(this)));
   menu_model_adapter_->set_triggerable_event_flags(GetTriggerableEventFlags());
+  auto* const root = menu_model_adapter_->CreateMenu();
+  root->SetSubmenuId(menu_identifier_);
   menu_runner_ = std::make_unique<views::MenuRunner>(
-      menu_model_adapter_->CreateMenu(), views::MenuRunner::HAS_MNEMONICS);
+      root, views::MenuRunner::HAS_MNEMONICS);
   menu_runner_->RunMenuAt(GetWidget(), nullptr, menu_anchor_bounds,
                           views::MenuAnchorPosition::kTopLeft, source_type);
 }

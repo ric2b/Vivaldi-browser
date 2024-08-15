@@ -7,7 +7,6 @@
 
 #include <map>
 #include <memory>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -25,6 +24,7 @@
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/engine/configure_reason.h"
+#include "components/sync/engine/cycle/sync_cycle_snapshot.h"
 #include "components/sync/engine/events/protocol_event_observer.h"
 #include "components/sync/engine/net/http_post_provider_factory.h"
 #include "components/sync/engine/shutdown_reason.h"
@@ -62,6 +62,7 @@ namespace syncer {
 
 class BackendMigrator;
 class SyncAuthManager;
+class SyncFeatureStatusForMigrationsRecorder;
 
 // Look at the SyncService interface for information on how to use this class.
 // You should not need to know about SyncServiceImpl directly.
@@ -95,7 +96,7 @@ class SyncServiceImpl : public SyncService,
         nullptr;
     version_info::Channel channel = version_info::Channel::UNKNOWN;
     std::string debug_identifier;
-    bool is_regular_profile_for_uma = false;
+    bool sync_poll_immediately_on_every_startup;
 
     GURL sync_server_url;
   };
@@ -127,9 +128,6 @@ class SyncServiceImpl : public SyncService,
   GoogleServiceAuthError GetAuthError() const override;
   base::Time GetAuthErrorTime() const override;
   bool RequiresClientUpgrade() const override;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  bool IsSyncFeatureDisabledViaDashboard() const override;
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   std::unique_ptr<SyncSetupInProgressHandle> GetSetupInProgressHandle()
       override;
   bool IsSetupInProgress() const override;
@@ -160,6 +158,9 @@ class SyncServiceImpl : public SyncService,
   void GetAllNodesForDebugging(
       base::OnceCallback<void(base::Value::List)> callback) override;
   ModelTypeDownloadStatus GetDownloadStatusFor(ModelType type) const override;
+  void RecordReasonIfWaitingForUpdates(
+      ModelType type,
+      const std::string& histogram_name) const override;
   void GetTypesWithUnsyncedData(
       base::OnceCallback<void(ModelTypeSet)> callback) const override;
   void GetLocalDataDescriptions(
@@ -188,7 +189,7 @@ class SyncServiceImpl : public SyncService,
   void CryptoStateChanged() override;
   void CryptoRequiredUserActionChanged() override;
   void ReconfigureDataTypesDueToCrypto() override;
-  void SetPassphraseType(PassphraseType passphrase_type) override;
+  void PassphraseTypeChanged(PassphraseType passphrase_type) override;
   absl::optional<PassphraseType> GetPassphraseType() const override;
   void SetEncryptionBootstrapToken(const std::string& bootstrap_token) override;
   std::string GetEncryptionBootstrapToken() const override;
@@ -210,17 +211,16 @@ class SyncServiceImpl : public SyncService,
 
   // SyncPrefObserver implementation.
   void OnSyncManagedPrefChange(bool is_sync_managed) override;
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   void OnFirstSetupCompletePrefChange(
       bool is_initial_sync_feature_setup_complete) override;
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
   void OnPreferredDataTypesPrefChange(
       bool payments_integration_enabled_changed) override;
 
   // KeyedService implementation.  This must be called exactly
   // once (before this object is destroyed).
   void Shutdown() override;
-
-  // Records the reason if the `type` is waiting for updates to be downloaded.
-  void RecordReasonIfWaitingForUpdates(ModelType type);
 
   // Returns whether or not the underlying sync engine has made any
   // local changes to items that have not yet been synced with the
@@ -406,11 +406,11 @@ class SyncServiceImpl : public SyncService,
   void OnDownloadStatusRecorderFinished();
 
   // Returns current download status for `type`. Records a histogram if the data
-  // type is waiting for updates and `record_waiting_for_updates_metrics` is set
-  // to true.
+  // type is waiting for updates and `waiting_for_updates_histogram_name` is not
+  // empty.
   ModelTypeDownloadStatus GetDownloadStatusForImpl(
       ModelType type,
-      bool record_waiting_for_updates_metrics) const;
+      const std::string& waiting_for_updates_histogram_name) const;
 
   // This profile's SyncClient, which abstracts away non-Sync dependencies and
   // the Sync API component factory.
@@ -519,16 +519,12 @@ class SyncServiceImpl : public SyncService,
 
   std::unique_ptr<SyncStoppedReporter> sync_stopped_reporter_;
 
-  // Whether the Profile that this SyncService is attached to is a "regular"
-  // profile, i.e. one for which sync actually makes sense. This excludes
-  // profiles types such as system and guest profiles, as well as sign-in and
-  // lockscreen profiles on Ash.
-  const bool is_regular_profile_for_uma_;
-
   // Used for UMA to determine whether TrustedVaultErrorShownOnStartup
   // histogram needs to recorded. Set to false iff histogram was already
   // recorded or trusted vault passphrase type wasn't used on startup.
   bool should_record_trusted_vault_error_shown_on_startup_;
+
+  const bool sync_poll_immediately_on_every_startup_;
 
   // Whether we want to receive invalidations for the SESSIONS data type. This
   // is typically false on Android (to save network traffic), but true on all
@@ -542,6 +538,8 @@ class SyncServiceImpl : public SyncService,
 
   // Used to track download status changes during browser startup.
   std::unique_ptr<DownloadStatusRecorder> download_status_recorder_;
+
+  std::unique_ptr<SyncFeatureStatusForMigrationsRecorder> sync_status_recorder_;
 
   base::ScopedObservation<SyncPrefs, SyncPrefObserver> sync_prefs_observation_{
       this};

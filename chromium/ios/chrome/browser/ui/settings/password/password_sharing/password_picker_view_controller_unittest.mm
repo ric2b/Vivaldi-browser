@@ -4,11 +4,13 @@
 
 #import "ios/chrome/browser/ui/settings/password/password_sharing/password_picker_view_controller.h"
 
+#import "base/strings/sys_string_conversions.h"
 #import "components/password_manager/core/browser/password_form.h"
 #import "components/password_manager/core/browser/ui/credential_ui_entry.h"
+#import "ios/chrome/browser/net/crurl.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_url_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_controller_test.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
-#import "ios/chrome/browser/ui/settings/cells/settings_image_detail_text_item.h"
 #import "testing/gtest/include/gtest/gtest.h"
 #import "testing/gtest_mac.h"
 
@@ -42,6 +44,16 @@ class PasswordPickerViewControllerTest : public ChromeTableViewControllerTest {
         static_cast<PasswordPickerViewController*>(controller());
     [password_picker_controller setCredentials:credentials];
   }
+
+  void CheckCellAccessoryType(UITableViewCellAccessoryType accessoryType,
+                              int section,
+                              int row) {
+    UITableViewCell* cell =
+        [controller() tableView:controller().tableView
+            cellForRowAtIndexPath:[NSIndexPath indexPathForRow:row
+                                                     inSection:section]];
+    EXPECT_EQ(cell.accessoryType, accessoryType);
+  }
 };
 
 TEST_F(PasswordPickerViewControllerTest, TestPasswordPickerLayout) {
@@ -50,13 +62,55 @@ TEST_F(PasswordPickerViewControllerTest, TestPasswordPickerLayout) {
   EXPECT_EQ(NumberOfSections(), 1);
   EXPECT_EQ(NumberOfItemsInSection(0), 5);
   for (int i = 0; i < 5; i++) {
-    SettingsImageDetailTextItem* item =
-        static_cast<SettingsImageDetailTextItem*>(
-            GetTableViewItem(/*section=*/0, i));
+    TableViewURLItem* item =
+        static_cast<TableViewURLItem*>(GetTableViewItem(/*section=*/0, i));
     EXPECT_NSEQ(
         ([NSString stringWithFormat:@"%@%d%@", @"user", i, @"@gmail.com"]),
-        item.text);
-    EXPECT_NSEQ(([NSString stringWithFormat:@"%@%d%@", @"example", i, @".com"]),
-                item.detailText);
+        item.title);
+    EXPECT_NSEQ(
+        ([NSString stringWithFormat:@"%@%d%@", @"www.example", i, @".com"]),
+        base::SysUTF8ToNSString(item.URL.gurl.host()));
   }
+}
+
+TEST_F(PasswordPickerViewControllerTest, TestNextButtonEnabledByDefault) {
+  SetCredentials(/*amount=*/3);
+
+  EXPECT_EQ(NumberOfSections(), 1);
+  EXPECT_EQ(NumberOfItemsInSection(0), 3);
+
+  PasswordPickerViewController* passwordPickerController =
+      base::apple::ObjCCastStrict<PasswordPickerViewController>(controller());
+  EXPECT_TRUE(
+      passwordPickerController.navigationItem.rightBarButtonItem.isEnabled);
+}
+
+TEST_F(PasswordPickerViewControllerTest, TestSettingAccessoryType) {
+  SetCredentials(/*amount=*/4);
+
+  EXPECT_EQ(NumberOfSections(), 1);
+  EXPECT_EQ(NumberOfItemsInSection(0), 4);
+
+  // Check that the first row has a checkmark by default.
+  CheckCellAccessoryType(UITableViewCellAccessoryCheckmark, 0, 0);
+  CheckCellAccessoryType(UITableViewCellAccessoryNone, 0, 1);
+  CheckCellAccessoryType(UITableViewCellAccessoryNone, 0, 2);
+  CheckCellAccessoryType(UITableViewCellAccessoryNone, 0, 3);
+
+  // Select last row.
+  PasswordPickerViewController* passwordPickerController =
+      base::apple::ObjCCastStrict<PasswordPickerViewController>(controller());
+  NSIndexPath* indexPath = [NSIndexPath indexPathForRow:3 inSection:0];
+  [passwordPickerController.tableView
+      selectRowAtIndexPath:indexPath
+                  animated:NO
+            scrollPosition:UITableViewScrollPositionNone];
+  [passwordPickerController tableView:passwordPickerController.tableView
+              didSelectRowAtIndexPath:indexPath];
+
+  // Check that the last row has a checkmark.
+  CheckCellAccessoryType(UITableViewCellAccessoryNone, 0, 0);
+  CheckCellAccessoryType(UITableViewCellAccessoryNone, 0, 1);
+  CheckCellAccessoryType(UITableViewCellAccessoryNone, 0, 2);
+  CheckCellAccessoryType(UITableViewCellAccessoryCheckmark, 0, 3);
 }

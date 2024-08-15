@@ -7,8 +7,8 @@ package org.chromium.components.autofill;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.annotations.JNINamespace;
+import org.jni_zero.CalledByNative;
+import org.jni_zero.JNINamespace;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -23,7 +23,6 @@ import java.util.Map;
 @JNINamespace("autofill")
 public class AutofillProfile {
     private String mGUID;
-    private boolean mIsLocal;
     private @Source int mSource;
     private Map<Integer, ValueWithStatus> mFields;
     private String mLabel;
@@ -56,7 +55,6 @@ public class AutofillProfile {
      */
     public static final class Builder {
         private String mGUID = "";
-        private boolean mIsLocal = true;
         private @Source int mSource = Source.LOCAL_OR_SYNCABLE;
         private ValueWithStatus mHonorificPrefix = ValueWithStatus.EMPTY;
         private ValueWithStatus mFullName = ValueWithStatus.EMPTY;
@@ -75,11 +73,6 @@ public class AutofillProfile {
 
         public Builder setGUID(String guid) {
             mGUID = guid;
-            return this;
-        }
-
-        public Builder setIsLocal(boolean isLocal) {
-            mIsLocal = isLocal;
             return this;
         }
 
@@ -222,9 +215,21 @@ public class AutofillProfile {
         }
 
         public AutofillProfile build() {
-            return new AutofillProfile(mGUID, mIsLocal, mSource, mHonorificPrefix, mFullName,
-                    mCompanyName, mStreetAddress, mRegion, mLocality, mDependentLocality,
-                    mPostalCode, mSortingCode, mCountryCode, mPhoneNumber, mEmailAddress,
+            return new AutofillProfile(
+                    mGUID,
+                    mSource,
+                    mHonorificPrefix,
+                    mFullName,
+                    mCompanyName,
+                    mStreetAddress,
+                    mRegion,
+                    mLocality,
+                    mDependentLocality,
+                    mPostalCode,
+                    mSortingCode,
+                    mCountryCode,
+                    mPhoneNumber,
+                    mEmailAddress,
                     mLanguageCode);
         }
     }
@@ -234,45 +239,30 @@ public class AutofillProfile {
     }
 
     @CalledByNative
-    private static AutofillProfile create(String guid, boolean isLocal, @Source int source,
-            String honorificPrefix, @VerificationStatus int honorificPrefixStatus, String fullName,
-            @VerificationStatus int fullNameStatus, String companyName,
-            @VerificationStatus int companyNameStatus, String streetAddress,
-            @VerificationStatus int streetAddressStatus, String region,
-            @VerificationStatus int regionStatus, String locality,
-            @VerificationStatus int localityStatus, String dependentLocality,
-            @VerificationStatus int dependentLocalityStatus, String postalCode,
-            @VerificationStatus int postalCodeStatus, String sortingCode,
-            @VerificationStatus int sortingCodeStatus, String countryCode,
-            @VerificationStatus int countryCodeStatus, String phoneNumber,
-            @VerificationStatus int phoneNumberStatus, String emailAddress,
-            @VerificationStatus int emailAddressStatus, String languageCode) {
-        return new AutofillProfile(guid, isLocal, source,
-                new ValueWithStatus(honorificPrefix, honorificPrefixStatus),
-                new ValueWithStatus(fullName, fullNameStatus),
-                new ValueWithStatus(companyName, companyNameStatus),
-                new ValueWithStatus(streetAddress, streetAddressStatus),
-                new ValueWithStatus(region, regionStatus),
-                new ValueWithStatus(locality, localityStatus),
-                new ValueWithStatus(dependentLocality, dependentLocalityStatus),
-                new ValueWithStatus(postalCode, postalCodeStatus),
-                new ValueWithStatus(sortingCode, sortingCodeStatus),
-                new ValueWithStatus(countryCode, countryCodeStatus),
-                new ValueWithStatus(phoneNumber, phoneNumberStatus),
-                new ValueWithStatus(emailAddress, emailAddressStatus), languageCode);
+    private AutofillProfile(String guid, @Source int source, String languageCode) {
+        mGUID = guid;
+        mSource = source;
+        mLanguageCode = languageCode;
+        mFields = new HashMap<>();
     }
 
-    private AutofillProfile(String guid, boolean isLocal, @Source int source,
-            ValueWithStatus honorificPrefix, ValueWithStatus fullName, ValueWithStatus companyName,
-            ValueWithStatus streetAddress, ValueWithStatus region, ValueWithStatus locality,
-            ValueWithStatus dependentLocality, ValueWithStatus postalCode,
-            ValueWithStatus sortingCode, ValueWithStatus countryCode, ValueWithStatus phoneNumber,
-            ValueWithStatus emailAddress, String languageCode) {
-        mGUID = guid;
-        mIsLocal = isLocal;
-        mSource = source;
-
-        mFields = new HashMap<>();
+    private AutofillProfile(
+            String guid,
+            @Source int source,
+            ValueWithStatus honorificPrefix,
+            ValueWithStatus fullName,
+            ValueWithStatus companyName,
+            ValueWithStatus streetAddress,
+            ValueWithStatus region,
+            ValueWithStatus locality,
+            ValueWithStatus dependentLocality,
+            ValueWithStatus postalCode,
+            ValueWithStatus sortingCode,
+            ValueWithStatus countryCode,
+            ValueWithStatus phoneNumber,
+            ValueWithStatus emailAddress,
+            String languageCode) {
+        this(guid, source, languageCode);
         mFields.put(ServerFieldType.NAME_HONORIFIC_PREFIX, honorificPrefix);
         mFields.put(ServerFieldType.NAME_FULL, fullName);
         mFields.put(ServerFieldType.COMPANY_NAME, companyName);
@@ -285,20 +275,22 @@ public class AutofillProfile {
         mFields.put(ServerFieldType.ADDRESS_HOME_COUNTRY, countryCode);
         mFields.put(ServerFieldType.PHONE_HOME_WHOLE_NUMBER, phoneNumber);
         mFields.put(ServerFieldType.EMAIL_ADDRESS, emailAddress);
-
-        mLanguageCode = languageCode;
     }
 
     /* Builds an AutofillProfile that is an exact copy of the one passed as parameter. */
     public AutofillProfile(AutofillProfile profile) {
         mGUID = profile.getGUID();
-        mIsLocal = profile.getIsLocal();
         mSource = profile.getSource();
 
         mFields = new HashMap<>(profile.mFields);
 
         mLanguageCode = profile.getLanguageCode();
         mLabel = profile.getLabel();
+    }
+
+    @CalledByNative
+    private int[] getFieldTypes() {
+        return mFields.keySet().stream().mapToInt(i -> i).toArray();
     }
 
     @CalledByNative
@@ -443,10 +435,6 @@ public class AutofillProfile {
         return mLanguageCode;
     }
 
-    public boolean getIsLocal() {
-        return mIsLocal;
-    }
-
     public void setGUID(String guid) {
         mGUID = guid;
     }
@@ -459,9 +447,15 @@ public class AutofillProfile {
         mSource = source;
     }
 
-    public void setInfo(@ServerFieldType int fieldType, @Nullable String value) {
+    @CalledByNative
+    public void setInfo(@ServerFieldType int fieldType, @Nullable String value,
+            @VerificationStatus int status) {
         value = value == null ? "" : value;
-        mFields.put(fieldType, new ValueWithStatus(value, VerificationStatus.USER_VERIFIED));
+        mFields.put(fieldType, new ValueWithStatus(value, status));
+    }
+
+    public void setInfo(@ServerFieldType int fieldType, @Nullable String value) {
+        setInfo(fieldType, value, VerificationStatus.USER_VERIFIED);
     }
 
     public void setHonorificPrefix(String honorificPrefix) {
@@ -514,10 +508,6 @@ public class AutofillProfile {
 
     public void setLanguageCode(String languageCode) {
         mLanguageCode = languageCode;
-    }
-
-    public void setIsLocal(boolean isLocal) {
-        mIsLocal = isLocal;
     }
 
     /** Used by ArrayAdapter in credit card settings. */

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/webui/ash/borealis_installer/borealis_installer_page_handler.h"
+#include "ash/webui/settings/public/constants/routes.mojom.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/strings/string_number_conversions.h"
@@ -14,7 +15,10 @@
 #include "chrome/browser/ash/borealis/borealis_installer.h"
 #include "chrome/browser/ash/borealis/borealis_metrics.h"
 #include "chrome/browser/ash/borealis/borealis_service.h"
+#include "chrome/browser/ash/borealis/borealis_types.mojom.h"
 #include "chrome/browser/ash/borealis/borealis_util.h"
+#include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/views/borealis/borealis_installer_error_dialog.h"
 #include "chrome/browser/ui/views/borealis/borealis_splash_screen_view.h"
 #include "chrome/grit/generated_resources.h"
@@ -22,7 +26,9 @@
 #include "ui/base/l10n/time_format.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/web_dialogs/web_dialog_ui.h"
+
 namespace {
+
 // Returns the text to be used for a predicted completion time, which is
 // something like "starting up" or "3 mins remaining" depending on how
 // accurately we can predict.
@@ -42,6 +48,7 @@ std::string GetInstallationPredictionText(const base::Time& start_time,
 }
 
 }  // namespace
+
 namespace ash {
 
 BorealisInstallerPageHandler::BorealisInstallerPageHandler(
@@ -60,7 +67,6 @@ BorealisInstallerPageHandler::BorealisInstallerPageHandler(
 BorealisInstallerPageHandler::~BorealisInstallerPageHandler() = default;
 
 void BorealisInstallerPageHandler::Install() {
-  fraction_complete_ = 0;
   install_start_time_ = base::Time::Now();
   borealis::BorealisInstaller& installer =
       borealis::BorealisService::GetForProfile(profile_)->Installer();
@@ -82,6 +88,10 @@ void BorealisInstallerPageHandler::ShutDown() {
             LOG(ERROR) << "Failed to shutdown borealis after install: code="
                        << static_cast<int>(result);
           }));
+}
+
+void BorealisInstallerPageHandler::CancelInstall() {
+  borealis::BorealisService::GetForProfile(profile_)->Installer().Cancel();
 }
 
 void BorealisInstallerPageHandler::Launch() {
@@ -114,29 +124,18 @@ void BorealisInstallerPageHandler::OnProgressUpdated(double fraction_complete) {
 }
 
 void BorealisInstallerPageHandler::OnInstallationEnded(
-    borealis::BorealisInstallResult result,
+    borealis::mojom::InstallResult result,
     const std::string& error_description) {
-  if (result == borealis::BorealisInstallResult::kSuccess) {
-    page_->OnInstallFinished();
-  } else if (result != borealis::BorealisInstallResult::kCancelled) {
-    views::borealis::ShowInstallerErrorDialog(
-        native_window_, result,
-        base::BindOnce(&BorealisInstallerPageHandler::OnErrorDialogDismissed,
-                       weak_factory_.GetWeakPtr()));
-    LOG(ERROR) << "Borealis Installation Error: " << error_description;
-  }
+  page_->OnInstallFinished(result);
 }
 
-void BorealisInstallerPageHandler::OnErrorDialogDismissed(
-    views::borealis::ErrorDialogChoice choice) {
-  switch (choice) {
-    case views::borealis::ErrorDialogChoice::kRetry:
-      page_->RestartInstallation();
-      return;
-    case views::borealis::ErrorDialogChoice::kExit:
-      OnPageClosed();
-      return;
-  }
+void BorealisInstallerPageHandler::OpenStoragePage() {
+  chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
+      profile_, chromeos::settings::mojom::kStorageSubpagePath);
+}
+
+void BorealisInstallerPageHandler::RequestClosePage() {
+  page_->RequestClose();
 }
 
 }  // namespace ash

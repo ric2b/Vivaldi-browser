@@ -18,6 +18,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/rand_util.h"
+#include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/task_traits.h"
@@ -44,7 +45,6 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/qrcode_generator/qrcode_generator_bubble_controller.h"
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -80,7 +80,9 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
+#include "net/base/data_url.h"
 #include "net/base/filename_util.h"
+#include "net/base/mime_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/shell_dialogs/select_file_policy.h"
@@ -108,6 +110,12 @@
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_skia_utils.h"
 #include "ui/vivaldi_ui_utils.h"
+
+#include "net/proxy_resolution/proxy_config_service.h"
+#include "chrome/browser/net/proxy_service_factory.h"
+#include "components/proxy_config/pref_proxy_config_tracker.h"
+#include "chromium/net/proxy_resolution/proxy_config_service.h"
+#include "net/proxy_resolution/proxy_config_with_annotation.h"
 
 #if defined(ENABLE_RELAY_PROXY)
 #include "proxy/launcher.h"
@@ -168,11 +176,6 @@ ContentSetting vivContentSettingFromString(const std::string& name) {
 
 VivaldiUtilitiesAPI::VivaldiUtilitiesAPI(content::BrowserContext* context)
     : browser_context_(context) {
-  password_access_authenticator_.Init(
-      base::BindRepeating(&VivaldiUtilitiesAPI::OsReauthCall,
-                          base::Unretained(this)),
-      base::BindRepeating(&VivaldiUtilitiesAPI::TimeoutCall,
-                          base::Unretained(this)));
 
   EventRouter* event_router = EventRouter::Get(browser_context_);
   event_router->RegisterObserver(this,
@@ -335,46 +338,6 @@ gfx::Rect VivaldiUtilitiesAPI::GetDialogPosition(int window_id,
     }
   }
   return gfx::Rect();
-}
-
-// static
-bool VivaldiUtilitiesAPI::AuthenticateUser(
-    content::WebContents* web_contents,
-    password_manager::PasswordAccessAuthenticator::AuthResultCallback
-        callback) {
-  VivaldiUtilitiesAPI* api =
-      GetFactoryInstance()->Get(web_contents->GetBrowserContext());
-  DCHECK(api);
-  if (!api)
-    return false;
-
-  api->native_window_ =
-      platform_util::GetTopLevel(web_contents->GetNativeView());
-
-  api->password_access_authenticator_.EnsureUserIsAuthenticated(
-      password_manager::ReauthPurpose::VIEW_PASSWORD,
-      base::BindOnce(std::move(callback)));
-  api->native_window_ = nullptr;
-
-  return false;
-}
-
-void VivaldiUtilitiesAPI::OsReauthCall(
-    password_manager::ReauthPurpose purpose,
-    password_manager::PasswordAccessAuthenticator::AuthResultCallback
-        callback) {
-#if BUILDFLAG(IS_WIN)
-  bool result = password_manager_util_win::AuthenticateUser(
-      native_window_,
-      password_manager_util_win::GetMessageForLoginPrompt(purpose));
-  std::move(callback).Run(result);
-#elif BUILDFLAG(IS_MAC)
-  bool result = password_manager_util_mac::AuthenticateUser(
-      password_manager_util_mac::GetMessageForLoginPrompt(purpose));
-  std::move(callback).Run(result);
-#else
-  std::move(callback).Run(true);
-#endif
 }
 
 void VivaldiUtilitiesAPI::TimeoutCall() {
@@ -828,6 +791,22 @@ void UtilitiesSelectLocalImageFunction::SendResult(std::string data_url) {
 UtilitiesStoreImageFunction::UtilitiesStoreImageFunction() = default;
 UtilitiesStoreImageFunction::~UtilitiesStoreImageFunction() = default;
 
+UtilitiesCleanUnusedImagesFunction::UtilitiesCleanUnusedImagesFunction() =
+    default;
+UtilitiesCleanUnusedImagesFunction::~UtilitiesCleanUnusedImagesFunction() =
+    default;
+
+ExtensionFunction::ResponseAction UtilitiesCleanUnusedImagesFunction::Run() {
+  using vivaldi::utilities::CleanUnusedImages::Params;
+  int limit = 0;
+  absl::optional<Params> params = Params::Create(args());
+  if (params) {
+    limit = params->created_before;
+  }
+  VivaldiImageStore::ScheduleRemovalOfUnusedUrlData(browser_context(), limit);
+  return RespondNow(NoArguments());
+}
+
 ExtensionFunction::ResponseAction UtilitiesStoreImageFunction::Run() {
   using vivaldi::utilities::StoreImage::Params;
 
@@ -840,7 +819,20 @@ ExtensionFunction::ResponseAction UtilitiesStoreImageFunction::Run() {
                         std::string(), error);
   if (!error.empty())
     return RespondNow(Error(std::move(error)));
+
+  uint32_t what_args = 0;
+  constexpr uint32_t has_value = (1 << 0);
+  constexpr uint32_t has_url = (1 << 1);
+
   if (params->options.data.has_value()) {
+    what_args |= has_value;
+  }
+
+  if (params->options.url && !params->options.url->empty()) {
+    what_args |= has_url;
+  }
+
+  if (what_args == has_value) {
     if (params->options.data->empty()) {
       return RespondNow(Error("blob option cannot be empty"));
     }
@@ -857,32 +849,47 @@ ExtensionFunction::ResponseAction UtilitiesStoreImageFunction::Run() {
     }
     StoreImage(
         base::RefCountedBytes::TakeVector(&params->options.data.value()));
-  } else if (params->options.url && !params->options.url->empty()) {
+  } else if (what_args == has_url) {
     GURL url(*params->options.url);
     if (!url.is_valid()) {
       return RespondNow(
           Error("url is not valid - " + url.possibly_invalid_spec()));
     }
-    if (!url.SchemeIsFile()) {
-      return RespondNow(Error("only file: url is supported - " + url.spec()));
+    if (url.SchemeIs("data")) {
+      std::string mime, charset, data;
+      if (net::DataURL::Parse(url, &mime, &charset, &data)) {
+        auto bytes = base::MakeRefCounted<base::RefCountedBytes>(
+            reinterpret_cast<const uint8_t*>(data.c_str()), data.size());
+        image_format_ = VivaldiImageStore::FindFormatForMimeType(mime);
+        if (!image_format_) {
+          return RespondNow(Error("invalid DataURL - unsupported mime type"));
+        }
+        StoreImage(bytes);
+      } else {
+        return RespondNow(Error("invalid DataURL"));
+      }
+    } else {
+      if (!url.SchemeIsFile()) {
+        return RespondNow(Error("unsupported image source URL: " + url.spec()));
+      }
+      base::FilePath file_path;
+      if (!net::FileURLToFilePath(url, &file_path)) {
+        return RespondNow(
+            Error("url does not refer to a valid file path - " + url.spec()));
+      }
+      image_format_ = VivaldiImageStore::FindFormatForPath(file_path);
+      if (!image_format_) {
+        return RespondNow(Error("Unsupported image format - " +
+                                file_path.BaseName().AsUTF8Unsafe()));
+      }
+      base::ThreadPool::PostTaskAndReplyWithResult(
+          FROM_HERE,
+          {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
+           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+          base::BindOnce(&vivaldi_data_url_utils::ReadFileOnBlockingThread,
+                         std::move(file_path), /*log_not_found=*/true),
+          base::BindOnce(&UtilitiesStoreImageFunction::StoreImage, this));
     }
-    base::FilePath file_path;
-    if (!net::FileURLToFilePath(url, &file_path)) {
-      return RespondNow(
-          Error("url does not refer to a valid file path - " + url.spec()));
-    }
-    image_format_ = VivaldiImageStore::FindFormatForPath(file_path);
-    if (!image_format_) {
-      return RespondNow(Error("Unsupported image format - " +
-                              file_path.BaseName().AsUTF8Unsafe()));
-    }
-    base::ThreadPool::PostTaskAndReplyWithResult(
-        FROM_HERE,
-        {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
-         base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-        base::BindOnce(&vivaldi_data_url_utils::ReadFileOnBlockingThread,
-                       std::move(file_path), /*log_not_found=*/true),
-        base::BindOnce(&UtilitiesStoreImageFunction::StoreImage, this));
   } else {
     return RespondNow(Error("Exactly one of data, url must be given"));
   }
@@ -2173,18 +2180,18 @@ ExtensionFunction::ResponseAction UtilitiesSetProtocolHandlingFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction UtilitiesConnectProxyFunction::Run() {
-#if defined (ENABLE_RELAY_PROXY)
+#if defined(ENABLE_RELAY_PROXY)
   namespace Results = vivaldi::utilities::ConnectProxy::Results;
   absl::optional<vivaldi::utilities::ConnectProxy::Params> params(
       vivaldi::utilities::ConnectProxy::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   ::vivaldi::proxy::ConnectSettings settings;
-  settings.local_port = std::to_string(
-      static_cast<int>(params->options.local.port));
+  settings.local_port =
+      std::to_string(static_cast<int>(params->options.local.port));
   settings.remote_host = params->options.remote.host;
-  settings.remote_port = std::to_string(
-      static_cast<int>(params->options.remote.port));
+  settings.remote_port =
+      std::to_string(static_cast<int>(params->options.remote.port));
   settings.token = params->options.token;
   ::vivaldi::proxy::ConnectState state;
 
@@ -2196,22 +2203,163 @@ ExtensionFunction::ResponseAction UtilitiesConnectProxyFunction::Run() {
   return RespondNow(ArgumentList(Results::Create(info)));
 #else
   return RespondNow(Error("Unexpected call to the browser process"));
-#endif // ENABLE_RELAY_PROXY
+#endif  // ENABLE_RELAY_PROXY
 }
 
 ExtensionFunction::ResponseAction UtilitiesDisconnectProxyFunction::Run() {
-#if defined (ENABLE_RELAY_PROXY)
+#if defined(ENABLE_RELAY_PROXY)
   namespace Results = vivaldi::utilities::DisconnectProxy::Results;
   ::vivaldi::proxy::disconnect();
   return RespondNow(ArgumentList(Results::Create(true)));
 #else
   return RespondNow(Error("Unexpected call to the browser process"));
-#endif // ENABLE_RELAY_PROXY
+#endif  // ENABLE_RELAY_PROXY
 }
 
 ExtensionFunction::ResponseAction UtilitiesSupportsProxyFunction::Run() {
+  // Implemented in vivaldi_utilities_hook_delegate.cc to provide synchronous
+  // access.
   return RespondNow(Error("Unexpected call to the browser process"));
 }
 
+ExtensionFunction::ResponseAction UtilitiesGetOtherProxiesFunction::Run() {
+  namespace Results = vivaldi::utilities::GetOtherProxies::Results;
+  absl::optional<vivaldi::utilities::GetOtherProxies::Params> params(
+      vivaldi::utilities::GetOtherProxies::Params::Create(args()));
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+
+  std::unique_ptr<PrefProxyConfigTracker> pref_proxy_config_tracker =
+    ProxyServiceFactory::CreatePrefProxyConfigTrackerOfProfile(
+        profile->GetPrefs(), g_browser_process->local_state());
+
+  std::unique_ptr<net::ProxyConfigService> proxy_config_service =
+      ProxyServiceFactory::CreateProxyConfigService(
+          pref_proxy_config_tracker.get(), profile);
+
+  vivaldi::utilities::ProxyInfo info;
+  info.has_other = true; // Assume conflict by default.
+
+  net::ProxyConfigWithAnnotation config;
+  net::ProxyConfigService::ConfigAvailability available =
+    proxy_config_service->GetLatestProxyConfig(&config);
+  if (available != net::ProxyConfigService::CONFIG_VALID) {
+    // No conflict.
+    info.has_other = false;
+  } else if (config.value().proxy_rules().empty()) {
+    // No other proxies.
+    info.has_other = false;
+  } else if (config.value().proxy_rules().type ==
+             net::ProxyConfig::ProxyRules::Type::PROXY_LIST) {
+    const net::ProxyList& list = config.value().proxy_rules().single_proxies;
+    if (list.size() == 1) {
+      const net::ProxyServer& server = list.Get();
+      if (server.GetHost() == params->options.host &&
+          server.GetPort() == params->options.port) {
+        // Only one element and it is our proxy. No conflict.
+        info.has_other = false;
+      }
+    } else {
+      // Any other size than one means conflict.
+    }
+  } else {
+    // We do not use separate proxies for ftp, https etc (proxy rules type is
+    // then PROXY_LIST_PER_SCHEME) so in that case it is always another proxy
+    // and we have a conflict.
+  }
+  // Fixes a DCHECK in tracker's destructor,
+  pref_proxy_config_tracker->DetachFromPrefService();
+
+  return RespondNow(ArgumentList(Results::Create(info)));
+}
+
+ExtensionFunction::ResponseAction UtilitiesBrowserWindowReadyFunction::Run() {
+  namespace Results = vivaldi::utilities::BrowserWindowReady::Results;
+  absl::optional<vivaldi::utilities::BrowserWindowReady::Params> params(
+      vivaldi::utilities::BrowserWindowReady::Params::Create(args()));
+  EXTENSION_FUNCTION_VALIDATE(params);
+  VivaldiBrowserWindow* window =
+      VivaldiBrowserWindow::FromId(params->window_id);
+  if (window) {
+    window->OnUIReady();
+    return RespondNow(ArgumentList(Results::Create(true)));
+  } else {
+    return RespondNow(ArgumentList(Results::Create(false)));
+  }
+}
+
+bool UtilitiesReadImageFunction::ReadFileAndMimeType(base::FilePath file_path,
+                                                     std::vector<uint8_t>* data,
+                                                     std::string* mimeType) {
+  if (!base::PathExists(file_path) || !data || !mimeType) {
+    return false;
+  }
+  if (const auto bytes = base::ReadFileToBytes(file_path)) {
+    *data = *bytes;
+  }
+  net::GetMimeTypeFromFile(file_path, mimeType);
+  return !(data->empty() || mimeType->empty());
+}
+
+void UtilitiesReadImageFunction::SendResult(
+    std::unique_ptr<std::vector<uint8_t>> data,
+    std::unique_ptr<std::string> mimeType,
+    bool result) {
+  namespace Results = vivaldi::utilities::ReadImage::Results;
+  if (!result || !data || !mimeType) {
+    Respond(Error("Could not get the data."));
+  } else {
+    std::vector<int> transData;
+    std::transform(data->begin(), data->end(), std::back_inserter(transData),
+                   [](const uint8_t& it) { return static_cast<int>(it); });
+
+    vivaldi::utilities::ReadImageData resp;
+    resp.data = transData;
+    resp.type = *mimeType;
+    Respond(ArgumentList(Results::Create(resp)));
+  }
+}
+
+ExtensionFunction::ResponseAction UtilitiesReadImageFunction::Run() {
+  absl::optional<vivaldi::utilities::ReadImage::Params> params(
+      vivaldi::utilities::ReadImage::Params::Create(args()));
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  GURL gurl(params->url);
+
+  if (gurl.is_empty() || !gurl.is_valid()) {
+    return RespondNow(Error("Empty or invalid url."));
+  }
+  base::FilePath filePath;
+  if (!net::FileURLToFilePath(gurl, &filePath)) {
+    return RespondNow(
+        Error("URL does not refer to a valid file path - " + gurl.spec()));
+  }
+
+  auto fileBytes = std::make_unique<std::vector<uint8_t>>();
+  // |fileBytes_ptr| is expected to be valid as long as |fileBytes| is valid,
+  // which should be at least until SendResult is called. So, it should be
+  // safe to use during ReadFileAndMimeType - the explicit variable is required
+  // to work on Windows
+  std::vector<uint8_t>* fileBytes_ptr = fileBytes.get();
+
+  auto mimeType = std::make_unique<std::string>();
+  // |mimeType_ptr| is expected to be valid as long as |mimeType| is valid,
+  // which should be at least until SendResult is called. So, it should be
+  // safe to use during ReadFileAndMimeType - the explicit variable is required
+  // to work on Windows
+  std::string* mimeType_ptr = mimeType.get();
+
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE,
+      {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+      base::BindOnce(&UtilitiesReadImageFunction::ReadFileAndMimeType, this,
+                     filePath, fileBytes_ptr, mimeType_ptr),
+      base::BindOnce(&UtilitiesReadImageFunction::SendResult, this,
+                     std::move(fileBytes), std::move(mimeType)));
+  return RespondLater();
+}
 
 }  // namespace extensions

@@ -9,7 +9,7 @@ import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import '../../../discount.mojom-webui.js';
 
 import {CrLazyRenderElement} from 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
-import {assert} from 'chrome://resources/js/assert_ts.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {Cart} from '../../../cart.mojom-webui.js';
@@ -137,8 +137,8 @@ export class HistoryClustersModuleElement extends I18nMixin
     return this.cluster.relatedSearches.length > 1;
   }
 
-  private computeLabel_(): string {
-    return this.cluster.label.replace(/[“”]+/g, '');
+  private computeUnquotedClusterLabel_(): string {
+    return this.cluster.label.substring(1, this.cluster.label.length - 1);
   }
 
   private shouldShowCartTile_(cart: Object): boolean {
@@ -204,7 +204,7 @@ export class HistoryClustersModuleElement extends I18nMixin
   private onShowAllButtonClick_() {
     assert(this.cluster.label.length >= 2, 'Unexpected cluster label length');
     HistoryClustersProxyImpl.getInstance().handler.showJourneysSidePanel(
-        this.cluster.label.substring(1, this.cluster.label.length - 1));
+        this.computeUnquotedClusterLabel_());
     this.dispatchEvent(new Event('usage', {bubbles: true, composed: true}));
   }
 

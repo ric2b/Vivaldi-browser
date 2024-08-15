@@ -103,11 +103,16 @@ class SharedStorageWorkletDevToolsAgentHostTest
     contents()->NavigateAndCommit(GURL("http://www.google.com"));
     RenderFrameHost* main_rfh = web_contents()->GetPrimaryMainFrame();
 
+    mojo::PendingAssociatedReceiver<blink::mojom::SharedStorageWorkletHost>
+        worklet_host;
+
     SharedStorageDocumentServiceImpl* document_service =
         SharedStorageDocumentServiceImpl::GetOrCreateForCurrentDocument(
             main_rfh);
-    document_service->AddModuleOnWorklet(
-        GURL("http://www.google.com/script.js"), base::DoNothing());
+    document_service->CreateWorklet(
+        GURL("http://www.google.com/script.js"),
+        {blink::mojom::OriginTrialFeature::kSharedStorageAPI},
+        std::move(worklet_host), base::DoNothing());
 
     SharedStorageWorkletHostManager* manager =
         GetSharedStorageWorkletHostManagerForStoragePartition(
@@ -147,6 +152,12 @@ TEST_F(SharedStorageWorkletDevToolsAgentHostTest, BasicAttributes) {
             GURL("http://www.google.com/script.js"));
   EXPECT_FALSE(devtools_agent_host_->Activate());
   EXPECT_FALSE(devtools_agent_host_->Close());
+
+  devtools_agent_host_->WorkletDestroyed();
+  EXPECT_EQ(devtools_agent_host_->GetBrowserContext(), nullptr);
+  EXPECT_EQ(devtools_agent_host_->GetType(), "shared_storage_worklet");
+  EXPECT_EQ(devtools_agent_host_->GetTitle(), std::string());
+  EXPECT_EQ(devtools_agent_host_->GetURL(), GURL());
 }
 
 TEST_F(SharedStorageWorkletDevToolsAgentHostTest,

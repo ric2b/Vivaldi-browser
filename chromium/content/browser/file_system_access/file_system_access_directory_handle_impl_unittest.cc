@@ -12,6 +12,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/test/gmock_callback_support.h"
@@ -27,6 +28,7 @@
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "storage/browser/test/test_file_system_context.h"
+#include "storage/common/file_system/file_system_types.h"
 #include "storage/common/file_system/file_system_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -108,6 +110,16 @@ class FileSystemAccessDirectoryHandleImplTest : public testing::Test {
     return handle;
   }
 
+  scoped_refptr<FileSystemAccessLockManager::LockHandle> TakeLockSync(
+      const storage::FileSystemURL& url,
+      FileSystemAccessLockManager::LockType lock_type) {
+    base::test::TestFuture<
+        scoped_refptr<FileSystemAccessLockManager::LockHandle>>
+        future;
+    manager_->TakeLock(url, lock_type, future.GetCallback());
+    return future.Take();
+  }
+
  protected:
   const GURL test_src_url_ = GURL("http://example.com/foo");
   const blink::StorageKey test_src_storage_key_ =
@@ -135,14 +147,18 @@ class FileSystemAccessDirectoryHandleImplTest : public testing::Test {
 };
 
 TEST_F(FileSystemAccessDirectoryHandleImplTest, IsSafePathComponent) {
+  // Path components which are allowed everywhere.
   constexpr const char* kSafePathComponents[] = {
       "a", "a.txt", "a b.txt", "My Computer", ".a", "lnk.zip", "lnk", "a.local",
   };
 
-  constexpr const char* kUnsafePathComponents[] = {
-      "",
-      ".",
-      "..",
+  // Path components which are disallowed everywhere.
+  constexpr const char* kAlwaysUnsafePathComponents[] = {
+      "", ".", "..", "a/", "a\\", "a\\a", "a/a", "C:\\", "C:/",
+  };
+
+  // Path components which are allowed only in sandboxed file systems.
+  constexpr const char* kUnsafeLocalPathComponents[] = {
       "...",
       "con",
       "con.zip",
@@ -153,30 +169,47 @@ TEST_F(FileSystemAccessDirectoryHandleImplTest, IsSafePathComponent) {
       "a<a",
       "a>a",
       "a?a",
-      "a/",
-      "a\\",
       "a ",
       "a . .",
       " Computer",
       "My Computer.{a}",
       "My Computer.{20D04FE0-3AEA-1069-A2D8-08002B30309D}",
-      "a\\a",
       "a.lnk",
       "a.url",
-      "a/a",
-      "C:\\",
-      "C:/",
       "C:",
   };
 
   for (const char* component : kSafePathComponents) {
-    EXPECT_TRUE(
-        FileSystemAccessDirectoryHandleImpl::IsSafePathComponent(component))
+    EXPECT_TRUE(FileSystemAccessDirectoryHandleImpl::IsSafePathComponent(
+        storage::kFileSystemTypeTemporary, component))
+        << component;
+    EXPECT_TRUE(FileSystemAccessDirectoryHandleImpl::IsSafePathComponent(
+        storage::kFileSystemTypeLocal, component))
+        << component;
+    EXPECT_TRUE(FileSystemAccessDirectoryHandleImpl::IsSafePathComponent(
+        storage::kFileSystemTypeExternal, component))
         << component;
   }
-  for (const char* component : kUnsafePathComponents) {
-    EXPECT_FALSE(
-        FileSystemAccessDirectoryHandleImpl::IsSafePathComponent(component))
+  for (const char* component : kAlwaysUnsafePathComponents) {
+    EXPECT_FALSE(FileSystemAccessDirectoryHandleImpl::IsSafePathComponent(
+        storage::kFileSystemTypeTemporary, component))
+        << component;
+    EXPECT_FALSE(FileSystemAccessDirectoryHandleImpl::IsSafePathComponent(
+        storage::kFileSystemTypeLocal, component))
+        << component;
+    EXPECT_FALSE(FileSystemAccessDirectoryHandleImpl::IsSafePathComponent(
+        storage::kFileSystemTypeExternal, component))
+        << component;
+  }
+  for (const char* component : kUnsafeLocalPathComponents) {
+    EXPECT_TRUE(FileSystemAccessDirectoryHandleImpl::IsSafePathComponent(
+        storage::kFileSystemTypeTemporary, component))
+        << component;
+    EXPECT_FALSE(FileSystemAccessDirectoryHandleImpl::IsSafePathComponent(
+        storage::kFileSystemTypeLocal, component))
+        << component;
+    EXPECT_FALSE(FileSystemAccessDirectoryHandleImpl::IsSafePathComponent(
+        storage::kFileSystemTypeExternal, component))
         << component;
   }
 }
@@ -384,7 +417,7 @@ TEST_F(FileSystemAccessDirectoryHandleImplTest, RemoveEntry) {
     EXPECT_FALSE(base::PathExists(file));
     // The lock acquired during the operation should be released by the time the
     // callback runs.
-    EXPECT_TRUE(manager_->TakeLock(file_url, exclusive_lock_type));
+    EXPECT_TRUE(TakeLockSync(file_url, exclusive_lock_type));
   }
 
   // Acquire an exclusive lock on a file before removing to simulate when the
@@ -394,7 +427,7 @@ TEST_F(FileSystemAccessDirectoryHandleImplTest, RemoveEntry) {
     auto base_name = storage::FilePathToString(file.BaseName());
     EXPECT_EQ(handle->GetChildURL(base_name, &file_url)->file_error,
               base::File::Error::FILE_OK);
-    auto lock = manager_->TakeLock(file_url, exclusive_lock_type);
+    auto lock = TakeLockSync(file_url, exclusive_lock_type);
     EXPECT_TRUE(lock);
 
     base::test::TestFuture<blink::mojom::FileSystemAccessErrorPtr> future;
@@ -413,7 +446,7 @@ TEST_F(FileSystemAccessDirectoryHandleImplTest, RemoveEntry) {
     auto base_name = storage::FilePathToString(file.BaseName());
     EXPECT_EQ(handle->GetChildURL(base_name, &file_url)->file_error,
               base::File::Error::FILE_OK);
-    auto lock = manager_->TakeLock(file_url, wfs_siloed_lock_type);
+    auto lock = TakeLockSync(file_url, wfs_siloed_lock_type);
     ASSERT_TRUE(lock);
     EXPECT_TRUE(lock->type() == wfs_siloed_lock_type);
 

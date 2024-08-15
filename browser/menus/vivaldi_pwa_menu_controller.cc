@@ -42,7 +42,7 @@ absl::optional<std::u16string> GetInstallPWAAppMenuItemName(Browser* browser) {
 PWAMenuController::PWAMenuController(Browser* browser) : browser_(browser) {}
 
 void PWAMenuController::PopulateModel(ui::SimpleMenuModel* menu_model) {
-  absl::optional<web_app::AppId> pwa = web_app::GetWebAppForActiveTab(browser_);
+  absl::optional<webapps::AppId> pwa = web_app::GetWebAppForActiveTab(browser_);
   if (pwa) {
     auto* provider =
         web_app::WebAppProvider::GetForWebApps(browser_->profile());

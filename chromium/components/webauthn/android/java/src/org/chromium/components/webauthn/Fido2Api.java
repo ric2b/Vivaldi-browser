@@ -13,11 +13,13 @@ import android.util.Pair;
 
 import androidx.annotation.Nullable;
 
+import org.jni_zero.CalledByNative;
+import org.jni_zero.JNINamespace;
+import org.jni_zero.NativeMethods;
+
 import org.chromium.base.Log;
-import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.annotations.JNINamespace;
-import org.chromium.base.annotations.NativeMethods;
 import org.chromium.blink.mojom.AttestationConveyancePreference;
+import org.chromium.blink.mojom.AuthenticationExtensionsClientOutputs;
 import org.chromium.blink.mojom.AuthenticatorAttachment;
 import org.chromium.blink.mojom.AuthenticatorTransport;
 import org.chromium.blink.mojom.CommonCredentialInfo;
@@ -359,8 +361,15 @@ public final class Fido2Api {
             final int b = writeHeader(11, parcel);
             final int c = writeHeader(OBJECT_MAGIC, parcel);
             final int d = writeHeader(1, parcel);
-            // length of PRF inputs. None for makeCredential.
-            parcel.writeInt(0);
+            if (options.prfInput != null) {
+                // Two bytestrings for a single PRF input: the null credential ID and then the
+                // hashed salts, concatenated.
+                parcel.writeInt(2);
+                writePrfInput(options.prfInput, /* prfInputsHashed= */ false, parcel);
+            } else {
+                // No PRF inputs.
+                parcel.writeInt(0);
+            }
             writeLength(d, parcel);
             writeLength(c, parcel);
             writeLength(b, parcel);
@@ -493,16 +502,7 @@ public final class Fido2Api {
             final int d = writeHeader(1, parcel);
             parcel.writeInt(2 * options.extensions.prfInputs.length);
             for (PrfValues input : options.extensions.prfInputs) {
-                parcel.writeByteArray(input.id);
-                if (options.extensions.prfInputsHashed) {
-                    if (input.second == null) {
-                        parcel.writeByteArray(input.first);
-                    } else {
-                        parcel.writeByteArray(concat(input.first, input.second));
-                    }
-                } else {
-                    parcel.writeByteArray(hashPrfInputs(input));
-                }
+                writePrfInput(input, options.extensions.prfInputsHashed, parcel);
             }
             writeLength(d, parcel);
             writeLength(c, parcel);
@@ -520,6 +520,19 @@ public final class Fido2Api {
         }
 
         writeLength(a, parcel);
+    }
+
+    private static void writePrfInput(PrfValues input, boolean prfInputsHashed, Parcel parcel) {
+        parcel.writeByteArray(input.id);
+        if (prfInputsHashed) {
+            if (input.second == null) {
+                parcel.writeByteArray(input.first);
+            } else {
+                parcel.writeByteArray(concat(input.first, input.second));
+            }
+        } else {
+            parcel.writeByteArray(hashPrfInputs(input));
+        }
     }
 
     /**
@@ -886,6 +899,7 @@ public final class Fido2Api {
                 if (extensions.prf != null) {
                     creationResponse.echoPrf = true;
                     creationResponse.prf = extensions.prf.first;
+                    creationResponse.prfResults = extensions.getPrfResults();
                 }
             }
             return creationResponse;
@@ -893,31 +907,21 @@ public final class Fido2Api {
 
         if (assertionResponse != null) {
             if (extensions != null && extensions.userVerificationMethods != null) {
-                assertionResponse.echoUserVerificationMethods = true;
-                assertionResponse.userVerificationMethods = new UvmEntry[0];
-                assertionResponse.userVerificationMethods =
+                assertionResponse.extensions.echoUserVerificationMethods = true;
+                assertionResponse.extensions.userVerificationMethods = new UvmEntry[0];
+                assertionResponse.extensions.userVerificationMethods =
                         extensions.userVerificationMethods.toArray(
-                                assertionResponse.userVerificationMethods);
+                                assertionResponse.extensions.userVerificationMethods);
             }
             if (extensions != null && extensions.devicePublicKey != null) {
-                assertionResponse.devicePublicKey = extensions.devicePublicKey;
-                assertionResponse.devicePublicKey.authenticatorOutput =
+                assertionResponse.extensions.devicePublicKey = extensions.devicePublicKey;
+                assertionResponse.extensions.devicePublicKey.authenticatorOutput =
                         Fido2ApiJni.get().getDevicePublicKeyFromAuthenticatorData(
                                 assertionResponse.info.authenticatorData);
             }
             if (extensions != null && extensions.prf != null) {
-                assertionResponse.echoPrf = true;
-                assertionResponse.prfResults = new PrfValues();
-                if (extensions.prf.second.length == 32) {
-                    assertionResponse.prfResults.first = extensions.prf.second;
-                } else {
-                    assertionResponse.prfResults.first = new byte[32];
-                    assertionResponse.prfResults.second = new byte[32];
-                    System.arraycopy(
-                            extensions.prf.second, 0, assertionResponse.prfResults.first, 0, 32);
-                    System.arraycopy(
-                            extensions.prf.second, 32, assertionResponse.prfResults.second, 0, 32);
-                }
+                assertionResponse.extensions.echoPrf = true;
+                assertionResponse.extensions.prfResults = extensions.getPrfResults();
             }
             if (attachment >= AuthenticatorAttachment.MIN_VALUE) {
                 assertionResponse.authenticatorAttachment = attachment;
@@ -1081,6 +1085,7 @@ public final class Fido2Api {
         response.info = info;
         response.signature = signature;
         response.userHandle = userHandle;
+        response.extensions = new AuthenticationExtensionsClientOutputs();
 
         return response;
     }
@@ -1128,6 +1133,24 @@ public final class Fido2Api {
         // prf contains an "enabled" flag and a bytestring that contains either
         // one or two 32-byte strings.
         public Pair<Boolean, byte[]> prf;
+
+        PrfValues getPrfResults() {
+            if (prf == null || prf.second == null) {
+                return null;
+            }
+
+            PrfValues prfResults = new PrfValues();
+            if (prf.second.length == 32) {
+                prfResults.first = prf.second;
+            } else {
+                prfResults.first = new byte[32];
+                prfResults.second = new byte[32];
+                System.arraycopy(prf.second, 0, prfResults.first, 0, 32);
+                System.arraycopy(prf.second, 32, prfResults.second, 0, 32);
+            }
+
+            return prfResults;
+        }
     }
 
     private static Extensions parseExtensionResponse(Parcel parcel)

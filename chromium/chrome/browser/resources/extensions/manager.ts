@@ -31,7 +31,7 @@ import './kiosk_dialog.js';
 
 import {CrContainerShadowMixin} from 'chrome://resources/cr_elements/cr_container_shadow_mixin.js';
 import {CrViewManagerElement} from 'chrome://resources/cr_elements/cr_view_manager/cr_view_manager.js';
-import {assert, assertNotReached} from 'chrome://resources/js/assert_ts.js';
+import {assert, assertNotReached} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -546,7 +546,12 @@ export class ExtensionsManagerElement extends ExtensionsManagerElementBase {
       if (this.get(listId).length) {
         const focusIndex = Math.min(this.get(listId).length - 1, index);
         const itemToFocusId = this.get([listId, focusIndex])!.id;
-        this.$['items-list'].focusItemButton(itemToFocusId);
+
+        // In the rare case where the item cannot be focused despite existing,
+        // focus the search bar.
+        if (!this.$['items-list'].focusItemButton(itemToFocusId)) {
+          this.$.toolbar.focusSearchInput();
+        }
       } else {
         this.$.toolbar.focusSearchInput();
       }

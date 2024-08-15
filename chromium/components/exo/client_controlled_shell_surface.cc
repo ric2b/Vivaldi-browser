@@ -421,11 +421,13 @@ void ClientControlledShellSurface::SetRestored() {
   pending_window_state_ = chromeos::WindowStateType::kNormal;
 }
 
-void ClientControlledShellSurface::SetFullscreen(bool fullscreen) {
+void ClientControlledShellSurface::SetFullscreen(bool fullscreen,
+                                                 int64_t display_id) {
   TRACE_EVENT1("exo", "ClientControlledShellSurface::SetFullscreen",
                "fullscreen", fullscreen);
   pending_window_state_ = fullscreen ? chromeos::WindowStateType::kFullscreen
                                      : chromeos::WindowStateType::kNormal;
+  // TODO(crbug/1478300): `display_id` might need to be used here somewhere.
 }
 
 void ClientControlledShellSurface::SetPinned(chromeos::WindowPinType type) {
@@ -506,22 +508,30 @@ void ClientControlledShellSurface::AttemptToStartDrag(
       ash::Shell::Get()->toplevel_window_event_handler();
   aura::Window* mouse_pressed_handler =
       target->GetHost()->dispatcher()->mouse_pressed_handler();
-  // Start dragging only if ...
-  // 1) touch guesture is in progres.
+  // Start dragging only if:
+  // 1) touch guesture is in progress or
   // 2) mouse was pressed on the target or its subsurfaces.
-  if (toplevel_handler->gesture_target() ||
-      (mouse_pressed_handler && target->Contains(mouse_pressed_handler))) {
-    gfx::PointF point_in_root(location);
+  // If neither condition is met, we do not start the drag.
+  gfx::PointF point_in_root;
+  if (toplevel_handler->gesture_target()) {
+    point_in_root = toplevel_handler->event_location_in_gesture_target();
+    aura::Window::ConvertPointToTarget(
+        toplevel_handler->gesture_target(),
+        widget_->GetNativeWindow()->GetRootWindow(), &point_in_root);
+  } else if (mouse_pressed_handler && target->Contains(mouse_pressed_handler)) {
+    point_in_root = location;
     if (use_default_scale_cancellation_) {
       // When default scale cancellation is enabled, the client sends the
       // location in screen coordinates. Otherwise, the location should already
       // be in the display's coordinates.
       wm::ConvertPointFromScreen(target->GetRootWindow(), &point_in_root);
     }
-    toplevel_handler->AttemptToStartDrag(
-        target, point_in_root, component,
-        ash::ToplevelWindowEventHandler::EndClosure());
+  } else {
+    return;
   }
+  toplevel_handler->AttemptToStartDrag(
+      target, point_in_root, component,
+      ash::ToplevelWindowEventHandler::EndClosure());
 }
 
 bool ClientControlledShellSurface::IsDragging() {
@@ -752,8 +762,9 @@ void ClientControlledShellSurface::UnsetPip() {
   SetRestored();
 }
 
-void ClientControlledShellSurface::SetFloat() {
-  TRACE_EVENT0("exo", "ClientControlledShellSurface::SetFloat");
+void ClientControlledShellSurface::SetFloatToLocation(
+    chromeos::FloatStartLocation float_start_location) {
+  TRACE_EVENT0("exo", "ClientControlledShellSurface::SetFloatToLocation");
   pending_window_state_ = chromeos::WindowStateType::kFloated;
 }
 
@@ -1029,17 +1040,30 @@ void ClientControlledShellSurface::SetWidgetBounds(const gfx::Rect& bounds,
 
   UpdateHostWindowOrigin();
 }
+gfx::Rect ClientControlledShellSurface::GetVisibleBounds() const {
+  const auto* screen = display::Screen::GetScreen();
+  display::Display display;
+
+  if (geometry_.IsEmpty() ||
+      !screen->GetDisplayWithDisplayId(display_id_, &display)) {
+    return ShellSurfaceBase::GetVisibleBounds();
+  }
+  // ARC sends geometry_ in screen coordinates.
+  return geometry_ + display.bounds().OffsetFromOrigin();
+}
 
 gfx::Rect ClientControlledShellSurface::GetShadowBounds() const {
   gfx::Rect shadow_bounds = ShellSurfaceBase::GetShadowBounds();
   const ash::NonClientFrameViewAsh* frame_view = GetFrameView();
   if (frame_view->GetFrameEnabled() && !shadow_bounds_->IsEmpty() &&
-      !geometry_.IsEmpty()) {
+      !geometry_.IsEmpty() && !frame_view->GetFrameOverlapped()) {
     // The client controlled geometry is only for the client
     // area. When the chrome side frame is enabled, the shadow height
     // has to include the height of the frame, and the total height is
     // equals to the window height computed by
     // |GetWindowBoundsForClientBounds|.
+    // But when the frame is overlapped with the client area, shadow bounds
+    // should be the same as the client area bounds.
     shadow_bounds.set_size(
         frame_view->GetWindowBoundsForClientBounds(shadow_bounds).size());
   }
@@ -1103,7 +1127,7 @@ float ClientControlledShellSurface::GetScaleFactor() const {
 absl::optional<gfx::Rect> ClientControlledShellSurface::GetWidgetBounds()
     const {
   const ash::NonClientFrameViewAsh* frame_view = GetFrameView();
-  if (frame_view->GetFrameEnabled()) {
+  if (frame_view->GetFrameEnabled() && !frame_view->GetFrameOverlapped()) {
     gfx::Rect visible_bounds = GetVisibleBounds();
     if (widget_->IsMaximized() && frame_type_ == SurfaceFrameType::NORMAL) {
       // When the widget is maximized in clamshell mode, client sends
@@ -1113,6 +1137,8 @@ absl::optional<gfx::Rect> ClientControlledShellSurface::GetWidgetBounds()
     return frame_view->GetWindowBoundsForClientBounds(visible_bounds);
   }
 
+  // When frame is overlapped with the client window, widget bounds is the same
+  // as the |geometry_| from client.
   return GetVisibleBounds();
 }
 
@@ -1194,7 +1220,6 @@ bool ClientControlledShellSurface::OnPreWidgetCommit() {
                                                pending_window_state_)) {
     client_controlled_state_->set_next_bounds_change_animation_type(
         animation_type);
-    UpdateCornerRadius();
   }
 
   if (wasPip && !window_state->IsMinimized()) {
@@ -1461,7 +1486,9 @@ ClientControlledShellSurface::GetClientBoundsForWindowBoundsAndWindowState(
     return window_bounds;
 
   gfx::Rect client_bounds =
-      GetFrameView()->GetClientBoundsForWindowBounds(window_bounds);
+      GetFrameView()->GetFrameOverlapped()
+          ? window_bounds
+          : GetFrameView()->GetClientBoundsForWindowBounds(window_bounds);
 
   if (is_snapped && tablet_state == display::TabletState::kExitingTabletMode) {
     // Until the next commit, the frame view is in immersive mode, and the above

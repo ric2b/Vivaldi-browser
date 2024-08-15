@@ -61,12 +61,4 @@ BASE_DECLARE_FEATURE(kProfilesReordering);
 
 BASE_DECLARE_FEATURE(kForceSigninFlowInProfilePicker);
 
-// Used in Profile Picker signin in flow. Do not show outbound links that will
-// lead to opening a browser by displaying the embedded version of the page.
-BASE_DECLARE_FEATURE(kGaiaSigninUrlEmbedded);
-
-#if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
-BASE_DECLARE_FEATURE(kEnableBoundSessionCredentialsOnDiceProfiles);
-#endif
-
 #endif  // CHROME_BROWSER_SIGNIN_SIGNIN_FEATURES_H_

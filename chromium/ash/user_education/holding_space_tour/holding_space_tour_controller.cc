@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "ash/ash_element_identifiers.h"
+#include "ash/constants/ash_features.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/drag_drop/scoped_drag_drop_observer.h"
 #include "ash/public/cpp/holding_space/holding_space_client.h"
@@ -21,6 +22,7 @@
 #include "ash/shell.h"
 #include "ash/system/holding_space/holding_space_tray.h"
 #include "ash/system/status_area_widget.h"
+#include "ash/user_education/holding_space_tour/holding_space_tour_prefs.h"
 #include "ash/user_education/user_education_help_bubble_controller.h"
 #include "ash/user_education/user_education_ping_controller.h"
 #include "ash/user_education/user_education_types.h"
@@ -31,9 +33,7 @@
 #include "base/check_op.h"
 #include "base/containers/cxx20_erase_vector.h"
 #include "base/files/file_path.h"
-#include "base/pickle.h"
 #include "base/scoped_observation.h"
-#include "components/user_education/common/tutorial_description.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/client/drag_drop_client.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
@@ -84,6 +84,15 @@ const ui::ClipboardFormatType& FilesAppFormatType() {
   return ui::ClipboardFormatType::WebCustomDataType();
 }
 
+// TODO(http://b/283169365): Finalize strings.
+std::u16string GetBubbleBodyText() {
+  return features::IsHoldingSpaceTourDropToPinEnabled()
+             ? u"[i18n] Drop files on the desktop to add them to Tote. You "
+               u"can't add files to desktop."
+             : u"[i18n] Keep important files in Tote instead of on the "
+               u"desktop. Just drag files to Tote.";
+}
+
 aura::Window* GetRootWindowForDisplayId(int64_t display_id) {
   return Shell::Get()->window_tree_host_manager()->GetRootWindowForDisplayId(
       display_id);
@@ -119,6 +128,28 @@ WallpaperView* GetWallpaperViewNearestPoint(
                  GetDisplayNearestPoint(location_in_screen).id()))
       ->wallpaper_widget_controller()
       ->wallpaper_view();
+}
+
+// Indicates whether the tour should be shown based on when it was last shown
+// and how many times total it's been shown. It should be no more than once
+// in a 24 hour period, and no more than 3 times total.
+bool TourShouldBeShown() {
+  if (!features::IsHoldingSpaceTourRateLimitingEnabled()) {
+    return true;
+  }
+
+  PrefService* const prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+  const auto time_of_last_tour =
+      holding_space_tour_prefs::GetLastTimeTourWasShown(prefs);
+  const auto tour_shown_count =
+      holding_space_tour_prefs::GetTourShownCount(prefs);
+
+  bool tour_shown_recently =
+      time_of_last_tour.has_value() &&
+      base::Time::Now() - time_of_last_tour.value() < base::Hours(24);
+
+  return tour_shown_count < 3u && !tour_shown_recently;
 }
 
 // Highlight -------------------------------------------------------------------
@@ -199,18 +230,21 @@ class DragDropDelegate : public WallpaperDragDropDelegate {
   }
 
   bool CanDrop(const ui::OSExchangeData& data) override {
-    // Dropping `data` on the wallpaper has no effect unless doing so would
-    // result in pinning of files to holding space.
+    // If this `data` can be pinned to holding space, return true to make sure
+    // we can track the drag to show the nudge appropriately, even if
+    // drop-to-pin is not enabled.
     return !ExtractUnpinnedFilePaths(data).empty();
   }
 
   void OnDragEntered(const ui::OSExchangeData& data,
                      const gfx::Point& location_in_screen) override {
-    // Highlight the wallpaper when `data` is dragged over it so that the user
-    // better understands the wallpaper is a drop target.
-    CHECK(!wallpaper_highlight_);
-    wallpaper_highlight_ = std::make_unique<Highlight>(
-        GetWallpaperViewNearestPoint(location_in_screen));
+    if (features::IsHoldingSpaceTourDropToPinEnabled()) {
+      // Highlight the wallpaper when `data` is dragged over it so that the user
+      // better understands the wallpaper is a drop target.
+      CHECK(!wallpaper_highlight_);
+      wallpaper_highlight_ = std::make_unique<Highlight>(
+          GetWallpaperViewNearestPoint(location_in_screen));
+    }
 
     // If the `drag_drop_observer_` already exists, we are already observing the
     // current drag-and-drop sequence and can no-op here.
@@ -236,26 +270,40 @@ class DragDropDelegate : public WallpaperDragDropDelegate {
   ui::DragDropTypes::DragOperation OnDragUpdated(
       const ui::OSExchangeData& data,
       const gfx::Point& location_in_screen) override {
-    // Dropping `data` on the wallpaper will have no effect unless doing so
-    // would result in pinning of files to holding space.
-    return CanDrop(data) ? ui::DragDropTypes::DragOperation::DRAG_COPY
-                         : ui::DragDropTypes::DragOperation::DRAG_NONE;
+#if EXPENSIVE_DCHECKS_ARE_ON()
+    // NOTE: Data is assumed to be constant during a drag-and-drop sequence.
+    DCHECK(CanDrop(data));
+#endif  // EXPENSIVE_DCHECKS_ARE_ON()
+    return features::IsHoldingSpaceTourDropToPinEnabled()
+               ? ui::DragDropTypes::DragOperation::DRAG_COPY
+               : ui::DragDropTypes::DragOperation::DRAG_NONE;
   }
 
   void OnDragExited() override {
-    // When `data` is dragged out of the wallpaper, remove the highlight which
-    // was used to indicate the wallpaper was a drop target.
-    CHECK(wallpaper_highlight_);
-    wallpaper_highlight_.reset();
+    if (features::IsHoldingSpaceTourDropToPinEnabled()) {
+      // When `data` is dragged out of the wallpaper, remove the highlight which
+      // was used to indicate the wallpaper was a drop target.
+      CHECK(wallpaper_highlight_);
+      wallpaper_highlight_.reset();
+    }
   }
 
   ui::mojom::DragOperation OnDrop(
       const ui::OSExchangeData& data,
       const gfx::Point& location_in_screen) override {
+    if (!features::IsHoldingSpaceTourDropToPinEnabled()) {
+      return ui::mojom::DragOperation::kNone;
+    }
+
     // When `data` is dropped on the wallpaper, remove the highlight which was
     // used to indicate the wallpaper was a drop target.
     CHECK(wallpaper_highlight_);
     wallpaper_highlight_.reset();
+
+    // Immediately close the help bubble so that it does not block the holding
+    // space. If it has already closed, e.g. due to timeout, the internal
+    // callback will have already been canceled and no-op.
+    scoped_help_bubble_closer_.RunAndReset();
 
     // No-op if no holding space `client` is registered since we will be unable
     // to handle the dropped `data`.
@@ -329,10 +377,10 @@ class DragDropDelegate : public WallpaperDragDropDelegate {
     Shelf* shelf = GetShelfNearestPoint(location_in_screen.value());
     CHECK(shelf);
 
-    // Ensure the shelf is visible on the active display while the observed
-    // drag-and-drop sequence is in progress.
-    if (!disable_shelf_auto_hide_ ||
-        (disable_shelf_auto_hide_->weak_shelf() != shelf)) {
+    // If the shelf is currently being force-shown on the wrong display (i.e.
+    // the file has been dragged to a new display), switch to the correct one.
+    if (disable_shelf_auto_hide_ &&
+        disable_shelf_auto_hide_->weak_shelf() != shelf) {
       disable_shelf_auto_hide_ =
           std::make_unique<Shelf::ScopedDisableAutoHide>(shelf);
     }
@@ -344,19 +392,26 @@ class DragDropDelegate : public WallpaperDragDropDelegate {
           std::make_unique<HoldingSpaceController::ScopedForceShowInShelf>();
     }
 
+    if (!TourShouldBeShown()) {
+      return;
+    }
+
+    // Ensure the shelf is visible on the active display while the observed
+    // drag-and-drop sequence is in progress.
+    if (!disable_shelf_auto_hide_) {
+      disable_shelf_auto_hide_ =
+          std::make_unique<Shelf::ScopedDisableAutoHide>(shelf);
+    }
+
     // Cache the `holding_space_tray` nearest the `location_in_screen` so that
     // we can show an associated help bubble.
-    // TODO(http://b/283169466): Rate limit showing the help bubble.
     HoldingSpaceTray* const holding_space_tray =
         GetHoldingSpaceTrayNearestPoint(location_in_screen.value());
 
     // Configure the help bubble.
-    // TODO(http://b/283169365): Finalize strings.
     user_education::HelpBubbleParams help_bubble_params;
     help_bubble_params.arrow = user_education::HelpBubbleArrow::kBottomRight;
-    help_bubble_params.body_text =
-        u"[i18n] Drop files on the desktop to add them to Tote. You can't add "
-        u"files to desktop.";
+    help_bubble_params.body_text = GetBubbleBodyText();
     help_bubble_params.extended_properties =
         user_education_util::CreateExtendedProperties(HelpBubbleStyle::kNudge);
 
@@ -372,11 +427,21 @@ class DragDropDelegate : public WallpaperDragDropDelegate {
                     HoldingSpaceController::ScopedForceShowInShelf>()));
 
     // Attempt to show the help bubble.
-    if (UserEducationHelpBubbleController::Get()->CreateHelpBubble(
-            HelpBubbleId::kHoldingSpaceTour, std::move(help_bubble_params),
-            kHoldingSpaceTrayElementId,
-            views::ElementTrackerViews::GetContextForView(holding_space_tray),
-            std::move(close_callback))) {
+    if (auto scoped_help_bubble_closer =
+            UserEducationHelpBubbleController::Get()->CreateScopedHelpBubble(
+                HelpBubbleId::kHoldingSpaceTour, std::move(help_bubble_params),
+                kHoldingSpaceTrayElementId,
+                views::ElementTrackerViews::GetContextForView(
+                    holding_space_tray),
+                std::move(close_callback))) {
+      holding_space_tour_prefs::MarkTourShown(
+          Shell::Get()->session_controller()->GetLastActiveUserPrefService());
+
+      // If we successfully created a help bubble, then it is safe to replace
+      // the current `base::ScopedClosureRunner` because any previous help
+      // bubbles have already closed.
+      scoped_help_bubble_closer_ = std::move(scoped_help_bubble_closer);
+
       // If successful in showing the help bubble, ping the `holding_space_tray`
       // to further attract the user's attention.
       UserEducationPingController::Get()->CreatePing(PingId::kHoldingSpaceTour,
@@ -396,6 +461,9 @@ class DragDropDelegate : public WallpaperDragDropDelegate {
   // while an observed drag-and-drop sequence is in progress.
   std::unique_ptr<HoldingSpaceController::ScopedForceShowInShelf>
       force_holding_space_show_in_shelf_;
+
+  // Used to close the help bubble on drop-to-pin.
+  base::ScopedClosureRunner scoped_help_bubble_closer_;
 
   // Used to highlight the wallpaper when data is dragged over it so that the
   // user better understands the wallpaper is a drop target.
@@ -424,22 +492,6 @@ HoldingSpaceTourController::~HoldingSpaceTourController() {
 // static
 HoldingSpaceTourController* HoldingSpaceTourController::Get() {
   return g_instance;
-}
-
-// TODO(http://b/275909980): Implement tutorial descriptions.
-std::map<TutorialId, user_education::TutorialDescription>
-HoldingSpaceTourController::GetTutorialDescriptions() {
-  std::map<TutorialId, user_education::TutorialDescription>
-      tutorial_descriptions_by_id;
-  tutorial_descriptions_by_id.emplace(
-      std::piecewise_construct,
-      std::forward_as_tuple(TutorialId::kHoldingSpaceTourPrototype1),
-      std::forward_as_tuple());
-  tutorial_descriptions_by_id.emplace(
-      std::piecewise_construct,
-      std::forward_as_tuple(TutorialId::kHoldingSpaceTourPrototype2),
-      std::forward_as_tuple());
-  return tutorial_descriptions_by_id;
 }
 
 }  // namespace ash

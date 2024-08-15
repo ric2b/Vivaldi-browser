@@ -8,7 +8,7 @@
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/confirmation_alert/confirmation_alert_view_controller.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
-#import "ios/chrome/grit/ios_chromium_strings.h"
+#import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/lottie/lottie_animation_api.h"
 #import "ios/public/provider/chrome/browser/lottie/lottie_animation_configuration.h"
@@ -75,6 +75,11 @@ NSString* const kChromeSettingsKeypath = @"IDS_CHROME_SETTINGS";
 - (void)viewDidLoad {
   [super viewDidLoad];
   self.view.backgroundColor = [UIColor colorNamed:kGrey100Color];
+  NSString* tertiaryActionString =
+      (self.showRemindMeLater)
+          ? l10n_util::GetNSString(
+                IDS_IOS_DEFAULT_BROWSER_VIDEO_PROMO_TERTIARY_BUTTON_TEXT)
+          : nil;
   [self
       createConfirmationAlertScreen:
           l10n_util::GetNSString(IDS_IOS_DEFAULT_BROWSER_VIDEO_PROMO_TITLE_TEXT)
@@ -86,7 +91,8 @@ NSString* const kChromeSettingsKeypath = @"IDS_CHROME_SETTINGS";
                         IDS_IOS_DEFAULT_BROWSER_VIDEO_PROMO_PRIMARY_BUTTON_TEXT)
               secondaryActionString:
                   l10n_util::GetNSString(
-                      IDS_IOS_DEFAULT_BROWSER_VIDEO_PROMO_SECONDARY_BUTTON_TEXT)];
+                      IDS_IOS_DEFAULT_BROWSER_VIDEO_PROMO_SECONDARY_BUTTON_TEXT)
+               tertiaryActionString:tertiaryActionString];
 
   [self configureAnimationView];
   [self configureAlertScreen];
@@ -110,7 +116,8 @@ NSString* const kChromeSettingsKeypath = @"IDS_CHROME_SETTINGS";
 - (void)createConfirmationAlertScreen:(NSString*)titleString
                        subtitleString:(NSString*)subtitleString
                   primaryActionString:(NSString*)primaryActionString
-                secondaryActionString:(NSString*)secondaryActionString {
+                secondaryActionString:(NSString*)secondaryActionString
+                 tertiaryActionString:(NSString*)tertiaryActionString {
   DCHECK(!self.alertScreen);
   ConfirmationAlertViewController* alertScreen =
       [[ConfirmationAlertViewController alloc] init];
@@ -118,6 +125,7 @@ NSString* const kChromeSettingsKeypath = @"IDS_CHROME_SETTINGS";
   alertScreen.subtitleString = subtitleString;
   alertScreen.primaryActionString = primaryActionString;
   alertScreen.secondaryActionString = secondaryActionString;
+  alertScreen.tertiaryActionString = tertiaryActionString;
   alertScreen.actionHandler = self.actionHandler;
   alertScreen.modalPresentationStyle = UIModalPresentationFullScreen;
   self.alertScreen = alertScreen;

@@ -6,9 +6,10 @@ package org.chromium.net;
 
 import android.content.Context;
 
+import org.jni_zero.JNINamespace;
+import org.jni_zero.NativeMethods;
+
 import org.chromium.base.ContextUtils;
-import org.chromium.base.annotations.JNINamespace;
-import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.test.util.UrlUtils;
 
 /**
@@ -60,6 +61,10 @@ public final class QuicTestServer {
         return QuicTestServerJni.get().getServerPort();
     }
 
+    public static void delayResponse(String path, int delayInSeconds) {
+        QuicTestServerJni.get().delayResponse(path, delayInSeconds);
+    }
+
     public static final String getServerCert() {
         return CERT_USED;
     }
@@ -79,6 +84,7 @@ public final class QuicTestServer {
          * Runs a quic test server synchronously.
          */
         void startQuicTestServer(String filePath, String testDataDir);
+
         /*
          * Shutdowns the quic test-server synchronously.
          *
@@ -87,5 +93,14 @@ public final class QuicTestServer {
          */
         void shutdownQuicTestServer();
         int getServerPort();
+
+        /*
+         * Responses for path will be delayed by delayInSeconds.
+         *
+         * Ideally this wouldn't take a delay. Instead, it should provide a synchronization
+         * mechanism that allows the caller to unblock the request. This would require changes all
+         * the way down to QUICHE though.
+         */
+        void delayResponse(String path, int delayInSeconds);
     }
 }

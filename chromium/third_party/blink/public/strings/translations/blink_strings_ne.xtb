@@ -16,6 +16,7 @@
 <translation id="1729654308190250600">कृपया एउटा खाली नभएको इमेल ठेगाना प्रविष्टि गर्नुहोस्।</translation>
 <translation id="1758486001363313524">अन्य ...</translation>
 <translation id="1787192514241997742">कुल समय: <ph name="REMAINING_TIME" /></translation>
+<translation id="1800494066469288780">क्यामेरा प्रयोग गर्ने अनुमति दिनुहोस्</translation>
 <translation id="1822429046913737220">बिहना/साँझ</translation>
 <translation id="1832974991323546415">टाढाको यन्त्रमा प्ले गर्नुहोस्</translation>
 <translation id="1921819250265091946">dd</translation>
@@ -45,11 +46,13 @@
 <translation id="2761667185364618470">यदि तपाईं अगाडि बढ्न चाहनुहुन्छ भने यस बाकसमा ठिक चिह्न लगाउनुहोस्।</translation>
 <translation id="2908441821576996758">कृपया अल्पविरामले विभाजित गरिएको इमले ठेगानाहरूको सूची प्रविष्टि गर्नुहोस्।</translation>
 <translation id="3049748772180311791"><ph name="QUANTITY" /> एमबी</translation>
+<translation id="3053226512517284904">"अडियोको वर्णन" मेनु देखाइयोस्</translation>
 <translation id="3075154866155599887">कृपया एउटा वैध मान प्रविष्टि गर्नुहोस्। क्षेत््र अपूर्ण छ वा त्यसमा एउटा अमान्य मिति छ।</translation>
 <translation id="310520048233152454">कृपया एउटा URL प्रविष्टि गर्नुहोस्।</translation>
 <translation id="3220661731597678625">हालको चरण</translation>
 <translation id="3321030238473337787">प्लेब्याकको गति</translation>
 <translation id="3329013043687509092">संतृप्तीकरण</translation>
+<translation id="3377518164566272702">माइक्रोफोन तथा क्यामेरा प्रयोग गर्ने अनुमति दिनुहोस्</translation>
 <translation id="3450233048674729344">मूल्य <ph name="MAXIMUM" /> भन्दा थोरै वा बराबर हुनै पर्छ।</translation>
 <translation id="3732799496749320381">mm</translation>
 <translation id="3754210790023674521">Picture-in-picture बाट बाहिरिनुहोस्</translation>
@@ -65,6 +68,7 @@
 <translation id="4718048029184481307">picture-in-picture मा प्ले गर्दै</translation>
 <translation id="4748357248530471599">प्रदर्शनसम्बन्धी कटआउटलाई टगल गरी पूर्णस्क्रिन बनाउनुहोस्</translation>
 <translation id="4763480195061959176">भिडियो</translation>
+<translation id="4792862212177489858">लोकेसन सेयर गर्नुहोस्</translation>
 <translation id="4812940957355064477">कृपया एक नम्बर प्रविष्टि गर्नुहोस्।</translation>
 <translation id="4912200001568447310">हालको वस्तु</translation>
 <translation id="4915360478455618802">समय चयनकर्ता देखाउनुहोस्</translation>
@@ -74,6 +78,7 @@
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> चयन गरिएको</translation>
 <translation id="4992066212339426712">आवाज खोल्नुहोस्</translation>
 <translation id="49969490063480558">कृपया '<ph name="ATSIGN" />' पछ्याउने एउटा भाग प्रविष्टि गर्नुहोस्। '<ph name="INVALIDADDRESS" />' अपूर्ण छ।</translation>
+<translation id="5037575921016181960">भरपर्दो पासवर्ड</translation>
 <translation id="5090250355906949916">भिडियो टाइमलाइनसम्बन्धी स्क्रबर</translation>
 <translation id="509897012892853729">निलो च्यानल</translation>
 <translation id="5117590920725113268">अर्को महिना देखाउनुहोस्</translation>
@@ -178,6 +183,7 @@
 <translation id="9132465097189459683">अन्य...</translation>
 <translation id="9155987714137265666"><ph name="WEEK" /> , <ph name="WEEK_START_DATE" />मा सुरु गर्दै</translation>
 <translation id="916607977885256133">Picture in Picture</translation>
+<translation id="918430632320614861">माइक्रोफोन प्रयोग गर्ने अनुमति दिनुहोस्</translation>
 <translation id="945780513535800434">सबै विकल्पहरूमा चिन्ह लगाइएको छैन</translation>
 <translation id="954003015749068518">picture-in-picture मा प्रवेश गर्नुहोस्‌</translation>
 </translationbundle>

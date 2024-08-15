@@ -6,6 +6,7 @@
 
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
+#import "components/notes/notes_model.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/notes/notes_factory.h"
@@ -14,7 +15,6 @@
 #import "ios/ui/notes/note_parent_folder_view.h"
 #import "ios/ui/notes/note_utils_ios.h"
 #import "ios/ui/notes/note_ui_constants.h"
-#import "notes/notes_model.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 

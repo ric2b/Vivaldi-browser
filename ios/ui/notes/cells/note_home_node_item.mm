@@ -4,8 +4,8 @@
 
 #import "base/apple/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
+#import "components/notes/note_node.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_url_item.h"
-#import "notes/note_node.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "ios/ui/notes/cells/note_folder_item.h"
 #import "ios/ui/notes/cells/table_view_note_cell.h"

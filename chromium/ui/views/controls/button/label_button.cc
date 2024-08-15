@@ -31,6 +31,8 @@
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/painter.h"
 #include "ui/views/style/platform_style.h"
+#include "ui/views/style/typography.h"
+#include "ui/views/style/typography_provider.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/views/window/dialog_delegate.h"
 
@@ -46,9 +48,13 @@ LabelButton::LabelButton(PressedCallback callback,
                          int button_context)
     : Button(std::move(callback)),
       cached_normal_font_list_(
-          style::GetFont(button_context, style::STYLE_PRIMARY)),
-      cached_default_button_font_list_(
-          style::GetFont(button_context, style::STYLE_DIALOG_BUTTON_DEFAULT)) {
+          TypographyProvider::Get().GetFont(button_context,
+                                            style::STYLE_PRIMARY)),
+      cached_default_button_font_list_(TypographyProvider::Get().GetFont(
+          button_context,
+          style::STYLE_DIALOG_BUTTON_DEFAULT)),
+      appear_disabled_in_inactive_widget_(
+          PlatformStyle::kInactiveWidgetControlsAppearDisabled) {
   ink_drop_container_ = AddChildView(std::make_unique<InkDropContainerView>());
   ink_drop_container_->SetVisible(false);
 
@@ -276,6 +282,13 @@ std::unique_ptr<LabelButtonBorder> LabelButton::CreateDefaultBorder() const {
   auto border = std::make_unique<LabelButtonBorder>();
   border->set_insets(views::LabelButtonAssetBorder::GetDefaultInsets());
   return border;
+}
+
+void LabelButton::SetAppearDisabledInInactiveWidget(bool appear_disabled) {
+  appear_disabled_in_inactive_widget_ = appear_disabled;
+  if (GetWidget()) {
+    AddedToWidget();
+  }
 }
 
 void LabelButton::SetBorder(std::unique_ptr<Border> border) {
@@ -511,9 +524,9 @@ PropertyEffects LabelButton::UpdateStyleToIndicateDefaultStatus() {
   // never be given default status.
   DCHECK_EQ(cached_normal_font_list_.GetFontSize(),
             label()->font_list().GetFontSize());
-  // TODO(tapted): This should use style::GetFont(), but this part can just be
-  // deleted when default buttons no longer go bold. Colors will need updating
-  // still.
+  // TODO(tapted): This should use TypographyProvider::Get().GetFont(), but this
+  // part can just be deleted when default buttons no longer go bold. Colors
+  // will need updating still.
   label_->SetFontList(GetIsDefault() ? cached_default_button_font_list_
                                      : cached_normal_font_list_);
   ResetLabelEnabledColor();
@@ -525,7 +538,7 @@ void LabelButton::ChildPreferredSizeChanged(View* child) {
 }
 
 void LabelButton::AddedToWidget() {
-  if (PlatformStyle::kInactiveWidgetControlsAppearDisabled) {
+  if (appear_disabled_in_inactive_widget_) {
     paint_as_active_subscription_ =
         GetWidget()->RegisterPaintAsActiveChangedCallback(base::BindRepeating(
             &LabelButton::VisualStateChanged, base::Unretained(this)));
@@ -613,8 +626,9 @@ gfx::Size LabelButton::GetUnclampedSizeWithoutLabel() const {
 Button::ButtonState LabelButton::GetVisualState() const {
   const auto* widget = GetWidget();
   if (!widget || !widget->CanActivate() ||
-      !PlatformStyle::kInactiveWidgetControlsAppearDisabled)
+      !appear_disabled_in_inactive_widget_) {
     return GetState();
+  }
 
   // Paint as inactive if neither this widget nor its parent should paint as
   // active.

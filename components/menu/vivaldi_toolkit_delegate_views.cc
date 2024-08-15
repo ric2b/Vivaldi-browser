@@ -6,6 +6,7 @@
 #include "components/renderer_context_menu/views/toolkit_delegate_views.h"
 
 #include "browser/menus/vivaldi_context_menu_controller.h"
+#include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/controls/menu/menu_model_adapter.h"
 #include "ui/views/controls/menu/menu_runner.h"
 
@@ -17,7 +18,7 @@ class VivaldiMenuModelAdapterViews : public views::MenuModelAdapter {
 
   // views::MenuDelegate
   bool VivaldiShouldTryPositioningContextMenu() const override {
-    return delegate_ != nullptr;
+    return delegate_ && delegate_->CanSetPosition();
   }
 
   void VivaldiGetContextMenuPosition(
@@ -25,6 +26,18 @@ class VivaldiMenuModelAdapterViews : public views::MenuModelAdapter {
       const gfx::Rect& monitor_bounds,
       const gfx::Rect& anchor_bounds) const override {
     delegate_->SetPosition(menu_bounds, monitor_bounds, anchor_bounds);
+  }
+
+  void VivaldiExecutePersistent(
+      views::MenuItemView* menu_item,
+      int event_flags,
+      bool* success) override {
+    if (delegate_) {
+      delegate_->ExecuteIfPersistent(
+        menu_item->GetCommand(), event_flags, success);
+    } else {
+      *success = false;
+    }
   }
 
  private:

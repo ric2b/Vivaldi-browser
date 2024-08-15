@@ -19,6 +19,10 @@ dictionary AuctionAdditionalBidSignature {
   Uint8Array signature;
 };
 
+dictionary ProtectedAudiencePrivateAggregationConfig {
+  USVString aggregationCoordinatorOrigin;
+};
+
 dictionary AuctionAdConfig {
   required USVString seller;
 
@@ -68,7 +72,9 @@ dictionary AuctionAdConfig {
   Promise<undefined> additionalBids;
 
   [RuntimeEnabled=FledgeNegativeTargeting]
-  USVString auctionNonce;
+  DOMString auctionNonce;
+
+  ProtectedAudiencePrivateAggregationConfig privateAggregationConfig;
 
   sequence<AuctionAdConfig> componentAuctions;
   AbortSignal? signal;

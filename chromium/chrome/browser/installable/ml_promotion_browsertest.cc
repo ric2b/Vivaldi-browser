@@ -18,9 +18,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
-#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/ui/web_applications/web_app_dialog_utils.h"
+#include "chrome/browser/ui/web_applications/web_app_dialogs.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/web_app_command_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
@@ -263,7 +263,7 @@ class MLPromotionBrowserTest : public MLPromotionBrowserTestBase {
 
   void ExpectClasificationCallReturnResult(
       GURL site_url,
-      web_app::ManifestId manifest_id,
+      webapps::ManifestId manifest_id,
       std::string label_result,
       TrainingRequestId request_result,
       content::WebContents* custom_web_contents = nullptr) {
@@ -655,7 +655,7 @@ IN_PROC_BROWSER_TEST_F(MLPromotionBrowserTest,
   provider().command_manager().AwaitAllCommandsCompleteForTesting();
 
   EXPECT_FALSE(provider().registrar_unsafe().is_empty());
-  web_app::AppId app_id = provider().registrar_unsafe().GetAppIds()[0];
+  webapps::AppId app_id = provider().registrar_unsafe().GetAppIds()[0];
   EXPECT_EQ("Web App Test Page with Favicon",
             provider().registrar_unsafe().GetAppShortName(app_id));
   auto user_display_mode =
@@ -764,7 +764,7 @@ class MLPromotionInstallDialogBrowserTest
         InstallAppForCurrentWebContents(/*install_locally=*/true);
         break;
       case InstallDialogState::kCreateShortcutDialog:
-        chrome::SetAutoAcceptWebAppDialogForTesting(
+        web_app::SetAutoAcceptWebAppDialogForTesting(
             /*auto_accept=*/true, /*auto_open_in_window=*/false);
         chrome::ExecuteCommand(browser(), IDC_CREATE_SHORTCUT);
         break;
@@ -908,7 +908,7 @@ IN_PROC_BROWSER_TEST_P(MLPromotionInstallDialogBrowserTest,
   provider().command_manager().AwaitAllCommandsCompleteForTesting();
 
   EXPECT_FALSE(provider().registrar_unsafe().is_empty());
-  web_app::AppId app_id = provider().registrar_unsafe().GetAppIds()[0];
+  webapps::AppId app_id = provider().registrar_unsafe().GetAppIds()[0];
   EXPECT_EQ(GetAppNameBasedOnDialogState(),
             provider().registrar_unsafe().GetAppShortName(app_id));
 }

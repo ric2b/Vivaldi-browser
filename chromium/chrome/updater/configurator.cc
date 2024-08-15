@@ -138,7 +138,7 @@ base::flat_map<std::string, std::string> Configurator::ExtraRequestParams()
 
 std::string Configurator::GetDownloadPreference() const {
   PolicyStatus<std::string> preference =
-      policy_service_->GetDownloadPreferenceGroupPolicy();
+      policy_service_->GetDownloadPreference();
   return preference ? preference.policy() : std::string();
 }
 
@@ -170,7 +170,7 @@ scoped_refptr<update_client::PatcherFactory> Configurator::GetPatcherFactory() {
 }
 
 bool Configurator::EnabledDeltas() const {
-  return false;
+  return external_constants_->EnableDiffUpdates();
 }
 
 bool Configurator::EnabledBackgroundDownloader() const {
@@ -222,12 +222,7 @@ update_client::UpdaterStateProvider Configurator::GetUpdaterStateProvider()
 }
 
 absl::optional<base::FilePath> Configurator::GetCrxCachePath() const {
-  absl::optional<base::FilePath> optional_result =
-      updater::GetInstallDirectory(GetUpdaterScope());
-  return optional_result.has_value()
-             ? absl::optional<base::FilePath>(
-                   optional_result.value().AppendASCII("crx_cache"))
-             : absl::nullopt;
+  return updater::GetCrxDiffCacheDirectory(GetUpdaterScope());
 }
 
 }  // namespace updater

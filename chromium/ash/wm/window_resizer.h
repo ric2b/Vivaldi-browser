@@ -65,7 +65,7 @@ class ASH_EXPORT WindowResizer {
   // Invoked during pinch to move and resize the window. `location` is in the
   // coordinates of the window supplied to the constructor. `scale` is the
   // the scale change since last gesture event.
-  virtual void Pinch(const gfx::PointF& location, float scale) {}
+  virtual void Pinch(const gfx::PointF& location, float scale, float angle) {}
 
   // Invoked to complete the drag.
   virtual void CompleteDrag() = 0;
@@ -93,6 +93,10 @@ class ASH_EXPORT WindowResizer {
   // Call during an active resize to change the bounds of the window. This
   // should not be called as the result of a revert.
   void SetBoundsDuringResize(const gfx::Rect& bounds);
+
+  // Called during an active resize to change the transform of the
+  // window.
+  void SetTransformDuringResize(const gfx::Transform& transform);
 
   void SetPresentationTimeRecorder(
       std::unique_ptr<PresentationTimeRecorder> recorder);

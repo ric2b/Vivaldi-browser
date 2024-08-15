@@ -10,17 +10,19 @@
 import {assertInstanceof, assertNotReached} from 'chrome://resources/ash/common/assert.js';
 
 import {getMimeType, startIOTask} from '../../common/js/api.js';
-import {AnnotatedTask, getDefaultTask} from '../../common/js/file_tasks.js';
-import {metrics} from '../../common/js/metrics.js';
-import {str, strf, util} from '../../common/js/util.js';
+import {type AnnotatedTask, getDefaultTask} from '../../common/js/file_tasks.js';
+import {isJellyEnabled} from '../../common/js/flags.js';
+import {recordDirectoryListLoadWithTolerance, startInterval} from '../../common/js/metrics.js';
+import {str, strf} from '../../common/js/translations.js';
+import {checkAPIError} from '../../common/js/util.js';
 import {Crostini} from '../../externs/background/crostini.js';
 import {ProgressCenter} from '../../externs/background/progress_center.js';
 import {FilesAppDirEntry, FilesAppEntry} from '../../externs/files_app_entry_interfaces.js';
 import {FileData, FileKey, FileTasks as StoreFileTasks, PropStatus, State} from '../../externs/ts/state.js';
 import {VolumeManager} from '../../externs/volume_manager.js';
 import {fetchFileTasks} from '../../state/ducks/current_directory.js';
-import {getFilesData, getStore, Store, waitForState} from '../../state/store.js';
-import {FilesPasswordDialog} from '../elements/files_password_dialog.js';
+import {getFilesData, getStore, type Store, waitForState} from '../../state/store.js';
+import {XfPasswordDialog} from '../../widgets/xf_password_dialog.js';
 
 import {DirectoryModel} from './directory_model.js';
 import {FileSelection, FileSelectionHandler} from './file_selection.js';
@@ -207,7 +209,7 @@ export class TaskController {
     const mimeTypes =
         await Promise.all(entries.map(entry => this.getMimeType_(entry)));
     chrome.fileManagerPrivate.setDefaultTask(
-        task.descriptor, entries, mimeTypes, util.checkAPIError);
+        task.descriptor, entries, mimeTypes, checkAPIError);
     this.metadataUpdateController_.refreshCurrentDirectoryMetadata();
 
     // Update task menu button unless the task button was updated by other
@@ -301,7 +303,7 @@ export class TaskController {
     const items = [];
 
     // We don't bold default task item in refresh23 style.
-    const shouldBoldDefaultItem = !util.isJellyEnabled();
+    const shouldBoldDefaultItem = !isJellyEnabled();
 
     // Create items.
     for (const task of tasks) {
@@ -419,7 +421,7 @@ export class TaskController {
 
     try {
       const metricName = 'UpdateAvailableApps';
-      metrics.startInterval(metricName);
+      startInterval(metricName);
       const tasks = await this.getFileTasks();
       // Update the DOM.
       this.display_(tasks);
@@ -429,7 +431,7 @@ export class TaskController {
       if (window.IN_TEST) {
         this.ui_.taskMenuButton.toggleAttribute('get-tasks-completed', true);
       }
-      metrics.recordDirectoryListLoadWithTolerance(
+      recordDirectoryListLoadWithTolerance(
           metricName, openTaskItems.length, [10, 100], /*tolerance=*/ 0.8);
     } catch (error: any) {
       if (error) {
@@ -541,17 +543,17 @@ export class TaskController {
   }
 
   /**
-   * Return the tasks for the FileEntry |entry|.
+   * Return the tasks for the `entry`.
    * @param entry
    */
-  async getEntryFileTasks(entry: FileEntry): Promise<FileTasks> {
+  async getEntryFileTasks(entry: Entry): Promise<FileTasks> {
     return FileTasks.create(
         this.volumeManager_, this.metadataModel_, this.directoryModel_,
         this.ui_, this.fileTransferController_!, [entry], this.taskHistory_,
         this.crostini_, this.progressCenter_, this);
   }
 
-  async executeEntryTask(entry: FileEntry) {
+  async executeEntryTask(entry: Entry) {
     const tasks = await this.getEntryFileTasks(entry);
     tasks.executeDefault();
   }
@@ -629,7 +631,7 @@ export class TaskController {
     let password: string|null = null;
     // Ask for password.
     try {
-      const dialog = this.ui_.passwordDialog as FilesPasswordDialog;
+      const dialog = this.ui_.passwordDialog as XfPasswordDialog;
       password = await dialog.askForPassword(entry.fullPath, password);
     } catch (error) {
       console.warn('User cancelled password fetch ', error);

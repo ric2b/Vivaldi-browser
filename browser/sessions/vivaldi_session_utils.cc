@@ -26,8 +26,6 @@
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 #include "ui/base/l10n/l10n_util.h"
 
-#include <algorithm>
-
 using content::BrowserContext;
 using sessions::Index_Model;
 using sessions::Index_Node;
@@ -178,7 +176,7 @@ bool RemoveWorkspaceId(sessions::SessionTab* tab) {
 }
 
 // Returns true when 'ids' refers to one or more tabs in the browser.
-bool ContainsTabs(Browser* browser, std::vector<int>& ids) {
+bool ContainsTabs(Browser* browser, const std::vector<int>& ids) {
   bool has_content = false;
   TabStripModel* tab_strip = browser->tab_strip_model();
   for (int i = 0; i < tab_strip->count(); ++i) {
@@ -340,7 +338,6 @@ int PurgeAutosaves(BrowserContext* browser_context) {
     }
     model->Remove(node);
   }
-
   return sessions::kNoError;
 }
 
@@ -545,6 +542,7 @@ base::FilePath GetPathFromNode(BrowserContext* browser_context,
 
 int SetNodeState(BrowserContext* browser_context, const base::FilePath& file,
                  bool is_new, Index_Node* node) {
+  base::VivaldiScopedAllowBlocking allow_blocking;
   // Get time from file. Same as when setting up the model on first run.
   base::File::Info info;
   if (!base::GetFileInfo(file, &info)) {
@@ -552,8 +550,9 @@ int SetNodeState(BrowserContext* browser_context, const base::FilePath& file,
   }
 
   base::Time created = info.creation_time;
-  node->SetCreateTime(created.ToJsTime());
-  node->SetModifyTime(is_new ? created.ToJsTime() : info.last_modified.ToJsTime());
+  node->SetCreateTime(created.InMillisecondsFSinceUnixEpoch());
+  node->SetModifyTime(is_new ? created.InMillisecondsFSinceUnixEpoch()
+                          : info.last_modified.InMillisecondsFSinceUnixEpoch());
 
   sessions::SessionContent content;
   sessions::GetContent(file, content);
@@ -668,6 +667,45 @@ int SetNodeState(BrowserContext* browser_context, const base::FilePath& file,
   return kNoError;
 }
 
+std::vector<std::string> CollectThumbnailUrls(
+    content::BrowserContext* browser_context,
+    const WriteSessionOptions& opts) {
+  std::vector<std::string> res;
+  Profile* profile = Profile::FromBrowserContext(browser_context);
+  ::vivaldi::VivaldiSessionService service(profile);
+  for (auto* browser : *BrowserList::GetInstance()) {
+    if (service.ShouldTrackWindow(browser) &&
+        browser->tab_strip_model()->count() && browser->window() &&
+        // An empty list means all tabs.
+        (opts.ids.size() == 0 || ContainsTabs(browser, opts.ids)) &&
+        // A window id of 0 means all windows.
+        (opts.window_id == 0 ||
+         (browser->session_id().id() == opts.window_id))) {
+      std::vector<std::string> urls =
+          service.CollectThumbnailUrls(browser, opts.ids);
+      res.insert(res.end(), urls.begin(), urls.end());
+    }
+  }
+
+  return res;
+}
+
+std::vector<std::string> CollectAllThumbnailUrls(
+    content::BrowserContext* browser_context) {
+  std::vector<std::string> res;
+  Profile* profile = Profile::FromBrowserContext(browser_context);
+  ::vivaldi::VivaldiSessionService service(profile);
+  for (auto* browser : *BrowserList::GetInstance()) {
+    if (browser->window()) {
+      auto thumbnails =
+          service.CollectThumbnailUrls(browser, std::vector<int>());
+      res.insert(std::end(res), std::begin(thumbnails), std::end(thumbnails));
+    }
+  }
+
+  return res;
+}
+
 int WriteSessionFile(content::BrowserContext* browser_context,
                      WriteSessionOptions& opts) {
   if (opts.from_id != -1) {
@@ -695,13 +733,13 @@ int WriteSessionFile(content::BrowserContext* browser_context,
     //   removed. If the tab count is 0 or the window is NULL, the browser
     //   is about to be deleted, so we ignore it.
     if (service.ShouldTrackWindow(browser) &&
-        browser->tab_strip_model()->count() &&
-        browser->window() &&
+        browser->tab_strip_model()->count() && browser->window() &&
         // An empty list means all tabs.
         (opts.ids.size() == 0 || ContainsTabs(browser, opts.ids)) &&
         // A window id of 0 means all windows.
-        (opts.window_id == 0 || (browser->session_id().id() == opts.window_id))) {
-      service.BuildCommandsForBrowser(browser, opts.ids);
+        (opts.window_id == 0 ||
+         (browser->session_id().id() == opts.window_id))) {
+      service.BuildCommandsForBrowser(browser, opts.ids, opts.thumbnails);
     }
   }
   if (!service.Save(opts.path)) {
@@ -766,6 +804,9 @@ int MoveAutoSaveNodesToTrash(BrowserContext* browser_context) {
   return kNoError;
 }
 
+// Adds children of the autosave main node to the 'nodes' list of too old nodes.
+// All nodes made on the same date as autosave main node are added if 'on_add'
+// is true.
 int GetExpiredAutoSaveNodes(BrowserContext* browser_context,
                             int days_before,
                             bool on_add,
@@ -782,24 +823,47 @@ int GetExpiredAutoSaveNodes(BrowserContext* browser_context,
     return sessions::kNoError;
   }
 
-  base::Time time = on_add
-    ? base::Time::FromJsTime(autosave_node->modify_time())
+  base::Time time = on_add ? base::Time::FromMillisecondsSinceUnixEpoch(
+                                 autosave_node->modify_time())
     : base::Time::Now();
-  base::Time expire_time = time - base::Days(days_before);
   base::Time::Exploded time_exploded;
   time.LocalExplode(&time_exploded);
 
-  for (const std::unique_ptr<Index_Node>& node : autosave_node->children()) {
-    base::Time node_time = base::Time::FromJsTime(node->modify_time());
-    if (node_time <= expire_time) {
-      nodes.push_back(node.get());
-    } else if (on_add) {
+  // First add all from the same date. The top node is the only one that shall
+  // hold data from current date.
+  if (on_add) {
+    for (const std::unique_ptr<Index_Node>& node : autosave_node->children()) {
+      base::Time node_time =
+        base::Time::FromMillisecondsSinceUnixEpoch(node->modify_time());
       base::Time::Exploded node_exploded;
       node_time.LocalExplode(&node_exploded);
       if (time_exploded.year == node_exploded.year &&
           time_exploded.day_of_month == node_exploded.day_of_month &&
           time_exploded.month == node_exploded.month) {
         nodes.push_back(node.get());
+      }
+    }
+  }
+  // Next, add entries so that when we remove them the number of children of
+  // the autosave node does not exceed the value of days_before.
+  // This assumes the list is sorted by date (oldest last).
+  if (autosave_node->children().size() - nodes.size() > static_cast<size_t>(days_before)) {
+    int num_to_remove = autosave_node->children().size() -
+      nodes.size() - days_before;
+    for (int i = autosave_node->children().size() - 1;
+         i >= 0 && num_to_remove > 0;
+         --i) {
+      const std::unique_ptr<Index_Node>& node = autosave_node->children().at(i);
+      bool can_add = true;
+      for (size_t j=0; j < nodes.size() && can_add; j++) {
+        if (nodes.at(j) == node.get()) {
+          can_add = false;
+        }
+      }
+      if (can_add) {
+        nodes.push_back(node.get());
+        num_to_remove--;
+      } else {
       }
     }
   }
@@ -1462,8 +1526,16 @@ std::unique_ptr<base::Value::Dict> GetTabStackTitles(
 void GetContent(base::FilePath name, SessionContent& content) {
   ::vivaldi::VivaldiSessionService service;
   auto cmds = service.LoadSettingInfo(name);
+
   std::vector<std::unique_ptr<sessions::SessionCommand>> commands;
-  commands.swap(cmds);
+  for (auto &item: cmds) {
+    // We don't build thumbnails here.
+    if (item->id() == sessions::GetVivCreateThumbnailCommandId()) {
+      continue;
+    }
+    commands.push_back(std::move(item));
+  }
+
   sessions::TokenToSessionTabGroup tab_groups;
   sessions::VivaldiCreateTabsAndWindows(commands, &content.tabs,
                                         &tab_groups, &content.windows,

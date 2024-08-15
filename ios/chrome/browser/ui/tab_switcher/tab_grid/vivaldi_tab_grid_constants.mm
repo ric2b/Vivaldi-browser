@@ -74,3 +74,8 @@ const CGFloat vSectionHeaderHeight = 24;
 const CGFloat vRecentTabsEmptyStateLoginButtonCornerRadius = 8.0;
 // Button height for login button in empty state
 const CGFloat vRecentTabsEmptyStateLoginButtonHeight = 52.0;
+
+// Pinned tabs view dimension
+const CGFloat vPinnedViewHorizontalPadding = 16;
+const CGFloat vPinnedCellHeight = 40.0f;
+const CGFloat vPinnedCellHorizontalLayoutInsets = 12.0f;

@@ -12,6 +12,7 @@
 #include "base/files/file.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/discardable_memory_allocator.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/notreached.h"
 #include "base/test/task_environment.h"
@@ -57,7 +58,7 @@ namespace {
 cc::PaintRecord AddLink(const std::string& link, const SkRect& rect) {
   cc::PaintRecorder link_recorder;
   cc::PaintCanvas* link_canvas = link_recorder.beginRecording();
-  link_canvas->Annotate(cc::PaintCanvas::AnnotationType::URL, rect,
+  link_canvas->Annotate(cc::PaintCanvas::AnnotationType::kUrl, rect,
                         SkData::MakeWithCString(link.c_str()));
   return link_recorder.finishRecordingAsPicture();
 }
@@ -285,7 +286,7 @@ class PaintPreviewRecorderUtilsSerializeAsSkPictureTest
   cc::PaintRecorder recorder;
 
   // Valid after SetUp() until SerializeAsSkPicture() is called.
-  cc::PaintCanvas* canvas{};
+  raw_ptr<cc::PaintCanvas, ExperimentalRenderer> canvas = nullptr;
 
  protected:
   base::test::TaskEnvironment task_environment_;

@@ -27,6 +27,7 @@ extern const char kDetectAddressesEnabled[];
 extern const char kEnableDoNotTrack[];
 extern const char kFeaturePushNotificationPermissions[];
 extern const char kFirstFollowUIShownCount[];
+extern const char kFirstFollowUpdateUIShownCount[];
 extern const char kHttpServerProperties[];
 extern const char kInactiveTabsTimeThreshold[];
 extern const char kIncognitoInterstitialEnabled[];
@@ -57,7 +58,10 @@ extern const char
     kIosMagicStackSegmentationSafetyCheckImpressionsSinceFreshness[];
 extern const char
     kIosMagicStackSegmentationTabResumptionImpressionsSinceFreshness[];
-extern const char kIosParcelTrackingOptInPromptDisplayed[];
+extern const char kIosParcelTrackingOptInPromptDisplayLimitMet[];
+extern const char kIosParcelTrackingOptInStatus[];
+extern const char kIosParcelTrackingOptInPromptSwipedDown[];
+extern const char kIosParcelTrackingPolicyEnabled[];
 extern const char kIosPasswordBottomSheetDismissCount[];
 extern const char kIosPreRestoreAccountInfo[];
 extern const char kIosPromosManagerActivePromos[];
@@ -69,8 +73,8 @@ extern const char kIosSafetyCheckManagerPasswordCheckResult[];
 extern const char kIosSafetyCheckManagerUpdateCheckResult[];
 extern const char kIosSafetyCheckManagerSafeBrowsingCheckResult[];
 extern const char kIosSaveToPhotosDefaultGaiaId[];
-extern const char kIosSettingsPromoAlreadySeen[];
-extern const char kIosSettingsSigninPromoDisplayedCount[];
+extern const char kIosSaveToPhotosSkipAccountPicker[];
+extern const char kIosSaveToPhotosContextMenuPolicySettings[];
 extern const char kIosSettingsSafetyCheckLastRunTime[];
 extern const char kIosNtpFeedTopPromoAlreadySeen[];
 extern const char kIosNtpFeedTopSigninPromoDisplayedCount[];
@@ -122,9 +126,10 @@ extern const char kMixedContentAutoupgradeEnabled[];
 
 extern const char kAutofillBrandingIconAnimationRemainingCount[];
 extern const char kAutofillBrandingIconDisplayCount[];
-extern const char kAutofillBrandingKeyboardAccessoriesTapped[];
 
 extern const char kPriceNotificationsHasBeenShown[];
+
+extern const char kPasswordSharingFlowHasBeenEntered[];
 
 }  // namespace prefs
 

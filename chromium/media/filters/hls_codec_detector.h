@@ -12,6 +12,7 @@
 #include "media/base/stream_parser.h"
 #include "media/filters/hls_data_source_provider.h"
 #include "media/filters/hls_demuxer_status.h"
+#include "media/filters/hls_rendition.h"
 
 namespace media {
 
@@ -23,23 +24,39 @@ class MEDIA_EXPORT HlsCodecDetector {
     std::string container;
     std::string codecs;
   };
-
   using CodecCallback = HlsDemuxerStatusCb<ContainerAndCodecs>;
+  virtual ~HlsCodecDetector() = 0;
 
-  ~HlsCodecDetector();
-  explicit HlsCodecDetector(MediaLog* media_log);
+  virtual void DetermineContainerAndCodec(
+      std::unique_ptr<HlsDataSourceStream> stream,
+      CodecCallback cb) = 0;
+  virtual void DetermineContainerOnly(
+      std::unique_ptr<HlsDataSourceStream> stream,
+      CodecCallback cb) = 0;
+};
 
-  void DetermineContainerAndCodec(HlsDataSourceStream stream, CodecCallback cb);
-  void DetermineContainerOnly(HlsDataSourceStream stream, CodecCallback cb);
+class MEDIA_EXPORT HlsCodecDetectorImpl : public HlsCodecDetector {
+ public:
+  ~HlsCodecDetectorImpl() override;
+
+  // The HlsRenditionHost owns the only implementation of HlsCodecDetector
+  // and uses it only on a single thread, where it is also deleted. Keeping
+  // a raw pointer to that HlsRenditionHost is therefore safe.
+  HlsCodecDetectorImpl(MediaLog* media_log, HlsRenditionHost* rendition_host_);
+
+  void DetermineContainerAndCodec(std::unique_ptr<HlsDataSourceStream> stream,
+                                  CodecCallback cb) override;
+  void DetermineContainerOnly(std::unique_ptr<HlsDataSourceStream> stream,
+                              CodecCallback cb) override;
 
  private:
-  void ReadStream(bool container_only, HlsDataSourceStream::ReadResult stream);
+  void OnStreamFetched(bool container_only,
+                       HlsDataSourceProvider::ReadResult stream);
   void DetermineContainer(bool container_only,
                           const uint8_t* data,
                           size_t size);
   void ParserInit(const StreamParser::InitParameters& params);
-  bool OnNewConfigMP2T(std::unique_ptr<MediaTracks> tracks,
-                       const StreamParser::TextTrackConfigMap& map);
+  bool OnNewConfigMP2T(std::unique_ptr<MediaTracks> tracks);
   bool OnNewBuffers(const StreamParser::BufferQueueMap& buffers);
   void OnEncryptedMediaInit(EmeInitDataType type,
                             const std::vector<uint8_t>& data);
@@ -50,9 +67,10 @@ class MEDIA_EXPORT HlsCodecDetector {
   std::unique_ptr<media::StreamParser> parser_;
   std::string codec_response_;
   std::string container_;
+  raw_ptr<HlsRenditionHost> rendition_host_ = nullptr;
 
   SEQUENCE_CHECKER(sequence_checker_);
-  base::WeakPtrFactory<HlsCodecDetector> weak_factory_{this};
+  base::WeakPtrFactory<HlsCodecDetectorImpl> weak_factory_{this};
 };
 
 }  // namespace media

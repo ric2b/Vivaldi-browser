@@ -36,6 +36,32 @@ cc_library(
 )
 
 mediapipe_proto_library(
+    name = "align_hand_to_pose_in_world_calculator_proto",
+    srcs = ["align_hand_to_pose_in_world_calculator.proto"],
+    deps = [
+        "//mediapipe/framework:calculator_options_proto",
+        "//mediapipe/framework:calculator_proto",
+    ],
+)
+
+cc_library(
+    name = "align_hand_to_pose_in_world_calculator",
+    srcs = ["align_hand_to_pose_in_world_calculator.cc"],
+    hdrs = ["align_hand_to_pose_in_world_calculator.h"],
+    deps = [
+        ":align_hand_to_pose_in_world_calculator_cc_proto",
+        "//mediapipe/framework:calculator_framework",
+        "//mediapipe/framework/api2:node",
+        "//mediapipe/framework/api2:port",
+        "//mediapipe/framework/formats:landmark_cc_proto",
+        "//mediapipe/framework/port:ret_check",
+        "//mediapipe/framework/port:status",
+        "@com_google_absl//absl/status",
+    ],
+    alwayslink = 1,
+)
+
+mediapipe_proto_library(
     name = "annotation_overlay_calculator_proto",
     srcs = ["annotation_overlay_calculator.proto"],
     deps = [
@@ -269,6 +295,7 @@ cc_library(
             "//mediapipe/gpu:gl_calculator_helper",
             "//mediapipe/gpu:gl_simple_shaders",
             "//mediapipe/gpu:gpu_buffer",
+            "//mediapipe/gpu:gpu_buffer_format",
             "//mediapipe/gpu:shader_util",
         ],
     }),
@@ -1570,6 +1597,163 @@ cc_test(
         "//mediapipe/framework/formats:rect_cc_proto",
         "//mediapipe/framework/port:gtest_main",
         "//mediapipe/framework/port:parse_text_proto",
+        "//mediapipe/framework/port:status_matchers",
+        "@com_google_absl//absl/status",
+    ],
+)
+
+mediapipe_proto_library(
+    name = "landmarks_transformation_calculator_proto",
+    srcs = ["landmarks_transformation_calculator.proto"],
+    deps = [
+        "//mediapipe/framework:calculator_options_proto",
+        "//mediapipe/framework:calculator_proto",
+    ],
+)
+
+cc_library(
+    name = "landmarks_transformation_calculator",
+    srcs = ["landmarks_transformation_calculator.cc"],
+    hdrs = ["landmarks_transformation_calculator.h"],
+    deps = [
+        ":landmarks_transformation_calculator_cc_proto",
+        "//mediapipe/framework:calculator_framework",
+        "//mediapipe/framework/api2:node",
+        "//mediapipe/framework/formats:landmark_cc_proto",
+        "//mediapipe/framework/port:ret_check",
+        "//mediapipe/framework/port:statusor",
+    ],
+    alwayslink = 1,
+)
+
+cc_test(
+    name = "landmarks_transformation_calculator_test",
+    srcs = ["landmarks_transformation_calculator_test.cc"],
+    deps = [
+        ":landmarks_transformation_calculator",
+        ":landmarks_transformation_calculator_cc_proto",
+        "//mediapipe/framework:calculator_framework",
+        "//mediapipe/framework:calculator_runner",
+        "//mediapipe/framework:packet",
+        "//mediapipe/framework/formats:landmark_cc_proto",
+        "//mediapipe/framework/port:gtest_main",
+        "//mediapipe/framework/port:parse_text_proto",
+        "//mediapipe/framework/port:status_matchers",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "combine_joints_calculator",
+    srcs = ["combine_joints_calculator.cc"],
+    hdrs = ["combine_joints_calculator.h"],
+    deps = [
+        ":combine_joints_calculator_cc_proto",
+        "//mediapipe/framework:calculator_framework",
+        "//mediapipe/framework/api2:node",
+        "//mediapipe/framework/formats:body_rig_cc_proto",
+        "//mediapipe/framework/port:ret_check",
+    ],
+    alwayslink = 1,
+)
+
+mediapipe_proto_library(
+    name = "combine_joints_calculator_proto",
+    srcs = ["combine_joints_calculator.proto"],
+    deps = [
+        "//mediapipe/framework:calculator_options_proto",
+        "//mediapipe/framework:calculator_proto",
+        "//mediapipe/framework/formats:body_rig_proto",
+    ],
+)
+
+cc_test(
+    name = "combine_joints_calculator_test",
+    srcs = ["combine_joints_calculator_test.cc"],
+    deps = [
+        ":combine_joints_calculator",
+        ":combine_joints_calculator_cc_proto",
+        "//mediapipe/framework:calculator_framework",
+        "//mediapipe/framework:calculator_runner",
+        "//mediapipe/framework:packet",
+        "//mediapipe/framework/formats:body_rig_cc_proto",
+        "//mediapipe/framework/port:gtest_main",
+        "//mediapipe/framework/port:parse_text_proto",
+        "//mediapipe/framework/port:status_matchers",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+    ],
+)
+
+cc_library(
+    name = "set_joints_visibility_calculator",
+    srcs = ["set_joints_visibility_calculator.cc"],
+    hdrs = ["set_joints_visibility_calculator.h"],
+    deps = [
+        ":set_joints_visibility_calculator_cc_proto",
+        "//mediapipe/framework:calculator_framework",
+        "//mediapipe/framework/api2:node",
+        "//mediapipe/framework/formats:body_rig_cc_proto",
+        "//mediapipe/framework/formats:landmark_cc_proto",
+        "//mediapipe/framework/port:ret_check",
+        "//mediapipe/framework/port:status",
+    ],
+    alwayslink = 1,
+)
+
+mediapipe_proto_library(
+    name = "set_joints_visibility_calculator_proto",
+    srcs = ["set_joints_visibility_calculator.proto"],
+    deps = [
+        "//mediapipe/framework:calculator_options_proto",
+        "//mediapipe/framework:calculator_proto",
+    ],
+)
+
+cc_test(
+    name = "set_joints_visibility_calculator_test",
+    srcs = ["set_joints_visibility_calculator_test.cc"],
+    deps = [
+        ":set_joints_visibility_calculator",
+        "//mediapipe/framework:calculator_framework",
+        "//mediapipe/framework:calculator_runner",
+        "//mediapipe/framework:packet",
+        "//mediapipe/framework/formats:body_rig_cc_proto",
+        "//mediapipe/framework/formats:landmark_cc_proto",
+        "//mediapipe/framework/port:gtest_main",
+        "//mediapipe/framework/port:parse_text_proto",
+        "//mediapipe/framework/port:status_matchers",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:optional",
+    ],
+)
+
+cc_library(
+    name = "pass_through_or_empty_detection_vector_calculator",
+    srcs = ["pass_through_or_empty_detection_vector_calculator.cc"],
+    hdrs = ["pass_through_or_empty_detection_vector_calculator.h"],
+    deps = [
+        "//mediapipe/framework:calculator_context",
+        "//mediapipe/framework/api2:builder",
+        "//mediapipe/framework/api2:node",
+        "//mediapipe/framework/api2:packet",
+        "//mediapipe/framework/api2:port",
+        "//mediapipe/framework/formats:detection_cc_proto",
+        "@com_google_absl//absl/status",
+    ],
+    alwayslink = 1,
+)
+
+cc_test(
+    name = "pass_through_or_empty_detection_vector_calculator_test",
+    srcs = ["pass_through_or_empty_detection_vector_calculator_test.cc"],
+    tags = ["desktop_only_test"],
+    deps = [
+        ":pass_through_or_empty_detection_vector_calculator",
+        "//mediapipe/framework:calculator_framework",
+        "//mediapipe/framework/api2:builder",
+        "//mediapipe/framework/formats:detection_cc_proto",
+        "//mediapipe/framework/port:gtest_main",
         "//mediapipe/framework/port:status_matchers",
         "@com_google_absl//absl/status",
     ],

@@ -269,7 +269,7 @@ class CONTENT_EXPORT WebContentsDelegate {
 
   // Returns whether the page should be focused when transitioning from crashed
   // to live. Default is true.
-  virtual bool ShouldFocusPageAfterCrash();
+  virtual bool ShouldFocusPageAfterCrash(WebContents* source);
 
   // Returns whether the page should resume accepting requests for the new
   // window. This is used when window creation is asynchronous
@@ -374,6 +374,19 @@ class CONTENT_EXPORT WebContentsDelegate {
                                   const GURL& target_url,
                                   WebContents* new_contents) {}
 
+  // Notifies the embedder that a new WebContents dedicated for hosting a
+  // prerendered page has been created. `prerender_web_contents` will host an
+  // initial empty primary page and a prerendered page. The prerendered page
+  // will be activated as a primary page on prerender activation.
+  // `prerender_web_contents` is not visible until the activation.
+  //
+  // This function is called only when this delegate is
+  // PrerenderWebContentsDelegate. This delegate and `prerender_web_contents`
+  // are owned by a prerender handle. `prerender_web_contents` outlives this
+  // delegate.
+  virtual void PrerenderWebContentsCreated(
+      WebContents* prerender_web_contents) {}
+
   // Notifies the embedder that a new WebContents has been created to contain
   // the contents of a portal.
   virtual void PortalWebContentsCreated(WebContents* portal_web_contents) {}
@@ -460,6 +473,19 @@ class CONTENT_EXPORT WebContentsDelegate {
                                const std::string& one_time_code,
                                base::OnceCallback<void()> on_confirm,
                                base::OnceCallback<void()> on_cancel);
+
+  // Returns whether the RFH can use Additional Windowing Controls APIs.
+  // https://github.com/ivansandrk/additional-windowing-controls/blob/main/awc-explainer.md
+  virtual bool CanUseWindowingControls(RenderFrameHost* requesting_frame);
+
+  // Sends the resizable boolean set via `window.setResizable(bool)` API to
+  // `BrowserView`. Passing std::nullopt will reset the resizable state to the
+  // default.
+  virtual void SetCanResizeFromWebAPI(absl::optional<bool> can_resize) {}
+  virtual bool GetCanResize();
+  virtual void MinimizeFromWebAPI() {}
+  virtual void MaximizeFromWebAPI() {}
+  virtual void RestoreFromWebAPI() {}
 
   // Returns whether entering fullscreen with |EnterFullscreenModeForTab()| is
   // allowed.
@@ -780,6 +806,20 @@ class CONTENT_EXPORT WebContentsDelegate {
   // is registered/unregistered to update whether the CloseWatcher should
   // intercept.
   virtual void DidChangeCloseSignalInterceptStatus() {}
+
+  // Whether the WebContents is running in preview mode.
+  virtual bool IsInPreviewMode() const;
+
+  // Notify the page uses a forbidden powerful API and cannot be shown in
+  // preview mode.
+  virtual void CancelPreviewByMojoBinderPolicy(
+      const std::string& interface_name) {}
+
+#if !BUILDFLAG(IS_ANDROID)
+  // Whether the WebContents should use per PWA instanced
+  // system media controls.
+  virtual bool ShouldUseInstancedSystemMediaControls() const;
+#endif  // !BUILDFLAG(IS_ANDROID)
 
   // Vivaldi
   void SetDownloadInformation(const content::DownloadInformation& info);

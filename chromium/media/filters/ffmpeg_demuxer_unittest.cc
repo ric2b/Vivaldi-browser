@@ -14,12 +14,15 @@
 
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
+#include "base/i18n/time_formatting.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/test/bind.h"
 #include "base/test/mock_callback.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
@@ -28,6 +31,7 @@
 #include "media/base/decrypt_config.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/media_client.h"
+#include "media/base/media_switches.h"
 #include "media/base/media_tracks.h"
 #include "media/base/media_util.h"
 #include "media/base/mock_demuxer_host.h"
@@ -359,7 +363,8 @@ class FFmpegDemuxerTest : public testing::Test {
     CHECK(!data_source_);
 
     base::FilePath file_path;
-    EXPECT_TRUE(base::PathService::Get(base::DIR_SOURCE_ROOT, &file_path));
+    EXPECT_TRUE(
+        base::PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, &file_path));
 
     file_path = file_path.Append(FILE_PATH_LITERAL("media"))
                     .Append(FILE_PATH_LITERAL("test"))
@@ -425,7 +430,7 @@ TEST_F(FFmpegDemuxerTest, Initialize_Successful) {
 
   const AudioDecoderConfig& audio_config = stream->audio_decoder_config();
   EXPECT_EQ(AudioCodec::kVorbis, audio_config.codec());
-  EXPECT_EQ(32, audio_config.bits_per_channel());
+  EXPECT_EQ(4, audio_config.bytes_per_channel());
   EXPECT_EQ(CHANNEL_LAYOUT_STEREO, audio_config.channel_layout());
   EXPECT_EQ(44100, audio_config.samples_per_second());
   EXPECT_EQ(kSampleFormatPlanarF32, audio_config.sample_format());
@@ -585,7 +590,7 @@ TEST_F(FFmpegDemuxerTest, Seeking_PreferredStreamSelection) {
   // Test the start time is the first timestamp of the video and audio stream.
   CreateDemuxer("nonzero-start-time.webm");
   InitializeDemuxerWithTimelineOffset(
-      base::Time::FromJsTime(kTimelineOffsetMs));
+      base::Time::FromMillisecondsSinceUnixEpoch(kTimelineOffsetMs));
 
   FFmpegDemuxerStream* video =
       static_cast<FFmpegDemuxerStream*>(GetStream(DemuxerStream::VIDEO));
@@ -631,7 +636,7 @@ TEST_F(FFmpegDemuxerTest, Read_VideoPositiveStartTime) {
   // Test the start time is the first timestamp of the video and audio stream.
   CreateDemuxer("nonzero-start-time.webm");
   InitializeDemuxerWithTimelineOffset(
-      base::Time::FromJsTime(kTimelineOffsetMs));
+      base::Time::FromMillisecondsSinceUnixEpoch(kTimelineOffsetMs));
 
   // Attempt a read from the video stream and run the message loop until done.
   DemuxerStream* video = GetStream(DemuxerStream::VIDEO);
@@ -650,7 +655,8 @@ TEST_F(FFmpegDemuxerTest, Read_VideoPositiveStartTime) {
     EXPECT_EQ(audio_start_time, demuxer_->start_time());
 
     // Verify that the timeline offset has not been adjusted by the start time.
-    EXPECT_EQ(kTimelineOffsetMs, demuxer_->GetTimelineOffset().ToJavaTime());
+    EXPECT_EQ(kTimelineOffsetMs,
+              demuxer_->GetTimelineOffset().InMillisecondsSinceUnixEpoch());
 
     // Seek back to the beginning and repeat the test.
     WaitableMessageLoopEvent event;
@@ -794,8 +800,10 @@ TEST_F(FFmpegDemuxerTest, Read_AudioNegativeStartTimeAndOpusDiscard_Sync) {
 
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 TEST_F(FFmpegDemuxerTest, TestAudioNegativeTimestamps) {
+  base::test::ScopedFeatureList scoped_enable(kCrOSLegacyMediaFormats);
+
   // Note: This test will _crash_ the browser if negative timestamp
   // values are skipped, since this file is heavily truncated to avoid
   // copyright issue. If the negative timestamp packets are dropped, the
@@ -810,7 +818,7 @@ TEST_F(FFmpegDemuxerTest, TestAudioNegativeTimestamps) {
   Read(audio, FROM_HERE, 104, 77619, true);
   Read(audio, FROM_HERE, 104, 103492, true);
 }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 // Similar to the test above, but using an opus clip plus h264 b-frames to
 // ensure we don't apply chained ogg workarounds to other content.
@@ -855,6 +863,44 @@ TEST_F(FFmpegDemuxerTest,
     demuxer_->Seek(base::TimeDelta(), event.GetPipelineStatusCB());
     event.RunAndWaitForStatus(PIPELINE_OK);
   }
+}
+// Similar to the above cases, but with mixed audio/video trimming.
+TEST_F(FFmpegDemuxerTest, Read_AudioVideoNegativeStartTime) {
+  CreateDemuxer("sync2-trimmed.mp4");
+  InitializeDemuxer();
+
+  // Attempt a read from the video stream and run the message loop until done.
+  DemuxerStream* video = GetStream(DemuxerStream::VIDEO);
+  DemuxerStream* audio = GetStream(DemuxerStream::AUDIO);
+
+  Read(audio, FROM_HERE, 10, 0, true, DemuxerStream::Status::kOk,
+       base::Microseconds(1005464));  // ~ 43 * 23220
+  Read(audio, FROM_HERE, 10, 23220, true, DemuxerStream::Status::kOk,
+       kInfiniteDuration);
+
+  // The rest are all similar, just verify that discard padding is correct.
+  base::RunLoop run_loop;
+  audio->Read(41, base::BindLambdaForTesting(
+                      [&](DemuxerStream::Status status,
+                          DemuxerStream::DecoderBufferVector buffers) {
+                        for (const auto& buffer : buffers) {
+                          EXPECT_EQ(buffer->discard_padding().first,
+                                    kInfiniteDuration);
+                        }
+                        run_loop.QuitWhenIdle();
+                      }));
+  run_loop.Run();
+  task_environment_.RunUntilIdle();
+  Read(audio, FROM_HERE, 10, 998458, true);  // First audible audio.
+
+  // Note: Frames are in decode (not presentation) order at this point.
+  Read(video, FROM_HERE, 26791, -66733, true, DemuxerStream::Status::kOk,
+       kInfiniteDuration);
+  Read(video, FROM_HERE, 4233, 33367, false);
+  Read(video, FROM_HERE, 3257, 0, false);
+  Read(video, FROM_HERE, 2467, -33367, false, DemuxerStream::Status::kOk,
+       kInfiniteDuration);
+  Read(video, FROM_HERE, 4049, 133467, false);
 }
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 
@@ -1523,21 +1569,14 @@ TEST_F(FFmpegDemuxerTest, UTCDateToTime_Valid) {
   base::Time::Exploded exploded;
   result.UTCExplode(&exploded);
   EXPECT_TRUE(exploded.HasValidValues());
-  EXPECT_EQ(2012, exploded.year);
-  EXPECT_EQ(11, exploded.month);
-  EXPECT_EQ(6, exploded.day_of_week);
-  EXPECT_EQ(10, exploded.day_of_month);
-  EXPECT_EQ(12, exploded.hour);
-  EXPECT_EQ(34, exploded.minute);
-  EXPECT_EQ(56, exploded.second);
-  EXPECT_EQ(987, exploded.millisecond);
+  base::Time without_fractional_ms;
+  EXPECT_TRUE(base::Time::FromUTCExploded(exploded, &without_fractional_ms));
 
   // base::Time exploding operations round fractional milliseconds down, so
   // verify fractional milliseconds using a base::TimeDelta.
-  base::Time without_fractional_ms;
-  EXPECT_TRUE(base::Time::FromUTCExploded(exploded, &without_fractional_ms));
-  base::TimeDelta delta = result - without_fractional_ms;
-  EXPECT_EQ(654, delta.InMicroseconds());
+  EXPECT_EQ("2012-11-10T12:34:56.987Z",
+            base::TimeFormatAsIso8601(without_fractional_ms));
+  EXPECT_EQ(654, (result - without_fractional_ms).InMicroseconds());
 }
 
 TEST_F(FFmpegDemuxerTest, UTCDateToTime_Invalid) {
@@ -1564,7 +1603,7 @@ TEST_F(FFmpegDemuxerTest, UTCDateToTime_Invalid) {
 }
 
 static void VerifyFlacStream(DemuxerStream* stream,
-                             int expected_bits_per_channel,
+                             int expected_bytes_per_channel,
                              ChannelLayout expected_channel_layout,
                              int expected_samples_per_second,
                              SampleFormat expected_sample_format) {
@@ -1573,7 +1612,7 @@ static void VerifyFlacStream(DemuxerStream* stream,
 
   const AudioDecoderConfig& audio_config = stream->audio_decoder_config();
   EXPECT_EQ(AudioCodec::kFLAC, audio_config.codec());
-  EXPECT_EQ(expected_bits_per_channel, audio_config.bits_per_channel());
+  EXPECT_EQ(expected_bytes_per_channel, audio_config.bytes_per_channel());
   EXPECT_EQ(expected_channel_layout, audio_config.channel_layout());
   EXPECT_EQ(expected_samples_per_second, audio_config.samples_per_second());
   EXPECT_EQ(expected_sample_format, audio_config.sample_format());
@@ -1586,7 +1625,7 @@ TEST_F(FFmpegDemuxerTest, Read_Flac) {
   // Video stream should not be present.
   EXPECT_EQ(nullptr, GetStream(DemuxerStream::VIDEO));
 
-  VerifyFlacStream(GetStream(DemuxerStream::AUDIO), 32, CHANNEL_LAYOUT_MONO,
+  VerifyFlacStream(GetStream(DemuxerStream::AUDIO), 4, CHANNEL_LAYOUT_MONO,
                    44100, kSampleFormatS32);
 }
 
@@ -1597,7 +1636,7 @@ TEST_F(FFmpegDemuxerTest, Read_Flac_Mp4) {
   // Video stream should not be present.
   EXPECT_EQ(nullptr, GetStream(DemuxerStream::VIDEO));
 
-  VerifyFlacStream(GetStream(DemuxerStream::AUDIO), 32, CHANNEL_LAYOUT_STEREO,
+  VerifyFlacStream(GetStream(DemuxerStream::AUDIO), 4, CHANNEL_LAYOUT_STEREO,
                    44100, kSampleFormatS32);
 }
 
@@ -1608,7 +1647,7 @@ TEST_F(FFmpegDemuxerTest, Read_Flac_192kHz_Mp4) {
   // Video stream should not be present.
   EXPECT_EQ(nullptr, GetStream(DemuxerStream::VIDEO));
 
-  VerifyFlacStream(GetStream(DemuxerStream::AUDIO), 32, CHANNEL_LAYOUT_STEREO,
+  VerifyFlacStream(GetStream(DemuxerStream::AUDIO), 4, CHANNEL_LAYOUT_STEREO,
                    192000, kSampleFormatS32);
 }
 

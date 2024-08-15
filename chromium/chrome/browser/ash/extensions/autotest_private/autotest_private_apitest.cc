@@ -547,10 +547,7 @@ class AutotestPrivateSearchTest
     : public AutotestPrivateApiTest,
       public ::testing::WithParamInterface</* tablet_mode =*/bool> {
  public:
-  AutotestPrivateSearchTest() {
-    feature_list.InitAndEnableFeature(
-        ash::features::kAutocompleteExtendedSuggestions);
-  }
+  AutotestPrivateSearchTest() = default;
 
   ~AutotestPrivateSearchTest() override = default;
   AutotestPrivateSearchTest(const AutotestPrivateSearchTest&) = delete;
@@ -595,9 +592,6 @@ class AutotestPrivateSearchTest
     }
     return results;
   }
-
- private:
-  base::test::ScopedFeatureList feature_list;
 };
 
 INSTANTIATE_TEST_SUITE_P(All,
@@ -645,6 +639,21 @@ IN_PROC_BROWSER_TEST_P(AutotestPrivateSearchTest,
   EXPECT_EQ(base::UTF16ToASCII(results[0]->title()), "youtube");
 
   ASSERT_TRUE(RunAutotestPrivateExtensionTest("launcherSearchBoxState"))
+      << message_;
+}
+
+class AutotestPrivateIsFieldTrialActiveApiTest : public AutotestPrivateApiTest {
+ public:
+  AutotestPrivateIsFieldTrialActiveApiTest() {
+    base::FieldTrial* trial = base::FieldTrialList::CreateFieldTrial(
+        "ActiveTrialForTest", "GroupForTest");
+    trial->Activate();
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(AutotestPrivateIsFieldTrialActiveApiTest,
+                       IsFieldTrialActive) {
+  ASSERT_TRUE(RunAutotestPrivateExtensionTest("isFieldTrialActive"))
       << message_;
 }
 

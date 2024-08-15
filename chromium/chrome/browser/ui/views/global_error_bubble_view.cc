@@ -34,12 +34,27 @@
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
 
+#include "app/vivaldi_apptools.h"
+#include "ui/vivaldi_browser_window.h"
+
 // GlobalErrorBubbleViewBase ---------------------------------------------------
 
 // static
 GlobalErrorBubbleViewBase* GlobalErrorBubbleViewBase::ShowStandardBubbleView(
     Browser* browser,
     const base::WeakPtr<GlobalErrorWithStandardBubble>& error) {
+  if (vivaldi::IsVivaldiRunning()) {
+    VivaldiBrowserWindow* browserwindow =
+        static_cast<VivaldiBrowserWindow*>(browser->window());
+    views::View* anchor_view = browserwindow->toolbar_button_provider()
+                                   ->GetDefaultExtensionDialogAnchorView();
+    GlobalErrorBubbleView* bubble_view = new GlobalErrorBubbleView(
+        anchor_view, views::BubbleBorder::TOP_RIGHT, browser, error);
+    views::BubbleDialogDelegateView::CreateBubble(bubble_view);
+    bubble_view->GetWidget()->Show();
+    return bubble_view;
+  }
+
   views::View* anchor_view = BrowserView::GetBrowserViewForBrowser(browser)
                                  ->toolbar_button_provider()
                                  ->GetAppMenuButton();
@@ -67,7 +82,7 @@ GlobalErrorBubbleView::GlobalErrorBubbleView(
   WidgetDelegate::RegisterWindowClosingCallback(base::BindOnce(
       &GlobalErrorWithStandardBubble::BubbleViewDidClose, error_, browser));
 
-  SetDefaultButton(error_->GetDefaultDialogButton());
+  SetDefaultButton(ui::DIALOG_BUTTON_OK);
   SetButtons(!error_->GetBubbleViewCancelButtonLabel().empty()
                  ? (ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL)
                  : ui::DIALOG_BUTTON_OK);

@@ -566,6 +566,7 @@ void AutomationV8Bindings::SendGetTextLocationResult(
     const absl::optional<gfx::Rect>& rect) {
   base::Value::Dict params;
   params.Set("treeID", data.target_tree_id.ToString());
+  params.Set("childTreeID", data.child_tree_id.ToString());
   params.Set("nodeID", data.target_node_id);
   params.Set("result", false);
   if (rect) {
@@ -1906,7 +1907,7 @@ void AutomationV8Bindings::GetMarkers(v8::Isolate* isolate,
   const std::vector<int32_t>& marker_types =
       node->GetIntListAttribute(ax::mojom::IntListAttribute::kMarkerTypes);
 
-  std::vector<v8::Local<v8::Object>> markers;
+  v8::LocalVector<v8::Object> markers(isolate);
   for (size_t i = 0; i < marker_types.size(); ++i) {
     gin::DataObjectBuilder marker_obj(isolate);
     marker_obj.Set("startOffset", marker_starts[i]);

@@ -13,16 +13,25 @@
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/extensions/cws_info_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/ui/safety_hub/extensions_result.h"
+#include "chrome/browser/ui/safety_hub/menu_notification_service_factory.h"
 #include "chrome/browser/ui/safety_hub/notification_permission_review_service.h"
 #include "chrome/browser/ui/safety_hub/notification_permission_review_service_factory.h"
 #include "chrome/browser/ui/safety_hub/password_status_check_service.h"
 #include "chrome/browser/ui/safety_hub/password_status_check_service_factory.h"
+#include "chrome/browser/ui/safety_hub/safety_hub_constants.h"
 #include "chrome/browser/ui/safety_hub/unused_site_permissions_service.h"
 #include "chrome/browser/ui/safety_hub/unused_site_permissions_service_factory.h"
 #include "chrome/browser/ui/webui/settings/site_settings_helper.h"
+#include "chrome/browser/ui/webui/version/version_ui.h"
+#include "chrome/browser/upgrade_detector/build_state.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -31,10 +40,14 @@
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/permissions/constants.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+#include "components/signin/public/base/consent_level.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/site_engagement/content/site_engagement_service.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/time_format.h"
 #include "url/gurl.h"
+
+using safety_hub::SafetyHubCardState;
 
 namespace {
 // Key of the expiration time in the |UnusedSitePermissions| object. Indicates
@@ -43,12 +56,6 @@ namespace {
 constexpr char kExpirationKey[] = "expiration";
 // Key of the lifetime in the |UnusedSitePermissions| object.
 constexpr char kLifetimeKey[] = "lifetime";
-// Key of the header in |CardInfo| object.
-constexpr char kHeader[] = "header";
-// Key of the subheader in |CardInfo| object.
-constexpr char kSubheader[] = "subheader";
-// Key of the state in |CardInfo| object.
-constexpr char kState[] = "state";
 
 // Get values from |UnusedSitePermission| object in
 // safety_hub_browser_proxy.ts.
@@ -100,6 +107,7 @@ GetUnusedSitePermissionsFromDict(
 
 // Returns the state of Safe Browsing setting.
 SafeBrowsingState GetSafeBrowsingState(PrefService* pref_service) {
+  // TODO(crbug.com/1443466): Use SafeBrowsingResult from Safety Hub instead.
   if (safe_browsing::IsEnhancedProtectionEnabled(*pref_service))
     return SafeBrowsingState::kEnabledEnhanced;
   if (safe_browsing::IsSafeBrowsingEnabled(*pref_service))
@@ -109,6 +117,50 @@ SafeBrowsingState GetSafeBrowsingState(PrefService* pref_service) {
   if (safe_browsing::IsSafeBrowsingExtensionControlled(*pref_service))
     return SafeBrowsingState::kDisabledByExtension;
   return SafeBrowsingState::kDisabledByUser;
+}
+
+base::Value::Dict CardDataToValue(int header_id,
+                                  int subheader_id,
+                                  SafetyHubCardState card_state) {
+  base::Value::Dict sb_card_info;
+
+  sb_card_info.Set(safety_hub::kCardHeaderKey,
+                   l10n_util::GetStringUTF16(header_id));
+  sb_card_info.Set(safety_hub::kCardSubheaderKey,
+                   l10n_util::GetStringUTF16(subheader_id));
+  sb_card_info.Set(safety_hub::kCardStateKey, static_cast<int>(card_state));
+
+  return sb_card_info;
+}
+
+// Returns true if the card dict indicates there is something actionable for the
+// user.
+bool CardHasRecommendations(base::Value::Dict card_data) {
+  absl::optional<int> state = card_data.FindInt(safety_hub::kCardStateKey);
+  CHECK(state.has_value());
+  SafetyHubCardState card_state =
+      static_cast<SafetyHubCardState>(state.value());
+
+  return card_state == SafetyHubCardState::kWarning ||
+         card_state == SafetyHubCardState::kWeak;
+}
+
+void AppendModuleNameToString(std::u16string& str,
+                              int uppercase_id,
+                              int lowercase_id = 0) {
+  if (str.empty()) {
+    str.append(l10n_util::GetStringUTF16(uppercase_id));
+    return;
+  }
+
+  if (lowercase_id == 0) {
+    lowercase_id = uppercase_id;
+  }
+
+  str.append(
+      l10n_util::GetStringUTF16(IDS_SETTINGS_SAFETY_HUB_MODULE_NAME_SEPARATOR));
+  str.append(u" ");
+  str.append(l10n_util::GetStringUTF16(lowercase_id));
 }
 }  // namespace
 
@@ -272,7 +324,7 @@ void SafetyHubHandler::HandleGetNotificationPermissionReviewList(
   }
 
   base::Value::List result =
-      service->PopulateNotificationPermissionReviewData(profile_);
+      service->PopulateNotificationPermissionReviewData();
 
   ResolveJavascriptCallback(callback_id, base::Value(std::move(result)));
 }
@@ -313,6 +365,18 @@ void SafetyHubHandler::HandleResetNotificationPermissionForOrigins(
   }
 
   SendNotificationPermissionReviewList();
+}
+
+void SafetyHubHandler::HandleDismissActiveMenuNotification(
+    const base::Value::List& args) {
+  SafetyHubMenuNotificationServiceFactory::GetForProfile(profile_)
+      ->DismissActiveNotification();
+}
+
+void SafetyHubHandler::HandleDismissPasswordMenuNotification(
+    const base::Value::List& args) {
+  SafetyHubMenuNotificationServiceFactory::GetForProfile(profile_)
+      ->DismissPasswordNotification();
 }
 
 void SafetyHubHandler::HandleBlockNotificationPermissionForOrigins(
@@ -367,16 +431,53 @@ void SafetyHubHandler::HandleUndoIgnoreOriginsForNotificationPermissionReview(
   SendNotificationPermissionReviewList();
 }
 
-void SafetyHubHandler::HandleGetSafeBrowsingState(
+void SafetyHubHandler::HandleGetSafeBrowsingCardData(
     const base::Value::List& args) {
   AllowJavascript();
 
   CHECK_EQ(1U, args.size());
   const base::Value& callback_id = args[0];
 
+  ResolveJavascriptCallback(callback_id, GetSafeBrowsingCardData());
+}
+
+base::Value::Dict SafetyHubHandler::GetSafeBrowsingCardData() {
   SafeBrowsingState result = GetSafeBrowsingState(profile_->GetPrefs());
 
-  ResolveJavascriptCallback(callback_id, (int)result);
+  base::Value::Dict sb_card_info;
+
+  switch (result) {
+    case SafeBrowsingState::kEnabledEnhanced:
+      sb_card_info =
+          CardDataToValue(IDS_SETTINGS_SAFETY_HUB_SB_ON_ENHANCED_HEADER,
+                          IDS_SETTINGS_SAFETY_HUB_SB_ON_ENHANCED_SUBHEADER,
+                          SafetyHubCardState::kSafe);
+      break;
+    case SafeBrowsingState::kEnabledStandard:
+      sb_card_info =
+          CardDataToValue(IDS_SETTINGS_SAFETY_HUB_SB_ON_STANDARD_HEADER,
+                          IDS_SETTINGS_SAFETY_HUB_SB_ON_STANDARD_SUBHEADER,
+                          SafetyHubCardState::kSafe);
+      break;
+    case SafeBrowsingState::kDisabledByAdmin:
+      sb_card_info =
+          CardDataToValue(IDS_SETTINGS_SAFETY_HUB_SB_OFF_HEADER,
+                          IDS_SETTINGS_SAFETY_HUB_SB_OFF_MANAGED_SUBHEADER,
+                          SafetyHubCardState::kInfo);
+      break;
+    case SafeBrowsingState::kDisabledByExtension:
+      sb_card_info =
+          CardDataToValue(IDS_SETTINGS_SAFETY_HUB_SB_OFF_HEADER,
+                          IDS_SETTINGS_SAFETY_HUB_SB_OFF_EXTENSION_SUBHEADER,
+                          SafetyHubCardState::kInfo);
+      break;
+    default:
+      sb_card_info =
+          CardDataToValue(IDS_SETTINGS_SAFETY_HUB_SB_OFF_HEADER,
+                          IDS_SETTINGS_SAFETY_HUB_SB_OFF_USER_SUBHEADER,
+                          SafetyHubCardState::kWarning);
+  }
+  return sb_card_info;
 }
 
 void SafetyHubHandler::HandleGetPasswordCardData(
@@ -386,21 +487,159 @@ void SafetyHubHandler::HandleGetPasswordCardData(
   CHECK_EQ(1U, args.size());
   const base::Value& callback_id = args[0];
 
+  ResolveJavascriptCallback(callback_id, base::Value(GetPasswordCardData()));
+}
+
+base::Value::Dict SafetyHubHandler::GetPasswordCardData() {
   PasswordStatusCheckService* service =
       PasswordStatusCheckServiceFactory::GetForProfile(profile_);
-  base::Time last_check_completed =
-      base::Time::FromTimeT(profile_->GetPrefs()->GetDouble(
-          password_manager::prefs::kLastTimePasswordCheckCompleted));
+  CHECK(service);
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(profile_);
+  bool signed_in = identity_manager && identity_manager->HasPrimaryAccount(
+                                           signin::ConsentLevel::kSignin);
 
-  // TODO(crbug.com/1443466): The UI should be able to observe when password
-  // issues change.
-  base::Value::Dict result = GetPasswordCardData(
-      /*compromised_count=*/service->compromised_credential_count(),
-      /*weak_count=*/service->weak_credential_count(),
-      /*reused_count=*/service->reused_credential_count(),
-      /*last_check=*/last_check_completed);
+  return service->GetPasswordCardData(signed_in);
+}
 
-  ResolveJavascriptCallback(callback_id, base::Value(std::move(result)));
+void SafetyHubHandler::HandleGetVersionCardData(const base::Value::List& args) {
+  AllowJavascript();
+
+  CHECK_EQ(1U, args.size());
+  const base::Value& callback_id = args[0];
+
+  ResolveJavascriptCallback(callback_id, base::Value(GetVersionCardData()));
+}
+
+base::Value::Dict SafetyHubHandler::GetVersionCardData() {
+  base::Value::Dict result;
+  switch (g_browser_process->GetBuildState()->update_type()) {
+    case BuildState::UpdateType::kNone:
+      result.Set(safety_hub::kCardHeaderKey,
+                 l10n_util::GetStringUTF16(
+                     IDS_SETTINGS_SAFETY_HUB_VERSION_CARD_HEADER_UPDATED));
+      result.Set(safety_hub::kCardSubheaderKey,
+                 VersionUI::GetAnnotatedVersionStringForUi());
+      result.Set(safety_hub::kCardStateKey,
+                 static_cast<int>(SafetyHubCardState::kSafe));
+      break;
+    case BuildState::UpdateType::kNormalUpdate:
+    // kEnterpriseRollback and kChannelSwitchRollback are fairly rare state,
+    // they will be handled same as there is waiting updates.
+    case BuildState::UpdateType::kEnterpriseRollback:
+    case BuildState::UpdateType::kChannelSwitchRollback:
+      result = CardDataToValue(
+          IDS_SETTINGS_SAFETY_HUB_VERSION_CARD_HEADER_RESTART,
+          IDS_SETTINGS_SAFETY_HUB_VERSION_CARD_SUBHEADER_RESTART,
+          SafetyHubCardState::kWarning);
+  }
+  return result;
+}
+
+void SafetyHubHandler::HandleGetSafetyHubHasRecommendations(
+    const base::Value::List& args) {
+  AllowJavascript();
+
+  CHECK_EQ(1U, args.size());
+  const base::Value& callback_id = args[0];
+
+  bool has_recommendations = !GetSafetyHubModulesWithRecommendations().empty();
+
+  ResolveJavascriptCallback(callback_id, has_recommendations);
+}
+
+void SafetyHubHandler::HandleGetSafetyHubEntryPointSubheader(
+    const base::Value::List& args) {
+  AllowJavascript();
+
+  CHECK_EQ(1U, args.size());
+  const base::Value& callback_id = args[0];
+
+  std::set<SafetyHubModule> modules = GetSafetyHubModulesWithRecommendations();
+
+  // If there is no module that needs attention, a static string will be used
+  // for the subheader.
+  if (modules.empty()) {
+    ResolveJavascriptCallback(
+        callback_id, base::Value(l10n_util::GetStringUTF16(
+                         IDS_SETTINGS_SAFETY_HUB_ENTRY_POINT_NOTHING_TO_DO)));
+    return;
+  }
+
+  // Modules in subheader should be added in the following order: Passwords,
+  // Version, Safe Browsing, Extensions, Notifications, Permissions.
+  std::u16string subheader = u"";
+
+  if (modules.contains(SafetyHubModule::kPasswords)) {
+    AppendModuleNameToString(subheader,
+                             IDS_SETTINGS_SAFETY_HUB_PASSWORDS_MODULE_NAME);
+  }
+
+  if (modules.contains(SafetyHubModule::kVersion)) {
+    AppendModuleNameToString(
+        subheader, IDS_SETTINGS_SAFETY_HUB_VERSION_MODULE_UPPERCASE_NAME,
+        IDS_SETTINGS_SAFETY_HUB_VERSION_MODULE_LOWERCASE_NAME);
+  }
+
+  if (modules.contains(SafetyHubModule::kSafeBrowsing)) {
+    AppendModuleNameToString(subheader,
+                             IDS_SETTINGS_SAFETY_HUB_SAFE_BROWSING_MODULE_NAME);
+  }
+
+  if (modules.contains(SafetyHubModule::kExtensions)) {
+    AppendModuleNameToString(
+        subheader, IDS_SETTINGS_SAFETY_HUB_EXTENSIONS_MODULE_UPPERCASE_NAME,
+        IDS_SETTINGS_SAFETY_HUB_EXTENSIONS_MODULE_LOWERCASE_NAME);
+  }
+
+  if (modules.contains(SafetyHubModule::kNotifications)) {
+    AppendModuleNameToString(
+        subheader, IDS_SETTINGS_SAFETY_HUB_NOTIFICATIONS_MODULE_UPPERCASE_NAME,
+        IDS_SETTINGS_SAFETY_HUB_NOTIFICATIONS_MODULE_LOWERCASE_NAME);
+  }
+
+  if (modules.contains(SafetyHubModule::kUnusedSitePermissions)) {
+    AppendModuleNameToString(
+        subheader, IDS_SETTINGS_SAFETY_HUB_PERMISSIONS_MODULE_UPPERCASE_NAME,
+        IDS_SETTINGS_SAFETY_HUB_PERMISSIONS_MODULE_LOWERCASE_NAME);
+  }
+
+  ResolveJavascriptCallback(callback_id, base::Value(subheader));
+}
+
+std::set<SafetyHubHandler::SafetyHubModule>
+SafetyHubHandler::GetSafetyHubModulesWithRecommendations() {
+  std::set<SafetyHubModule> modules;
+
+  // Passwords module
+  if (CardHasRecommendations(GetPasswordCardData())) {
+    modules.insert(SafetyHubModule::kPasswords);
+  }
+  // Version module
+  if (CardHasRecommendations(GetVersionCardData())) {
+    modules.insert(SafetyHubModule::kVersion);
+  }
+  // SafeBrowsing module
+  if (CardHasRecommendations(GetSafeBrowsingCardData())) {
+    modules.insert(SafetyHubModule::kSafeBrowsing);
+  }
+  // Extensions module
+  if (GetNumberOfExtensionsThatNeedReview() > 0) {
+    modules.insert(SafetyHubModule::kExtensions);
+  }
+  // Notifications module
+  NotificationPermissionsReviewService* service =
+      NotificationPermissionsReviewServiceFactory::GetForProfile(profile_);
+  CHECK(service);
+  if (!service->PopulateNotificationPermissionReviewData().empty()) {
+    modules.insert(SafetyHubModule::kNotifications);
+  }
+  // Unused site permission module
+  if (!PopulateUnusedSitePermissionsData().empty()) {
+    modules.insert(SafetyHubModule::kUnusedSitePermissions);
+  }
+
+  return modules;
 }
 
 void SafetyHubHandler::RegisterMessages() {
@@ -448,6 +687,16 @@ void SafetyHubHandler::RegisterMessages() {
           &SafetyHubHandler::HandleResetNotificationPermissionForOrigins,
           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
+      "dismissActiveMenuNotification",
+      base::BindRepeating(
+          &SafetyHubHandler::HandleDismissActiveMenuNotification,
+          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "dismissSafetyHubPasswordMenuNotification",
+      base::BindRepeating(
+          &SafetyHubHandler::HandleDismissPasswordMenuNotification,
+          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
       "blockNotificationPermissionForOrigins",
       base::BindRepeating(
           &SafetyHubHandler::HandleBlockNotificationPermissionForOrigins,
@@ -464,13 +713,27 @@ void SafetyHubHandler::RegisterMessages() {
               HandleUndoIgnoreOriginsForNotificationPermissionReview,
           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "getSafeBrowsingState",
-      base::BindRepeating(&SafetyHubHandler::HandleGetSafeBrowsingState,
+      "getSafeBrowsingCardData",
+      base::BindRepeating(&SafetyHubHandler::HandleGetSafeBrowsingCardData,
                           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "getPasswordCardData",
       base::BindRepeating(&SafetyHubHandler::HandleGetPasswordCardData,
                           base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "getVersionCardData",
+      base::BindRepeating(&SafetyHubHandler::HandleGetVersionCardData,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "getSafetyHubHasRecommendations",
+      base::BindRepeating(
+          &SafetyHubHandler::HandleGetSafetyHubHasRecommendations,
+          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "getSafetyHubEntryPointSubheader",
+      base::BindRepeating(
+          &SafetyHubHandler::HandleGetSafetyHubEntryPointSubheader,
+          base::Unretained(this)));
 }
 
 void SafetyHubHandler::SendUnusedSitePermissionsReviewList() {
@@ -489,78 +752,25 @@ void SafetyHubHandler::SendNotificationPermissionReviewList() {
     return;
   }
 
-  base::Value::List result =
-      service->PopulateNotificationPermissionReviewData(profile_);
   // Notify observers that the permission review list could have changed. Note
   // that the list is not guaranteed to have changed.
   FireWebUIListener(
       site_settings::kNotificationPermissionsReviewListMaybeChangedEvent,
-      service->PopulateNotificationPermissionReviewData(profile_));
+      service->PopulateNotificationPermissionReviewData());
 }
 
-base::Value::Dict SafetyHubHandler::GetPasswordCardData(int compromised_count,
-                                                        int weak_count,
-                                                        int reused_count,
-                                                        base::Time last_check) {
-  base::Value::Dict result;
-
-  // TODO(crbug.com/1443466): Handle edge cases: User is signed out, passwords
-  // are disabled due to enterprise policy, or no check has yet taken place.
-  if (compromised_count > 0) {
-    result.Set(kHeader, l10n_util::GetPluralStringFUTF16(
-                            IDS_PASSWORD_MANAGER_UI_COMPROMISED_PASSWORDS_COUNT,
-                            compromised_count));
-    result.Set(kSubheader,
-               l10n_util::GetStringUTF16(
-                   IDS_PASSWORD_MANAGER_UI_HAS_COMPROMISED_PASSWORDS));
-    result.Set(kState, static_cast<int>(SafetyHubCardState::kWarning));
-    return result;
+int SafetyHubHandler::GetNumberOfExtensionsThatNeedReview() {
+  extensions::CWSInfoService* cws_info_service =
+      extensions::CWSInfoServiceFactory::GetForProfile(profile_);
+  absl::optional<std::unique_ptr<SafetyHubService::Result>> sh_result =
+      SafetyHubExtensionsResult::GetResult(cws_info_service, profile_, false);
+  if (!sh_result.has_value()) {
+    return 0;
   }
 
-  if (reused_count > 0) {
-    result.Set(kHeader, l10n_util::GetPluralStringFUTF16(
-                            IDS_PASSWORD_MANAGER_UI_REUSED_PASSWORDS_COUNT,
-                            reused_count));
-    result.Set(kSubheader, l10n_util::GetStringUTF16(
-                               IDS_PASSWORD_MANAGER_UI_HAS_REUSED_PASSWORDS));
-    result.Set(kState, static_cast<int>(SafetyHubCardState::kWeak));
-    return result;
-  }
+  auto* result = static_cast<SafetyHubExtensionsResult*>(sh_result->get());
 
-  if (weak_count > 0) {
-    result.Set(kHeader,
-               l10n_util::GetPluralStringFUTF16(
-                   IDS_PASSWORD_MANAGER_UI_WEAK_PASSWORDS_COUNT, weak_count));
-    result.Set(kSubheader, l10n_util::GetStringUTF16(
-                               IDS_PASSWORD_MANAGER_UI_HAS_WEAK_PASSWORDS));
-    result.Set(kState, static_cast<int>(SafetyHubCardState::kWeak));
-    return result;
-  }
-
-  // No issues, the card is in the safe state.
-  result.Set(kHeader,
-             l10n_util::GetPluralStringFUTF16(
-                 IDS_PASSWORD_MANAGER_UI_COMPROMISED_PASSWORDS_COUNT, 0));
-  // The subheader string depends on how much time has passed since the last
-  // check.
-  base::TimeDelta time_delta = base::Time::Now() - last_check;
-  if (time_delta < base::Minutes(1)) {
-    result.Set(kSubheader,
-               l10n_util::GetStringUTF16(
-                   IDS_SETTINGS_SAFETY_HUB_PASSWORD_CHECK_SUBHEADER_RECENTLY));
-  } else {
-    std::u16string last_check_string =
-        ui::TimeFormat::Simple(ui::TimeFormat::Format::FORMAT_DURATION,
-                               ui::TimeFormat::Length::LENGTH_LONG, time_delta);
-    result.Set(
-        kSubheader,
-        l10n_util::GetStringFUTF16(
-            IDS_SETTINGS_SAFETY_HUB_PASSWORD_CHECK_SUBHEADER_SOME_TIME_AGO,
-            last_check_string));
-  }
-  result.Set(kState, static_cast<int>(SafetyHubCardState::kSafe));
-
-  return result;
+  return result->GetNumTriggeringExtensions();
 }
 
 void SafetyHubHandler::SetClockForTesting(base::Clock* clock) {

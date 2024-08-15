@@ -34,6 +34,7 @@ excluded_modules = [
   "third_party/libFuzzer/src",
   "third_party/chromium-variations",
   "third_party/speedometer/v3.0",
+  "third_party/google-truth/src",
   ]
 
 def main():

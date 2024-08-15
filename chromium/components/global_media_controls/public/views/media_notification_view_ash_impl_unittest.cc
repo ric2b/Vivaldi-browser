@@ -116,6 +116,15 @@ class MediaNotificationViewAshImplTest : public views::ViewsTestBase {
         MediaDisplayPage::kQuickSettingsMediaView);
   }
 
+  std::unique_ptr<MediaNotificationViewAshImpl> CreateLockScreenMediaView() {
+    return std::make_unique<MediaNotificationViewAshImpl>(
+        container_.get(), /*item=*/nullptr, /*footer_view=*/nullptr,
+        /*device_selector_view=*/nullptr,
+        /*dismiss_button=*/std::make_unique<views::View>(),
+        media_message_center::MediaColorTheme(),
+        MediaDisplayPage::kLockScreenMediaView);
+  }
+
   void EnableAllActions() {
     actions_.insert(MediaSessionAction::kPlay);
     actions_.insert(MediaSessionAction::kPause);
@@ -182,13 +191,27 @@ TEST_F(MediaNotificationViewAshImplTest, ChevronIconVisibilityCheck) {
 
   view = CreateView(MediaDisplayPage::kQuickSettingsMediaDetailedView);
   EXPECT_EQ(view->GetChevronIconForTesting(), nullptr);
+
+  view = CreateView(MediaDisplayPage::kSystemShelfMediaDetailedView);
+  EXPECT_EQ(view->GetChevronIconForTesting(), nullptr);
+
+  view = CreateLockScreenMediaView();
+  EXPECT_EQ(view->GetChevronIconForTesting(), nullptr);
 }
 
 TEST_F(MediaNotificationViewAshImplTest, DeviceSelectorViewCheck) {
   EXPECT_NE(view()->GetStartCastingButtonForTesting(), nullptr);
-  EXPECT_TRUE(view()->GetStartCastingButtonForTesting()->GetVisible());
+  EXPECT_FALSE(view()->GetStartCastingButtonForTesting()->GetVisible());
   EXPECT_EQ(view()->GetDeviceSelectorForTesting(), device_selector());
+  EXPECT_FALSE(view()->GetDeviceSelectorForTesting()->GetVisible());
   EXPECT_NE(view()->GetDeviceSelectorSeparatorForTesting(), nullptr);
+  EXPECT_FALSE(view()->GetDeviceSelectorSeparatorForTesting()->GetVisible());
+
+  EXPECT_CALL(*device_selector(), IsDeviceSelectorExpanded())
+      .WillOnce(testing::Return(false));
+  view()->UpdateDeviceSelectorAvailability(/*has_devices=*/true);
+  EXPECT_TRUE(view()->GetStartCastingButtonForTesting()->GetVisible());
+  EXPECT_TRUE(view()->GetDeviceSelectorForTesting()->GetVisible());
   EXPECT_FALSE(view()->GetDeviceSelectorSeparatorForTesting()->GetVisible());
 
   EXPECT_CALL(*device_selector(), ShowOrHideDeviceList());

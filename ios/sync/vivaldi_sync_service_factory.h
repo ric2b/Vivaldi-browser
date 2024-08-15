@@ -6,7 +6,7 @@
 #include <memory>
 
 #include "base/no_destructor.h"
-#include "ios/chrome/browser/sync/sync_service_factory.h"
+#import "ios/chrome/browser/sync/model/sync_service_factory.h"
 
 class ChromeBrowserState;
 

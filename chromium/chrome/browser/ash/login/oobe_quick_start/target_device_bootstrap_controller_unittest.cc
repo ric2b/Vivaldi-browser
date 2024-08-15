@@ -145,7 +145,8 @@ class TargetDeviceBootstrapControllerTest : public testing::Test {
     fake_target_device_connection_broker_->InitiateConnection(kSourceDeviceId);
     fake_target_device_connection_broker_->AuthenticateConnection(
         kSourceDeviceId);
-    ASSERT_EQ(fake_observer_->last_status.step, Step::CONNECTING_TO_WIFI);
+    ASSERT_EQ(fake_observer_->last_status.step,
+              Step::REQUESTING_WIFI_CREDENTIALS);
   }
 
   void NotifySourceOfUpdateResponse(bool ack_successful) {
@@ -416,7 +417,8 @@ TEST_F(TargetDeviceBootstrapControllerTest, RequestWifiCredentials) {
   fake_target_device_connection_broker_->AuthenticateConnection(
       kSourceDeviceId);
 
-  EXPECT_EQ(fake_observer_->last_status.step, Step::CONNECTING_TO_WIFI);
+  EXPECT_EQ(fake_observer_->last_status.step,
+            Step::REQUESTING_WIFI_CREDENTIALS);
   EXPECT_TRUE(absl::holds_alternative<absl::monostate>(
       fake_observer_->last_status.payload));
 
@@ -430,7 +432,7 @@ TEST_F(TargetDeviceBootstrapControllerTest, RequestWifiCredentials) {
           mojom::WifiCredentials("ssid", mojom::WifiSecurityType::kWEP,
                                  /*is_hidden=*/true, "password"));
 
-  EXPECT_EQ(fake_observer_->last_status.step, Step::CONNECTED_TO_WIFI);
+  EXPECT_EQ(fake_observer_->last_status.step, Step::WIFI_CREDENTIALS_RECEIVED);
   EXPECT_TRUE(absl::holds_alternative<absl::monostate>(
       fake_observer_->last_status.payload));
   histogram_tester_.ExpectBucketCount(kWifiTransferResultHistogramName, true,
@@ -454,9 +456,8 @@ TEST_F(TargetDeviceBootstrapControllerTest,
   fake_target_device_connection_broker_->GetFakeConnection()
       ->SendWifiCredentials(absl::nullopt);
 
-  EXPECT_EQ(fake_observer_->last_status.step, Step::ERROR);
-  EXPECT_EQ(absl::get<ErrorCode>(fake_observer_->last_status.payload),
-            ErrorCode::WIFI_CREDENTIALS_NOT_RECEIVED);
+  EXPECT_EQ(fake_observer_->last_status.step,
+            Step::EMPTY_WIFI_CREDENTIALS_RECEIVED);
 }
 
 TEST_F(TargetDeviceBootstrapControllerTest,
@@ -468,7 +469,8 @@ TEST_F(TargetDeviceBootstrapControllerTest,
   fake_target_device_connection_broker_->AuthenticateConnection(
       kSourceDeviceId);
 
-  EXPECT_EQ(fake_observer_->last_status.step, Step::CONNECTING_TO_WIFI);
+  EXPECT_EQ(fake_observer_->last_status.step,
+            Step::REQUESTING_WIFI_CREDENTIALS);
   EXPECT_TRUE(absl::holds_alternative<absl::monostate>(
       fake_observer_->last_status.payload));
 
@@ -491,7 +493,8 @@ TEST_F(TargetDeviceBootstrapControllerTest,
   fake_target_device_connection_broker_->AuthenticateConnection(
       kSourceDeviceId);
 
-  EXPECT_EQ(fake_observer_->last_status.step, Step::CONNECTING_TO_WIFI);
+  EXPECT_EQ(fake_observer_->last_status.step,
+            Step::REQUESTING_WIFI_CREDENTIALS);
   EXPECT_TRUE(absl::holds_alternative<absl::monostate>(
       fake_observer_->last_status.payload));
 
@@ -501,6 +504,30 @@ TEST_F(TargetDeviceBootstrapControllerTest,
   EXPECT_EQ(fake_observer_->last_status.step, Step::ERROR);
   EXPECT_EQ(absl::get<ErrorCode>(fake_observer_->last_status.payload),
             ErrorCode::USER_VERIFICATION_FAILED);
+}
+
+TEST_F(TargetDeviceBootstrapControllerTest,
+       RequestGoogleAccountInfoStateUpdates) {
+  bootstrap_controller_->StartAdvertisingAndMaybeGetQRCode();
+  fake_target_device_connection_broker_->on_start_advertising_callback().Run(
+      /*success=*/true);
+  fake_target_device_connection_broker_->InitiateConnection(kSourceDeviceId);
+  fake_target_device_connection_broker_->AuthenticateConnection(
+      kSourceDeviceId);
+
+  bootstrap_controller_->RequestGoogleAccountInfo();
+
+  EXPECT_EQ(fake_observer_->last_status.step,
+            Step::REQUESTING_GOOGLE_ACCOUNT_INFO);
+  EXPECT_TRUE(absl::holds_alternative<absl::monostate>(
+      fake_observer_->last_status.payload));
+
+  fake_target_device_connection_broker_->GetFakeConnection()->SendAccountInfo();
+
+  EXPECT_EQ(fake_observer_->last_status.step,
+            Step::GOOGLE_ACCOUNT_INFO_RECEIVED);
+  EXPECT_TRUE(absl::holds_alternative<absl::monostate>(
+      fake_observer_->last_status.payload));
 }
 
 TEST_F(TargetDeviceBootstrapControllerTest,
@@ -601,11 +628,11 @@ TEST_F(TargetDeviceBootstrapControllerTest,
 }
 
 // Ensures that the discoverable name that is shown Chromebook (123) matches
-// the one returned by RandomSessionId
+// the one returned by AdvertisingId
 TEST_F(TargetDeviceBootstrapControllerTest, DiscoverableName) {
   std::string device_type = base::UTF16ToUTF8(ui::GetChromeOSDeviceName());
   std::string code =
-      fake_target_device_connection_broker_->GetSessionIdDisplayCode();
+      fake_target_device_connection_broker_->GetAdvertisingIdDisplayCode();
   auto expected_string = device_type + " (" + code + ")";
 
   EXPECT_EQ(bootstrap_controller_->GetDiscoverableName(), expected_string);
@@ -620,7 +647,8 @@ TEST_F(TargetDeviceBootstrapControllerTest,
   fake_target_device_connection_broker_->AuthenticateConnection(
       kSourceDeviceId);
 
-  EXPECT_EQ(fake_observer_->last_status.step, Step::CONNECTING_TO_WIFI);
+  EXPECT_EQ(fake_observer_->last_status.step,
+            Step::REQUESTING_WIFI_CREDENTIALS);
   EXPECT_TRUE(absl::holds_alternative<absl::monostate>(
       fake_observer_->last_status.payload));
 
@@ -637,7 +665,7 @@ TEST_F(TargetDeviceBootstrapControllerTest,
                                       1);
   histogram_tester_.ExpectBucketCount(
       kWifiTransferResultFailureReasonHistogramName,
-      quick_start_metrics::WifiTransferResultFailureReason::
+      QuickStartMetrics::WifiTransferResultFailureReason::
           kConnectionDroppedDuringAttempt,
       1);
   ExpectQuickStartConnectivityServiceCleanupCalled();
@@ -653,8 +681,10 @@ TEST_F(TargetDeviceBootstrapControllerTest, SessionContext) {
   GetLocalState()->SetDict(prefs::kResumeQuickStartAfterRebootInfo,
                            GetSessionContext().GetPrepareForUpdateInfo());
 
-  std::string expected_random_session_id =
-      GetSessionContext().random_session_id().ToString();
+  SessionContext::SessionId expected_session_id =
+      GetSessionContext().session_id();
+  std::string expected_advertising_id =
+      GetSessionContext().advertising_id().ToString();
   SessionContext::SharedSecret expected_shared_secret =
       GetSessionContext().secondary_shared_secret();
 
@@ -663,8 +693,9 @@ TEST_F(TargetDeviceBootstrapControllerTest, SessionContext) {
   CreateBootstrapController();
 
   EXPECT_TRUE(GetSessionContext().is_resume_after_update());
-  EXPECT_EQ(expected_random_session_id,
-            GetSessionContext().random_session_id().ToString());
+  EXPECT_EQ(expected_session_id, GetSessionContext().session_id());
+  EXPECT_EQ(expected_advertising_id,
+            GetSessionContext().advertising_id().ToString());
   EXPECT_EQ(expected_shared_secret, GetSessionContext().shared_secret());
 }
 

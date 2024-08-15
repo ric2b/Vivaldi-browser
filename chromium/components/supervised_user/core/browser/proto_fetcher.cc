@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 
+#include "base/check_op.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ref.h"
@@ -19,6 +20,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
+#include "base/timer/elapsed_timer.h"
 #include "base/types/expected.h"
 #include "components/signin/public/identity_manager/access_token_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -41,15 +43,15 @@
 namespace supervised_user {
 namespace {
 // Controls the retry count of the simple url loader.
-const int kNumFamilyInfoFetcherRetries = 1;
+const int kUrlLoaderRetryCount = 1;
 
 using ::base::BindOnce;
+using ::base::ElapsedTimer;
 using ::base::JoinString;
 using ::base::StrCat;
 using ::base::StringPiece;
 using ::base::StringPrintf;
 using ::base::TimeDelta;
-using ::base::TimeTicks;
 using ::base::Unretained;
 using ::network::ResourceRequest;
 using ::signin::IdentityManager;
@@ -122,49 +124,140 @@ std::unique_ptr<network::SimpleURLLoader> InitializeSimpleUrlLoader(
   }
 
   simple_url_loader->SetRetryOptions(
-      kNumFamilyInfoFetcherRetries,
-      network::SimpleURLLoader::RETRY_ON_NETWORK_CHANGE);
+      kUrlLoaderRetryCount, network::SimpleURLLoader::RETRY_ON_NETWORK_CHANGE);
   return simple_url_loader;
 }
 
-// Encapsulates metric functionalities.
-class Metrics final {
+// A stopwatch with two functions:
+// * measure total elapsed time,
+// * measure lap time (with automatic resetting after each lap).
+// The stopwatch is created started.
+class Stopwatch {
  public:
+  // Time since start of last lap. Resets the lap timer.
+  TimeDelta Lap() {
+    TimeDelta lap = lap_timer_.Elapsed();
+    lap_timer_ = ElapsedTimer();
+    return lap;
+  }
+
+  // Time since start of last lap.
+  TimeDelta Elapsed() const { return elapsed_timer_.Elapsed(); }
+
+ private:
+  ElapsedTimer elapsed_timer_;
+  ElapsedTimer lap_timer_;
+};
+
+// Encapsulates metric functionalities.
+class Metrics {
+ public:
+  enum class MetricType {
+    kStatus,
+    kLatency,
+    kHttpStatusOrNetError,
+    kRetryCount,
+    kAccessTokenLatency,
+    kApiLatency,
+  };
+
   Metrics() = delete;
   explicit Metrics(StringPiece basename) : basename_(basename) {}
 
   void RecordStatus(ProtoFetcherStatus status) const {
-    base::UmaHistogramEnumeration(GetMetricKey("Status"), status.state());
+    base::UmaHistogramEnumeration(GetFullHistogramName(MetricType::kStatus),
+                                  status.state());
   }
+
   void RecordLatency() const {
-    base::UmaHistogramTimes(GetMetricKey("Latency"),
-                            TimeTicks::Now() - start_time_);
+    base::UmaHistogramTimes(GetFullHistogramName(MetricType::kLatency),
+                            stopwatch_.Elapsed());
   }
-  void RecordStatusLatency(ProtoFetcherStatus status) const {
-    base::UmaHistogramTimes(GetMetricKey("Latency", ToMetricEnumLabel(status)),
-                            TimeTicks::Now() - start_time_);
+
+  void RecordAccessTokenLatency(
+      GoogleServiceAuthError::State auth_error_state) {
+    base::UmaHistogramTimes(
+        GetFullHistogramName(MetricType::kAccessTokenLatency, auth_error_state),
+        stopwatch_.Lap());
   }
+
+  void RecordApiLatency(
+      ProtoFetcherStatus::HttpStatusOrNetErrorType http_status_or_net_error) {
+    base::UmaHistogramTimes(
+        GetFullHistogramName(MetricType::kApiLatency, http_status_or_net_error),
+        stopwatch_.Lap());
+  }
+
+  virtual void RecordStatusLatency(ProtoFetcherStatus status) const {
+    base::UmaHistogramTimes(GetFullHistogramName(MetricType::kLatency, status),
+                            stopwatch_.Elapsed());
+  }
+
   void RecordHttpStatusOrNetError(ProtoFetcherStatus status) const {
     CHECK(status.state() ==
           ProtoFetcherStatus::State::HTTP_STATUS_OR_NET_ERROR);
-    base::UmaHistogramSparse(GetMetricKey("HttpStatusOrNetError"),
-                             status.http_status_or_net_error().value());
+    base::UmaHistogramSparse(
+        GetFullHistogramName(MetricType::kHttpStatusOrNetError),
+        status.http_status_or_net_error().value());
   }
-  void RecordRetryCount(int count) const {
-    // It's a prediction that it will take less than 100 retries to get a
-    // decisive response. Double exponential backoff set at 4 hour limit
-    // shouldn't exhaust this limit too soon.
-    base::UmaHistogramCounts100(GetMetricKey("RetryCount"), count);
+
+ protected:
+  // Translates top-level metric type into a string. ::ToMetricEnumLabel
+  // translates statuses for per-status latency tracking.
+  virtual StringPiece GetMetricKey(MetricType metric_type) const {
+    switch (metric_type) {
+      case MetricType::kStatus:
+        return "Status";
+      case MetricType::kLatency:
+        return "Latency";
+      case MetricType::kHttpStatusOrNetError:
+        return "HttpStatusOrNetError";
+      case MetricType::kAccessTokenLatency:
+        return "AccessTokenLatency";
+      case MetricType::kApiLatency:
+        return "ApiLatency";
+      case MetricType::kRetryCount:
+        NOTREACHED_NORETURN();
+      default:
+        NOTREACHED_NORETURN();
+    }
+  }
+
+  // Returns fully-qualified name of histogram for specified metric_type.
+  std::string GetFullHistogramName(MetricType metric_type) const {
+    return JoinString({basename_, GetMetricKey(metric_type)}, ".");
+  }
+
+  // Returns fully-qualified name of histogram for specified metric_type with
+  // per-status values.
+  std::string GetFullHistogramName(MetricType metric_type,
+                                   ProtoFetcherStatus status) const {
+    return JoinString(
+        {basename_, ToMetricEnumLabel(status), GetMetricKey(metric_type)}, ".");
+  }
+
+  // Returns fully-qualified name of histogram for specified metric_type with
+  // per-authentication status values.
+  std::string GetFullHistogramName(
+      MetricType metric_type,
+      GoogleServiceAuthError::State auth_error_state) const {
+    CHECK_EQ(auth_error_state, GoogleServiceAuthError::State::NONE)
+        << "Only authenticated case is supported.";
+    return JoinString({basename_, "NONE", GetMetricKey(metric_type)}, ".");
+  }
+
+  // Returns fully-qualified name of histogram for specified metric_type with
+  // per-net-or-http error values.
+  std::string GetFullHistogramName(MetricType metric_type,
+                                   ProtoFetcherStatus::HttpStatusOrNetErrorType
+                                       http_status_or_net_error) const {
+    CHECK_EQ(http_status_or_net_error,
+             ProtoFetcherStatus::HttpStatusOrNetErrorType(net::HTTP_OK))
+        << "Only successful api call case is supported.";
+    return JoinString({basename_, "HTTP_OK", GetMetricKey(metric_type)}, ".");
   }
 
  private:
-  std::string GetMetricKey(StringPiece id) const {
-    return JoinString({basename_, id}, ".");
-  }
-  std::string GetMetricKey(StringPiece id, StringPiece suffix) const {
-    return JoinString({basename_, id, suffix}, ".");
-  }
-
   // The returned value must match one of the labels in
   // chromium/src/tools/metrics/histograms/enums.xml://enum[@name='ProtoFetcherStatus'],
   // and should be reflected in tokens in histogram defined for this fetcher.
@@ -188,7 +281,45 @@ class Metrics final {
   }
 
   StringPiece basename_;
-  const TimeTicks start_time_{TimeTicks::Now()};
+  Stopwatch stopwatch_;
+};
+
+// Metrics for retrying fetchers, which are aggregating individual
+// fetchers.
+class OverallMetrics final : public Metrics {
+ public:
+  OverallMetrics() = delete;
+  explicit OverallMetrics(StringPiece basename) : Metrics(basename) {}
+
+  // Per-status latency is not defined for OverallMetrics.
+  void RecordStatusLatency(ProtoFetcherStatus status) const override {
+    NOTIMPLEMENTED();
+  }
+
+ protected:
+  StringPiece GetMetricKey(MetricType metric_type) const override {
+    switch (metric_type) {
+      case MetricType::kStatus:
+        return "OverallStatus";
+      case MetricType::kLatency:
+        return "OverallLatency";
+      case MetricType::kHttpStatusOrNetError:
+        NOTREACHED_NORETURN();
+      case MetricType::kRetryCount:
+        return "RetryCount";
+      default:
+        NOTREACHED_NORETURN();
+    }
+  }
+
+ public:
+  void RecordRetryCount(int count) const {
+    // It's a prediction that it will take less than 100 retries to get a
+    // decisive response. Double exponential backoff set at 4 hour limit
+    // shouldn't exhaust this limit too soon.
+    base::UmaHistogramCounts100(GetFullHistogramName(MetricType::kRetryCount),
+                                count);
+  }
 };
 
 // A fetcher with underlying network::SharedURLLoaderFactory.
@@ -217,12 +348,16 @@ class FetcherImpl final : public ProtoFetcher<Response> {
               StringPiece payload,
               const FetcherConfig& fetcher_config,
               Callback callback)
-      : fetcher_(LaunchFetcher(identity_manager,
-                               url_loader_factory,
-                               fetcher_config,
-                               std::move(callback))),
-        payload_(payload),
-        config_(fetcher_config) {}
+      : payload_(payload),
+        config_(fetcher_config),
+        metrics_(fetcher_config.histogram_basename),
+        fetcher_(identity_manager,
+                 fetcher_config.access_token_config,
+                 BindOnce(&FetcherImpl::OnAccessTokenFetchComplete,
+                          Unretained(this),  // Unretained(.) is safe because
+                                             // `this` owns `fetcher_`.
+                          url_loader_factory,
+                          std::move(callback))) {}
 
   // Not copyable.
   FetcherImpl(const FetcherImpl&) = delete;
@@ -250,21 +385,6 @@ class FetcherImpl final : public ProtoFetcher<Response> {
     }
   }
 
-  // Launch of the fetch process.
-  std::unique_ptr<ApiAccessTokenFetcher> LaunchFetcher(
-      IdentityManager& identity_manager,
-      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      const FetcherConfig& fetcher_config,
-      Callback callback) {
-    CHECK(callback) << "Use base::DoNothing() instead of empty callback.";
-    return std::make_unique<ApiAccessTokenFetcher>(
-        identity_manager, fetcher_config,
-        BindOnce(&FetcherImpl::OnAccessTokenFetchComplete, Unretained(this),
-                 url_loader_factory,
-                 std::move(callback)));  // Unretained(.) is safe because `this`
-                                         // owns `access_token_fetcher_`.
-  }
-
   // First phase of fetching done: the access token response is ready.
   void OnAccessTokenFetchComplete(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
@@ -276,6 +396,8 @@ class FetcherImpl final : public ProtoFetcher<Response> {
               ProtoFetcherStatus::GoogleServiceAuthError(access_token.error()));
       return;
     }
+
+    metrics_.RecordAccessTokenLatency(GoogleServiceAuthError::State::NONE);
 
     simple_url_loader_ = InitializeSimpleUrlLoader(
         access_token.value(), config_, GetRequestPayload());
@@ -296,6 +418,9 @@ class FetcherImpl final : public ProtoFetcher<Response> {
                   HttpStatusOrNetError(*simple_url_loader_)));
       return;
     }
+
+    metrics_.RecordApiLatency(
+        ProtoFetcherStatus::HttpStatusOrNetErrorType(net::HTTP_OK));
 
     std::unique_ptr<Response> response = std::make_unique<Response>();
     if (!response->ParseFromString(*response_body)) {
@@ -326,14 +451,16 @@ class FetcherImpl final : public ProtoFetcher<Response> {
     std::move(callback).Run(ProtoFetcherStatus::Ok(), std::move(response));
   }
 
-  // Entrypoint of the fetch process, which starts with ApiAccessToken access
-  // followed by a request made with SimpleURLLoader.
-  std::unique_ptr<ApiAccessTokenFetcher> fetcher_;
   std::unique_ptr<network::SimpleURLLoader> simple_url_loader_;
 
   const std::string payload_;
   const FetcherConfig config_;
-  const Metrics metrics_{config_.histogram_basename};
+  Metrics metrics_;
+
+  // Entrypoint of the fetch process, which starts with ApiAccessToken access
+  // followed by a request made with SimpleURLLoader. Purposely made last field
+  // should it depend on other members of this class.
+  ApiAccessTokenFetcher fetcher_;
 };
 
 // Wraps FetcherImpl deferring its startup until explicitly invoked. This is the
@@ -430,6 +557,8 @@ class RetryingFetcherImpl final : public DeferredFetcherImpl<Response> {
 
     CHECK(callback_) << "Callback can be used only once.";
     backoff_entry_.InformOfRequest(/*succeeded=*/true);
+    metrics_.RecordLatency();
+    metrics_.RecordStatus(status);
     metrics_.RecordRetryCount(retry_count_);
     std::move(callback_).Run(status, std::move(response));
   }
@@ -442,7 +571,7 @@ class RetryingFetcherImpl final : public DeferredFetcherImpl<Response> {
   net::BackoffEntry backoff_entry_;
   int retry_count_{0};
 
-  const Metrics metrics_;
+  const OverallMetrics metrics_;
 };
 
 using ClassifyUrlFetcher =

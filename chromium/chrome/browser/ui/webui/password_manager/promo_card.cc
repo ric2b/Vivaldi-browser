@@ -7,7 +7,9 @@
 #include "base/functional/bind.h"
 #include "base/json/values_util.h"
 #include "base/memory/weak_ptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_delegate.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_delegate_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -16,7 +18,7 @@
 #include "chrome/browser/user_education/user_education_service_factory.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/common/webui_url_constants.h"
-#include "chrome/grit/chromium_strings.h"
+#include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/password_manager/core/browser/password_manager_constants.h"
 #include "components/password_manager/core/browser/password_sync_util.h"
@@ -214,7 +216,13 @@ WebPasswordManagerPromo::WebPasswordManagerPromo(
     PrefService* prefs,
     const syncer::SyncService* sync_service)
     : PromoCardInterface(kWebPasswordManagerPromoId, prefs) {
-  sync_enabled_ = sync_util::IsPasswordSyncActive(sync_service);
+  // TODO(crbug.com/1464264): Migrate away from `ConsentLevel::kSync` on desktop
+  // platforms and remove #ifdef below.
+#if BUILDFLAG(IS_ANDROID)
+#error If this code is built on Android, please update TODO above.
+#endif  // BUILDFLAG(IS_ANDROID)
+  sync_enabled_ =
+      sync_util::IsSyncFeatureActiveIncludingPasswords(sync_service);
 }
 
 std::string WebPasswordManagerPromo::GetPromoID() const {

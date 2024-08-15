@@ -8,12 +8,13 @@
 #include <utility>
 #include <vector>
 
+#include "base/memory/raw_ref.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "extensions/browser/extension_function.h"
-#include "prefs/vivaldi_browser_prefs.h"
+#include "prefs/vivaldi_prefs_definitions.h"
 
 class Profile;
 
@@ -60,7 +61,8 @@ class VivaldiPrefsApiNotification : public KeyedService {
   VivaldiPrefsApiNotification& operator=(const VivaldiPrefsApiNotification&) =
       delete;
 
-  const ::vivaldi::PrefProperties* GetPrefProperties(const std::string& path);
+  const ::vivaldi::VivaldiPrefsDefinitions::PrefProperties* GetPrefProperties(
+      const std::string& path);
 
   void RegisterPref(const std::string& path, bool local_pref);
 
@@ -70,7 +72,8 @@ class VivaldiPrefsApiNotification : public KeyedService {
   const raw_ptr<Profile> profile_;
   PrefChangeRegistrar prefs_registrar_;
   PrefChangeRegistrar local_prefs_registrar_;
-  ::vivaldi::PrefPropertiesMap pref_properties_map_;
+  const raw_ref<const ::vivaldi::VivaldiPrefsDefinitions::PrefPropertiesMap>
+      pref_properties_;
   PrefChangeRegistrar::NamedChangeCallback pref_change_callback_;
 
   std::unique_ptr<::vivaldi::NativeSettingsObserver> native_settings_observer_;
@@ -175,8 +178,7 @@ class PrefsResetTranslationPrefsFunction : public ExtensionFunction {
 
 class PrefsResetAllToDefaultFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("prefs.resetAllToDefault",
-                             PREFS_RESETALLTODEFAULT)
+  DECLARE_EXTENSION_FUNCTION("prefs.resetAllToDefault", PREFS_RESETALLTODEFAULT)
   PrefsResetAllToDefaultFunction();
 
  private:

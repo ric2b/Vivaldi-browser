@@ -86,7 +86,7 @@ export function createCreditCardEntry():
     chrome.autofillPrivate.CreditCardEntry {
   const cards = ['Visa', 'Mastercard', 'Discover', 'Card'];
   const card = cards[Math.floor(Math.random() * cards.length)];
-  const cardNumber = patternMaker('xxxx xxxx xxxx xxxx', 10);
+  const cardNumber = patternMaker('xxxx', 10);
   return {
     guid: makeGuid(),
     name: 'Jane Doe',
@@ -254,7 +254,6 @@ export class TestAutofillManager extends TestBrowserProxy implements
 export class PaymentsManagerExpectations {
   requestedCreditCards: number = 0;
   listeningCreditCards: number = 0;
-  requestedUpiIds: number = 0;
   removedCreditCards: number = 0;
   clearedCachedCreditCards: number = 0;
   addedVirtualCards: number = 0;
@@ -262,7 +261,7 @@ export class PaymentsManagerExpectations {
   removedIbans: number = 0;
   isValidIban: number = 0;
   authenticateUserAndFlipMandatoryAuthToggle: number = 0;
-  authenticateUserToEditLocalCard: number = 0;
+  getLocalCard: number = 0;
 }
 
 /**
@@ -278,7 +277,6 @@ export class TestPaymentsManager extends TestBrowserProxy implements
   data: {
     creditCards: chrome.autofillPrivate.CreditCardEntry[],
     ibans: chrome.autofillPrivate.IbanEntry[],
-    upiIds: string[],
   };
 
   lastCallback:
@@ -290,21 +288,19 @@ export class TestPaymentsManager extends TestBrowserProxy implements
       'removePersonalDataManagerListener',
       'getCreditCardList',
       'getIbanList',
-      'getUpiIdList',
       'clearCachedCreditCard',
       'removeCreditCard',
       'removeIban',
       'addVirtualCard',
       'isValidIban',
       'authenticateUserAndFlipMandatoryAuthToggle',
-      'authenticateUserToEditLocalCard',
+      'getLocalCard',
     ]);
 
     // Set these to have non-empty data.
     this.data = {
       creditCards: [],
       ibans: [],
-      upiIds: [],
     };
 
     // Holds the last callbacks so they can be called when needed.
@@ -325,11 +321,6 @@ export class TestPaymentsManager extends TestBrowserProxy implements
   getCreditCardList() {
     this.methodCalled('getCreditCardList');
     return Promise.resolve(this.data.creditCards);
-  }
-
-  getUpiIdList() {
-    this.methodCalled('getUpiIdList');
-    return Promise.resolve(this.data.upiIds);
   }
 
   clearCachedCreditCard(_guid: string) {
@@ -382,9 +373,14 @@ export class TestPaymentsManager extends TestBrowserProxy implements
     this.methodCalled('authenticateUserAndFlipMandatoryAuthToggle');
   }
 
-  authenticateUserToEditLocalCard() {
-    this.methodCalled('authenticateUserToEditLocalCard');
-    return Promise.resolve(true);
+  getLocalCard(_guid: string) {
+    this.methodCalled('getLocalCard');
+    const card =
+        this.data.creditCards.find(creditCard => creditCard.guid === _guid);
+    if (card !== undefined) {
+      return Promise.resolve(card);
+    }
+    return Promise.resolve(null);
   }
 
   // <if expr="is_win or is_macosx">
@@ -430,8 +426,7 @@ export class TestPaymentsManager extends TestBrowserProxy implements
         this.getCallCount('authenticateUserAndFlipMandatoryAuthToggle'),
         'authenticateUserAndFlipMandatoryAuthToggle mismatch');
     assertEquals(
-        expected.authenticateUserToEditLocalCard,
-        this.getCallCount('authenticateUserToEditLocalCard'),
-        'authenticateUserToEditLocalCard mismatch');
+        expected.getLocalCard, this.getCallCount('getLocalCard'),
+        'getLocalCard mismatch');
   }
 }

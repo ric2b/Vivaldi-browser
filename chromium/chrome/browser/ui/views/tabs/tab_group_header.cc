@@ -123,7 +123,8 @@ TabGroupHeader::TabGroupHeader(TabSlotController& tab_slot_controller,
   title_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   title_->SetElideBehavior(gfx::FADE_TAIL);
 
-  if (features::IsChromeRefresh2023()) {
+  if (features::IsChromeRefresh2023() &&
+      base::FeatureList::IsEnabled(features::kChromeRefresh2023TopChromeFont)) {
     title_->SetTextStyle(views::style::STYLE_BODY_4_EMPHASIS);
   }
 
@@ -207,7 +208,8 @@ bool TabGroupHeader::OnMousePressed(const ui::MouseEvent& event) {
 }
 
 bool TabGroupHeader::OnMouseDragged(const ui::MouseEvent& event) {
-  tab_slot_controller_->ContinueDrag(this, event);
+  // TODO: ensure ignoring return value is ok.
+  std::ignore = tab_slot_controller_->ContinueDrag(this, event);
   return true;
 }
 
@@ -389,10 +391,13 @@ bool TabGroupHeader::DoesIntersectRect(const views::View* target,
   // visually the header is basically a rectangle between two tab separators.
   // The distance from the endge of the view to the tab separator is half of the
   // overlap distance. We should only accept events between the separators.
+  const views::Widget* widget = GetWidget();
+  bool extend_hittest = widget->IsMaximized() || widget->IsFullscreen();
+
   gfx::Rect contents_rect = GetLocalBounds();
-  contents_rect.Inset(gfx::Insets::TLBR(GetLayoutConstant(TAB_STRIP_PADDING),
-                                        tab_style_->GetTabOverlap() / 2, 0,
-                                        tab_style_->GetTabOverlap() / 2));
+  contents_rect.Inset(gfx::Insets::TLBR(
+      extend_hittest ? 0 : GetLayoutConstant(TAB_STRIP_PADDING),
+      tab_style_->GetTabOverlap() / 2, 0, tab_style_->GetTabOverlap() / 2));
   return contents_rect.Intersects(rect);
 }
 

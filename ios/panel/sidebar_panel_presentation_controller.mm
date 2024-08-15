@@ -3,14 +3,13 @@
 #import "ios/panel/sidebar_panel_presentation_controller.h"
 
 #import "base/apple/foundation_util.h"
+#import "ios/chrome/browser/ui/tabs/tab_strip_constants.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
 #import "ios/panel/panel_constants.h"
 #import "ios/panel/slide_in_animator.h"
 #import "ios/panel/slide_out_animator.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 @interface SidebarPanelPresentationController() {
 }
@@ -59,8 +58,8 @@
             withParentContainerSize:self.containerView.bounds.size];
    frame.size.width = panel_sidebar_width + panel_icon_size;
    frame.size.height = [self containerView].frame.size.height
-                            - panel_sidebar_top;
-   frame.origin = CGPointMake(0, panel_sidebar_top);
+                            - [self topPadding];
+   frame.origin = CGPointMake(0, [self topPadding]);
    return frame;
 }
 
@@ -69,7 +68,7 @@
     [self.backgroundView addSubview:[self.presentedViewController view]];
     [self.backgroundView fillSuperview];
     [self.dimmingView fillSuperviewWithPadding:UIEdgeInsetsMake(
-                                            panel_sidebar_top, 0, 0, 0)];
+                                                  [self topPadding], 0, 0, 0)];
         self.dimmingView.backgroundColor = UIColor.blackColor;
     [self.backgroundView.topAnchor constraintEqualToAnchor:
         self.presentedViewController.view.topAnchor].active = YES;
@@ -100,9 +99,25 @@
 - (CGSize)sizeForChildContentContainer:(id<UIContentContainer>)container
                  withParentContentSize:(CGSize)parentSize {
     return CGSizeMake(panel_sidebar_width + panel_icon_size,
-                      parentSize.height - panel_sidebar_top);
+                      parentSize.height - [self topPadding]);
 }
 
 - (void)presentationTransitionDidEnd {}
+
+// Calculate top padding from location bar height, safe top area insets, and
+// tab bar height.
+- (CGFloat)topPadding {
+  return ToolbarExpandedHeight(
+      self.traitCollection.preferredContentSizeCategory) +
+      kTabStripHeight + kTopToolbarUnsplitMargin + [self safeAreaTopHeight];
+}
+
+- (CGFloat)safeAreaTopHeight {
+  if (self.containerView) {
+    UIEdgeInsets safeAreaInsets = self.containerView.safeAreaInsets;
+    return safeAreaInsets.top;
+  }
+  return 0;
+}
 
 @end

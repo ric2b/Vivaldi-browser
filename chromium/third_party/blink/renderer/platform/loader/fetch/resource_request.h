@@ -230,9 +230,6 @@ class PLATFORM_EXPORT ResourceRequestHead {
     SetHttpHeaderField(http_names::kAccept, http_accept);
   }
 
-  bool AllowStoredCredentials() const;
-  void SetAllowStoredCredentials(bool allow_credentials);
-
   // The initial priority for the request.
   ResourceLoadPriority InitialPriority() const;
 
@@ -300,12 +297,24 @@ class PLATFORM_EXPORT ResourceRequestHead {
     ad_auction_headers_ = ad_auction_headers;
   }
 
-  // True if the request and any subsequent redirects should have the
-  // `http_names::kSharedStorageWritable` header attached and allow writing to
-  // shared storage via the response headers.
-  bool GetSharedStorageWritable() const { return shared_storage_writable_; }
-  void SetSharedStorageWritable(bool shared_storage_writable) {
-    shared_storage_writable_ = shared_storage_writable;
+  // True if the original request included the required attribute for the
+  // response to be eligible to write to shared storage, pending a
+  // `PermissionsPolicy` check.
+  bool GetSharedStorageWritableOptedIn() const {
+    return shared_storage_writable_opted_in_;
+  }
+  void SetSharedStorageWritableOptedIn(bool shared_storage_writable_opted_in) {
+    shared_storage_writable_opted_in_ = shared_storage_writable_opted_in;
+  }
+
+  // True if the current request should have the
+  // `http_names::kSecSharedStorageWritable` header attached and is eligible to
+  // write to shared storage from response headers.
+  bool GetSharedStorageWritableEligible() const {
+    return shared_storage_writable_eligible_;
+  }
+  void SetSharedStorageWritableEligible(bool shared_storage_writable_eligible) {
+    shared_storage_writable_eligible_ = shared_storage_writable_eligible;
   }
 
   // True if service workers should not get events for the request.
@@ -450,10 +459,8 @@ class PLATFORM_EXPORT ResourceRequestHead {
     devtools_accepted_stream_types_ = types;
   }
 
-  const absl::optional<String>& GetDevToolsId() const { return devtools_id_; }
-  void SetDevToolsId(const absl::optional<String>& devtools_id) {
-    devtools_id_ = devtools_id;
-  }
+  const String& GetDevToolsId() const { return devtools_id_; }
+  void SetDevToolsId(const String devtools_id) { devtools_id_ = devtools_id; }
 
   void SetRequestedWithHeader(const String& value) {
     requested_with_header_ = value;
@@ -620,12 +627,18 @@ class PLATFORM_EXPORT ResourceRequestHead {
     shared_dictionary_writer_enabled_ = shared_dictionary_writer_enabled;
   }
 
-  base::UnguessableToken GetServiceWorkerRaceNetworkRequestToken() const {
+  absl::optional<base::UnguessableToken>
+  GetServiceWorkerRaceNetworkRequestToken() const {
     return service_worker_race_network_request_token_;
   }
 
   void SetServiceWorkerRaceNetworkRequestToken(
       const base::UnguessableToken& token) {
+    // TODO(crbug.com/1492640) Consider using base::TokenType not to include
+    // null token by strong typing.
+    if (token.is_empty()) {
+      return;
+    }
     service_worker_race_network_request_token_ = token;
   }
 
@@ -647,7 +660,6 @@ class PLATFORM_EXPORT ResourceRequestHead {
 
   AtomicString http_method_;
   HTTPHeaderMap http_header_fields_;
-  bool allow_stored_credentials_ : 1;
   bool report_upload_progress_ : 1;
   bool has_user_gesture_ : 1;
   bool has_text_fragment_token_ : 1;
@@ -656,7 +668,8 @@ class PLATFORM_EXPORT ResourceRequestHead {
   bool keepalive_ : 1;
   bool browsing_topics_ : 1;
   bool ad_auction_headers_ : 1;
-  bool shared_storage_writable_ : 1;
+  bool shared_storage_writable_opted_in_ : 1;
+  bool shared_storage_writable_eligible_ : 1;
   bool allow_stale_response_ : 1;
   mojom::blink::FetchCacheMode cache_mode_;
   bool skip_service_worker_ : 1;
@@ -696,7 +709,7 @@ class PLATFORM_EXPORT ResourceRequestHead {
   bool is_automatic_upgrade_ = false;
 
   absl::optional<base::UnguessableToken> devtools_token_;
-  absl::optional<String> devtools_id_;
+  String devtools_id_;
   String requested_with_header_;
   String client_data_header_;
   String purpose_header_;
@@ -774,7 +787,8 @@ class PLATFORM_EXPORT ResourceRequestHead {
   // CompressionDictionaryTransport feature.
   bool shared_dictionary_writer_enabled_ = false;
 
-  base::UnguessableToken service_worker_race_network_request_token_;
+  absl::optional<base::UnguessableToken>
+      service_worker_race_network_request_token_;
 };
 
 class PLATFORM_EXPORT ResourceRequestBody {

@@ -46,6 +46,13 @@ bool DeleteChromeRegistrationKeys(const InstallerState& installer_state,
                                   const std::wstring& browser_entry_suffix,
                                   InstallStatus* exit_code);
 
+// Make sure to call this before
+// HKEY_CURRENT_USER\Software\Vivaldi\ToastActivatorCLSID is removed as this
+// is used to look up clsid for the notificator, and is needed to delete these
+// keys.
+bool DeleteVivaldiToastNoticatorKeys(const InstallerState& installer_state,
+                                     HKEY root);
+
 // Removes any legacy registry keys from earlier versions of Chrome that are no
 // longer needed. This is used during autoupdate since we don't do full
 // uninstalls/reinstalls to update.

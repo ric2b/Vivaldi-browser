@@ -84,7 +84,7 @@ class ContextRecyclerTest : public testing::Test {
       const std::string& function_name,
       std::vector<std::string>& error_msgs,
       v8::Local<v8::Value> maybe_arg = v8::Local<v8::Value>()) {
-    std::vector<v8::Local<v8::Value>> args;
+    v8::LocalVector<v8::Value> args(helper_->isolate());
     if (!maybe_arg.IsEmpty())
       args.push_back(maybe_arg);
     if (!helper_->RunScript(scope.GetContext(), script,
@@ -103,7 +103,7 @@ class ContextRecyclerTest : public testing::Test {
                                 v8::Local<v8::UnboundScript> script,
                                 const std::string& function_name,
                                 std::vector<std::string>& error_msgs,
-                                std::vector<v8::Local<v8::Value>> args) {
+                                v8::LocalVector<v8::Value> args) {
     if (!helper_->RunScript(scope.GetContext(), script,
                             /*debug_id=*/nullptr, time_limit_.get(),
                             error_msgs)) {
@@ -318,9 +318,9 @@ TEST_F(ContextRecyclerTest, SetBidBindings) {
       base::BindRepeating([](const GURL& ignored) { return false; });
 
   {
-    ContextRecyclerScope scope(context_recycler);
     mojom::BidderWorkletNonSharedParamsPtr params =
         mojom::BidderWorkletNonSharedParams::New();
+    ContextRecyclerScope scope(context_recycler);
     params->ads.emplace();
     params->ads.value().emplace_back(GURL("https://example.com/ad1"),
                                      absl::nullopt);
@@ -354,9 +354,9 @@ TEST_F(ContextRecyclerTest, SetBidBindings) {
 
   {
     // Different ad objects get taken into account.
-    ContextRecyclerScope scope(context_recycler);
     mojom::BidderWorkletNonSharedParamsPtr params =
         mojom::BidderWorkletNonSharedParams::New();
+    ContextRecyclerScope scope(context_recycler);
     params->ads.emplace();
     params->ads.value().emplace_back(GURL("https://example.com/notad1"),
                                      absl::nullopt);
@@ -389,10 +389,10 @@ TEST_F(ContextRecyclerTest, SetBidBindings) {
   }
 
   {
-    // Some components, and in a nested auction, w/o permission.
-    ContextRecyclerScope scope(context_recycler);
     mojom::BidderWorkletNonSharedParamsPtr params =
         mojom::BidderWorkletNonSharedParams::New();
+    // Some components, and in a nested auction, w/o permission.
+    ContextRecyclerScope scope(context_recycler);
     params->ads.emplace();
     params->ads.value().emplace_back(GURL("https://example.com/ad3"),
                                      absl::nullopt);
@@ -429,9 +429,9 @@ TEST_F(ContextRecyclerTest, SetBidBindings) {
 
   {
     // Some components, and in a nested auction, w/permission.
-    ContextRecyclerScope scope(context_recycler);
     mojom::BidderWorkletNonSharedParamsPtr params =
         mojom::BidderWorkletNonSharedParams::New();
+    ContextRecyclerScope scope(context_recycler);
     params->ads.emplace();
     params->ads.value().emplace_back(GURL("https://example.com/ad5"),
                                      absl::nullopt);
@@ -456,7 +456,7 @@ TEST_F(ContextRecyclerTest, SetBidBindings) {
     bid_dict.Set("render", std::string("https://example.com/ad5"));
     bid_dict.Set("bid", 15.0);
     bid_dict.Set("allowComponentAuction", true);
-    std::vector<v8::Local<v8::Value>> components;
+    v8::LocalVector<v8::Value> components(helper_->isolate());
     components.push_back(gin::ConvertToV8(
         helper_->isolate(), std::string("https://example.com/portion3")));
     components.push_back(gin::ConvertToV8(
@@ -483,9 +483,9 @@ TEST_F(ContextRecyclerTest, SetBidBindings) {
 
   {
     // Wrong components.
-    ContextRecyclerScope scope(context_recycler);
     mojom::BidderWorkletNonSharedParamsPtr params =
         mojom::BidderWorkletNonSharedParams::New();
+    ContextRecyclerScope scope(context_recycler);
     params->ads.emplace();
     params->ads.value().emplace_back(GURL("https://example.com/ad5"),
                                      absl::nullopt);
@@ -509,7 +509,7 @@ TEST_F(ContextRecyclerTest, SetBidBindings) {
     gin::Dictionary bid_dict = gin::Dictionary::CreateEmpty(helper_->isolate());
     bid_dict.Set("render", std::string("https://example.com/ad5"));
     bid_dict.Set("bid", 15.0);
-    std::vector<v8::Local<v8::Value>> components;
+    v8::LocalVector<v8::Value> components(helper_->isolate());
     components.push_back(gin::ConvertToV8(
         helper_->isolate(), std::string("https://example.com/portion3")));
     components.push_back(gin::ConvertToV8(
@@ -532,9 +532,9 @@ TEST_F(ContextRecyclerTest, SetBidBindings) {
 
   {
     // use ad filter function - ads excluded.
-    ContextRecyclerScope scope(context_recycler);
     mojom::BidderWorkletNonSharedParamsPtr params =
         mojom::BidderWorkletNonSharedParams::New();
+    ContextRecyclerScope scope(context_recycler);
     params->ads.emplace();
     params->ads.value().emplace_back(GURL("https://example.com/ad1"),
                                      absl::nullopt);
@@ -565,9 +565,9 @@ TEST_F(ContextRecyclerTest, SetBidBindings) {
 
   {
     // use ad filter function - ads permitted.
-    ContextRecyclerScope scope(context_recycler);
     mojom::BidderWorkletNonSharedParamsPtr params =
         mojom::BidderWorkletNonSharedParams::New();
+    ContextRecyclerScope scope(context_recycler);
     params->ads.emplace();
     params->ads.value().emplace_back(GURL("https://example.com/ad2"),
                                      absl::nullopt);
@@ -600,9 +600,9 @@ TEST_F(ContextRecyclerTest, SetBidBindings) {
 
   {
     // Bid currency --- expect USD.
-    ContextRecyclerScope scope(context_recycler);
     mojom::BidderWorkletNonSharedParamsPtr params =
         mojom::BidderWorkletNonSharedParams::New();
+    ContextRecyclerScope scope(context_recycler);
     params->ads.emplace();
     params->ads.value().emplace_back(GURL("https://example.com/ad2"),
                                      absl::nullopt);
@@ -637,9 +637,9 @@ TEST_F(ContextRecyclerTest, SetBidBindings) {
 
   {
     // Bid currency --- expect CAD.
-    ContextRecyclerScope scope(context_recycler);
     mojom::BidderWorkletNonSharedParamsPtr params =
         mojom::BidderWorkletNonSharedParams::New();
+    ContextRecyclerScope scope(context_recycler);
     params->ads.emplace();
     params->ads.value().emplace_back(GURL("https://example.com/ad2"),
                                      absl::nullopt);
@@ -672,9 +672,9 @@ TEST_F(ContextRecyclerTest, SetBidBindings) {
 
   {
     // Make sure the reject reason doesn't latch.
-    ContextRecyclerScope scope(context_recycler);
     mojom::BidderWorkletNonSharedParamsPtr params =
         mojom::BidderWorkletNonSharedParams::New();
+    ContextRecyclerScope scope(context_recycler);
     params->ads.emplace();
     params->ads.value().emplace_back(GURL("https://example.com/ad2"),
                                      absl::nullopt);
@@ -1014,7 +1014,8 @@ TEST_F(ContextRecyclerTest, SharedStorageMethods) {
 
     Run(scope, script, "testSet", error_msgs,
         /*args=*/
-        std::vector<v8::Local<v8::Value>>(
+        v8::LocalVector<v8::Value>(
+            helper_->isolate(),
             {gin::ConvertToV8(helper_->isolate(), std::string("a")),
              gin::ConvertToV8(helper_->isolate(), std::string("b"))}));
     EXPECT_THAT(error_msgs, ElementsAre());
@@ -1038,7 +1039,8 @@ TEST_F(ContextRecyclerTest, SharedStorageMethods) {
 
     Run(scope, script, "testSet", error_msgs,
         /*args=*/
-        std::vector<v8::Local<v8::Value>>(
+        v8::LocalVector<v8::Value>(
+            helper_->isolate(),
             {gin::ConvertToV8(helper_->isolate(), std::string("a")),
              gin::ConvertToV8(helper_->isolate(), std::string("b")),
              gin::ConvertToV8(helper_->isolate(), options_dict)}));
@@ -1059,7 +1061,8 @@ TEST_F(ContextRecyclerTest, SharedStorageMethods) {
 
     Run(scope, script, "testAppend", error_msgs,
         /*args=*/
-        std::vector<v8::Local<v8::Value>>(
+        v8::LocalVector<v8::Value>(
+            helper_->isolate(),
             {gin::ConvertToV8(helper_->isolate(), std::string("a")),
              gin::ConvertToV8(helper_->isolate(), std::string("b"))}));
     EXPECT_THAT(error_msgs, ElementsAre());
@@ -1079,7 +1082,8 @@ TEST_F(ContextRecyclerTest, SharedStorageMethods) {
 
     Run(scope, script, "testDelete", error_msgs,
         /*args=*/
-        std::vector<v8::Local<v8::Value>>(
+        v8::LocalVector<v8::Value>(
+            helper_->isolate(),
             {gin::ConvertToV8(helper_->isolate(), std::string("a"))}));
     EXPECT_THAT(error_msgs, ElementsAre());
 
@@ -1098,7 +1102,8 @@ TEST_F(ContextRecyclerTest, SharedStorageMethods) {
 
     Run(scope, script, "testClear", error_msgs,
         /*args=*/
-        std::vector<v8::Local<v8::Value>>(
+        v8::LocalVector<v8::Value>(
+            helper_->isolate(),
             {gin::ConvertToV8(helper_->isolate(), std::string("a"))}));
     EXPECT_THAT(error_msgs, ElementsAre());
 
@@ -1116,7 +1121,7 @@ TEST_F(ContextRecyclerTest, SharedStorageMethods) {
     std::vector<std::string> error_msgs;
 
     Run(scope, script, "testSet", error_msgs,
-        /*args=*/std::vector<v8::Local<v8::Value>>());
+        /*args=*/v8::LocalVector<v8::Value>(helper_->isolate()));
     EXPECT_THAT(
         error_msgs,
         ElementsAre(
@@ -1129,7 +1134,8 @@ TEST_F(ContextRecyclerTest, SharedStorageMethods) {
     std::vector<std::string> error_msgs;
 
     Run(scope, script, "testSet", error_msgs, /*args=*/
-        std::vector<v8::Local<v8::Value>>(
+        v8::LocalVector<v8::Value>(
+            helper_->isolate(),
             {gin::ConvertToV8(helper_->isolate(), std::string("a"))}));
     EXPECT_THAT(
         error_msgs,
@@ -1143,7 +1149,8 @@ TEST_F(ContextRecyclerTest, SharedStorageMethods) {
     std::vector<std::string> error_msgs;
 
     Run(scope, script, "testSet", error_msgs, /*args=*/
-        std::vector<v8::Local<v8::Value>>(
+        v8::LocalVector<v8::Value>(
+            helper_->isolate(),
             {gin::ConvertToV8(helper_->isolate(), std::string("a")),
              gin::ConvertToV8(helper_->isolate(), std::string("b")),
              gin::ConvertToV8(helper_->isolate(), true)}));
@@ -1160,7 +1167,8 @@ TEST_F(ContextRecyclerTest, SharedStorageMethods) {
     std::vector<std::string> error_msgs;
 
     Run(scope, script, "testSet", error_msgs, /*args=*/
-        std::vector<v8::Local<v8::Value>>(
+        v8::LocalVector<v8::Value>(
+            helper_->isolate(),
             {gin::ConvertToV8(helper_->isolate(), std::string("")),
              gin::ConvertToV8(helper_->isolate(), std::string("b"))}));
     EXPECT_THAT(
@@ -1174,7 +1182,8 @@ TEST_F(ContextRecyclerTest, SharedStorageMethods) {
     std::vector<std::string> error_msgs;
 
     Run(scope, script, "testSet", error_msgs, /*args=*/
-        std::vector<v8::Local<v8::Value>>(
+        v8::LocalVector<v8::Value>(
+            helper_->isolate(),
             {gin::ConvertToV8(helper_->isolate(), std::string("a")),
              gin::ConvertToV8(helper_->isolate(), kInvalidValue)}));
     EXPECT_THAT(
@@ -1190,7 +1199,8 @@ TEST_F(ContextRecyclerTest, SharedStorageMethods) {
     std::vector<std::string> error_msgs;
 
     Run(scope, script, "testSet", error_msgs, /*args=*/
-        std::vector<v8::Local<v8::Value>>(
+        v8::LocalVector<v8::Value>(
+            helper_->isolate(),
             {gin::ConvertToV8(helper_->isolate(), std::string("")),
              gin::ConvertToV8(helper_->isolate(), std::string("b")),
              gin::ConvertToV8(helper_->isolate(), true)}));
@@ -1207,7 +1217,7 @@ TEST_F(ContextRecyclerTest, SharedStorageMethods) {
     std::vector<std::string> error_msgs;
 
     Run(scope, script, "testAppend", error_msgs,
-        /*args=*/std::vector<v8::Local<v8::Value>>());
+        /*args=*/v8::LocalVector<v8::Value>(helper_->isolate()));
     EXPECT_THAT(
         error_msgs,
         ElementsAre(
@@ -1220,7 +1230,8 @@ TEST_F(ContextRecyclerTest, SharedStorageMethods) {
     std::vector<std::string> error_msgs;
 
     Run(scope, script, "testAppend", error_msgs, /*args=*/
-        std::vector<v8::Local<v8::Value>>(
+        v8::LocalVector<v8::Value>(
+            helper_->isolate(),
             {gin::ConvertToV8(helper_->isolate(), std::string("a"))}));
     EXPECT_THAT(
         error_msgs,
@@ -1234,7 +1245,8 @@ TEST_F(ContextRecyclerTest, SharedStorageMethods) {
     std::vector<std::string> error_msgs;
 
     Run(scope, script, "testAppend", error_msgs, /*args=*/
-        std::vector<v8::Local<v8::Value>>(
+        v8::LocalVector<v8::Value>(
+            helper_->isolate(),
             {gin::ConvertToV8(helper_->isolate(), std::string("")),
              gin::ConvertToV8(helper_->isolate(), std::string("b"))}));
     EXPECT_THAT(
@@ -1248,7 +1260,8 @@ TEST_F(ContextRecyclerTest, SharedStorageMethods) {
     std::vector<std::string> error_msgs;
 
     Run(scope, script, "testAppend", error_msgs, /*args=*/
-        std::vector<v8::Local<v8::Value>>(
+        v8::LocalVector<v8::Value>(
+            helper_->isolate(),
             {gin::ConvertToV8(helper_->isolate(), std::string("a")),
              gin::ConvertToV8(helper_->isolate(), kInvalidValue)}));
     EXPECT_THAT(
@@ -1262,7 +1275,7 @@ TEST_F(ContextRecyclerTest, SharedStorageMethods) {
     std::vector<std::string> error_msgs;
 
     Run(scope, script, "testDelete", error_msgs,
-        /*args=*/std::vector<v8::Local<v8::Value>>());
+        /*args=*/v8::LocalVector<v8::Value>(helper_->isolate()));
     EXPECT_THAT(
         error_msgs,
         ElementsAre(
@@ -1275,7 +1288,8 @@ TEST_F(ContextRecyclerTest, SharedStorageMethods) {
     std::vector<std::string> error_msgs;
 
     Run(scope, script, "testDelete", error_msgs, /*args=*/
-        std::vector<v8::Local<v8::Value>>(
+        v8::LocalVector<v8::Value>(
+            helper_->isolate(),
             {gin::ConvertToV8(helper_->isolate(), std::string(""))}));
     EXPECT_THAT(
         error_msgs,
@@ -1319,7 +1333,7 @@ TEST_F(ContextRecyclerTest, SharedStorageMethodsPermissionsPolicyDisabled) {
     std::vector<std::string> error_msgs;
 
     Run(scope, script, "testSet", error_msgs,
-        /*args=*/std::vector<v8::Local<v8::Value>>());
+        /*args=*/v8::LocalVector<v8::Value>(helper_->isolate()));
     EXPECT_THAT(error_msgs,
                 ElementsAre("https://example.org/script.js:3 Uncaught "
                             "TypeError: The \"shared-storage\" Permissions "
@@ -1331,7 +1345,7 @@ TEST_F(ContextRecyclerTest, SharedStorageMethodsPermissionsPolicyDisabled) {
     std::vector<std::string> error_msgs;
 
     Run(scope, script, "testAppend", error_msgs,
-        /*args=*/std::vector<v8::Local<v8::Value>>());
+        /*args=*/v8::LocalVector<v8::Value>(helper_->isolate()));
     EXPECT_THAT(error_msgs,
                 ElementsAre("https://example.org/script.js:7 Uncaught "
                             "TypeError: The \"shared-storage\" Permissions "
@@ -1343,7 +1357,7 @@ TEST_F(ContextRecyclerTest, SharedStorageMethodsPermissionsPolicyDisabled) {
     std::vector<std::string> error_msgs;
 
     Run(scope, script, "testDelete", error_msgs,
-        /*args=*/std::vector<v8::Local<v8::Value>>());
+        /*args=*/v8::LocalVector<v8::Value>(helper_->isolate()));
     EXPECT_THAT(error_msgs,
                 ElementsAre("https://example.org/script.js:11 Uncaught "
                             "TypeError: The \"shared-storage\" Permissions "
@@ -1355,7 +1369,7 @@ TEST_F(ContextRecyclerTest, SharedStorageMethodsPermissionsPolicyDisabled) {
     std::vector<std::string> error_msgs;
 
     Run(scope, script, "testClear", error_msgs,
-        /*args=*/std::vector<v8::Local<v8::Value>>());
+        /*args=*/v8::LocalVector<v8::Value>(helper_->isolate()));
     EXPECT_THAT(error_msgs,
                 ElementsAre("https://example.org/script.js:15 Uncaught "
                             "TypeError: The \"shared-storage\" Permissions "

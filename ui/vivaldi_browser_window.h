@@ -13,8 +13,9 @@
 #include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "components/web_modal/modal_dialog_host.h"
-#include "extensions/common/draggable_region.h"
+#include "extensions/common/mojom/frame.mojom.h"
 #include "ui/base/ui_base_types.h"  // WindowShowState
 #include "ui/gfx/image/image_family.h"
 #include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
@@ -49,6 +50,36 @@ class VivaldiRootDocumentHandler;
 namespace vivaldi {
 class InfoBarContainerWebProxy;
 }
+
+class VivaldiToolbarButtonProvider : public ToolbarButtonProvider {
+ public:
+  VivaldiToolbarButtonProvider(VivaldiBrowserWindow* window);
+  //  VivaldiToolbarButtonProvider(const ToolbarView&) = delete;
+  //  VivaldiToolbarButtonProvider& operator=(const ToolbarView&) = delete;
+
+  ~VivaldiToolbarButtonProvider() override;
+
+ private:
+  // ToolbarButtonProvider:
+  ExtensionsToolbarContainer* GetExtensionsToolbarContainer() override;
+  gfx::Size GetToolbarButtonSize() const override;
+  views::View* GetDefaultExtensionDialogAnchorView() override;
+  PageActionIconView* GetPageActionIconView(PageActionIconType type) override;
+  AppMenuButton* GetAppMenuButton() override;
+  gfx::Rect GetFindBarBoundingBox(int contents_bottom) override;
+  void FocusToolbar() override;
+  views::AccessiblePaneView* GetAsAccessiblePaneView() override;
+  views::View* GetAnchorView(PageActionIconType type) override;  // the one
+  void ZoomChangedForActiveTab(bool can_show_bubble) override;
+  AvatarToolbarButton* GetAvatarToolbarButton() override;
+  ToolbarButton* GetBackButton() override;
+  ReloadButton* GetReloadButton() override;
+  IntentChipButton* GetIntentChipButton() override;
+  DownloadToolbarButtonView* GetDownloadButton() override;
+  SidePanelToolbarButton* GetSidePanelButton() override;
+
+  raw_ptr<VivaldiBrowserWindow> window_ = nullptr;
+};
 
 struct VivaldiBrowserWindowParams {
   static constexpr int kUnspecifiedPosition = INT_MIN;
@@ -212,6 +243,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
 
   void NavigationStateChanged(content::WebContents* source,
                               content::InvalidateTypes changed_flags);
+  void OnUIReady();
 
   // Enable or disable fullscreen mode.
   void SetFullscreen(bool enable);
@@ -244,7 +276,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void SetWindowURL(std::string s) { resource_relative_url_ = std::move(s); }
 
   void UpdateDraggableRegions(
-      const std::vector<extensions::DraggableRegion>& regions);
+      const std::vector<extensions::mojom::DraggableRegionPtr>& regions);
 
   const gfx::Rect& GetMaximizeButtonBounds() const {
     return maximize_button_bounds_;
@@ -413,28 +445,20 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   user_education::FeaturePromoController* GetFeaturePromoController() override;
   bool IsFeaturePromoActive(
       const base::Feature& iph_feature) const override;
-  bool MaybeShowFeaturePromo(
-      const base::Feature& iph_feature,
-      user_education::FeaturePromoController::BubbleCloseCallback
-          close_callback = base::DoNothing(),
-      user_education::FeaturePromoSpecification::FormatParameters body_params =
-          user_education::FeaturePromoSpecification::NoSubstitution(),
-      user_education::FeaturePromoSpecification::FormatParameters title_params =
-          user_education::FeaturePromoSpecification::NoSubstitution()) override;
+  user_education::FeaturePromoResult CanShowFeaturePromo(
+      const base::Feature& iph_feature) const override;
+  user_education::FeaturePromoResult MaybeShowFeaturePromo(
+      user_education::FeaturePromoParams params) override;
   bool MaybeShowStartupFeaturePromo(
+      user_education::FeaturePromoParams params) override;
+  bool CloseFeaturePromo(
       const base::Feature& iph_feature,
-      user_education::FeaturePromoController::StartupPromoCallback
-          promo_callback = base::DoNothing(),
-      user_education::FeaturePromoController::BubbleCloseCallback
-          close_callback = base::DoNothing(),
-      user_education::FeaturePromoSpecification::FormatParameters body_params =
-          user_education::FeaturePromoSpecification::NoSubstitution(),
-      user_education::FeaturePromoSpecification::FormatParameters title_params =
-          user_education::FeaturePromoSpecification::NoSubstitution()) override;
-  bool CloseFeaturePromo(const base::Feature& iph_feature) override;
+      user_education::FeaturePromoCloseReason close_reason =
+          user_education::FeaturePromoCloseReason::kFeatureEngaged) override;
   user_education::FeaturePromoHandle CloseFeaturePromoAndContinue(
       const base::Feature& iph_feature) override;
   void NotifyFeatureEngagementEvent(const char* event_name) override {}
+  void NotifyPromoFeatureUsed(const base::Feature& iph_feature) override {}
   void ShowIncognitoClearBrowsingDataDialog() override {}
   void ShowIncognitoHistoryDisclaimerDialog() override {}
   std::string GetWorkspace() const override;
@@ -442,6 +466,9 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   bool IsLocationBarVisible() const override;
   bool IsBorderlessModeEnabled() const override;
   void ShowChromeLabs() override {}
+
+  void SetCanResizeFromWebAPI(absl::optional<bool> can_resize) override {}
+  bool GetCanResize() override;
 
   // BrowserWindow overrides end
 
@@ -468,7 +495,11 @@ class VivaldiBrowserWindow final : public BrowserWindow {
 
   // Called from unload handler during the close sequence if the sequence is
   // aborted.
-  static void CancelWindowClose(Browser* browser);
+  static void CancelWindowClose();
+
+  ToolbarButtonProvider* toolbar_button_provider() {
+    return toolbar_button_provider_.get();
+  }
 
  private:
   enum class CloseDialogMode { CloseWindow = 0, QuitApplication };
@@ -605,6 +636,12 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   raw_ptr<extensions::VivaldiRootDocumentHandler> root_doc_handler_ = nullptr;
 
   views::UnhandledKeyboardEventHandler unhandled_keyboard_event_handler_;
+
+  // The handler responsible for showing autofill bubbles.
+  std::unique_ptr<VivaldiToolbarButtonProvider> toolbar_button_provider_;
+
+  std::unique_ptr<autofill::AutofillBubbleHandler> autofill_bubble_handler_;
+
 
 #if !BUILDFLAG(IS_MAC)
   // Last key code received in HandleKeyboardEvent(). For auto repeat detection.

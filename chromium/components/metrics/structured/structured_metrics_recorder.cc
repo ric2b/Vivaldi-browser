@@ -16,12 +16,16 @@
 #include "base/task/current_thread.h"
 #include "components/metrics/metrics_features.h"
 #include "components/metrics/structured/enums.h"
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "components/metrics/structured/external_metrics.h"
+#endif
 #include "components/metrics/structured/histogram_util.h"
 #include "components/metrics/structured/project_validator.h"
 #include "components/metrics/structured/storage.pb.h"
 #include "components/metrics/structured/structured_metrics_features.h"
 #include "components/metrics/structured/structured_metrics_validator.h"
+#include "event_validator.h"
+#include "project_validator.h"
 #include "third_party/metrics_proto/chrome_user_metrics_extension.pb.h"
 
 namespace metrics::structured {
@@ -33,17 +37,17 @@ using ::metrics::SystemProfileProto;
 // The delay period for the PersistentProto.
 constexpr int kSaveDelayMs = 1000;
 
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
 // The interval between chrome's collection of metrics logged from cros.
 constexpr int kExternalMetricsIntervalMins = 10;
 
 // Directory containing serialized event protos to read.
 constexpr char kExternalMetricsDir[] = "/var/lib/metrics/structured/events";
+#endif
 
 }  // namespace
 
 int StructuredMetricsRecorder::kMaxEventsPerUpload = 100;
-
-char StructuredMetricsRecorder::kUnsentLogsPath[] = "structured_metrics/events";
 
 StructuredMetricsRecorder::StructuredMetricsRecorder(
     metrics::MetricsProvider* system_profile_provider)
@@ -69,9 +73,11 @@ void StructuredMetricsRecorder::EnableRecording() {
   // Enable recording only if structured metrics' feature flag is enabled.
   recording_enabled_ =
       base::FeatureList::IsEnabled(features::kStructuredMetrics);
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
   if (external_metrics_.get() != nullptr) {
     external_metrics_->EnableRecording();
   }
+#endif
   if (recording_enabled_) {
     CacheDisallowedProjectsSet();
   }
@@ -80,9 +86,11 @@ void StructuredMetricsRecorder::EnableRecording() {
 void StructuredMetricsRecorder::DisableRecording() {
   DCHECK(base::CurrentUIThread::IsSet());
   recording_enabled_ = false;
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
   if (external_metrics_.get() != nullptr) {
     external_metrics_->DisableRecording();
   }
+#endif
   disallowed_projects_.clear();
 }
 
@@ -217,13 +225,18 @@ void StructuredMetricsRecorder::OnProfileAdded(
       base::BindOnce(&StructuredMetricsRecorder::OnKeyDataInitialized,
                      weak_factory_.GetWeakPtr()));
 
+  // The directory used to store unsent logs. Relative to the user's cryptohome.
+  // This file is created by chromium.
   events_ = std::make_unique<PersistentProto<EventsProto>>(
-      profile_path.Append(kUnsentLogsPath), write_delay_,
+      profile_path.Append(FILE_PATH_LITERAL("structured_metrics"))
+          .Append(FILE_PATH_LITERAL("events")),
+      write_delay_,
       base::BindOnce(&StructuredMetricsRecorder::OnRead,
                      weak_factory_.GetWeakPtr()),
       base::BindRepeating(&StructuredMetricsRecorder::OnWrite,
                           weak_factory_.GetWeakPtr()));
 
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
   external_metrics_ = std::make_unique<ExternalMetrics>(
       base::FilePath(kExternalMetricsDir),
       base::Minutes(kExternalMetricsIntervalMins),
@@ -234,6 +247,7 @@ void StructuredMetricsRecorder::OnProfileAdded(
   if (recording_enabled_) {
     external_metrics_->EnableRecording();
   }
+#endif
 
   // See DisableRecording for more information.
   if (purge_state_on_init_) {
@@ -247,7 +261,7 @@ void StructuredMetricsRecorder::OnEventRecord(const Event& event) {
 
   // One more state for the EventRecordingState exists: kMetricsProviderMissing.
   // This is recorded in Recorder::Record.
-  if (!recording_enabled_) {
+  if (!recording_enabled_ && !CanForceRecord(event)) {
     // Events should be ignored if recording is disabled.
     LogEventRecordingState(EventRecordingState::kRecordingDisabled);
     return;
@@ -265,30 +279,7 @@ void StructuredMetricsRecorder::OnEventRecord(const Event& event) {
   RecordEvent(event);
 
   events_->QueueWrite();
-}
-
-absl::optional<int> StructuredMetricsRecorder::LastKeyRotation(
-    const uint64_t project_name_hash) {
-  DCHECK(base::CurrentUIThread::IsSet());
-  if (init_state_ != InitState::kInitialized) {
-    return absl::nullopt;
-  }
-
-  KeyData* device_key_data = key_data_provider_->GetDeviceKeyData();
-  KeyData* profile_key_data = key_data_provider_->GetProfileKeyData();
-
-  DCHECK(IsDeviceKeyDataInitialized());
-  DCHECK(IsProfileKeyDataInitialized());
-
-  // |project_name_hash| could store its keys in either the profile or device
-  // key data, so check both. As they cannot both contain the same name hash,
-  // at most one will return a non-nullopt value.
-  absl::optional<int> profile_day =
-      profile_key_data->LastKeyRotation(project_name_hash);
-  absl::optional<int> device_day =
-      device_key_data->LastKeyRotation(project_name_hash);
-  DCHECK(!(profile_day && device_day));
-  return profile_day ? profile_day : device_day;
+  test_callback_on_record_.Run();
 }
 
 void StructuredMetricsRecorder::OnReportingStateChanged(bool enabled) {
@@ -298,6 +289,11 @@ void StructuredMetricsRecorder::OnReportingStateChanged(bool enabled) {
   // handle enabling.
   if (enabled) {
     return;
+  }
+
+  // Clean up any events that were recording during the pre-user.
+  if (!recording_enabled_ && !enabled) {
+    Purge();
   }
 
   // When reporting is disabled, OnRecordingDisabled is also called. Disabling
@@ -337,9 +333,14 @@ void StructuredMetricsRecorder::ProvideSystemProfile(
 }
 
 void StructuredMetricsRecorder::WriteNowForTest() {
-  events_->StartWrite();
+  // The event proto may not be initialized yet. Check that the proto is ready
+  // before attempting to write.
+  if (can_provide_metrics()) {
+    events_->StartWrite();
+  }
 }
 
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
 void StructuredMetricsRecorder::SetExternalMetricsDirForTest(
     const base::FilePath& dir) {
   external_metrics_ = std::make_unique<ExternalMetrics>(
@@ -348,6 +349,7 @@ void StructuredMetricsRecorder::SetExternalMetricsDirForTest(
           &StructuredMetricsRecorder::OnExternalMetricsCollected,
           weak_factory_.GetWeakPtr()));
 }
+#endif
 
 void StructuredMetricsRecorder::SetOnReadyToRecord(base::OnceClosure callback) {
   on_ready_callback_ = std::move(callback);
@@ -373,21 +375,13 @@ void StructuredMetricsRecorder::RecordEvent(const Event& event) {
 
   // Validates the event. If valid, retrieve the metadata associated
   // with the event.
-  auto maybe_project_validator =
-      validator::GetProjectValidator(event.project_name());
+  const auto validators = GetEventValidators(event);
+  if (!validators) {
+    return;
+  }
 
-  DCHECK(maybe_project_validator.has_value());
-  if (!maybe_project_validator.has_value()) {
-    return;
-  }
-  const auto* project_validator = maybe_project_validator.value();
-  const auto maybe_event_validator =
-      project_validator->GetEventValidator(event.event_name());
-  DCHECK(maybe_event_validator.has_value());
-  if (!maybe_event_validator.has_value()) {
-    return;
-  }
-  const auto* event_validator = maybe_event_validator.value();
+  const auto* project_validator = validators->first;
+  const auto* event_validator = validators->second;
 
   if (!CanUploadProject(project_validator->project_hash())) {
     LogEventRecordingState(EventRecordingState::kProjectDisallowed);
@@ -429,6 +423,12 @@ void StructuredMetricsRecorder::RecordEvent(const Event& event) {
         event.recorded_time_since_boot().InMilliseconds());
     event_sequence_metadata->set_event_unique_id(
         base::HashMetricName(event.event_sequence_metadata().event_unique_id));
+
+    const int rotation_age =
+        profile_key_data->GetKeyAgeInWeeks(project_validator->project_hash())
+            .value_or(0);
+    event_sequence_metadata->set_client_id_rotation_weeks(rotation_age);
+
     event_proto->set_device_project_id(
         device_key_data->Id(project_validator->project_hash(),
                             project_validator->key_rotation_period()));
@@ -546,6 +546,8 @@ void StructuredMetricsRecorder::RecordEvent(const Event& event) {
 
   // Log size information about the event.
   LogEventSerializedSizeBytes(event_proto->ByteSizeLong());
+
+  Recorder::GetInstance()->OnEventRecorded(event_proto);
 }
 
 void StructuredMetricsRecorder::HashUnhashedEventsAndPersist() {
@@ -601,6 +603,39 @@ void StructuredMetricsRecorder::UpdateAndCheckInitState() {
     HashUnhashedEventsAndPersist();
     std::move(on_ready_callback_).Run();
   }
+}
+
+void StructuredMetricsRecorder::SetEventRecordCallbackForTest(
+    base::RepeatingClosure callback) {
+  test_callback_on_record_ = std::move(callback);
+}
+
+bool StructuredMetricsRecorder::CanForceRecord(const Event& event) const {
+  const auto validators = GetEventValidators(event);
+  if (!validators) {
+    return false;
+  }
+  return validators->second->can_force_record();
+}
+
+absl::optional<std::pair<const ProjectValidator*, const EventValidator*>>
+StructuredMetricsRecorder::GetEventValidators(const Event& event) const {
+  auto maybe_project_validator =
+      validator::Validators::Get()->GetProjectValidator(event.project_name());
+
+  DCHECK(maybe_project_validator.has_value());
+  if (!maybe_project_validator.has_value()) {
+    return {};
+  }
+  const auto* project_validator = maybe_project_validator.value();
+  const auto maybe_event_validator =
+      project_validator->GetEventValidator(event.event_name());
+  DCHECK(maybe_event_validator.has_value());
+  if (!maybe_event_validator.has_value()) {
+    return {};
+  }
+  const auto* event_validator = maybe_event_validator.value();
+  return std::make_pair(project_validator, event_validator);
 }
 
 }  // namespace metrics::structured

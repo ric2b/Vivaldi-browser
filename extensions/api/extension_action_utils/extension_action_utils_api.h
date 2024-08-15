@@ -11,8 +11,12 @@
 #include "base/memory/singleton.h"
 #include "chrome/browser/extensions/api/commands/command_service.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
+#include "chrome/browser/extensions/external_install_error.h"
+#include "chrome/browser/extensions/extension_error_ui.h"
+#include "chrome/browser/extensions/extension_uninstall_dialog.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list_observer.h"
+#include "chrome/browser/ui/global_error/global_error.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/sessions/core/session_id.h"
 #include "extensions/browser/extension_function.h"
@@ -28,6 +32,35 @@ typedef std::vector<vivaldi::extension_action_utils::ExtensionInfo>
     ToolbarExtensionInfoList;
 
 class ExtensionActionUtil;
+class ExtensionService;
+
+using ExtensionToIdMap = base::flat_map<std::string, int>;
+
+// Helper class to map extension id to an unique id used for each error.
+class ExtensionToIdProvider {
+ public:
+  ExtensionToIdProvider();
+
+  ExtensionToIdProvider(
+      const ExtensionToIdProvider&) = delete;
+  ExtensionToIdProvider& operator=(
+      const ExtensionToIdProvider&) = delete;
+
+  ~ExtensionToIdProvider();
+
+  int AddOrGetId(const std::string& extension_id);
+  void RemoveExtension(const std::string& extension_id);
+
+  // Used to look up a GlobalError through GetGlobalErrorByMenuItemCommandID.
+  // Returns -1 on not-found.
+  int GetCommandId(const std::string& extension_id);
+
+ private:
+  // Counted unique id.
+  int last_used_id_ = 0;
+
+  ExtensionToIdMap extension_ids_;
+};
 
 class ExtensionActionUtilFactory : public BrowserContextKeyedServiceFactory {
  public:
@@ -73,6 +106,8 @@ class ExtensionActionUtil : public KeyedService,
 
   void NotifyTabSelectionChange(content::WebContents* selected_contents);
 
+  ExtensionToIdProvider& GetExtensionToIdProvider() { return id_provider_; }
+
  private:
   ~ExtensionActionUtil() override;
 
@@ -112,6 +147,10 @@ class ExtensionActionUtil : public KeyedService,
   const raw_ptr<Profile> profile_;
 
   SessionID last_active_tab_window_ = SessionID::InvalidValue();
+
+  // Lookup between extension id and command-id.
+  ExtensionToIdProvider id_provider_;
+
 };
 
 class ExtensionActionUtilsGetToolbarExtensionsFunction
@@ -209,6 +248,96 @@ class ExtensionActionUtilsExecuteMenuActionFunction : public ExtensionFunction {
 
   // ExtensionFunction:
   ResponseAction Run() override;
+};
+
+class ExtensionActionUtilsShowGlobalErrorFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("extensionActionUtils.showGlobalError",
+                             EXTENSIONS_SHOWGLOBALERROR)
+  ExtensionActionUtilsShowGlobalErrorFunction() = default;
+
+ private:
+  ~ExtensionActionUtilsShowGlobalErrorFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+};
+
+class ExtensionActionUtilsTriggerGlobalErrorsFunction
+    : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("extensionActionUtils.triggerGlobalErrors",
+                             EXTENSIONS_TRIGGERGLOBALERRORS)
+  ExtensionActionUtilsTriggerGlobalErrorsFunction() = default;
+
+ private:
+  ~ExtensionActionUtilsTriggerGlobalErrorsFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+};
+
+////////
+
+// Used to show ui in Vivaldi for ExternalInstallBubbleAlert and
+// ExtensionDisabledGlobalError.
+class VivaldiExtensionDisabledGlobalError
+    : public GlobalError,
+      public ExtensionUninstallDialog::Delegate,
+      public ExtensionRegistryObserver {
+ public:
+  // ExternalInstallBubbleAlert
+  VivaldiExtensionDisabledGlobalError(ExtensionService* service,
+                               const Extension* extension);
+
+  // ExtensionDisabledGlobalError
+  VivaldiExtensionDisabledGlobalError(content::BrowserContext* context,
+                                      ExternalInstallError* error);
+
+  ~VivaldiExtensionDisabledGlobalError() override;
+
+  const Extension* GetExtension();
+  const std::string& GetExtensionId() { return extension_id_; }
+  const std::string& GetExtensionName() { return extension_name_; }
+
+ private:
+  // GlobalError implementation.
+  Severity GetSeverity() override;
+  bool HasMenuItem() override;
+  int MenuItemCommandID() override;
+  std::u16string MenuItemLabel() override;
+  void ExecuteMenuItem(Browser* browser) override;
+  bool HasBubbleView() override;
+  bool HasShownBubbleView() override;
+  void ShowBubbleView(Browser* browser) override;
+  GlobalErrorBubbleViewBase* GetBubbleView() override;
+
+  // ExtensionRegistryObserver:
+  void OnExtensionLoaded(content::BrowserContext* browser_context,
+                         const Extension* extension) override;
+  void OnExtensionUninstalled(content::BrowserContext* browser_context,
+                              const Extension* extension,
+                              UninstallReason reason) override;
+  void OnShutdown(ExtensionRegistry* registry) override;
+
+  void RemoveGlobalError();
+
+  content::BrowserContext* browser_context_;
+  raw_ptr<ExtensionService, DanglingUntriaged> service_;
+  scoped_refptr<const Extension> extension_;
+
+  raw_ptr<ExternalInstallError> error_;
+  //raw_ptr<ExtensionInstallPrompt::Prompt> prompt_;
+  //ExternalInstallError::AlertType alert_type_;
+  // Copy of the Extension values in case we delete the extension.
+  std::string extension_id_;
+  std::string extension_name_;
+  int command_id_; // Used to lookup error via errorservice.
+
+  std::unique_ptr<ExtensionUninstallDialog> uninstall_dialog_;
+
+  base::ScopedObservation<ExtensionRegistry, ExtensionRegistryObserver>
+      registry_observation_{this};
 };
 
 }  // namespace extensions

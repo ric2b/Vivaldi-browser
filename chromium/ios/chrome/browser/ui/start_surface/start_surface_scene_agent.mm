@@ -19,10 +19,10 @@
 #import "ios/chrome/browser/shared/model/url/url_util.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/tab_insertion/model/tab_insertion_browser_agent.h"
 #import "ios/chrome/browser/ui/start_surface/start_surface_features.h"
 #import "ios/chrome/browser/ui/start_surface/start_surface_recent_tab_browser_agent.h"
 #import "ios/chrome/browser/ui/start_surface/start_surface_util.h"
-#import "ios/chrome/browser/web_state_list/tab_insertion_browser_agent.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/web_state.h"
 #import "url/gurl.h"
@@ -241,18 +241,19 @@ const char kExcessNTPTabsRemoved[] = "IOS.NTP.ExcessRemovedTabCount";
 
 - (void)logBackgroundDurationMetricForActivationLevel:
     (SceneActivationLevel)level {
-  NSInteger timeSinceBackgroundInMinutes =
-      GetTimeSinceMostRecentTabWasOpenForSceneState(self.sceneState) / 60;
-  BOOL isColdStart = (level > SceneActivationLevelBackground &&
-                      self.sceneState.appState.startupInformation.isColdStart);
+  const base::TimeDelta timeSinceBackground =
+      GetTimeSinceMostRecentTabWasOpenForSceneState(self.sceneState);
+  const BOOL isColdStart =
+      (level > SceneActivationLevelBackground &&
+       self.sceneState.appState.startupInformation.isColdStart);
   if (isColdStart) {
     UMA_HISTOGRAM_CUSTOM_COUNTS("IOS.BackgroundTimeBeforeColdStart",
-                                timeSinceBackgroundInMinutes, 1,
-                                60 * 12 /* 12 hours */, 24);
+                                timeSinceBackground.InMinutes(), 1,
+                                base::Hours(12).InMinutes(), 24);
   } else {
     UMA_HISTOGRAM_CUSTOM_COUNTS("IOS.BackgroundTimeBeforeWarmStart",
-                                timeSinceBackgroundInMinutes, 1,
-                                60 * 12 /* 12 hours */, 24);
+                                timeSinceBackground.InMinutes(), 1,
+                                base::Hours(12).InMinutes(), 24);
   }
 }
 

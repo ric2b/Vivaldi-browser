@@ -15,8 +15,10 @@ const char kDuckDuckGoList[] =
     "https://downloads.vivaldi.com/ddg/tds-v2-current.json";
 const char kEasyList[] =
     "https://downloads.vivaldi.com/easylist/easylist-current.txt";
-const char kAdblockPlucaAntiCv[] =
+const char kAdblockPlusAntiCv[] =
     "https://downloads.vivaldi.com/lists/abp/abp-filters-anti-cv-current.txt";
+const char kAdblockPlusAntiAdblock[] =
+    "https://downloads.vivaldi.com/lists/abp/antiadblockfilters-current.txt";
 const char kPartnersList[] =
     "https://downloads.vivaldi.com/lists/vivaldi/partners-current.txt";
 
@@ -35,7 +37,8 @@ const PermanentSource kPermanentKnownTrackingSources[] = {
 const PermanentSource kPermanentKnownAdBlockSources[] = {
     {kEasyList, false},
     {kPartnersList, false},
-    {kAdblockPlucaAntiCv, true}};
+    {kAdblockPlusAntiCv, true},
+    {kAdblockPlusAntiAdblock, true}};
 
 struct PresetSourceInfo {
   base::StringPiece url;
@@ -149,7 +152,9 @@ const PresetSourceInfo kPresetAdBlockSources[] = {
     {"https://www.i-dont-care-about-cookies.eu/abp/",
      "c1e5bcb8-edf6-4a71-b61b-ca96a87f30e3"},
     {"https://secure.fanboy.co.nz/fanboy-cookiemonster.txt",
-     "78610306-e2ab-4147-9a10-fb6072e6675e"}};
+     "78610306-e2ab-4147-9a10-fb6072e6675e"},
+    {"https://secure.fanboy.co.nz/fanboy-annoyance.txt",
+     "269f589f-0a17-4158-a961-ee5252120dad"}};
 
 struct PresetSourceInfoWithSize {
   /* Not a rwa ptr, because used for static data.*/
@@ -228,8 +233,28 @@ KnownRuleSourcesHandlerImpl::KnownRuleSourcesHandlerImpl(
   if (storage_version < 6) {
     EnableSource(
         RuleGroup::kAdBlockingRules,
-        KnownRuleSource(GURL(kAdblockPlucaAntiCv), RuleGroup::kAdBlockingRules)
+        KnownRuleSource(GURL(kAdblockPlusAntiCv), RuleGroup::kAdBlockingRules)
             .id);
+  }
+
+  if (storage_version < 7) {
+    bool skip = false;
+    // Avoid enabling our cached version of the list if the user added it
+    // already by its original URL
+    for (const auto& known_source : GetSourceMap(RuleGroup::kAdBlockingRules)) {
+      if (known_source.second.source_url ==
+          GURL("https://easylist-downloads.adblockplus.org/"
+               "antiadblockfilters.txt")) {
+        skip = true;
+        break;
+      }
+    }
+    if (!skip) {
+      EnableSource(RuleGroup::kAdBlockingRules,
+                   KnownRuleSource(GURL(kAdblockPlusAntiAdblock),
+                                   RuleGroup::kAdBlockingRules)
+                       .id);
+    }
   }
 }
 

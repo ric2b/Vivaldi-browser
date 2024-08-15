@@ -13,10 +13,12 @@
 #include "chrome/browser/ui/browser_user_data.h"
 #include "chrome/browser/ui/side_panel/side_panel_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+#include "chrome/browser/ui/toolbar/pinned_toolbar_actions_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_entry.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_service_observer.h"
+#include "ui/actions/actions.h"
 
 class Browser;
 class PrefService;
@@ -30,10 +32,6 @@ class SearchCompanionSidePanelCoordinator
       public TemplateURLServiceObserver {
  public:
   explicit SearchCompanionSidePanelCoordinator(Browser* browser);
-  SearchCompanionSidePanelCoordinator(
-      const SearchCompanionSidePanelCoordinator&) = delete;
-  SearchCompanionSidePanelCoordinator& operator=(
-      const SearchCompanionSidePanelCoordinator&) = delete;
   ~SearchCompanionSidePanelCoordinator() override;
 
   // If `include_runtime_checks` is true, then the method returns true if the
@@ -93,6 +91,8 @@ class SearchCompanionSidePanelCoordinator
 
   // Called if there is a change in the state of the exps pref.
   void OnExpsPolicyPrefChanged();
+
+  actions::ActionItem* GetActionItem();
 
   raw_ptr<Browser> browser_;
   std::u16string accessible_name_;

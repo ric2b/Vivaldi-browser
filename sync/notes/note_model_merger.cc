@@ -9,17 +9,17 @@
 #include <utility>
 
 #include "base/containers/contains.h"
-#include "base/uuid.h"
 #include "base/logging.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/uuid.h"
+#include "components/notes/note_node.h"
 #include "components/sync/protocol/entity_metadata.pb.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
 #include "components/sync/protocol/notes_specifics.pb.h"
 #include "components/sync_bookmarks/switches.h"
-#include "notes/note_node.h"
-#include "notes/notes_model.h"
+#include "sync/notes/note_model_view.h"
 #include "sync/notes/note_specifics_conversions.h"
 #include "sync/notes/synced_note_tracker.h"
 #include "sync/notes/synced_note_tracker_entity.h"
@@ -79,7 +79,7 @@ enum class NotesUuidDuplicates {
 // |server_defined_unique_tag| or null of the tag is unknown. |notes_model|
 // must not be null and |server_defined_unique_tag| must not be empty.
 const vivaldi::NoteNode* GetPermanentFolderForServerDefinedUniqueTag(
-    const vivaldi::NotesModel* notes_model,
+    const NoteModelView* notes_model,
     const std::string& server_defined_unique_tag) {
   DCHECK(notes_model);
   DCHECK(!server_defined_unique_tag.empty());
@@ -429,7 +429,7 @@ NoteModelMerger::RemoteTreeNode NoteModelMerger::RemoteTreeNode::BuildTree(
 }
 
 NoteModelMerger::NoteModelMerger(UpdateResponseDataList updates,
-                                 vivaldi::NotesModel* notes_model,
+                                 NoteModelView* notes_model,
                                  SyncedNoteTracker* note_tracker)
     : notes_model_(notes_model),
       note_tracker_(note_tracker),
@@ -539,7 +539,7 @@ NoteModelMerger::RemoteForest NoteModelMerger::BuildRemoteForest(
 std::unordered_map<base::Uuid, NoteModelMerger::GuidMatch, base::UuidHash>
 NoteModelMerger::FindGuidMatchesOrReassignLocal(
     const RemoteForest& remote_forest,
-    vivaldi::NotesModel* notes_model) {
+    NoteModelView* notes_model) {
   DCHECK(notes_model);
 
   // Build a temporary lookup table for remote UUIDs.

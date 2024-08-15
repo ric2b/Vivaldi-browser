@@ -11,6 +11,9 @@ found in the LICENSE file.
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Vivaldi -->
+    <include layout="@layout/tracker_shield_button"/>
+
     <include layout="@layout/location_status" />
 
     <include

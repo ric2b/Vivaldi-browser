@@ -7,27 +7,31 @@ package org.chromium.chrome.browser.page_insights;
 import android.content.Context;
 import android.view.View;
 
+import androidx.annotation.Nullable;
+
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsSizer;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.flags.MutableFlagWithSafeDefault;
+import org.chromium.chrome.browser.page_insights.proto.Config.PageInsightsConfig;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.ExpandedSheetHelper;
 import org.chromium.components.browser_ui.bottomsheet.ManagedBottomSheetController;
+import org.chromium.content_public.browser.NavigationHandle;
 
 import java.util.function.BooleanSupplier;
+import java.util.function.Function;
 
 /**
  * Coordinator for PageInsights bottom sheet module. Provides API, and initializes
  * various components lazily.
  */
 public class PageInsightsCoordinator {
-    private static MutableFlagWithSafeDefault sPageInsightsHub =
-            new MutableFlagWithSafeDefault(ChromeFeatureList.CCT_PAGE_INSIGHTS_HUB, false);
 
     private final Context mContext;
 
@@ -42,27 +46,42 @@ public class PageInsightsCoordinator {
 
     /** Returns true if page insight is enabled in the feature flag. */
     public static boolean isFeatureEnabled() {
-        return sPageInsightsHub.isEnabled();
+        return ChromeFeatureList.sCctPageInsightsHub.isEnabled();
     }
 
     /**
      * Constructor.
+     *
      * @param context The associated {@link Context}.
+     * @param layoutView the top-level view for the Window
      * @param tabProvider Provider of the current activity tab.
      * @param shareDelegateSupplier Supplier of {@link ShareDelegate}.
+     * @param profileSupplier Supplier of {@link Profile}.
      * @param bottomSheetController {@link ManagedBottomSheetController} for page insights.
      * @param bottomUiController {@link BottomSheetController} for other bottom sheet UIs.
      * @param expandedSheetHelper Helps interaction with other UI in expanded mode.
      * @param controlsStateProvider Provides the browser controls' state.
      * @param browserControlsSizer Bottom browser controls resizer.
+     * @param backPressManager Back press manager.
+     * @param inMotionSupplier Supplier for whether the compositor is in motion.
      * @param isPageInsightsHubEnabled Supplier of the feature flag.
+     * @param firstLoadTimeMs Timestamp for the first page load completion.
      */
-    public PageInsightsCoordinator(Context context, ObservableSupplier<Tab> tabProvider,
+    public PageInsightsCoordinator(
+            Context context,
+            View layoutView,
+            ObservableSupplier<Tab> tabProvider,
             Supplier<ShareDelegate> shareDelegateSupplier,
+            Supplier<Profile> profileSupplier,
             ManagedBottomSheetController bottomSheetController,
-            BottomSheetController bottomUiController, ExpandedSheetHelper expandedSheetHelper,
+            BottomSheetController bottomUiController,
+            ExpandedSheetHelper expandedSheetHelper,
             BrowserControlsStateProvider controlsStateProvider,
-            BrowserControlsSizer browserControlsSizer, BooleanSupplier isPageInsightsHubEnabled) {
+            BrowserControlsSizer browserControlsSizer,
+            @Nullable BackPressManager backPressManager,
+            @Nullable ObservableSupplier<Boolean> inMotionSupplier,
+            BooleanSupplier isPageInsightsEnabledSupplier,
+            Function<NavigationHandle, PageInsightsConfig> pageInsightsConfigProvider) {
         mContext = context;
         mTabProvider = tabProvider;
         mBottomSheetController = bottomSheetController;
@@ -70,16 +89,29 @@ public class PageInsightsCoordinator {
         mBottomUiController = bottomUiController;
         mControlsStateProvider = controlsStateProvider;
         mBrowserControlsSizer = browserControlsSizer;
-        mMediator = new PageInsightsMediator(mContext, mTabProvider, shareDelegateSupplier,
-                mBottomSheetController, mBottomUiController, mExpandedSheetHelper,
-                mControlsStateProvider, mBrowserControlsSizer, isPageInsightsHubEnabled);
+        mMediator =
+                new PageInsightsMediator(
+                        mContext,
+                        layoutView,
+                        mTabProvider,
+                        shareDelegateSupplier,
+                        profileSupplier,
+                        mBottomSheetController,
+                        mBottomUiController,
+                        mExpandedSheetHelper,
+                        mControlsStateProvider,
+                        mBrowserControlsSizer,
+                        backPressManager,
+                        inMotionSupplier,
+                        isPageInsightsEnabledSupplier,
+                        pageInsightsConfigProvider);
     }
 
     /**
      * Launch PageInsights hub in bottom sheet container and fetch the data to show.
      */
     public void launch() {
-        mMediator.openInExpandedState();
+        mMediator.launch();
     }
 
     /**
@@ -99,6 +131,13 @@ public class PageInsightsCoordinator {
         mMediator.onBottomUiStateChanged(opened);
     }
 
+    /** Returns the controller for the Page Insights bottom sheet. */
+    // TODO(b/307046796): Remove this once we have found better way to integrate with back handling
+    // logic.
+    public ManagedBottomSheetController getBottomSheetController() {
+        return mBottomSheetController;
+    }
+
     /** Destroy PageInsights component. */
     public void destroy() {
         if (mMediator != null) mMediator.destroy();
@@ -108,8 +147,8 @@ public class PageInsightsCoordinator {
         return mMediator.getCornerRadiusForTesting();
     }
 
-    void setAutoTriggerReadyForTesting() {
-        mMediator.setAutoTriggerReadyForTesting();
+    void onAutoTriggerTimerFinishedForTesting() {
+        mMediator.onAutoTriggerTimerFinished();
     }
 
     void setPageInsightsDataLoaderForTesting(PageInsightsDataLoader pageInsightsDataLoader) {

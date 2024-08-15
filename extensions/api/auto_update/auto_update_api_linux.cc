@@ -1,6 +1,7 @@
 // Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved
 
 #include "extensions/api/auto_update/auto_update_api.h"
+#include "extensions/tools/vivaldi_tools.h"
 
 namespace extensions {
 
@@ -30,7 +31,8 @@ AutoUpdateDisableUpdateNotifierFunction::Run() {
 
 ExtensionFunction::ResponseAction
 AutoUpdateInstallUpdateAndRestartFunction::Run() {
-  return RespondNow(Error("Not implemented"));
+  ::vivaldi::RestartBrowser();
+  return RespondNow(NoArguments());
 }
 
 ExtensionFunction::ResponseAction

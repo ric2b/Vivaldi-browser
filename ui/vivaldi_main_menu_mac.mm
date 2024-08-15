@@ -391,6 +391,10 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
       [menu removeItemAtIndex:item_index];
       [menu insertItem:menuItem atIndex:index];
     }
+    // We can hide top level entries with the visible flag
+    if (item.visible.has_value()) {
+      [menuItem setHidden:!item.visible.value()];
+    }
   } else {
     // Either a sub menu item or a new top level item.
     if (item.type == menubar::ITEM_TYPE_SEPARATOR) {
@@ -421,7 +425,7 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
         setMenuItemBold(menuItem, true);
       }
       if (item.checked.has_value() && item.checked.value()) {
-        [menuItem setState:NSOnState];
+        [menuItem setState:NSControlStateValueOn];
       }
 
       AppController* appController =
@@ -524,14 +528,30 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
           // Here and in bookmark_menu_bridge.mm. Remove all items that have
           // been created earlier by this function.
           {
-            for (auto id: GetBookmarkMenuIds()) {
-              NSMenuItem* item4 = [subMenu itemWithTag:id];
-              if (item4) {
-                long index3 = [subMenu indexOfItem:item4];
-                [subMenu removeItemAtIndex:index3];
+            NSMenu* saved_bookmark_menu = GetBookmarkMenu();
+            if (subMenu != saved_bookmark_menu) {
+              // The menu itself has changed. Typically happens when we switch
+              // to/from a guest window. Our caching of menu ids will not work
+              // so we clear the entire menu. We prefer to avoid this as there
+              // can be many bookmarks.
+              // Bookmarks (all bookmarks and items created by the container).
+              ClearBookmarkMenu();
+              // All regular items (configurable from UI).
+              [subMenu removeAllItems];
+              // Register new menu.
+              SetBookmarkMenu(subMenu);
+            } else {
+              for (auto id: GetBookmarkMenuIds()) {
+                NSMenuItem* installed_item = [subMenu itemWithTag:id];
+                if (installed_item) {
+                  long installed_index = [subMenu indexOfItem:installed_item];
+                  [subMenu removeItemAtIndex:installed_index];
+                }
               }
             }
+            // Clear cached ids
             GetBookmarkMenuIds().clear();
+            // New items are added a bit further down in the function.
           }
           break;
         case IDC_WINDOW_MENU:
@@ -590,35 +610,22 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
       // and in bookmark_menu_bridge.mm. We only add UI menu items below.
 
       // The menu currently only holds elements added in bookmark_menu_bridge.mm
+      // (it may be none as the menu is popuplated there when it is about to be
+      // shown). Those represent the content of IDC_VIV_BOOKMARK_CONTAINER. The
+      // other items are added here and are regular menu items.
       int num_installed_bookmarks = subMenu.numberOfItems;
-      // Due to existing bookmark items in the menu.
-      int extra_index = 0;
-      int pos = 0;
-      // In the first pass we add all UI items to the menu.
+      index2 = 0;
       for (const menubar::MenuItem& child: *item.items) {
         GetBookmarkMenuIds().push_back(child.id);
-        index2 = pos + extra_index;
         PopulateMenu(child, subMenu, false, index2, faviconLoader, 0, 0);
         if (child.id == IDC_VIV_BOOKMARK_CONTAINER) {
-          extra_index = num_installed_bookmarks;
-        }
-        pos ++;
-      }
-      // The second pass hands over information to chrome now that the items
-      // are in place.
-      bool has_container = false;
-      pos = 0;
-      for (const menubar::MenuItem& child: *item.items) {
-        if (child.id == IDC_VIV_BOOKMARK_CONTAINER) {
+          // Register container and its offset.
           SetContainerState(extensions::vivaldi::menubar::ToString(child.edge),
-              pos);
-          has_container = true;
-          break;
+            index2);
+          // Step over installed bookmarks.
+          index2 += num_installed_bookmarks;
         }
-        pos ++;
-      }
-      if (!has_container) {
-        SetContainerState("below", -1);
+        index2 ++;
       }
     } else {
       for (const menubar::MenuItem& child: *item.items) {
@@ -635,7 +642,8 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
 
 void UpdateMenuItem(const menubar::MenuItem& item, NSMenuItem* menuItem) {
   if (item.checked.has_value()) {
-    [menuItem setState:item.checked.value() ? NSOnState : NSOffState];
+    [menuItem setState:
+        item.checked.value() ? NSControlStateValueOn : NSControlStateValueOff];
   }
   if (item.emphasized.has_value()) {
     setMenuItemBold(menuItem, item.emphasized.value() ? true : false);
@@ -660,7 +668,6 @@ NSMenuItem* GetMenuItemByTag(NSMenu* menu, int tag) {
 void CreateVivaldiMainMenu(
     Profile* profile,
     std::vector<menubar::MenuItem>* items,
-    menubar::Mode mode,
     int min_id,
     int max_id) {
 
@@ -682,41 +689,30 @@ void CreateVivaldiMainMenu(
     [g_window_menu_delegate faviconLoader]->UpdateProfile(profile);
   }
 
-  if (mode == menubar::MODE_ALL) {
-    // Full update. Remove any pending requests.
-    [g_window_menu_delegate reset];
+  // Full update. Remove any pending requests.
+  [g_window_menu_delegate reset];
 
-    FaviconLoaderMac* faviconLoader = [g_window_menu_delegate faviconLoader];
-    int index = 0;
+  FaviconLoaderMac* faviconLoader = [g_window_menu_delegate faviconLoader];
+  int index = 0;
+  for (const menubar::MenuItem& item : *items) {
+    PopulateMenu(item, mainMenu, true, index++, faviconLoader, min_id,
+                 max_id);
+  }
+  // In PopulateMenu we never remove any existing top level items so we do
+  // that here in case configuration has removed one or more.
+  for (int menubarIndex = 0; menubarIndex < [mainMenu numberOfItems]; ) {
+    NSMenuItem* menuItem = [mainMenu itemAtIndex:menubarIndex];
+    bool present = false;
     for (const menubar::MenuItem& item : *items) {
-      PopulateMenu(item, mainMenu, true, index++, faviconLoader, min_id,
-                   max_id);
-    }
-    // In PopulateMenu we never remove any existing top level items so we do
-    // that here in case configuration has removed one or more.
-    for (int menubarIndex = 0; menubarIndex < [mainMenu numberOfItems]; ) {
-      NSMenuItem* menuItem = [mainMenu itemAtIndex:menubarIndex];
-      bool present = false;
-      for (const menubar::MenuItem& item : *items) {
-        if (item.id == menuItem.tag) {
-          present = true;
-          break;
-        }
-      }
-      if (!present) {
-        [mainMenu removeItem:menuItem];
-      } else {
-        menubarIndex ++;
+      if (item.id == menuItem.tag) {
+        present = true;
+        break;
       }
     }
-  } else if (mode == menubar::MODE_TABS) {
-    [g_window_menu_delegate setMenuItems:items];
-  } else if (mode == menubar::MODE_UPDATE) {
-    // Update one or more items. Title is not changed.
-    for (const menubar::MenuItem& item : *items) {
-      NSMenuItem* menuItem = GetMenuItemByTag(mainMenu, item.id);
-      if (menuItem)
-        UpdateMenuItem(item, menuItem);
+    if (!present) {
+      [mainMenu removeItem:menuItem];
+    } else {
+      menubarIndex ++;
     }
   }
 

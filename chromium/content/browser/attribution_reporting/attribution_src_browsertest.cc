@@ -65,18 +65,11 @@ namespace content {
 
 namespace {
 
-using ::attribution_reporting::FilterPair;
 using ::attribution_reporting::mojom::RegistrationEligibility;
 using ::net::test_server::EmbeddedTestServer;
-using ::testing::AllOf;
 using ::testing::ElementsAre;
-using ::testing::Eq;
-using ::testing::HasSubstr;
 using ::testing::IsEmpty;
-using ::testing::Optional;
-using ::testing::Pair;
 using ::testing::SizeIs;
-using ::testing::UnorderedElementsAre;
 
 }  // namespace
 
@@ -155,12 +148,13 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest, SourceRegistered) {
   data_host->WaitForSourceData(/*num_source_data=*/1);
   const auto& source_data = data_host->source_data();
 
+  // TODO: These checks are redundant with a variety of unit and/or WPT tests.
   EXPECT_EQ(source_data.size(), 1u);
   EXPECT_EQ(source_data.front().source_event_id, 5UL);
   EXPECT_THAT(source_data.front().destination_set.destinations(),
               ElementsAre(net::SchemefulSite::Deserialize("https://d.test")));
   EXPECT_EQ(source_data.front().priority, 0);
-  EXPECT_EQ(source_data.front().expiry, absl::nullopt);
+  EXPECT_EQ(source_data.front().expiry, base::Days(30));
   EXPECT_FALSE(source_data.front().debug_key);
   EXPECT_THAT(source_data.front().filter_data.filter_values(), IsEmpty());
   EXPECT_THAT(source_data.front().aggregation_keys.keys(), IsEmpty());
@@ -204,12 +198,13 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
     // data host isn't disconnected promptly.
     disconnect_loop.Run();
 
+    // TODO: These checks are redundant with a variety of unit and/or WPT tests.
     EXPECT_EQ(source_data.size(), 1u);
     EXPECT_EQ(source_data.front().source_event_id, 5UL);
     EXPECT_THAT(source_data.front().destination_set.destinations(),
                 ElementsAre(net::SchemefulSite::Deserialize("https://d.test")));
     EXPECT_EQ(source_data.front().priority, 0);
-    EXPECT_EQ(source_data.front().expiry, absl::nullopt);
+    EXPECT_EQ(source_data.front().expiry, base::Days(30));
     EXPECT_FALSE(source_data.front().debug_key);
     EXPECT_THAT(source_data.front().filter_data.filter_values(), IsEmpty());
     EXPECT_THAT(source_data.front().aggregation_keys.keys(), IsEmpty());
@@ -628,7 +623,7 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
   register_response->WaitForRequest();
   const net::test_server::HttpRequest* request =
       register_response->http_request();
-  EXPECT_TRUE(request->headers.find("Referer") == request->headers.end());
+  EXPECT_FALSE(base::Contains(request->headers, "Referer"));
 }
 
 class AttributionSrcBasicTriggerBrowserTest
@@ -670,21 +665,7 @@ IN_PROC_BROWSER_TEST_P(AttributionSrcBasicTriggerBrowserTest,
   }
   data_host->WaitForTriggerData(/*num_trigger_data=*/1);
 
-  EXPECT_THAT(
-      data_host->trigger_data(),
-      ElementsAre(TriggerRegistrationMatches(TriggerRegistrationMatcherConfig(
-          FilterPair(),
-          /*debug_key=*/Eq(absl::nullopt),
-          ElementsAre(EventTriggerDataMatches(EventTriggerDataMatcherConfig(
-              /*data=*/7))),
-          std::vector<attribution_reporting::AggregatableDedupKey>(),
-          /*debug_reporting=*/false,
-          std::vector<attribution_reporting::AggregatableTriggerData>(),
-          /*aggregatable_values=*/
-          attribution_reporting::AggregatableValues(),
-          /*aggregation_coordinator_origin=*/Eq(absl::nullopt),
-          attribution_reporting::mojom::SourceRegistrationTimeConfig::
-              kExclude))));
+  EXPECT_THAT(data_host->trigger_data(), SizeIs(1));
 }
 
 IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
@@ -743,8 +724,13 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
   MockAttributionReportingContentBrowserClientBase<
       ContentBrowserTestContentBrowserClient>
       browser_client;
-  EXPECT_CALL(browser_client, IsWebAttributionReportingAllowed())
-      .WillRepeatedly(testing::Return(false));
+  EXPECT_CALL(
+      browser_client,
+      GetAttributionSupport(
+          ContentBrowserClient::AttributionReportingOsApiState::kDisabled,
+          testing::_))
+      .WillRepeatedly(
+          testing::Return(network::mojom::AttributionSupport::kNone));
 
   // Create a separate server as we cannot register a `ControllableHttpResponse`
   // after the server starts.

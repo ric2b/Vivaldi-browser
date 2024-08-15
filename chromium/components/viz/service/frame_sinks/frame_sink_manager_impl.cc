@@ -22,6 +22,7 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "components/viz/common/features.h"
+#include "components/viz/common/performance_hint_utils.h"
 #include "components/viz/common/surfaces/subtree_capture_id.h"
 #include "components/viz/common/surfaces/video_capture_target.h"
 #include "components/viz/service/display/shared_bitmap_manager.h"
@@ -30,7 +31,6 @@
 #include "components/viz/service/frame_sinks/frame_sink_bundle_impl.h"
 #include "components/viz/service/frame_sinks/video_capture/capturable_frame_sink.h"
 #include "components/viz/service/frame_sinks/video_capture/frame_sink_video_capturer_impl.h"
-#include "components/viz/service/performance_hint/utils.h"
 #include "components/viz/service/surfaces/pending_copy_output_request.h"
 #include "components/viz/service/surfaces/surface.h"
 
@@ -581,7 +581,7 @@ CapturableFrameSink* FrameSinkManagerImpl::FindCapturableFrameSink(
   // Search the known CompositorFrameSinkSupport objects for region capture
   // bounds matching the crop ID specified by |target| (if one was set), and
   // return the corresponding frame sink.
-  if (absl::holds_alternative<RegionCaptureCropId>(target.sub_target)) {
+  if (IsRegionCapture(target.sub_target)) {
     const auto crop_id = absl::get<RegionCaptureCropId>(target.sub_target);
     for (const auto& id_and_sink : support_map_) {
       const RegionCaptureBounds& bounds =
@@ -752,10 +752,32 @@ void FrameSinkManagerImpl::OnCaptureStopped(const FrameSinkId& id) {
   UpdateThrottling();
 }
 
-bool FrameSinkManagerImpl::VerifySandboxedThreadIds(
-    base::flat_set<base::PlatformThreadId> thread_ids) {
-  return CheckThreadIdsDoNotBelongToProcessIds(
-      {host_process_id_, base::GetCurrentProcId()}, std::move(thread_ids));
+void FrameSinkManagerImpl::VerifySandboxedThreadIds(
+    const base::flat_set<base::PlatformThreadId>& thread_ids,
+    base::OnceCallback<void(bool)> verification_callback) {
+#if BUILDFLAG(IS_ANDROID)
+  if (!base::FeatureList::IsEnabled(
+          ::features::kEnableADPFAsyncThreadsVerification)) {
+    // Do a sync check for both GPU and Browser from the GPU process, and
+    // invoke the callback immediately.
+    std::move(verification_callback)
+        .Run(CheckThreadIdsDoNotBelongToProcessIds(
+            {host_process_id_, base::GetCurrentProcId()}, thread_ids));
+    return;
+  }
+
+  if (!CheckThreadIdsDoNotBelongToCurrentProcess(thread_ids)) {
+    // At least one thread belongs to the GPU process, verification failed.
+    std::move(verification_callback).Run(false);
+    return;
+  }
+  // GPU check passed, now do an async check for the Browser process.
+  std::vector<int32_t> tids(thread_ids.begin(), thread_ids.end());
+  client_->VerifyThreadIdsDoNotBelongToHost(tids,
+                                            std::move(verification_callback));
+#else
+  std::move(verification_callback).Run(false);
+#endif
 }
 
 void FrameSinkManagerImpl::CacheBackBuffer(

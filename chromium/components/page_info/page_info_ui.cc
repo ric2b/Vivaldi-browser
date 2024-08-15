@@ -25,7 +25,7 @@
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/security_interstitials/core/common_string_util.h"
-#include "components/strings/grit/components_chromium_strings.h"
+#include "components/strings/grit/components_branded_strings.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/elide_url.h"
 #include "content/public/browser/permission_result.h"
@@ -158,8 +158,17 @@ base::span<const PageInfoUI::PermissionUIInfo> GetContentSettingsUIInfo() {
     {ContentSettingsType::AUTOMATIC_DOWNLOADS,
      IDS_SITE_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS,
      IDS_SITE_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS_MID_SENTENCE},
-    {ContentSettingsType::MIDI_SYSEX, IDS_SITE_SETTINGS_TYPE_MIDI_SYSEX,
-     IDS_SITE_SETTINGS_TYPE_MIDI_SYSEX_MID_SENTENCE},
+    {ContentSettingsType::MIDI, IDS_SITE_SETTINGS_TYPE_MIDI,
+     IDS_SITE_SETTINGS_TYPE_MIDI_MID_SENTENCE},
+    {
+        ContentSettingsType::MIDI_SYSEX,
+        base::FeatureList::IsEnabled(permissions::features::kBlockMidiByDefault)
+            ? IDS_SITE_SETTINGS_TYPE_MIDI_SYSEX
+            : IDS_SITE_SETTINGS_TYPE_MIDI,
+        base::FeatureList::IsEnabled(permissions::features::kBlockMidiByDefault)
+            ? IDS_SITE_SETTINGS_TYPE_MIDI_SYSEX_MID_SENTENCE
+            : IDS_SITE_SETTINGS_TYPE_MIDI_MID_SENTENCE,
+    },
     {ContentSettingsType::BACKGROUND_SYNC,
      IDS_SITE_SETTINGS_TYPE_BACKGROUND_SYNC,
      IDS_SITE_SETTINGS_TYPE_BACKGROUND_SYNC_MID_SENTENCE},
@@ -206,6 +215,8 @@ base::span<const PageInfoUI::PermissionUIInfo> GetContentSettingsUIInfo() {
      IDS_SITE_SETTINGS_TYPE_FEDERATED_IDENTITY_API_MID_SENTENCE},
     {ContentSettingsType::IDLE_DETECTION, IDS_SITE_SETTINGS_TYPE_IDLE_DETECTION,
      IDS_SITE_SETTINGS_TYPE_IDLE_DETECTION_MID_SENTENCE},
+    {ContentSettingsType::STORAGE_ACCESS, IDS_SITE_SETTINGS_TYPE_STORAGE_ACCESS,
+     IDS_SITE_SETTINGS_TYPE_STORAGE_ACCESS_MID_SENTENCE},
 #if !BUILDFLAG(IS_ANDROID)
     // Page Info Permissions that are not defined in Android.
     {ContentSettingsType::AUTO_PICTURE_IN_PICTURE,
@@ -225,8 +236,6 @@ base::span<const PageInfoUI::PermissionUIInfo> GetContentSettingsUIInfo() {
     {ContentSettingsType::WINDOW_MANAGEMENT,
      IDS_SITE_SETTINGS_TYPE_WINDOW_MANAGEMENT,
      IDS_SITE_SETTINGS_TYPE_WINDOW_MANAGEMENT_MID_SENTENCE},
-    {ContentSettingsType::STORAGE_ACCESS, IDS_SITE_SETTINGS_TYPE_STORAGE_ACCESS,
-     IDS_SITE_SETTINGS_TYPE_STORAGE_ACCESS_MID_SENTENCE},
 #endif
 #if defined(VIVALDI_BUILD)
     {ContentSettingsType::AUTOPLAY, IDS_SITE_SETTINGS_TYPE_AUTOPLAY,
@@ -300,6 +309,16 @@ void SetTargetContentSetting(PageInfo::PermissionInfo& permission,
 void CreateOppositeToDefaultSiteException(
     PageInfo::PermissionInfo& permission,
     ContentSetting opposite_to_block_setting) {
+  // For Automatic Picture-in-Picture, we show the toggle in the "on" position
+  // while the setting is ASK, so the opposite to the default when the default
+  // is ASK should be BLOCK instead of ALLOW.
+  if (permission.type == ContentSettingsType::AUTO_PICTURE_IN_PICTURE) {
+    permission.setting = permission.default_setting == CONTENT_SETTING_BLOCK
+                             ? CONTENT_SETTING_ALLOW
+                             : CONTENT_SETTING_BLOCK;
+    return;
+  }
+
   // For guard content settings opposite to block setting is ask, for the
   // rest opposite is allow.
   permission.setting = permission.default_setting == opposite_to_block_setting
@@ -317,8 +336,11 @@ std::u16string GetPermissionAskStateString(ContentSettingsType type) {
     case ContentSettingsType::NOTIFICATIONS:
       message_id = IDS_PAGE_INFO_STATE_TEXT_NOTIFICATIONS_ASK;
       break;
-    case ContentSettingsType::MIDI_SYSEX:
+    case ContentSettingsType::MIDI:
       message_id = IDS_PAGE_INFO_STATE_TEXT_MIDI_ASK;
+      break;
+    case ContentSettingsType::MIDI_SYSEX:
+      message_id = IDS_PAGE_INFO_STATE_TEXT_MIDI_SYSEX_ASK;
       break;
     case ContentSettingsType::MEDIASTREAM_CAMERA:
       message_id = IDS_PAGE_INFO_STATE_TEXT_CAMERA_ASK;
@@ -946,6 +968,14 @@ void PageInfoUI::ToggleBetweenRememberAndForget(
 bool PageInfoUI::IsToggleOn(const PageInfo::PermissionInfo& permission) {
   ContentSetting effective_setting = GetEffectiveSetting(
       permission.type, permission.setting, permission.default_setting);
+
+  // Since Automatic Picture-in-Picture is essentially allowed while in the ASK
+  // state, we display the toggle as on for either ASK or ALLOW.
+  if (permission.type == ContentSettingsType::AUTO_PICTURE_IN_PICTURE) {
+    return (effective_setting == CONTENT_SETTING_ASK ||
+            effective_setting == CONTENT_SETTING_ALLOW);
+  }
+
   return permissions::PermissionUtil::IsGuardContentSetting(permission.type)
              ? effective_setting == CONTENT_SETTING_ASK
              : effective_setting == CONTENT_SETTING_ALLOW;

@@ -8,6 +8,7 @@
 
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login_accelerators.h"
+#include "base/check.h"
 #include "base/check_deref.h"
 #include "base/check_is_test.h"
 #include "base/command_line.h"
@@ -244,6 +245,17 @@ class DefaultNetworkMonitor : public NetworkUiController::NetworkMonitor {
   scoped_refptr<NetworkStateInformer> network_state_informer_;
 };
 
+std::string ToString(app_mode::ForceInstallObserver::Result result) {
+  switch (result) {
+    case app_mode::ForceInstallObserver::Result::kSuccess:
+      return "kSuccess";
+    case app_mode::ForceInstallObserver::Result::kTimeout:
+      return "kTimeout";
+    case app_mode::ForceInstallObserver::Result::kInvalidPolicy:
+      return "kInvalidPolicy";
+  }
+}
+
 }  // namespace
 
 using NetworkUIState = NetworkUiController::NetworkUIState;
@@ -314,15 +326,10 @@ void KioskLaunchController::Start(const KioskAppId& kiosk_app_id,
     CHECK_IS_TEST();
   }
 
-  if (kiosk_app_id.type == KioskAppType::kChromeApp) {
-    KioskAppManager::App app;
-    DCHECK(KioskAppManager::IsInitialized());
-    CHECK(KioskAppManager::Get()->GetApp(*kiosk_app_id.app_id, &app));
-    kiosk_app_id_.account_id = app.account_id;
-    if (auto_launch) {
-      KioskAppManager::Get()->SetAppWasAutoLaunchedWithZeroDelay(
-          *kiosk_app_id.app_id);
-    }
+  if (auto_launch && kiosk_app_id.type == KioskAppType::kChromeApp) {
+    CHECK(KioskAppManager::IsInitialized());
+    KioskAppManager::Get()->SetAppWasAutoLaunchedWithZeroDelay(
+        *kiosk_app_id.app_id);
   }
 
   network_ui_controller_->Start();
@@ -337,8 +344,12 @@ void KioskLaunchController::Start(const KioskAppId& kiosk_app_id,
     return;
   }
 
+  // TODO(b/304981820) remove checks once account_id is no longer optional.
+  CHECK(kiosk_app_id.account_id.has_value());
+  CHECK(kiosk_app_id.account_id.value().is_valid());
+
   kiosk_profile_loader_ = std::make_unique<KioskProfileLoader>(
-      *kiosk_app_id_.account_id, kiosk_app_id_.type, /*delegate=*/this);
+      kiosk_app_id_.account_id.value(), kiosk_app_id_.type, /*delegate=*/this);
   kiosk_profile_loader_->Start();
 }
 
@@ -376,31 +387,31 @@ void KioskLaunchController::OnProfileLoaded(Profile* profile) {
   // browser_data_migrator.h for details.
   BrowserDataMigratorImpl::ClearMigrationStep(g_browser_process->local_state());
 
-  const user_manager::User* user =
-      ProfileHelper::Get()->GetUserByProfile(profile);
+  const user_manager::User& user =
+      CHECK_DEREF(ProfileHelper::Get()->GetUserByProfile(profile));
 
-  // TODO(b/257210467): Remove the need for CHECK_IS_TEST
-  if (!user) {
-    CHECK_IS_TEST();
-  } else {
-    if (BrowserDataMigratorImpl::MaybeRestartToMigrate(
-            user->GetAccountId(), user->username_hash(),
-            crosapi::browser_util::PolicyInitState::kAfterInit)) {
-      LOG(WARNING) << "Restarting chrome to run profile migration.";
-      return;
-    }
+  if (BrowserDataMigratorImpl::MaybeRestartToMigrate(
+          user.GetAccountId(), user.username_hash(),
+          crosapi::browser_util::PolicyInitState::kAfterInit)) {
+    LOG(WARNING) << "Restarting chrome to run profile migration.";
+    return;
+  }
 
-    if (BrowserDataBackMigrator::MaybeRestartToMigrateBack(
-            user->GetAccountId(), user->username_hash(),
-            crosapi::browser_util::PolicyInitState::kAfterInit)) {
-      LOG(WARNING) << "Restarting chrome to run backward profile migration.";
-      return;
-    }
+  if (BrowserDataBackMigrator::MaybeRestartToMigrateBack(
+          user.GetAccountId(), user.username_hash(),
+          crosapi::browser_util::PolicyInitState::kAfterInit)) {
+    LOG(WARNING) << "Restarting chrome to run backward profile migration.";
+    return;
   }
 
   // This is needed to trigger input method extensions being loaded.
   profile->InitChromeOSPreferences();
-  network_ui_controller_->SetProfile(profile);
+
+  if (cleaned_up_) {
+    LOG(WARNING) << "Profile is loaded after kiosk launch has been aborted.";
+    return;
+  }
+  CHECK_DEREF(network_ui_controller_.get()).SetProfile(profile);
 
   InitializeKeyboard();
   LaunchLacros();
@@ -641,6 +652,9 @@ void KioskLaunchController::FinishForcedExtensionsInstall(
     app_mode::ForceInstallObserver::Result result) {
   app_state_ = AppState::kInstalled;
   force_install_observer_.reset();
+
+  SYSLOG(INFO) << "Kiosk finished installing extensions with result: "
+               << ToString(result);
 
   switch (result) {
     case app_mode::ForceInstallObserver::Result::kTimeout:

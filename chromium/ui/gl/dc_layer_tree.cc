@@ -377,7 +377,9 @@ bool DCLayerTree::Initialize(
 
 VideoProcessorWrapper* DCLayerTree::InitializeVideoProcessor(
     const gfx::Size& input_size,
-    const gfx::Size& output_size) {
+    const gfx::Size& output_size,
+    bool& video_processor_recreated) {
+  video_processor_recreated = false;
   if (!video_processor_wrapper_.video_device) {
     // This can fail if the D3D device is "Microsoft Basic Display Adapter".
     if (FAILED(d3d11_device_.As(&video_processor_wrapper_.video_device))) {
@@ -396,10 +398,10 @@ VideoProcessorWrapper* DCLayerTree::InitializeVideoProcessor(
   }
 
   // Calculate input and output size to be maximum in a sliding window.
-  max_video_processor_input_width_.Put(input_size.width());
-  max_video_processor_input_height_.Put(input_size.height());
-  max_video_processor_output_width_.Put(output_size.width());
-  max_video_processor_output_height_.Put(output_size.height());
+  max_video_processor_input_width_.AddSample(input_size.width());
+  max_video_processor_input_height_.AddSample(input_size.height());
+  max_video_processor_output_width_.AddSample(output_size.width());
+  max_video_processor_output_height_.AddSample(output_size.height());
   gfx::Size effective_input_size(max_video_processor_input_width_.Max(),
                                  max_video_processor_input_height_.Max());
   gfx::Size effective_output_size(max_video_processor_output_width_.Max(),
@@ -460,6 +462,8 @@ VideoProcessorWrapper* DCLayerTree::InitializeVideoProcessor(
   video_processor_wrapper_.video_context
       ->VideoProcessorSetStreamAutoProcessingMode(
           video_processor_wrapper_.video_processor.Get(), 0, FALSE);
+
+  video_processor_recreated = true;
   return &video_processor_wrapper_;
 }
 

@@ -7,6 +7,7 @@
 #include "base/atomic_ref_count.h"
 #include "base/check.h"
 #include "base/check_op.h"
+#include "base/memory/raw_ptr.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/partitions.h"
 
 #include <algorithm>
@@ -23,7 +24,8 @@ static const size_t kMinAllocSize = 4096;
 }  // namespace
 
 struct RWBuffer::BufferBlock {
-  RWBuffer::BufferBlock* next_;  // updated by the writer
+  raw_ptr<RWBuffer::BufferBlock, ExperimentalRenderer>
+      next_;                     // updated by the writer
   size_t used_;                  // updated by the writer
   const size_t capacity_;
 
@@ -102,10 +104,15 @@ struct RWBuffer::BufferHead {
     if (!ref_count_.Decrement()) {
       // Like unique(), the acquire is only needed on success.
       RWBuffer::BufferBlock* block = block_.next_;
+
+      // `buffer_` has a `raw_ptr` that needs to be destroyed to
+      // properly lower the refcount.
+      block_.~BufferBlock();
       WTF::Partitions::BufferFree(
           reinterpret_cast<void*>(const_cast<RWBuffer::BufferHead*>(this)));
       while (block) {
         RWBuffer::BufferBlock* next = block->next_;
+        block->~BufferBlock();
         WTF::Partitions::BufferFree(block);
         block = next;
       }

@@ -8,16 +8,16 @@
 #import "base/feature_list.h"
 #import "components/sync/base/features.h"
 #import "ios/chrome/browser/discover_feed/feed_constants.h"
+#import "ios/chrome/browser/ntp/home/features.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_configurator.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_constants.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 #import "ios/chrome/browser/ui/ntp/discover_feed_constants.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_delegate.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_feature.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
-#import "ios/chrome/grit/ios_chromium_strings.h"
+#import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
 
@@ -84,55 +84,31 @@ NSArray<NSLayoutConstraint*>* SameConstraintsWithInsets(
   [super viewDidLoad];
   self.view.translatesAutoresizingMaskIntoConstraints = NO;
   [self.view addSubview:self.contentStack];
-  [self applyStackViewConstraints];
 }
 
 #pragma mark - FeedTopSectionConsumer
 
-- (void)setShouldShowSigninPromo:(BOOL)shouldShowSigninPromo {
-  if (_shouldShowSigninPromo == shouldShowSigninPromo) {
-    return;
-  }
-  // TODO(crbug.com/1331010): Handle targeting of the promo.
-  _shouldShowSigninPromo = shouldShowSigninPromo;
-  [self updateFeedSigninPromoVisibility];
-}
+// Creates the `PromoViewContainer` and adds the SignInPromo.
+- (void)createPromoViewContainer {
+  DCHECK(!self.promoViewContainer);
+  DCHECK(!self.promoView);
+  self.promoViewContainer = [[UIView alloc] init];
+  self.promoViewContainer.translatesAutoresizingMaskIntoConstraints = NO;
+  self.promoViewContainer.backgroundColor = [UIColor colorNamed:kGrey100Color];
 
-- (void)updateFeedSigninPromoVisibility {
-  if (self.shouldShowSigninPromo) {
-    DCHECK(!self.promoViewContainer);
-    DCHECK(!self.promoView);
-    self.promoViewContainer = [[UIView alloc] init];
-    self.promoViewContainer.translatesAutoresizingMaskIntoConstraints = NO;
+  // TODO(b/287118358): Cleanup IsMagicStackEnabled() code from the sync promo
+  // after experiment.
+  if (IsMagicStackEnabled()) {
     self.promoViewContainer.backgroundColor =
-        [UIColor colorNamed:kGrey100Color];
-
-    // TODO(b/287118358): Cleanup IsMagicStackEnabled() code from the sync promo
-    // after experiment.
-    if (IsMagicStackEnabled()) {
-      self.promoViewContainer.backgroundColor =
-          [UIColor colorNamed:kBackgroundColor];
-    }
-    self.promoViewContainer.layer.cornerRadius =
-        kPromoViewContainerBorderRadius;
-
-    self.promoView = [self createPromoView];
-    [self.promoViewContainer addSubview:self.promoView];
-
-    [self.contentStack addArrangedSubview:self.promoViewContainer];
-    AddSameConstraints(self.promoViewContainer, self.promoView);
-  } else {
-    DCHECK(self.promoViewContainer);
-    DCHECK(self.promoView);
-    [self.contentStack willRemoveSubview:self.promoViewContainer];
-    [self.promoViewContainer willRemoveSubview:self.promoView];
-    [self.promoView removeFromSuperview];
-    [self.promoViewContainer removeFromSuperview];
-    self.promoViewContainer = nil;
-    self.promoView = nil;
+        [UIColor colorNamed:kBackgroundColor];
   }
-  [self applyStackViewConstraints];
-  [self.ntpDelegate updateFeedLayout];
+  self.promoViewContainer.layer.cornerRadius = kPromoViewContainerBorderRadius;
+
+  self.promoView = [self createPromoView];
+  // Add the subview to the promoViewContainer.
+  [self.promoViewContainer addSubview:self.promoView];
+  [self.contentStack addArrangedSubview:self.promoViewContainer];
+  AddSameConstraints(self.promoViewContainer, self.promoView);
 }
 
 - (void)updateSigninPromoWithConfigurator:
@@ -152,30 +128,53 @@ NSArray<NSLayoutConstraint*>* SameConstraintsWithInsets(
 
 // Returns insets to add a margin around the stackview if there are items
 // to display in the stackview. Otherwise returns NSDirectionalEdgeInsetsZero.
-- (NSDirectionalEdgeInsets)stackViewInsets {
-  if (self.shouldShowSigninPromo) {
-    return NSDirectionalEdgeInsetsMake(
-        kContentStackVerticalPadding, kContentStackHorizontalPadding,
-        kContentStackVerticalPadding, kContentStackHorizontalPadding);
-  } else {
+// `visible` indicates whether or not the Feed Top Section is visible.
+- (NSDirectionalEdgeInsets)stackViewInsetsForTopSectionVisible:(BOOL)visible {
+  if (!visible) {
     return NSDirectionalEdgeInsetsZero;
   }
+  return NSDirectionalEdgeInsetsMake(
+      kContentStackVerticalPadding, kContentStackHorizontalPadding,
+      kContentStackVerticalPadding, kContentStackHorizontalPadding);
 }
 
-// Applies constraints to the stack view.
-- (void)applyStackViewConstraints {
+// Applies constraints to the stack view for a specific visibility. `visible`
+// indicates whether or not the Feed Top Section is visible.
+- (void)applyStackViewConstraintsForTopSectionVisible:(BOOL)visible {
   if (self.contentStackConstraints) {
     [NSLayoutConstraint deactivateConstraints:self.contentStackConstraints];
   }
-
+  self.contentStack.hidden = !visible;
+  self.view.hidden = !visible;
   self.contentStackConstraints = SameConstraintsWithInsets(
-      self.contentStack, self.view, [self stackViewInsets]);
+      self.contentStack, self.view,
+      [self stackViewInsetsForTopSectionVisible:visible]);
   [NSLayoutConstraint activateConstraints:self.contentStackConstraints];
+}
+
+- (void)showSigninPromo {
+  // Check if the promoViewContainer does not exist. Might not exist if the
+  // promo has been "hidden", which involves removing the container.
+  if (!self.promoViewContainer && !self.promoView) {
+    [self createPromoViewContainer];
+  }
+  [self applyStackViewConstraintsForTopSectionVisible:YES];
+  [self.ntpDelegate updateFeedLayout];
+}
+
+- (void)hideSigninPromo {
+  [self.contentStack willRemoveSubview:self.promoViewContainer];
+  [self.promoViewContainer willRemoveSubview:self.promoView];
+  [self.promoView removeFromSuperview];
+  [self.promoViewContainer removeFromSuperview];
+  self.promoViewContainer = nil;
+  self.promoView = nil;
+  [self applyStackViewConstraintsForTopSectionVisible:NO];
+  [self.ntpDelegate updateFeedLayout];
 }
 
 // Configures and creates a signin promo view.
 - (SigninPromoView*)createPromoView {
-  DCHECK(self.signinPromoDelegate);
   SigninPromoView* promoView =
       [[SigninPromoView alloc] initWithFrame:CGRectZero];
   promoView.translatesAutoresizingMaskIntoConstraints = NO;

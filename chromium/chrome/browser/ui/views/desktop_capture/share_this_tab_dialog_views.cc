@@ -37,6 +37,7 @@
 #include "ui/views/border.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/style/typography.h"
+#include "ui/views/style/typography_provider.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
 
@@ -107,7 +108,7 @@ ShareThisTabDialogView::ShareThisTabDialogView(
       provider->GetDistanceMetric(DISTANCE_RELATED_CONTROL_VERTICAL_SMALL)));
 
   views::Label* title_label = AddChildView(std::make_unique<views::Label>());
-  title_label->SetFontList(views::style::GetFont(
+  title_label->SetFontList(views::TypographyProvider::Get().GetFont(
       views::style::CONTEXT_DIALOG_TITLE, views::style::STYLE_PRIMARY));
   title_label->SetAllowCharacterBreak(true);
   title_label->SetMultiLine(true);
@@ -146,8 +147,7 @@ ShareThisTabDialogView::ShareThisTabDialogView(
   if (params.web_contents &&
       !params.web_contents->GetDelegate()->IsNeverComposited(
           params.web_contents)) {
-    const Browser* browser =
-        chrome::FindBrowserWithWebContents(params.web_contents);
+    const Browser* browser = chrome::FindBrowserWithTab(params.web_contents);
     // Close the extension popup to prevent spoofing.
     if (browser && browser->window() &&
         browser->window()->GetExtensionsContainer()) {

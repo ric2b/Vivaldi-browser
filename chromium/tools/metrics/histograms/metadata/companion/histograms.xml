@@ -36,7 +36,7 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <histogram name="Companion.CQ.TextHighlight.Success" enum="BooleanSuccess"
-    expires_after="2023-10-20">
+    expires_after="2024-04-21">
   <owner>junzou@chromium.org</owner>
   <owner>shaktisahu@chromium.org</owner>
   <owner>src/chrome/browser/companion/OWNERS</owner>
@@ -47,7 +47,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Companion.FullLoad.Latency" units="ms"
-    expires_after="2024-01-07">
+    expires_after="2024-03-10">
   <owner>mcrouse@chromium.org</owner>
   <owner>src/chrome/browser/companion/OWNERS</owner>
   <summary>
@@ -57,7 +57,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Companion.HasNavigatedToExpsSuccessPagePref.OnChanged"
-    enum="Boolean" expires_after="2024-01-07">
+    enum="Boolean" expires_after="2024-03-10">
   <owner>tbansal@chromium.org</owner>
   <owner>src/chrome/browser/companion/OWNERS</owner>
   <summary>
@@ -87,7 +87,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Companion.NavigationLoad.Latency" units="ms"
-    expires_after="2024-01-07">
+    expires_after="2024-03-10">
   <owner>mcrouse@chromium.org</owner>
   <owner>src/chrome/browser/companion/OWNERS</owner>
   <summary>
@@ -128,7 +128,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Companion.SidePanel.ShowUiSuccess" enum="BooleanSuccess"
-    expires_after="2023-12-31">
+    expires_after="2024-03-17">
   <owner>mercerd@google.com</owner>
   <owner>src/chrome/browser/companion/OWNERS</owner>
   <summary>
@@ -221,7 +221,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Companion.VisualQuery.DomImageCount" units="images"
-    expires_after="2023-10-20">
+    expires_after="2024-03-31">
   <owner>srna@google.com</owner>
   <owner>pstjuste@google.com</owner>
   <owner>src/chrome/browser/companion/OWNERS</owner>
@@ -284,7 +284,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Companion.VisualQuery.MaybeSensitive.SensitivityClassificationScore"
-    units="percentile" expires_after="2023-10-20">
+    units="percentile" expires_after="2024-03-31">
   <owner>srna@google.com</owner>
   <owner>pstjuste@google.com</owner>
   <owner>src/chrome/browser/companion/OWNERS</owner>
@@ -298,7 +298,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Companion.VisualQuery.MaybeShoppy.ShoppingClassificationScore"
-    units="percentile" expires_after="2023-10-20">
+    units="percentile" expires_after="2024-03-31">
   <owner>srna@google.com</owner>
   <owner>pstjuste@google.com</owner>
   <owner>src/chrome/browser/companion/OWNERS</owner>
@@ -313,7 +313,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Companion.VisualQuery.MostShoppy.SensitivityClassificationScore"
-    units="percentile" expires_after="2023-10-20">
+    units="percentile" expires_after="2024-03-31">
   <owner>srna@google.com</owner>
   <owner>pstjuste@google.com</owner>
   <owner>src/chrome/browser/companion/OWNERS</owner>
@@ -327,7 +327,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Companion.VisualQuery.MostShoppy.ShoppingClassificationScore"
-    units="percentile" expires_after="2023-10-20">
+    units="percentile" expires_after="2024-03-31">
   <owner>srna@google.com</owner>
   <owner>pstjuste@google.com</owner>
   <owner>src/chrome/browser/companion/OWNERS</owner>
@@ -342,7 +342,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Companion.VisualQuery.MostShoppyNotSensitive.SensitivityClassificationScore"
-    units="percentile" expires_after="2023-10-20">
+    units="percentile" expires_after="2024-03-31">
   <owner>srna@google.com</owner>
   <owner>pstjuste@google.com</owner>
   <owner>src/chrome/browser/companion/OWNERS</owner>
@@ -357,7 +357,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Companion.VisualQuery.MostShoppyNotSensitive.ShoppingClassificationScore"
-    units="percentile" expires_after="2023-10-20">
+    units="percentile" expires_after="2024-03-31">
   <owner>srna@google.com</owner>
   <owner>pstjuste@google.com</owner>
   <owner>src/chrome/browser/companion/OWNERS</owner>

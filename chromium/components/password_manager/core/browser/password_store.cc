@@ -29,11 +29,8 @@
 #include "components/password_manager/core/browser/affiliation/affiliation_service.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
-#include "components/password_manager/core/browser/password_manager_util.h"
-#include "components/password_manager/core/browser/password_reuse_manager_impl.h"
 #include "components/password_manager/core/browser/password_store_backend.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
-#include "components/password_manager/core/browser/password_store_signin_notifier.h"
 #include "components/password_manager/core/browser/password_store_util.h"
 #include "components/password_manager/core/browser/psl_matching_helper.h"
 #include "components/password_manager/core/common/password_manager_features.h"
@@ -310,11 +307,8 @@ void PasswordStore::GetAllLoginsWithAffiliationAndBrandingInformation(
   auto consumer_reply = base::BindOnce(
       &PasswordStoreConsumer::OnGetPasswordStoreResultsOrErrorFrom, consumer,
       base::RetainedRef(this));
-
-  auto affiliation_injection =
-      base::BindOnce(&PasswordStore::InjectAffiliationAndBrandingInformation,
-                     this, std::move(consumer_reply));
-  backend_->GetAllLoginsAsync(std::move(affiliation_injection));
+  backend_->GetAllLoginsWithAffiliationAndBrandingAsync(
+      std::move(consumer_reply));
 }
 
 SmartBubbleStatsStore* PasswordStore::GetSmartBubbleStatsStore() {
@@ -508,19 +502,6 @@ void PasswordStore::UnblocklistInternal(
   for (const auto& form : forms_to_remove) {
     backend_->RemoveLoginAsync(form, barrier_callback);
   }
-}
-
-void PasswordStore::InjectAffiliationAndBrandingInformation(
-    LoginsOrErrorReply callback,
-    LoginsResultOrError forms_or_error) {
-  if (!affiliated_match_helper_ ||
-      absl::holds_alternative<PasswordStoreBackendError>(forms_or_error) ||
-      absl::get<LoginsResult>(forms_or_error).empty()) {
-    std::move(callback).Run(std::move(forms_or_error));
-    return;
-  }
-  affiliated_match_helper_->InjectAffiliationAndBrandingInformation(
-      std::move(absl::get<LoginsResult>(forms_or_error)), std::move(callback));
 }
 
 }  // namespace password_manager

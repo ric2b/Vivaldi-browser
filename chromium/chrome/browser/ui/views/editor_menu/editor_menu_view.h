@@ -5,10 +5,12 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_EDITOR_MENU_EDITOR_MENU_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_EDITOR_MENU_EDITOR_MENU_VIEW_H_
 
+#include <string>
 #include <vector>
 
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
+#include "chrome/browser/ui/views/editor_menu/utils/preset_text_query.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/layout/flex_layout_view.h"
 #include "ui/views/widget/unique_widget_ptr.h"
@@ -17,21 +19,25 @@
 namespace views {
 class ImageButton;
 class FlexLayoutView;
+class View;
 }  // namespace views
 
 namespace chromeos::editor_menu {
 
-class EditorMenuChipView;
 class EditorMenuTextfieldView;
 class EditorMenuViewDelegate;
 class PreTargetHandler;
+
+enum class EditorMenuMode { kWrite = 0, kRewrite };
 
 // A bubble style view to show Editor Menu.
 class EditorMenuView : public views::View, public views::WidgetObserver {
  public:
   METADATA_HEADER(EditorMenuView);
 
-  EditorMenuView(const gfx::Rect& anchor_view_bounds,
+  EditorMenuView(EditorMenuMode editor_menu_mode,
+                 const PresetTextQueries& preset_text_queries,
+                 const gfx::Rect& anchor_view_bounds,
                  EditorMenuViewDelegate* delegate);
 
   EditorMenuView(const EditorMenuView&) = delete;
@@ -40,6 +46,8 @@ class EditorMenuView : public views::View, public views::WidgetObserver {
   ~EditorMenuView() override;
 
   static views::UniqueWidgetPtr CreateWidget(
+      EditorMenuMode editor_menu_mode,
+      const PresetTextQueries& preset_text_queries,
       const gfx::Rect& anchor_view_bounds,
       EditorMenuViewDelegate* delegate);
 
@@ -52,19 +60,30 @@ class EditorMenuView : public views::View, public views::WidgetObserver {
   void OnWidgetDestroying(views::Widget* widget) override;
   void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
+  void OnWidgetVisibilityChanged(views::Widget* widget, bool visible) override;
 
   void UpdateBounds(const gfx::Rect& anchor_view_bounds);
 
+  const views::View* chips_container_for_testing() const {
+    return chips_container_;
+  }
+
  private:
-  void InitLayout();
+  void InitLayout(const PresetTextQueries& preset_text_queries);
   void AddTitleContainer();
-  void AddChipsContainer();
+  void AddChipsContainer(const PresetTextQueries& preset_text_queries);
   void AddTextfield();
 
+  void UpdateChipsContainer(int editor_menu_width);
+
+  views::View* AddChipsRow();
+
   void OnSettingsButtonPressed();
-  void OnChipButtonPressed(int button_id);
+  void OnChipButtonPressed(const std::string& text_query_id);
 
   void ResetPreTargetHandler();
+
+  EditorMenuMode editor_menu_mode_;
 
   std::unique_ptr<PreTargetHandler> pre_target_handler_;
 
@@ -77,7 +96,6 @@ class EditorMenuView : public views::View, public views::WidgetObserver {
 
   // Containing chips.
   raw_ptr<views::FlexLayoutView> chips_container_ = nullptr;
-  std::vector<raw_ptr<EditorMenuChipView>> chips_;
 
   raw_ptr<EditorMenuTextfieldView> textfield_ = nullptr;
 

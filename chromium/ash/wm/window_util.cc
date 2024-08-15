@@ -24,9 +24,13 @@
 #include "ash/wm/float/float_controller.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/overview_controller.h"
+#include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_session.h"
+#include "ash/wm/overview/overview_utils.h"
+#include "ash/wm/snap_group/snap_group.h"
 #include "ash/wm/snap_group/snap_group_controller.h"
 #include "ash/wm/splitview/split_view_controller.h"
+#include "ash/wm/splitview/split_view_overview_session.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_positioning_utils.h"
 #include "ash/wm/window_state.h"
@@ -37,7 +41,6 @@
 #include "base/ranges/algorithm.h"
 #include "chromeos/ui/base/chromeos_ui_constants.h"
 #include "chromeos/ui/frame/interior_resize_handler_targeter.h"
-#include "chromeos/ui/wm/features.h"
 #include "components/prefs/pref_service.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
@@ -336,24 +339,39 @@ bool ShouldExcludeForOverview(const aura::Window* window) {
   auto* split_view_controller =
       SplitViewController::Get(window->GetRootWindow());
 
-  auto* snap_group_controller = SnapGroupController::Get();
+  // A window should be excluded from being shown in overview when:
+  // 1. In tablet split view mode on one window snapped;
+  // 2. During split view overview session in clamshell mode,
+  // 3. If the window is not the mru window in snap group i.e. the corresponding
+  // overview item representation for the snap group has been created.
+  auto should_exclude_in_clamshell = [&]() -> bool {
+    if (IsFasterSplitScreenOrSnapGroupArm1Enabled()) {
+      if (auto* split_view_overview_session =
+              RootWindowController::ForWindow(window)
+                  ->split_view_overview_session();
+          split_view_overview_session &&
+          split_view_overview_session->window() == window) {
+        return true;
+      }
+    }
 
-  // A window should be excluded from being shown in overview when we are
-  // selecting another window to complete a window layout, which can happen when
-  // in tablet split view mode or during snap group creation session in
-  // clamshell mode with `IsArm1AutomaticallyLockEnabled()` returns true.
-  const bool should_exclude_in_clamshell =
-      snap_group_controller &&
-      snap_group_controller->IsArm1AutomaticallyLockEnabled() &&
-      split_view_controller->in_snap_group_creation_session();
-  if ((split_view_controller->InTabletSplitViewMode() ||
-       should_exclude_in_clamshell) &&
-      window == split_view_controller->GetDefaultSnappedWindow()) {
+    if (auto* snap_group_controller = SnapGroupController::Get()) {
+      if (SnapGroup* snap_group =
+              snap_group_controller->GetSnapGroupForGivenWindow(window)) {
+        return window != snap_group->GetTopMostWindowInGroup();
+      }
+    }
+
+    return false;
+  };
+
+  if (ShouldExcludeForCycleList(window)) {
     return true;
   }
 
-  // Remove everything cycle list should not have.
-  return ShouldExcludeForCycleList(window);
+  return Shell::Get()->tablet_mode_controller()->InTabletMode()
+             ? (window == split_view_controller->GetDefaultSnappedWindow())
+             : should_exclude_in_clamshell();
 }
 
 void EnsureTransientRoots(std::vector<aura::Window*>* out_window_list) {
@@ -476,13 +494,7 @@ aura::Window* GetTopNonFloatedWindow() {
 }
 
 aura::Window* GetFloatedWindowForActiveDesk() {
-  if (!chromeos::wm::features::IsWindowLayoutMenuEnabled()) {
-    return nullptr;
-  }
-
-  auto* float_controller = Shell::Get()->float_controller();
-  DCHECK(float_controller);
-  return float_controller->FindFloatedWindowOfDesk(
+  return Shell::Get()->float_controller()->FindFloatedWindowOfDesk(
       DesksController::Get()->GetTargetActiveDesk());
 }
 
@@ -639,6 +651,42 @@ bool ShouldRoundThumbnailWindow(views::View* backdrop_view,
       gfx::RRectF(gfx::RectF(backdrop_view->GetBoundsInScreen()),
                   backdrop_view->layer()->rounded_corner_radii()));
   return !backdrop_bounds_in_screen.Contains(thumbnail_bounds_in_screen);
+}
+
+bool IsFasterSplitScreenOrSnapGroupArm1Enabled() {
+  if (Shell::Get()->IsInTabletMode()) {
+    // FasterSplitScreen is not supported in tablet mode.
+    return false;
+  }
+  if (features::IsFasterSplitScreenSetupEnabled()) {
+    return true;
+  }
+  auto* snap_group_controller = SnapGroupController::Get();
+  return snap_group_controller &&
+         snap_group_controller->IsArm1AutomaticallyLockEnabled();
+}
+
+void MaybeStartSplitViewOverview(aura::Window* window,
+                                 WindowSnapActionSource snap_action_source) {
+  auto* root_window_controller = RootWindowController::ForWindow(window);
+  if (root_window_controller->split_view_overview_session()) {
+    // If split view overview is already active, which may be the case if this
+    // was the selected window from overview, return.
+    return;
+  }
+
+  if (!IsInOverviewSession()) {
+    root_window_controller->StartSplitViewOverviewSession(
+        window, OverviewStartAction::kFasterSplitScreenSetup,
+        OverviewEnterExitType::kNormal, snap_action_source);
+  } else {
+    // If overview has already started, we may need to update the bounds. This
+    // may happen if a snapped window swaps positions or ratios during split
+    // view overview.
+    GetOverviewSession()
+        ->GetGridWithRootWindow(window->GetRootWindow())
+        ->RefreshGridBounds(/*animate=*/false);
+  }
 }
 
 }  // namespace ash::window_util

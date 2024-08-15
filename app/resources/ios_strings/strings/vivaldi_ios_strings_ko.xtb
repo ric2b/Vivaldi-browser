@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ko">
-<translation id="3866249974567520381">설명</translation>
+<translation id="1063263220330818888">시크릿 검색</translation>
+<translation id="1310184829257917508">다른 앱에서 오는 링크를 열 때 시크릿 탭에서 여는지 묻기</translation>
+<translation id="1512201558627495343">새 시크릿 탭</translation>
+<translation id="2899836479226240291">Vivaldi를 기본 브라우저 앱으로 설정하면 링크가 자동으로 Vivaldi에서 열립니다.</translation>
+<translation id="3379322781901918214">1. Vivaldi 설정 열기</translation>
+<translation id="6827597288286078054">시크릿 검색</translation>
 </translationbundle>

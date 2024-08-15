@@ -42,8 +42,8 @@ const char kConsumedSalts[] = "consumed_salts";
 // Generates a random validity bound offset in the interval
 // [0, kNearbyShareMaxPrivateCertificateValidityBoundOffset).
 base::TimeDelta GenerateRandomOffset() {
-  return base::Microseconds(base::RandGenerator(
-      kNearbyShareMaxPrivateCertificateValidityBoundOffset.InMicroseconds()));
+  return base::RandTimeDeltaUpTo(
+      kNearbyShareMaxPrivateCertificateValidityBoundOffset);
 }
 
 // Generates a certificate identifier by hashing the input secret |key|.
@@ -312,9 +312,9 @@ NearbySharePrivateCertificate::ToPublicCertificate() const {
   public_certificate.set_public_key(
       std::string(public_key.begin(), public_key.end()));
   public_certificate.mutable_start_time()->set_seconds(
-      (not_before_ - not_before_offset).ToJavaTime() / 1000);
+      (not_before_ - not_before_offset).InMillisecondsSinceUnixEpoch() / 1000);
   public_certificate.mutable_end_time()->set_seconds(
-      (not_after_ + not_after_offset).ToJavaTime() / 1000);
+      (not_after_ + not_after_offset).InMillisecondsSinceUnixEpoch() / 1000);
 
   // When `visibility_` is set to kYourDevices, under the hood, the visibility
   // is set to Selected Contacts with an empty allowed contact list. The
@@ -345,25 +345,21 @@ NearbySharePrivateCertificate::ToPublicCertificate() const {
 }
 
 base::Value::Dict NearbySharePrivateCertificate::ToDictionary() const {
-  base::Value::Dict dict;
-
-  dict.Set(kVisibility, static_cast<int>(visibility_));
-  dict.Set(kNotBefore, base::TimeToValue(not_before_));
-  dict.Set(kNotAfter, base::TimeToValue(not_after_));
-
   std::vector<uint8_t> key_pair;
   key_pair_->ExportPrivateKey(&key_pair);
-  dict.Set(kKeyPair, BytesToEncodedString(key_pair));
 
-  dict.Set(kSecretKey, EncodeString(secret_key_->key()));
-  dict.Set(kMetadataEncryptionKey,
-           BytesToEncodedString(metadata_encryption_key_));
-  dict.Set(kId, BytesToEncodedString(id_));
-  dict.Set(kUnencryptedMetadata,
-           EncodeString(unencrypted_metadata_.SerializeAsString()));
-  dict.Set(kConsumedSalts, SaltsToString(consumed_salts_));
-
-  return dict;
+  return base::Value::Dict()
+      .Set(kVisibility, static_cast<int>(visibility_))
+      .Set(kNotBefore, base::TimeToValue(not_before_))
+      .Set(kNotAfter, base::TimeToValue(not_after_))
+      .Set(kKeyPair, BytesToEncodedString(key_pair))
+      .Set(kSecretKey, EncodeString(secret_key_->key()))
+      .Set(kMetadataEncryptionKey,
+           BytesToEncodedString(metadata_encryption_key_))
+      .Set(kId, BytesToEncodedString(id_))
+      .Set(kUnencryptedMetadata,
+           EncodeString(unencrypted_metadata_.SerializeAsString()))
+      .Set(kConsumedSalts, SaltsToString(consumed_salts_));
 }
 
 absl::optional<NearbySharePrivateCertificate>

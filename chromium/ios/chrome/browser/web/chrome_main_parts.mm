@@ -51,8 +51,8 @@
 #import "components/variations/variations_ids_provider.h"
 #import "components/variations/variations_switches.h"
 #import "ios/chrome/browser/application_context/model/application_context_impl.h"
-#import "ios/chrome/browser/browser_state/browser_state_keyed_service_factories.h"
-#import "ios/chrome/browser/crash_report/crash_helper.h"
+#import "ios/chrome/browser/browser_state/model/browser_state_keyed_service_factories.h"
+#import "ios/chrome/browser/crash_report/model/crash_helper.h"
 #import "ios/chrome/browser/first_run/first_run.h"
 #import "ios/chrome/browser/flags/about_flags.h"
 #import "ios/chrome/browser/metrics/ios_chrome_metrics_service_accessor.h"
@@ -61,14 +61,14 @@
 #import "ios/chrome/browser/optimization_guide/optimization_guide_service_factory.h"
 #import "ios/chrome/browser/policy/browser_policy_connector_ios.h"
 #import "ios/chrome/browser/promos_manager/promos_manager.h"
-#import "ios/chrome/browser/safe_browsing/safe_browsing_metrics_collector_factory.h"
+#import "ios/chrome/browser/safe_browsing/model/safe_browsing_metrics_collector_factory.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state_manager.h"
 #import "ios/chrome/browser/shared/model/paths/paths.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/signin/signin_util.h"
-#import "ios/chrome/browser/translate/chrome_ios_translate_client.h"
-#import "ios/chrome/browser/translate/translate_service_ios.h"
+#import "ios/chrome/browser/translate/model/chrome_ios_translate_client.h"
+#import "ios/chrome/browser/translate/model/translate_service_ios.h"
 #import "ios/chrome/browser/web/ios_thread_profiler.h"
 #import "ios/chrome/common/channel_info.h"
 #import "ios/components/security_interstitials/safe_browsing/safe_browsing_service.h"
@@ -94,6 +94,8 @@
 
 // Vivaldi
 #import "browser/stats_reporter.h"
+#import "ios/ui/settings/appearance/vivaldi_appearance_setting_swift.h"
+#import "ios/ui/settings/appearance/vivaldi_theme_setting_prefs.h"
 // End Vivaldi
 
 namespace {
@@ -383,6 +385,8 @@ void IOSChromeMainParts::PreMainMessageLoopRun() {
 
 // Vivaldi
   stats_reporter_ = vivaldi::StatsReporter::CreateInstance();
+  [VivaldiThemeSettingPrefs setPrefService: last_used_browser_state->GetPrefs()];
+  [ThemeManager.shared applyTheme];
 // End Vivaldi
 
 }
@@ -435,9 +439,9 @@ void IOSChromeMainParts::SetUpFieldTrials(
 
 void IOSChromeMainParts::SetupMetrics() {
   metrics::MetricsService* metrics = application_context_->GetMetricsService();
-  metrics->GetSyntheticTrialRegistry()->AddSyntheticTrialObserver(
+  metrics->GetSyntheticTrialRegistry()->AddObserver(
       variations::VariationsIdsProvider::GetInstance());
-  metrics->GetSyntheticTrialRegistry()->AddSyntheticTrialObserver(
+  metrics->GetSyntheticTrialRegistry()->AddObserver(
       variations::SyntheticTrialsActiveGroupIdProvider::GetInstance());
   // Now that field trials have been created, initializes metrics recording.
   metrics->InitializeMetricsRecordingState();

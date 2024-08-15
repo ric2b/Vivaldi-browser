@@ -8,6 +8,7 @@
 <translation id="1056898198331236512">Waarskuwing</translation>
 <translation id="1060368002126861100">Om lêers met <ph name="APP_NAME" /> oop te maak, moet jy hulle eers na die Windows-lêersvouer toe skuif.</translation>
 <translation id="1062407476771304334">Vervang</translation>
+<translation id="1119383441774809183">Wys teksboodskappe</translation>
 <translation id="1119447706177454957">Interne fout</translation>
 <translation id="1120073797882051782">Hangul Romaja</translation>
 <translation id="112387589102719461">Engels (VSA) met Programmer Dvorak-sleutelbord</translation>
@@ -328,6 +329,7 @@
 <translation id="3619115746895587757">Cappuccino</translation>
 <translation id="3619593063686672873">Geen onlangse video's nie</translation>
 <translation id="3634507049637220048">Netwerk <ph name="NETWORK_INDEX" /> van <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, deur jou administrateur bestuur, besonderhede</translation>
+<translation id="36451918667380448">Selnetwerkverskaffer is gesluit. Kontak jou verskaffer vir steundienste.</translation>
 <translation id="3645233063072417428"><ph name="NUMBER_OF_ITEMS" /> items is geskuif.</translation>
 <translation id="3658269352872031728"><ph name="SELECTED_FILE_COUNT" /> lêers is gekies</translation>
 <translation id="3685122418104378273">Google Drive-sinkronisering is by verstek afgeskakel wanneer dit mobiele data gebruik.</translation>
@@ -1013,6 +1015,7 @@
 <translation id="8698877009525468705">Hierdie lêer is vertroulik en onderworpe aan beperkings op grond van adminbeleid.</translation>
 <translation id="8712637175834984815">Het dit</translation>
 <translation id="8713112442029511308">Maltees</translation>
+<translation id="8714138378966541668">Gesluit deur verskaffer</translation>
 <translation id="8714406895390098252">Fiets</translation>
 <translation id="8719721339511222681">Het <ph name="ENTRY_NAME" /> gekies.</translation>
 <translation id="872537912056138402">Kroaties</translation>

@@ -5,11 +5,13 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_SIDE_PANEL_CUSTOMIZE_CHROME_CUSTOMIZE_CHROME_PAGE_HANDLER_H_
 #define CHROME_BROWSER_UI_WEBUI_SIDE_PANEL_CUSTOMIZE_CHROME_CUSTOMIZE_CHROME_PAGE_HANDLER_H_
 
+#include <vector>
+
+#include "base/containers/flat_map.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
-#include "chrome/browser/manta/manta_service.h"
-#include "chrome/browser/manta/snapper_provider.h"
 #include "chrome/browser/search/background/ntp_background_service.h"
 #include "chrome/browser/search/background/ntp_background_service_observer.h"
 #include "chrome/browser/search/background/ntp_custom_background_service.h"
@@ -19,7 +21,6 @@
 #include "chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome.mojom.h"
 #include "chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_section.h"
 #include "chrome/common/search/ntp_logging_events.h"
-#include "components/endpoint_fetcher/endpoint_fetcher.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -97,11 +98,8 @@ class CustomizeChromePageHandler
   void UpdateModulesSettings() override;
   void UpdateScrollToSection() override;
 
-  void GetWallpaperSearchBackground();
-
  private:
   void LogEvent(NTPLoggingEventType event);
-  void WallpaperSearchCallback(std::unique_ptr<EndpointResponse> response);
 
   bool IsCustomLinksEnabled() const;
   bool IsShortcutsVisible() const;
@@ -134,8 +132,6 @@ class CustomizeChromePageHandler
   scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
   raw_ptr<content::WebContents> web_contents_;
   raw_ptr<NtpBackgroundService> ntp_background_service_;
-  raw_ptr<manta::MantaService> manta_service_;
-  std::unique_ptr<manta::SnapperProvider> snapper_provider_;
   GetBackgroundCollectionsCallback background_collections_callback_;
   base::TimeTicks background_collections_request_start_time_;
   std::string images_request_collection_id_;
@@ -143,6 +139,7 @@ class CustomizeChromePageHandler
   base::TimeTicks background_images_request_start_time_;
   raw_ptr<ThemeService> theme_service_;
   const std::vector<std::pair<const std::string, int>> module_id_names_;
+
   // Caches a request to scroll to a section in case the front-end queries the
   // last requested section, e.g. during load.
   CustomizeChromeSection last_requested_section_ =

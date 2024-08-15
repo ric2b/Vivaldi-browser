@@ -14,6 +14,8 @@
 #include "components/permissions/permission_hats_trigger_helper.h"  // nogncheck
 #include "components/safe_browsing/core/common/features.h"          // nogncheck
 #include "components/safe_browsing/core/common/safebrowsing_constants.h"  // nogncheck
+#else
+#include "chrome/browser/flags/android/chrome_feature_list.h"
 #endif  // #if !BUILDFLAG(IS_ANDROID)
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -45,6 +47,15 @@ constexpr char kHatsSurveyTriggerPrivacySandbox[] = "privacy-sandbox";
 constexpr char kHatsSurveyTriggerRedWarning[] = "red-warning";
 constexpr char kHatsSurveyTriggerSettings[] = "settings";
 constexpr char kHatsSurveyTriggerSettingsPrivacy[] = "settings-privacy";
+constexpr char kHatsSurveyTriggerSettingsSecurity[] = "settings-security";
+constexpr char kHatsSurveyTriggerTrackingProtectionControlImmediate[] =
+    "tracking-protection-control-immediate";
+constexpr char kHatsSurveyTriggerTrackingProtectionTreatmentImmediate[] =
+    "tracking-protection-treatment-immediate";
+constexpr char kHatsSurveyTriggerTrackingProtectionControlDelayed[] =
+    "tracking-protection-control-delayed";
+constexpr char kHatsSurveyTriggerTrackingProtectionTreatmentDelayed[] =
+    "tracking-protection-treatment-delayed";
 constexpr char kHatsSurveyTriggerTrustSafetyPrivacySandbox3ConsentAccept[] =
     "ts-ps3-consent-accept";
 constexpr char kHatsSurveyTriggerTrustSafetyPrivacySandbox3ConsentDecline[] =
@@ -75,8 +86,12 @@ constexpr char kHatsSurveyTriggerTrustSafetyV2BrowsingData[] =
     "ts-v2-browsing-data";
 constexpr char kHatsSurveyTriggerTrustSafetyV2ControlGroup[] =
     "ts-v2-control-group";
+constexpr char kHatsSurveyTriggerTrustSafetyV2DownloadWarningUI[] =
+    "ts-v2-download-warning-ui";
 constexpr char kHatsSurveyTriggerTrustSafetyV2PasswordCheck[] =
     "ts-v2-password-check";
+constexpr char kHatsSurveyTriggerTrustSafetyV2PasswordProtectionUI[] =
+    "ts-v2-password-protection-ui";
 constexpr char kHatsSurveyTriggerTrustSafetyV2SafetyCheck[] =
     "ts-v2-safety-check";
 constexpr char kHatsSurveyTriggerTrustSafetyV2TrustedSurface[] =
@@ -93,6 +108,8 @@ constexpr char kHatsSurveyTriggerTrustSafetyV2PrivacySandbox4NoticeSettings[] =
     "ts-v2-ps4-notice-settings";
 constexpr char kHatsSurveyTriggerTrustSafetyV2SafeBrowsingInterstitial[] =
     "ts-v2-safe-browsing-interstitial";
+#else   // BUILDFLAG(IS_ANDROID)
+constexpr char kHatsSurveyTriggerAndroidStartupSurvey[] = "startup_survey";
 #endif  // #if !BUILDFLAG(IS_ANDROID)
 
 constexpr char kHatsSurveyTriggerTesting[] = "testing";
@@ -152,6 +169,15 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
       std::vector<std::string>{"3P cookies blocked",
                                "Privacy Sandbox enabled"});
   survey_configs.emplace_back(
+      &features::kHappinessTrackingSurveysForSecurityPage,
+      kHatsSurveyTriggerSettingsSecurity,
+      /*presupplied_trigger_id=*/
+      features::kHappinessTrackingSurveysForSecurityPageTriggerId.Get(),
+      std::vector<std::string>{},
+      std::vector<std::string>{
+          "Security Page User Action", "Safe Browsing Setting Before Trigger",
+          "Safe Browsing Setting After Trigger", "Client Channel"});
+  survey_configs.emplace_back(
       &features::kHappinessTrackingSurveysForDesktopPrivacyGuide,
       kHatsSurveyTriggerPrivacyGuide);
   survey_configs.emplace_back(
@@ -193,6 +219,43 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
   survey_configs.emplace_back(
       &features::kHappinessTrackingSurveysForNtpPhotosOptOut,
       kHatsSurveyTriggerNtpPhotosModuleOptOut);
+
+  // Tracking Protection Sentiment Surveys
+  survey_configs.emplace_back(
+      &features::kTrackingProtectionSentimentSurvey,
+      kHatsSurveyTriggerTrackingProtectionControlImmediate,
+      features::kTrackingProtectionSentimentSurveyControlImmediateTriggerId
+          .Get(),
+      std::vector<std::string>{
+          "Onboarding Settings Clicked", "3P cookies blocked", "Is Mode B'",
+          "Topics enabled", "Fledge enabled", "Measurement enabled"},
+      std::vector<std::string>{"Seconds to acknowledge"});
+  survey_configs.emplace_back(
+      &features::kTrackingProtectionSentimentSurvey,
+      kHatsSurveyTriggerTrackingProtectionTreatmentImmediate,
+      features::kTrackingProtectionSentimentSurveyTreatmentImmediateTriggerId
+          .Get(),
+      std::vector<std::string>{
+          "Onboarding Settings Clicked", "3P cookies blocked", "Is Mode B'",
+          "Topics enabled", "Fledge enabled", "Measurement enabled"},
+      std::vector<std::string>{"Seconds to acknowledge"});
+  survey_configs.emplace_back(
+      &features::kTrackingProtectionSentimentSurvey,
+      kHatsSurveyTriggerTrackingProtectionControlDelayed,
+      features::kTrackingProtectionSentimentSurveyControlDelayedTriggerId.Get(),
+      std::vector<std::string>{
+          "Onboarding Settings Clicked", "3P cookies blocked", "Is Mode B'",
+          "Topics enabled", "Fledge enabled", "Measurement enabled"},
+      std::vector<std::string>{"Seconds to acknowledge"});
+  survey_configs.emplace_back(
+      &features::kTrackingProtectionSentimentSurvey,
+      kHatsSurveyTriggerTrackingProtectionTreatmentDelayed,
+      features::kTrackingProtectionSentimentSurveyTreatmentDelayedTriggerId
+          .Get(),
+      std::vector<std::string>{
+          "Onboarding Settings Clicked", "3P cookies blocked", "Is Mode B'",
+          "Topics enabled", "Fledge enabled", "Measurement enabled"},
+      std::vector<std::string>{"Seconds to acknowledge"});
 
   // Trust & Safety Sentiment surveys.
   survey_configs.emplace_back(
@@ -291,8 +354,26 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
       features::kTrustSafetySentimentSurveyV2ControlGroupTriggerId.Get());
   survey_configs.emplace_back(
       &features::kTrustSafetySentimentSurveyV2,
+      kHatsSurveyTriggerTrustSafetyV2DownloadWarningUI,
+      features::kTrustSafetySentimentSurveyV2DownloadWarningUITriggerId.Get(),
+      std::vector<std::string>{"Enhanced protection enabled", "Is mainpage UI",
+                               "Is subpage UI", "Is downloads page UI",
+                               "Is download prompt UI",
+                               "User proceeded past warning"});
+  survey_configs.emplace_back(
+      &features::kTrustSafetySentimentSurveyV2,
       kHatsSurveyTriggerTrustSafetyV2PasswordCheck,
       features::kTrustSafetySentimentSurveyV2PasswordCheckTriggerId.Get());
+  survey_configs.emplace_back(
+      &features::kTrustSafetySentimentSurveyV2,
+      kHatsSurveyTriggerTrustSafetyV2PasswordProtectionUI,
+      features::kTrustSafetySentimentSurveyV2PasswordProtectionUITriggerId
+          .Get(),
+      std::vector<std::string>{
+          "Enhanced protection enabled", "Is page info UI",
+          "Is modal dialog UI", "Is interstitial UI",
+          "User completed password change", "User clicked change password",
+          "User ignored warning", "User marked as legitimate"});
   survey_configs.emplace_back(
       &features::kTrustSafetySentimentSurveyV2,
       kHatsSurveyTriggerTrustSafetyV2SafetyCheck,
@@ -333,7 +414,11 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
       &features::kTrustSafetySentimentSurveyV2,
       kHatsSurveyTriggerTrustSafetyV2SafeBrowsingInterstitial,
       features::kTrustSafetySentimentSurveyV2SafeBrowsingInterstitialTriggerId
-          .Get());
+          .Get(),
+      std::vector<std::string>{
+          "User proceeded past interstitial", "Enhanced protection enabled",
+          "Threat is phishing", "Threat is malware",
+          "Threat is unwanted software", "Threat is billing"});
 
   // Autofill surveys.
   survey_configs.emplace_back(&features::kAutofillAddressSurvey,
@@ -402,6 +487,10 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
       std::vector<std::string>{
           safe_browsing::kFlaggedUrl, safe_browsing::kMainFrameUrl,
           safe_browsing::kReferrerUrl, safe_browsing::kUserActivityWithUrls});
+
+#else
+  survey_configs.emplace_back(&chrome::android::kChromeSurveyNextAndroid,
+                              kHatsSurveyTriggerAndroidStartupSurvey);
 
 #endif  // #if !BUILDFLAG(IS_ANDROID)
 

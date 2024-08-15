@@ -6,15 +6,17 @@
 #define CONTENT_BROWSER_PRELOADING_PREFETCH_PREFETCH_TEST_UTILS_H_
 
 #include <memory>
+#include <ostream>
 #include <string>
 
-#include "content/browser/preloading/prefetch/prefetch_streaming_url_loader.h"
+#include "content/browser/preloading/prefetch/prefetch_streaming_url_loader_common_types.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "mojo/public/cpp/system/data_pipe_drainer.h"
 #include "services/network/public/mojom/early_hints.mojom.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom-forward.h"
 #include "services/network/test/test_url_loader_factory.h"
+#include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
 namespace base {
@@ -25,6 +27,11 @@ namespace content {
 
 class PrefetchContainer;
 
+enum class PrefetchReusableForTests { kDisabled, kEnabled };
+std::ostream& operator<<(std::ostream& ostream, PrefetchReusableForTests);
+
+std::vector<PrefetchReusableForTests> PrefetchReusableValuesForTests();
+
 void MakeServableStreamingURLLoaderForTest(
     PrefetchContainer* prefetch_container,
     network::mojom::URLResponseHeadPtr head,
@@ -34,8 +41,7 @@ network::TestURLLoaderFactory::PendingRequest
 MakeManuallyServableStreamingURLLoaderForTest(
     PrefetchContainer* prefetch_container);
 
-PrefetchStreamingURLLoader::OnPrefetchRedirectCallback
-CreatePrefetchRedirectCallbackForTest(
+OnPrefetchRedirectCallback CreatePrefetchRedirectCallbackForTest(
     base::RunLoop* on_receive_redirect_loop,
     net::RedirectInfo* out_redirect_info,
     network::mojom::URLResponseHeadPtr* out_redirect_head);
@@ -45,8 +51,7 @@ void MakeServableStreamingURLLoaderWithRedirectForTest(
     const GURL& original_url,
     const GURL& redirect_url);
 
-std::vector<base::WeakPtr<PrefetchStreamingURLLoader>>
-MakeServableStreamingURLLoadersWithNetworkTransitionRedirectForTest(
+void MakeServableStreamingURLLoadersWithNetworkTransitionRedirectForTest(
     PrefetchContainer* prefetch_container,
     const GURL& original_url,
     const GURL& redirect_url);
@@ -87,8 +92,6 @@ class PrefetchTestURLLoaderClient : public network::mojom::URLLoaderClient,
     return received_redirects_;
   }
 
-  void SetOnDataCompleteCallback(base::OnceClosure on_data_complete_callback);
-
  private:
   // network::mojom::URLLoaderClient
   void OnReceiveEarlyHints(network::mojom::EarlyHintsPtr early_hints) override;
@@ -125,8 +128,6 @@ class PrefetchTestURLLoaderClient : public network::mojom::URLLoaderClient,
 
   std::vector<std::pair<net::RedirectInfo, network::mojom::URLResponseHeadPtr>>
       received_redirects_;
-
-  base::OnceClosure on_data_complete_callback_;
 };
 
 }  // namespace content

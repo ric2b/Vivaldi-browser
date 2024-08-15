@@ -19,6 +19,7 @@ ci.defaults.set(
     sheriff_rotations = sheriff_rotations.CHROMIUM,
     tree_closing = True,
     main_console_view = "main",
+    contact_team_email = "chrome-desktop-engprod@google.com",
     execution_timeout = ci.DEFAULT_EXECUTION_TIMEOUT,
     reclient_instance = reclient.instance.DEFAULT_TRUSTED,
     reclient_jobs = reclient.jobs.DEFAULT,
@@ -166,7 +167,7 @@ ci.builder(
     cq_mirrors_console_view = "mirrors",
     # TODO(crbug/1473182): Remove once the bug is closed.
     reclient_bootstrap_env = {
-        "RBE_v": "3",
+        "RBE_experimental_exit_on_stuck_actions": "true",
     },
 )
 

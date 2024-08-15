@@ -6,6 +6,7 @@
 
 #include "base/containers/contains.h"
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-shared.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_fragmentation_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_fragment.h"
 #include "third_party/blink/renderer/core/style/computed_style_base_constants.h"
@@ -323,38 +324,19 @@ void NGFragmentBuilder::PropagateFromFragment(
           child_break_tokens_.push_back(child_break_token);
         break;
       case NGPhysicalFragment::kFragmentLineBox:
-        const auto* inline_break_token =
-            To<NGInlineBreakToken>(child_break_token);
-        if (inline_break_token) {
-          // TODO(mstensho): Orphans / widows calculation is wrong when regular
-          // inline layout gets interrupted by a block-in-inline. We need to
-          // reset line_count_ when this happens.
-          if (UNLIKELY(inline_break_token->BlockInInlineBreakToken())) {
-            if (inline_break_token->BlockInInlineBreakToken()->IsAtBlockEnd()) {
-              // We were resuming a block in inline, and we broke again, and
-              // we're in a parallel flow. To be resumed in the next
-              // fragmentainer.
-              child_break_tokens_.push_back(inline_break_token);
-              break;
-            }
-          }
-          if (UNLIKELY(inline_break_token->SubBreakTokenInParallelFlow())) {
-            // We broke inside a block inside an inline which establised a
-            // parallel flow in the current fragmentainer. This creates two
-            // inline break tokens - one for the actual inline content to resume
-            // in the current fragmentainer, and one for the block-in-inline to
-            // resume in the next fragmentainer. Look inside the break token for
-            // actual inline layout (it will be picked up and resumed by the
-            // current layout algorithm), and take the sub break token with the
-            // block-in-inline and add it to the break token list, so that it
-            // gets resumed in the next fragmentainer.
-            const auto* sub_break_token =
-                inline_break_token->SubBreakTokenInParallelFlow();
-            DCHECK(sub_break_token->BlockInInlineBreakToken());
-            child_break_tokens_.push_back(sub_break_token);
-          }
+        if (child.IsLineForParallelFlow()) {
+          // This is a line that only contains a resumed float / block after a
+          // fragmentation break. It should not affect orphans / widows
+          // calculation.
+          break;
         }
 
+        const auto* inline_break_token =
+            To<InlineBreakToken>(child_break_token);
+        // TODO(mstensho): Orphans / widows calculation is wrong when regular
+        // inline layout gets interrupted by a block-in-inline. We need to reset
+        // line_count_ when this happens.
+        //
         // We only care about the break token from the last line box added. This
         // is where we'll resume if we decide to block-fragment. Note that
         // child_break_token is nullptr if this is the last line to be generated
@@ -391,11 +373,11 @@ void NGFragmentBuilder::AddChildInternal(const NGPhysicalFragment* child,
 void NGFragmentBuilder::AddOutOfFlowChildCandidate(
     NGBlockNode child,
     const LogicalOffset& child_offset,
-    NGLogicalStaticPosition::InlineEdge inline_edge,
-    NGLogicalStaticPosition::BlockEdge block_edge) {
+    LogicalStaticPosition::InlineEdge inline_edge,
+    LogicalStaticPosition::BlockEdge block_edge) {
   DCHECK(child);
   oof_positioned_candidates_.emplace_back(
-      child, NGLogicalStaticPosition{child_offset, inline_edge, block_edge},
+      child, LogicalStaticPosition{child_offset, inline_edge, block_edge},
       NGInlineContainer<LogicalOffset>());
 }
 
@@ -415,9 +397,9 @@ void NGFragmentBuilder::AddOutOfFlowInlineChildCandidate(
   // parent element to correctly determine an OOF childs static position.
   AddOutOfFlowChildCandidate(child, child_offset,
                              IsLtr(inline_container_direction)
-                                 ? NGLogicalStaticPosition::kInlineStart
-                                 : NGLogicalStaticPosition::kInlineEnd,
-                             NGLogicalStaticPosition::kBlockStart);
+                                 ? LogicalStaticPosition::kInlineStart
+                                 : LogicalStaticPosition::kInlineEnd,
+                             LogicalStaticPosition::kBlockStart);
 }
 
 void NGFragmentBuilder::AddOutOfFlowFragmentainerDescendant(
@@ -542,7 +524,7 @@ void NGFragmentBuilder::PropagateOOFPositionedInfo(
   const WritingModeConverter converter(GetWritingDirection(), fragment.Size());
   for (const auto& descendant : fragment.OutOfFlowPositionedDescendants()) {
     NGBlockNode node = descendant.Node();
-    NGLogicalStaticPosition static_position =
+    LogicalStaticPosition static_position =
         descendant.StaticPosition().ConvertToLogical(converter);
 
     NGInlineContainer<LogicalOffset> new_inline_container;
@@ -587,7 +569,7 @@ void NGFragmentBuilder::PropagateOOFPositionedInfo(
       // fragment, since it hasn't finished layout yet. But we still need to
       // propagate the fixed-positioned descendant, so that it gets laid out
       // inside the fragmentation context (and repeated on every page), instead
-      // of becoming a direct child of the LayoutNGView fragment (and thus a
+      // of becoming a direct child of the LayoutView fragment (and thus a
       // sibling of the page fragments).
       if (fixedpos_containing_block &&
           (fixedpos_containing_block->Fragment() || node_.IsPaginatedRoot())) {
@@ -810,7 +792,7 @@ void NGFragmentBuilder::PropagateOOFFragmentainerDescendants(
     // fragment.
     const WritingModeConverter containing_block_converter(
         GetWritingDirection(), containing_block_fragment->Size());
-    NGLogicalStaticPosition static_position =
+    LogicalStaticPosition static_position =
         descendant.StaticPosition().ConvertToLogical(
             containing_block_converter);
 
@@ -929,6 +911,17 @@ void NGFragmentBuilder::AdjustFixedposContainerInfo(
         *fixedpos_containing_block_fragment = box_fragment;
     }
   }
+}
+
+void NGFragmentBuilder::PropagateSpaceShortage(
+    absl::optional<LayoutUnit> space_shortage) {
+  // Space shortage should only be reported when we already have a tentative
+  // fragmentainer block-size. It's meaningless to talk about space shortage
+  // in the initial column balancing pass, because then we have no
+  // fragmentainer block-size at all, so who's to tell what's too short or
+  // not?
+  DCHECK(!IsInitialColumnBalancingPass());
+  UpdateMinimalSpaceShortage(space_shortage, &minimal_space_shortage_);
 }
 
 const NGLayoutResult* NGFragmentBuilder::Abort(NGLayoutResult::EStatus status) {

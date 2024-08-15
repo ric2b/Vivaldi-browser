@@ -11,8 +11,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "chrome/browser/web_applications/commands/web_app_command.h"
-#include "chrome/browser/web_applications/web_app_id.h"
 #include "components/webapps/browser/installable/installable_logging.h"
+#include "components/webapps/common/web_app_id.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom-forward.h"
 #include "url/gurl.h"
 
@@ -94,8 +94,8 @@ class NavigateAndTriggerInstallDialogCommand
   const std::unique_ptr<WebAppDataRetriever> data_retriever_;
   raw_ptr<Profile> profile_ = nullptr;
 
-  AppId app_id_;
-  raw_ptr<content::WebContents> web_contents_ = nullptr;
+  webapps::AppId app_id_;
+  base::WeakPtr<content::WebContents> web_contents_;
   base::Value::List error_log_;
 
   base::WeakPtrFactory<NavigateAndTriggerInstallDialogCommand> weak_factory_{

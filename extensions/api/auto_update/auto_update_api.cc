@@ -5,6 +5,11 @@
 #include "extensions/schema/autoupdate.h"
 #include "extensions/tools/vivaldi_tools.h"
 
+#include "base/lazy_instance.h"
+#include "base/path_service.h"
+#include "base/files/file_path.h"
+#include "base/task/thread_pool.h"
+
 namespace auto_update = extensions::vivaldi::auto_update;
 
 namespace extensions {
@@ -18,6 +23,70 @@ std::string GetVersionString(const base::Version& version) {
 }
 
 }  // namespace
+
+AutoUpdateAPI::AutoUpdateAPI(content::BrowserContext* context)
+    : browser_context_(context) {
+  LOG(INFO) << "AutoUpdateAPI::Init";
+#if BUILDFLAG(IS_WIN)
+  InitUpgradeDetection();
+#endif
+
+#if BUILDFLAG(IS_LINUX)
+  task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
+      {base::TaskPriority::USER_VISIBLE, base::MayBlock()});
+
+  task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(base::BindOnce(
+          [](AutoUpdateAPI* api) {
+            base::FilePath executable_path;
+            if (base::PathService::Get(base::FILE_EXE, &executable_path)) {
+              LOG(INFO) << "got executable";
+              api->executable_file_watcher_ =
+                  std::make_unique<base::FilePathWatcher>();
+              api->executable_file_watcher_->Watch(
+                  executable_path, base::FilePathWatcher::Type::kNonRecursive,
+                  base::BindRepeating([](const base::FilePath&, bool) {
+                    content::GetUIThreadTaskRunner()->PostTask(
+                        FROM_HERE, base::BindOnce([]() {
+                          LOG(INFO) << "Binary changed";
+                          ::vivaldi::BroadcastEventToAllProfiles(
+                              auto_update::OnWillInstallUpdateOnQuit::
+                                  kEventName,
+                              auto_update::OnWillInstallUpdateOnQuit::Create(
+                                  ""));
+                        }));
+                  }));
+            } else {
+              LOG(INFO) << "executable not found";
+            }
+          },
+          this)));
+#endif
+}
+
+AutoUpdateAPI::~AutoUpdateAPI() {}
+
+void AutoUpdateAPI::Shutdown() {
+#if BUILDFLAG(IS_LINUX)
+  task_runner_->PostTask(FROM_HERE, base::BindOnce(
+                                        [](AutoUpdateAPI* api) {
+                                          api->executable_file_watcher_.reset();
+                                        },
+                                        this));
+#endif
+#if BUILDFLAG(IS_WIN)
+  ShutdownUpgradeDetection();
+#endif
+}
+
+BrowserContextKeyedAPIFactory<AutoUpdateAPI>*
+AutoUpdateAPI::GetFactoryInstance() {
+  static base::LazyInstance<
+      BrowserContextKeyedAPIFactory<AutoUpdateAPI>>::DestructorAtExit factory =
+      LAZY_INSTANCE_INITIALIZER;
+  return factory.Pointer();
+}
 
 /* static */
 void AutoUpdateAPI::SendDidFindValidUpdate(const std::string& url,

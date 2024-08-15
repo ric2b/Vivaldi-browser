@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/memory/raw_ptr.h"
 #include "gin/public/context_holder.h"
 #include "gin/public/gin_embedders.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
@@ -175,13 +176,20 @@ class PLATFORM_EXPORT ScriptState : public GarbageCollected<ScriptState> {
   // associated with a ScriptState. This is necessary in unit tests when a
   // v8::Context is created directly on the v8 API without going through the
   // usual blink codepaths.
+  // This is also called in some situations where DissociateContext() has
+  // already been called and therefore the ScriptState pointer on the
+  // v8::Context has already been nulled.
   static ScriptState* MaybeFrom(v8::Local<v8::Context> context) {
     DCHECK(!context.IsEmpty());
     if (context->GetNumberOfEmbedderDataFields() <=
         kV8ContextPerContextDataIndex) {
       return nullptr;
     }
-    return From(context);
+    ScriptState* script_state =
+        static_cast<ScriptState*>(context->GetAlignedPointerFromEmbedderData(
+            kV8ContextPerContextDataIndex));
+    SECURITY_CHECK(!script_state || script_state->context_ == context);
+    return script_state;
   }
 
   v8::Isolate* GetIsolate() const { return isolate_; }
@@ -215,7 +223,7 @@ class PLATFORM_EXPORT ScriptState : public GarbageCollected<ScriptState> {
   static void OnV8ContextCollectedCallback(
       const v8::WeakCallbackInfo<ScriptState>&);
 
-  v8::Isolate* isolate_;
+  raw_ptr<v8::Isolate, ExperimentalRenderer> isolate_;
   // This persistent handle is weak.
   ScopedPersistent<v8::Context> context_;
 
@@ -274,7 +282,7 @@ class ScriptStateProtectingContext final
 
   void Trace(Visitor* visitor) const { visitor->Trace(script_state_); }
 
-  ScriptState* Get() const { return script_state_; }
+  ScriptState* Get() const { return script_state_.Get(); }
   void Reset() {
     script_state_ = nullptr;
     context_.Clear();

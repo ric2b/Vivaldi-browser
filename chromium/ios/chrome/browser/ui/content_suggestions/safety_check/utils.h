@@ -10,7 +10,7 @@
 #import <UIKit/UIKit.h>
 
 #import "base/time/time.h"
-#import "ios/chrome/browser/safety_check/ios_chrome_safety_check_manager_constants.h"
+#import "ios/chrome/browser/safety_check/model/ios_chrome_safety_check_manager_constants.h"
 #import "third_party/abseil-cpp/absl/types/optional.h"
 
 @protocol ApplicationCommands;
@@ -49,6 +49,8 @@ int CheckIssuesCount(SafetyCheckState* state);
 // Returns true if the Safety Check can be run given `last_run_time`.
 bool CanRunSafetyCheck(absl::optional<base::Time> last_run_time);
 
+// Given `last_run_time`, returns a short, human-readable string for the
+// timestamp.
 NSString* FormatElapsedTimeSinceLastSafetyCheck(
     absl::optional<base::Time> last_run_time);
 

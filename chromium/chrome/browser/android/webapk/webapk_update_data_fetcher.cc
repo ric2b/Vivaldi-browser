@@ -141,7 +141,8 @@ void WebApkUpdateDataFetcher::FetchInstallableData() {
     return;
 
   webapps::InstallableParams params;
-  params.valid_manifest = true;
+  params.installable_criteria =
+      webapps::InstallableCriteria::kValidManifestWithIcons;
   params.prefer_maskable_icon =
       webapps::WebappsIconUtils::DoesAndroidSupportMaskableIcons();
   params.has_worker = false;
@@ -176,27 +177,26 @@ void WebApkUpdateDataFetcher::OnDidGetInstallableData(
     return;
   }
 
-    GURL new_manifest_id(blink::GetIdFromManifest(*data.manifest));
-    if (web_manifest_id_.is_empty()) {
-      // Don't have an existing manifest ID, check if either manifest URL or
-      // start URL are the same. If neither of them are the same, we treat the
-      // manifest as one of another WebAPK.
-      if (web_manifest_url_ != *data.manifest_url &&
-          start_url_ != data.manifest->start_url) {
-        UMA_HISTOGRAM_ENUMERATION(kGotUpdateManifestHistogramName,
-                                  ManifestResult::kDifferentLegacyId,
-                                  ManifestResult::kMaxValue);
-        return;
-      }
-    } else if (web_manifest_id_ != new_manifest_id) {
-      // If the fetched manifest id is different from the current one,
-      // continue observing as the id is the identity for the application. We
-      // will treat the manifest with different id as the one of another WebAPK.
+  if (web_manifest_id_.is_empty()) {
+    // Don't have an existing manifest ID, check if either manifest URL or
+    // start URL are the same. If neither of them are the same, we treat the
+    // manifest as one of another WebAPK.
+    if (web_manifest_url_ != *data.manifest_url &&
+        start_url_ != data.manifest->start_url) {
       UMA_HISTOGRAM_ENUMERATION(kGotUpdateManifestHistogramName,
-                                ManifestResult::kDifferent,
+                                ManifestResult::kDifferentLegacyId,
                                 ManifestResult::kMaxValue);
       return;
     }
+  } else if (web_manifest_id_ != data.manifest->id) {
+    // If the fetched manifest id is different from the current one,
+    // continue observing as the id is the identity for the application. We
+    // will treat the manifest with different id as the one of another WebAPK.
+    UMA_HISTOGRAM_ENUMERATION(kGotUpdateManifestHistogramName,
+                              ManifestResult::kDifferent,
+                              ManifestResult::kMaxValue);
+    return;
+  }
 
   UMA_HISTOGRAM_ENUMERATION(kGotUpdateManifestHistogramName,
                             ManifestResult::kFound, ManifestResult::kMaxValue);

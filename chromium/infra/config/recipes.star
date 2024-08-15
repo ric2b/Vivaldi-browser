@@ -165,7 +165,15 @@ build_recipe(
 )
 
 build_recipe(
+    name = "recipe:chromium/gn_args_verifier",
+)
+
+build_recipe(
     name = "recipe:chromium/targets_config_verifier",
+)
+
+build_recipe(
+    name = "recipe:chromium_licenses/scan",
 )
 
 build_recipe(
@@ -238,10 +246,6 @@ build_recipe(
 build_recipe(
     name = "recipe:gofindit/chromium/test_single_revision",
     bootstrappable = POLYMORPHIC,
-)
-
-build_recipe(
-    name = "recipe:perf/crossbench",
 )
 
 build_recipe(

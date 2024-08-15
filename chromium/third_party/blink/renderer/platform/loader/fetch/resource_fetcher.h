@@ -66,6 +66,7 @@ namespace blink {
 
 enum class ResourceType : uint8_t;
 class BackForwardCacheLoaderHelper;
+class CodeCacheHost;
 class DetachableConsoleLogger;
 class DetachableUseCounter;
 class DetachableResourceFetcherProperties;
@@ -78,7 +79,6 @@ class ResourceError;
 class ResourceLoadObserver;
 class SubresourceWebBundle;
 class SubresourceWebBundleList;
-class WebCodeCacheLoader;
 struct ResourceFetcherInit;
 struct ResourceLoaderOptions;
 
@@ -117,8 +117,8 @@ class PLATFORM_EXPORT ResourceFetcher
         scoped_refptr<base::SingleThreadTaskRunner> unfreezable_task_runner,
         BackForwardCacheLoaderHelper*) = 0;
 
-    // Create a code cache loader to fetch data from code caches.
-    virtual std::unique_ptr<WebCodeCacheLoader> CreateCodeCacheLoader() = 0;
+    // Get a code cache host to fetch data from code caches.
+    virtual CodeCacheHost* GetCodeCacheHost() = 0;
   };
 
   // ResourceFetcher creators are responsible for setting consistent objects
@@ -147,7 +147,7 @@ class PLATFORM_EXPORT ResourceFetcher
   ResourceLoadObserver* GetResourceLoadObserver() {
     // When detached, we must have a null observer.
     DCHECK(!IsDetached() || !resource_load_observer_);
-    return resource_load_observer_;
+    return resource_load_observer_.Get();
   }
   // This must be called right after construction.
   void SetResourceLoadObserver(ResourceLoadObserver* observer) {
@@ -174,9 +174,8 @@ class PLATFORM_EXPORT ResourceFetcher
   // Create a loader. This cannot be called after ClearContext is called.
   std::unique_ptr<URLLoader> CreateURLLoader(const ResourceRequestHead&,
                                              const ResourceLoaderOptions&);
-  // Create a code cache loader. This cannot be called after ClearContext is
-  // called.
-  std::unique_ptr<WebCodeCacheLoader> CreateCodeCacheLoader();
+  // Get a code cache host. This cannot be called after ClearContext is called.
+  CodeCacheHost* GetCodeCacheHost();
 
   Resource* CachedResource(const KURL&) const;
 
@@ -318,16 +317,13 @@ class PLATFORM_EXPORT ResourceFetcher
       bool is_link_preload,
       const absl::optional<float> resource_width = absl::nullopt,
       const absl::optional<float> resource_height = absl::nullopt,
-      bool is_potentially_lcp_element = false) {
-    return ComputeLoadPriority(type, request, visibility_statue, defer_option,
-                               speculative_preload_type,
-                               render_blocking_behavior, script_type,
-                               is_link_preload, resource_width, resource_height,
-                               is_potentially_lcp_element);
-  }
-
-  bool ShouldLoadIncrementalForTesting(ResourceType type) {
-    return ShouldLoadIncremental(type);
+      bool is_potentially_lcp_element = false,
+      bool is_potentially_lcp_influencer = false) {
+    return ComputeLoadPriority(
+        type, request, visibility_statue, defer_option,
+        speculative_preload_type, render_blocking_behavior, script_type,
+        is_link_preload, resource_width, resource_height,
+        is_potentially_lcp_element, is_potentially_lcp_influencer);
   }
 
   void SetThrottleOptionOverride(
@@ -339,7 +335,7 @@ class PLATFORM_EXPORT ResourceFetcher
   SubresourceWebBundleList* GetOrCreateSubresourceWebBundleList();
 
   BackForwardCacheLoaderHelper* GetBackForwardCacheLoaderHelper() {
-    return back_forward_cache_loader_helper_;
+    return back_forward_cache_loader_helper_.Get();
   }
 
   void SetEarlyHintsPreloadedResources(
@@ -396,7 +392,13 @@ class PLATFORM_EXPORT ResourceFetcher
       bool is_link_preload = false,
       const absl::optional<float> resource_width = absl::nullopt,
       const absl::optional<float> resource_height = absl::nullopt,
-      bool is_potentially_lcp_element = false);
+      bool is_potentially_lcp_element = false,
+      bool is_potentially_lcp_influencer = false);
+  // A helper that uses `params` to fill out other remaining parameters.
+  ResourceLoadPriority ComputeLoadPriorityHelper(
+      ResourceType,
+      ResourcePriority::VisibilityStatus,
+      const FetchParameters& params);
   ResourceLoadPriority AdjustImagePriority(
       ResourceLoadPriority priority_so_far,
       ResourceType type,
@@ -405,7 +407,6 @@ class PLATFORM_EXPORT ResourceFetcher
       bool is_link_preload,
       const absl::optional<float> resource_width,
       const absl::optional<float> resource_height);
-  bool ShouldLoadIncremental(ResourceType type) const;
 
   // |virtual_time_pauser| is an output parameter. PrepareRequest may
   // create a new WebScopedVirtualTimePauser and set it to
@@ -655,7 +656,7 @@ class PLATFORM_EXPORT ResourceFetcher
   // Area (in pixels) below which an image is considered "small"
   uint32_t small_image_max_size_ = 0;
 
-  // Number of images that have had their priority boosted based on LCPP
+  // Number of resources that have had their priority boosted based on LCPP
   // signals.
   uint32_t potentially_lcp_resource_priority_boosts_ = 0;
 };

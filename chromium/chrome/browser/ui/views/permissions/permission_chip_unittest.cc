@@ -6,6 +6,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
+#include "base/test/to_vector.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/test_with_browser_view.h"
 #include "chrome/browser/ui/views/permissions/chip_controller.h"
@@ -14,6 +15,7 @@
 #include "components/permissions/permission_ui_selector.h"
 #include "components/permissions/test/mock_permission_request.h"
 #include "ui/events/base_event_utils.h"
+#include "ui/gfx/animation/animation_test_api.h"
 #include "ui/views/test/ax_event_counter.h"
 #include "ui/views/test/button_test_api.h"
 
@@ -40,17 +42,18 @@ class TestDelegate : public permissions::PermissionPrompt::Delegate {
           quiet_ui_reason,
       content::WebContents* web_contents)
       : quiet_ui_reason_(quiet_ui_reason), web_contents_(web_contents) {
-    base::ranges::transform(
-        request_types, std::back_inserter(requests_), [&](auto& request_type) {
+    requests_ = base::test::ToVector(
+        request_types,
+        [&](auto request_type)
+            -> std::unique_ptr<permissions::PermissionRequest> {
           return std::make_unique<permissions::MockPermissionRequest>(
               origin, request_type,
               with_gesture
                   ? permissions::PermissionRequestGestureType::GESTURE
                   : permissions::PermissionRequestGestureType::NO_GESTURE);
         });
-    base::ranges::transform(
-        requests_, std::back_inserter(raw_requests_),
-        &std::unique_ptr<permissions::PermissionRequest>::get);
+    raw_requests_ = base::test::ToVector(
+        requests_, &std::unique_ptr<permissions::PermissionRequest>::get);
   }
 
   const std::vector<permissions::PermissionRequest*>& Requests() override {
@@ -70,6 +73,7 @@ class TestDelegate : public permissions::PermissionPrompt::Delegate {
   void Deny() override { requests_.clear(); }
   void Dismiss() override { requests_.clear(); }
   void Ignore() override { requests_.clear(); }
+  void FinalizeCurrentRequests() override { NOTREACHED(); }
   void OpenHelpCenterLink(const ui::Event& event) override {}
   void PreIgnoreQuietPrompt() override { requests_.clear(); }
   void SetManageClicked() override { requests_.clear(); }
@@ -121,8 +125,9 @@ class TestDelegate : public permissions::PermissionPrompt::Delegate {
 class PermissionChipUnitTest : public TestWithBrowserView {
  public:
   PermissionChipUnitTest()
-      : TestWithBrowserView(
-            base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
+      : TestWithBrowserView(base::test::TaskEnvironment::TimeSource::MOCK_TIME),
+        animation_mode_reset_(gfx::AnimationTestApi::SetRichAnimationRenderMode(
+            gfx::Animation::RichAnimationRenderMode::FORCE_ENABLED)) {}
 
   PermissionChipUnitTest(const PermissionChipUnitTest&) = delete;
   PermissionChipUnitTest& operator=(const PermissionChipUnitTest&) = delete;
@@ -142,6 +147,9 @@ class PermissionChipUnitTest : public TestWithBrowserView {
   }
 
   raw_ptr<content::WebContents, DanglingUntriaged> web_contents_;
+  // Some of these tests rely on animation being enabled. This forces
+  // animation on even if it's turned off in the OS.
+  gfx::AnimationTestApi::RenderModeResetter animation_mode_reset_;
 
   base::TimeDelta kChipCollapseDuration = base::Seconds(12);
   base::TimeDelta kNormalChipDismissDuration = base::Seconds(6);

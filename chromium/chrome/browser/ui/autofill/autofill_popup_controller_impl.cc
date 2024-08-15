@@ -30,6 +30,7 @@
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/feature_engagement/public/tracker.h"
 #include "components/strings/grit/components_strings.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
@@ -155,6 +156,16 @@ void AutofillPopupControllerImpl::RenderFrameDeleted(
   }
 }
 
+void AutofillPopupControllerImpl::DidFinishNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (key_press_observer_.handler &&
+      key_press_observer_.rfh ==
+          navigation_handle->GetPreviousRenderFrameHostId() &&
+      !navigation_handle->IsSameDocument()) {
+    Hide(PopupHidingReason::kNavigation);
+  }
+}
+
 void AutofillPopupControllerImpl::OnVisibilityChanged(
     content::Visibility visibility) {
   if (visibility == content::Visibility::HIDDEN) {
@@ -164,7 +175,8 @@ void AutofillPopupControllerImpl::OnVisibilityChanged(
 
 void AutofillPopupControllerImpl::Show(
     std::vector<Suggestion> suggestions,
-    AutofillSuggestionTriggerSource trigger_source) {
+    AutofillSuggestionTriggerSource trigger_source,
+    AutoselectFirstSuggestion autoselect_first_suggestion) {
   if (IsMouseLocked()) {
     Hide(PopupHidingReason::kMouseLocked);
     return;
@@ -180,8 +192,8 @@ void AutofillPopupControllerImpl::Show(
 
   trigger_source_ = trigger_source;
   should_ignore_mouse_observed_outside_item_bounds_check_ =
-      trigger_source_ == AutofillSuggestionTriggerSource::
-                             kManualFallbackForAutocompleteUnrecognized;
+      trigger_source_ ==
+      AutofillSuggestionTriggerSource::kManualFallbackAddress;
 
   if (view_) {
     OnSuggestionsChanged();
@@ -203,12 +215,7 @@ void AutofillPopupControllerImpl::Show(
         ->UpdateSourceAvailability(FillingSource::AUTOFILL,
                                    !suggestions_.empty());
 #endif
-    if (!view_
-             .Call(&AutofillPopupView::Show,
-                   AutoselectFirstSuggestion(trigger_source ==
-                                             AutofillSuggestionTriggerSource::
-                                                 kTextFieldDidReceiveKeyDown))
-             .value_or(false)) {
+    if (!view_ || !view_->Show(autoselect_first_suggestion)) {
       return;
     }
 
@@ -218,19 +225,21 @@ void AutofillPopupControllerImpl::Show(
   }
   time_view_shown_ = base::TimeTicks::Now();
 
-  key_press_observer_.rfh = rfh->GetGlobalId();
-  key_press_observer_.handler = base::BindRepeating(
-      // Cannot bind HandleKeyPressEvent() directly because of its
-      // return value.
-      [](base::WeakPtr<AutofillPopupControllerImpl> weak_this,
-         const content::NativeWebKeyboardEvent& event) {
-        return weak_this && weak_this->HandleKeyPressEvent(event);
-      },
-      GetWeakPtr());
-  rfh->GetRenderWidgetHost()->AddKeyPressEventCallback(
-      key_press_observer_.handler);
+  if (IsRootPopup()) {
+    key_press_observer_.rfh = rfh->GetGlobalId();
+    key_press_observer_.handler = base::BindRepeating(
+        // Cannot bind HandleKeyPressEvent() directly because of its
+        // return value.
+        [](base::WeakPtr<AutofillPopupControllerImpl> weak_this,
+           const content::NativeWebKeyboardEvent& event) {
+          return weak_this && weak_this->HandleKeyPressEvent(event);
+        },
+        GetWeakPtr());
+    rfh->GetRenderWidgetHost()->AddKeyPressEventCallback(
+        key_press_observer_.handler);
 
-  delegate_->OnPopupShown();
+    delegate_->OnPopupShown();
+  }
 }
 
 AutofillSuggestionTriggerSource
@@ -241,13 +250,13 @@ AutofillPopupControllerImpl::GetAutofillSuggestionTriggerSource() const {
 bool AutofillPopupControllerImpl::
     ShouldIgnoreMouseObservedOutsideItemBoundsCheck() const {
   return should_ignore_mouse_observed_outside_item_bounds_check_ ||
+         !IsRootPopup() ||
          base::FeatureList::IsEnabled(
              features::kAutofillPopupDisablePaintChecks);
 }
 
 void AutofillPopupControllerImpl::UpdateDataListValues(
-    const std::vector<std::u16string>& values,
-    const std::vector<std::u16string>& labels) {
+    base::span<const SelectOption> options) {
   // Remove all the old data list values, which should always be at the top of
   // the list if they are present.
   while (!suggestions_.empty() &&
@@ -257,7 +266,7 @@ void AutofillPopupControllerImpl::UpdateDataListValues(
 
   // If there are no new data list values, exit (clearing the separator if there
   // is one).
-  if (values.empty()) {
+  if (options.empty()) {
     if (!suggestions_.empty() &&
         suggestions_[0].popup_item_id == PopupItemId::kSeparator) {
       suggestions_.erase(suggestions_.begin());
@@ -280,11 +289,11 @@ void AutofillPopupControllerImpl::UpdateDataListValues(
   }
 
   // Prepend the parameters to the suggestions we already have.
-  suggestions_.insert(suggestions_.begin(), values.size(), Suggestion());
-  for (size_t i = 0; i < values.size(); i++) {
+  suggestions_.insert(suggestions_.begin(), options.size(), Suggestion());
+  for (size_t i = 0; i < options.size(); i++) {
     suggestions_[i].main_text =
-        Suggestion::Text(values[i], Suggestion::Text::IsPrimary(true));
-    suggestions_[i].labels = {{Suggestion::Text(labels[i])}};
+        Suggestion::Text(options[i].value, Suggestion::Text::IsPrimary(true));
+    suggestions_[i].labels = {{Suggestion::Text(options[i].content)}};
     suggestions_[i].popup_item_id = PopupItemId::kDatalistEntry;
   }
 
@@ -318,7 +327,7 @@ void AutofillPopupControllerImpl::Hide(PopupHidingReason reason) {
     return;  // Don't close the popup because the browser window is resized.
   }
 
-  if (delegate_) {
+  if (delegate_ && IsRootPopup()) {
     delegate_->ClearPreviewedForm();
     delegate_->OnPopupHidden();
   }
@@ -341,19 +350,12 @@ void AutofillPopupControllerImpl::ViewDestroyed() {
 
 bool AutofillPopupControllerImpl::HandleKeyPressEvent(
     const content::NativeWebKeyboardEvent& event) {
-  // If there is a view, give it the opportunity to handle key press events
-  // first.
-  if (view_.Call(&AutofillPopupView::HandleKeyPressEvent, event)
-          .value_or(false)) {
+  if (sub_popup_controller_ &&
+      sub_popup_controller_->HandleKeyPressEvent(event)) {
     return true;
   }
-  switch (event.windows_key_code) {
-    case ui::VKEY_ESCAPE:
-      Hide(PopupHidingReason::kUserAborted);
-      return true;
-    default:
-      return false;
-  }
+
+  return view_ && view_->HandleKeyPressEvent(event);
 }
 
 void AutofillPopupControllerImpl::OnSuggestionsChanged() {
@@ -365,8 +367,9 @@ void AutofillPopupControllerImpl::OnSuggestionsChanged() {
                                  /*has_suggestions=*/true);
 #endif
 
-  // Platform-specific draw call.
-  std::ignore = view_.Call(&AutofillPopupView::OnSuggestionsChanged);
+  if (view_) {
+    view_->OnSuggestionsChanged();
+  }
 }
 
 void AutofillPopupControllerImpl::AcceptSuggestion(int index,
@@ -385,10 +388,6 @@ void AutofillPopupControllerImpl::AcceptSuggestion(int index,
     return;
   }
 
-  AcceptSuggestionWithoutThreshold(index);
-}
-
-void AutofillPopupControllerImpl::AcceptSuggestionWithoutThreshold(int index) {
   if (static_cast<size_t>(index) >= suggestions_.size()) {
     // Prevents crashes from crbug.com/521133. It seems that in rare cases or
     // races the suggestions_ and the user-selected index may be out of sync.
@@ -437,8 +436,8 @@ void AutofillPopupControllerImpl::AcceptSuggestionWithoutThreshold(int index) {
 
   absl::optional<std::u16string> announcement =
       suggestion.acceptance_a11y_announcement;
-  if (announcement) {
-    std::ignore = view_.Call(&AutofillPopupView::AxAnnounce, *announcement);
+  if (announcement && view_) {
+    view_->AxAnnounce(*announcement);
   }
 
   delegate_->DidAcceptSuggestion(suggestion, index, trigger_source_);
@@ -455,6 +454,11 @@ void AutofillPopupControllerImpl::AcceptSuggestionWithoutThreshold(int index) {
             kKeyboardAcessoryBar);
   }
 #endif
+}
+
+void AutofillPopupControllerImpl::PerformButtonActionForSuggestion(int index) {
+  CHECK_LE(base::checked_cast<size_t>(index), suggestions_.size());
+  delegate_->DidPerformButtonActionForSuggestion(suggestions_[index]);
 }
 
 gfx::NativeView AutofillPopupControllerImpl::container_view() const {
@@ -484,8 +488,10 @@ std::vector<Suggestion> AutofillPopupControllerImpl::GetSuggestions() const {
 }
 
 base::WeakPtr<AutofillPopupController>
-AutofillPopupControllerImpl::OpenSubPopup(const gfx::RectF& anchor_bounds,
-                                          std::vector<Suggestion> suggestions) {
+AutofillPopupControllerImpl::OpenSubPopup(
+    const gfx::RectF& anchor_bounds,
+    std::vector<Suggestion> suggestions,
+    AutoselectFirstSuggestion autoselect_first_suggestion) {
   AutofillPopupControllerImpl* controller = new AutofillPopupControllerImpl(
       delegate_, web_contents(), controller_common_.container_view,
       anchor_bounds, controller_common_.text_direction, base::DoNothing(),
@@ -494,7 +500,8 @@ AutofillPopupControllerImpl::OpenSubPopup(const gfx::RectF& anchor_bounds,
   // Show() can fail and cause controller deletion. Therefore store the weak
   // pointer before, so that this method returns null when that happens.
   sub_popup_controller_ = controller->GetWeakPtr();
-  controller->Show(std::move(suggestions), trigger_source_);
+  controller->Show(std::move(suggestions), trigger_source_,
+                   autoselect_first_suggestion);
   return sub_popup_controller_;
 }
 
@@ -506,8 +513,12 @@ void AutofillPopupControllerImpl::HideSubPopup() {
   }
 }
 
+bool AutofillPopupControllerImpl::IsRootPopup() const {
+  return !parent_controller_;
+}
+
 void AutofillPopupControllerImpl::OnEnterPictureInPicture() {
-  if (view_.Call(&AutofillPopupView::OverlapsWithPictureInPictureWindow)) {
+  if (view_ && view_->OverlapsWithPictureInPictureWindow()) {
     Hide(PopupHidingReason::kOverlappingWithPictureInPictureWindow);
   }
 }
@@ -565,11 +576,10 @@ bool AutofillPopupControllerImpl::RemoveSuggestion(int list_index) {
           suggestions_[list_index].GetPayload<Suggestion::BackendId>())) {
     return false;
   }
-  if (suggestion_type == PopupItemId::kAutocompleteEntry) {
-    const std::u16string announcement = l10n_util::GetStringFUTF16(
+  if (suggestion_type == PopupItemId::kAutocompleteEntry && view_) {
+    view_->AxAnnounce(l10n_util::GetStringFUTF16(
         IDS_AUTOFILL_AUTOCOMPLETE_ENTRY_DELETED_A11Y_HINT,
-        suggestions_[list_index].main_text.value);
-    std::ignore = view_.Call(&AutofillPopupView::AxAnnounce, announcement);
+        suggestions_[list_index].main_text.value));
   }
 
   // Remove the deleted element.
@@ -610,6 +620,12 @@ void AutofillPopupControllerImpl::SelectSuggestion(
 
 PopupType AutofillPopupControllerImpl::GetPopupType() const {
   return delegate_->GetPopupType();
+}
+
+std::optional<AutofillClient::PopupScreenLocation>
+AutofillPopupControllerImpl::GetPopupScreenLocation() const {
+  return view_ ? view_->GetPopupScreenLocation()
+               : std::make_optional<AutofillClient::PopupScreenLocation>();
 }
 
 bool AutofillPopupControllerImpl::HasSuggestions() const {
@@ -658,8 +674,7 @@ void AutofillPopupControllerImpl::HideViewAndDie() {
   if (view_) {
     // We need to fire the event while view is not deleted yet.
     FireControlsChangedEvent(false);
-    // Deletes the pointer wrapped in `view_`.
-    std::ignore = view_.Call(&AutofillPopupView::Hide);
+    view_->Hide();
     view_ = nullptr;
   }
 
@@ -685,15 +700,7 @@ bool AutofillPopupControllerImpl::IsMouseLocked() const {
 base::WeakPtr<AutofillPopupView>
 AutofillPopupControllerImpl::CreateSubPopupView(
     base::WeakPtr<AutofillPopupController> controller) {
-  auto sub_view =
-      view_.Call(&AutofillPopupView::CreateSubPopupView, controller);
-  return sub_view.value_or(nullptr);
-}
-
-void AutofillPopupControllerImpl::SetViewForTesting(
-    base::WeakPtr<AutofillPopupView> view) {
-  view_ = std::move(view);
-  time_view_shown_ = base::TimeTicks::Now();
+  return view_ ? view_->CreateSubPopupView(controller) : nullptr;
 }
 
 void AutofillPopupControllerImpl::FireControlsChangedEvent(bool is_show) {
@@ -725,17 +732,22 @@ void AutofillPopupControllerImpl::FireControlsChangedEvent(bool is_show) {
   // Now get the target node from its tree ID and node ID.
   ui::AXPlatformNode* target_node =
       root_platform_node_delegate->GetFromTreeIDAndNodeID(tree_id, node_id);
-  absl::optional<absl::optional<int32_t>> popup_ax_id =
-      view_.Call(&AutofillPopupView::GetAxUniqueId);
-  if (!target_node || !popup_ax_id || !*popup_ax_id)
+  if (!target_node || !view_) {
     return;
+  }
+
+  absl::optional<int32_t> popup_ax_id = view_->GetAxUniqueId();
+  if (!popup_ax_id) {
+    return;
+  }
 
   // All the conditions are valid, raise the accessibility event and set global
   // popup ax unique id.
-  if (is_show)
-    ui::SetActivePopupAxUniqueId(*popup_ax_id);
-  else
+  if (is_show) {
+    ui::SetActivePopupAxUniqueId(popup_ax_id);
+  } else {
     ui::ClearActivePopupAxUniqueId();
+  }
 
   target_node->NotifyAccessibilityEvent(ax::mojom::Event::kControlsChanged);
 }
@@ -759,11 +771,5 @@ AutofillPopupControllerImpl::GetRootAXPlatformNodeForWebContents() {
   // NativeViewAccessible corresponds to an AXPlatformNode.
   return ui::AXPlatformNode::FromNativeViewAccessible(native_view_accessible);
 }
-
-AutofillPopupControllerImpl::AutofillPopupViewPtr::AutofillPopupViewPtr() =
-    default;
-
-AutofillPopupControllerImpl::AutofillPopupViewPtr::~AutofillPopupViewPtr() =
-    default;
 
 }  // namespace autofill

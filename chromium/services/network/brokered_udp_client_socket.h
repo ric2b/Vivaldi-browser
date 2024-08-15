@@ -25,9 +25,7 @@
 #include "net/socket/udp_socket.h"
 #include "net/socket/udp_socket_global_limits.h"
 
-#if BUILDFLAG(IS_WIN)
 #include "services/network/broker_helper_win.h"
-#endif
 
 namespace net {
 class IOBuffer;
@@ -40,19 +38,12 @@ namespace network {
 class BrokeredClientSocketFactory;
 class TransferableSocket;
 
-enum WhichConnect {
-  CONNECT,
-  CONNECT_USING_NETWORK,
-  CONNECT_USING_DEFAULT_NETWORK,
-};
-
 // A client socket used exclusively with a socket broker. Currently intended for
-// Windows and Android only. Not intended to be used by non-brokered
-// connections. Generally, all calls pass through to an underlying
-// TCPClientSocket API, but Bind and Connect are the sent to a privileged
-// process using the net:SocketBroker interface. This is because socket creation
-// needs to be brokered, and TCPClientSocket only creates and opens a socket
-// within Bind and Connect.
+// Windows only. Not intended to be used by non-brokered connections. Generally,
+// all calls pass through to an underlying TCPClientSocket API, but Bind and
+// Connect are the sent to a privileged process using the net:SocketBroker
+// interface. This is because socket creation needs to be brokered, and
+// TCPClientSocket only creates and opens a socket within Bind and Connect.
 class COMPONENT_EXPORT(NETWORK_SERVICE) BrokeredUdpClientSocket
     : public net::DatagramClientSocket {
  public:
@@ -100,6 +91,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) BrokeredUdpClientSocket
   int SetReceiveBufferSize(int32_t size) override;
   int SetSendBufferSize(int32_t size) override;
   int SetDoNotFragment() override;
+  int SetRecvEcn() override;
   void SetMsgConfirm(bool confirm) override;
   const net::NetLogWithSource& NetLog() const override;
 
@@ -139,21 +131,15 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) BrokeredUdpClientSocket
   // Directly creates a new `socket_` if brokering is not required, calls
   // `BrokerCreateUdpSocket` if it is.
   int ConnectAsyncInternal(const net::IPEndPoint& address,
-                           WhichConnect which_connect,
-                           net::handles::NetworkHandle network,
                            net::CompletionOnceCallback callback);
   // Synchronously creates and connects a socket. This method can only be used
   // on Windows if a connection does not need to be brokered.
-  int ConnectInternal(const net::IPEndPoint& address,
-                      WhichConnect which_connect,
-                      net::handles::NetworkHandle network);
+  int ConnectInternal(const net::IPEndPoint& address);
   // Returns a net error result upon opening and connecting `socket_`. If a
   // connection needs to be brokered, the return value is ignored as callback is
   // run with the return value instead.
   int DidCompleteCreate(bool should_broker,
                         const net::IPEndPoint& address,
-                        WhichConnect which_connect,
-                        net::handles::NetworkHandle network,
                         net::CompletionOnceCallback callback,
                         network::TransferableSocket socket,
                         int result);
@@ -177,9 +163,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) BrokeredUdpClientSocket
   // remote SocketBroker.
   const raw_ptr<BrokeredClientSocketFactory> client_socket_factory_;
 
-#if BUILDFLAG(IS_WIN)
   BrokerHelperWin broker_helper_;
-#endif
 
   SEQUENCE_CHECKER(sequence_checker_);
 

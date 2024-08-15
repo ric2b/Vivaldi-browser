@@ -270,14 +270,12 @@ void SearchProvider::Start(const AutocompleteInput& input,
 
   const TemplateURL* default_provider = model->GetDefaultSearchProvider();
 
-#if BUILDFLAG(IS_IOS)
   // Note:(prio@vivaldi.com) - This iOS flag can be safe to remove when Android
   // implements the private tab search engine settings.
   if (vivaldi::IsVivaldiRunning() && client()->IsOffTheRecord()) {
     default_provider = model->GetDefaultSearchProvider(
           TemplateURLService::kDefaultSearchPrivate);
   } // End Vivaldi
-#endif
 
   if (default_provider &&
       !default_provider->SupportsReplacement(model->search_terms_data()))
@@ -458,8 +456,9 @@ void SearchProvider::OnURLLoadComplete(
       SearchSuggestionParser::Results* results =
           is_keyword ? &keyword_results_ : &default_results_;
       results_updated = SearchSuggestionParser::ParseSuggestResults(
-          *data, GetInput(is_keyword), client()->GetSchemeClassifier(), -1,
-          is_keyword, results);
+          *data, GetInput(is_keyword), client()->GetSchemeClassifier(),
+          /*default_result_relevance=*/-1, /*is_keyword_result=*/is_keyword,
+          results);
       if (results_updated) {
         if (results->field_trial_triggered) {
           client()->GetOmniboxTriggeredFeatureService()->FeatureTriggered(

@@ -31,6 +31,7 @@
 #include "components/sessions/content/content_serialized_navigation_builder.h"
 #include "components/sessions/core/session_service_commands.h"
 #include "components/sessions/vivaldi_session_service_commands.h"
+#include "components/datasource/vivaldi_image_store.h"
 #include "content/public/browser/navigation_entry.h"
 #include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/api/tabs/tabs_private_api.h"
@@ -488,12 +489,15 @@ void SessionsPrivateAPI::SendOnPersistentLoad(
       browser_context);
 }
 
+SessionsPrivateAddFunction::SessionsPrivateAddFunction() = default;
+SessionsPrivateAddFunction::~SessionsPrivateAddFunction() = default;
+
 ExtensionFunction::ResponseAction SessionsPrivateAddFunction::Run() {
   using vivaldi::sessions_private::SessionAddOptions;
   using vivaldi::sessions_private::Add::Params;
   namespace Results = vivaldi::sessions_private::Add::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   const SessionAddOptions& options = params->options;
@@ -505,54 +509,65 @@ ExtensionFunction::ResponseAction SessionsPrivateAddFunction::Run() {
         options.backup == vivaldi::sessions_private::BACKUP_TYPE_AUTOSAVE) {
       error_code = sessions::AutoSaveFromBackup(browser_context());
     }
-
     return RespondNow(ArgumentList(Results::Create(error_code)));
   }
 
-  NodeModel pair = GetNodeAndModel(browser_context(), options.parent_id);
-  if (!pair.first) {
-    return RespondNow(ArgumentList(Results::Create(sessions::kErrorUnknownId)));
-  }
-
-  sessions::WriteSessionOptions ctl;
   if (options.window_id.has_value())
-    ctl.window_id = options.window_id.value();
+    ctl_.window_id = options.window_id.value();
   if (options.ids.has_value())
-    ctl.ids = options.ids.value();
+    ctl_.ids = options.ids.value();
   if (options.from_id.has_value())
-    ctl.from_id = options.from_id.value();
-  ctl.filename = options.filename;
+    ctl_.from_id = options.from_id.value();
+  ctl_.filename = options.filename;
 
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-  bool with_workspaces =
-    profile->GetPrefs()->GetBoolean(
-        vivaldiprefs::kSessionsSaveAllWorkspaces);
-
-  int error_code = sessions::WriteSessionFile(browser_context(), ctl);
-  if (error_code == sessions::kNoError) {
-    int id = Index_Node::GetNewId();
-    std::unique_ptr<Index_Node> node = std::make_unique<Index_Node>(
-      base::Uuid::GenerateRandomV4().AsLowercaseString(), id);
-    SetNodeState(browser_context(), ctl.path, true, node.get());
-    if (!with_workspaces) {
-      // TODO: Remove ws info from node
+  // Collects all the thumbnails URLs used by the session to be saved,
+  // read their content into the Batch and store them in the session file.
+  VivaldiImageStore::BatchRead(browser_context(),
+      sessions::CollectThumbnailUrls(browser_context(), ctl_),
+      base::BindOnce([](scoped_refptr<SessionsPrivateAddFunction> fn,
+        VivaldiImageStore::Batch batch) -> void
+  {
+    // called, when the batch is ready
+    const SessionAddOptions& options = fn->params->options;
+    NodeModel pair = GetNodeAndModel(fn->browser_context(), options.parent_id);
+    if (!pair.first) {
+      fn->Respond(fn->ArgumentList(Results::Create(sessions::kErrorUnknownId)));
+      return;
     }
-    node->SetTitle(base::UTF8ToUTF16(options.name));
-    node->SetFilename(ctl.filename);
-    // SetNodeState sets create time to now. Revert that when copying.
-    if (options.from_id.has_value()) {
-      Index_Node* from = pair.second->root_node()->GetById(
-          options.from_id.value());
-      if (from) {
-        node->SetCreateTime(from->create_time());
+
+    fn->ctl_.thumbnails.swap(batch);
+
+    Profile* profile = Profile::FromBrowserContext(fn->browser_context());
+    bool with_workspaces = profile->GetPrefs()->GetBoolean(
+          vivaldiprefs::kSessionsSaveAllWorkspaces);
+
+    int error_code = sessions::WriteSessionFile(fn->browser_context(), fn->ctl_);
+    if (error_code == sessions::kNoError) {
+      int id = Index_Node::GetNewId();
+      std::unique_ptr<Index_Node> node = std::make_unique<Index_Node>(
+          base::Uuid::GenerateRandomV4().AsLowercaseString(), id);
+      SetNodeState(fn->browser_context(), fn->ctl_.path, true, node.get());
+      if (!with_workspaces) {
+        // TODO: Remove ws info from node
       }
+      node->SetTitle(base::UTF8ToUTF16(options.name));
+      node->SetFilename(fn->ctl_.filename);
+      // SetNodeState sets create time to now. Revert that when copying.
+      if (options.from_id.has_value()) {
+        Index_Node* from = pair.second->root_node()->GetById(
+            options.from_id.value());
+        if (from) {
+          node->SetCreateTime(from->create_time());
+        }
+      }
+      pair.second->Add(std::move(node), pair.first, options.index, options.owner);
     }
-    pair.second->Add(std::move(node), pair.first, options.index, options.owner);
-  }
 
-  return RespondNow(ArgumentList(Results::Create(error_code)));
+    fn->Respond(fn->ArgumentList(Results::Create(error_code)));
+  }, scoped_refptr<SessionsPrivateAddFunction>(this)));
+
+  return RespondLater();
 }
-
 
 ExtensionFunction::ResponseAction SessionsPrivateGetAllFunction::Run() {
   Index_Model* model =

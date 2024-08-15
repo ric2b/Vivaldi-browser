@@ -89,9 +89,12 @@ base::FilePath GetModulePath(base::WStringPiece module_name) {
 // Prefetches and loads |module| after setting the CWD to |module|'s
 // directory. Returns a handle to the loaded module on success, or nullptr on
 // failure.
-HMODULE LoadModuleWithDirectory(const base::FilePath& module) {
+HMODULE LoadModuleWithDirectory(const base::FilePath& module,
+                                const base::CommandLine& cmd_line) {
   ::SetCurrentDirectoryW(module.DirName().value().c_str());
-  base::PreReadFile(module, /*is_executable=*/true);
+  if (!cmd_line.HasSwitch(switches::kNoPreReadMainDll)) {
+    base::PreReadFile(module, /*is_executable=*/true);
+  }
   HMODULE handle = ::LoadLibraryExW(module.value().c_str(), nullptr,
                                     LOAD_WITH_ALTERED_SEARCH_PATH);
   return handle;
@@ -100,13 +103,13 @@ HMODULE LoadModuleWithDirectory(const base::FilePath& module) {
 // Prefetches and loads the appropriate DLL for the process type
 // |process_type_|. Populates |module| with the path of the loaded DLL.
 // Returns a handle to the loaded DLL, or nullptr on failure.
-HMODULE Load(base::FilePath* module) {
+HMODULE Load(base::FilePath* module, const base::CommandLine& cmd_line) {
   *module = GetModulePath(installer::kChromeDll);
   if (module->empty()) {
     PLOG(ERROR) << "Cannot find module " << installer::kChromeDll;
     return nullptr;
   }
-  HMODULE dll = LoadModuleWithDirectory(*module);
+  HMODULE dll = LoadModuleWithDirectory(*module, cmd_line);
   if (!dll)
     PLOG(ERROR) << "Failed to load Chrome DLL from " << module->value();
   return dll;
@@ -148,7 +151,7 @@ int MainDllLoader::Launch(HINSTANCE instance,
   }
 
   base::FilePath file;
-  dll_ = Load(&file);
+  dll_ = Load(&file, cmd_line);
   if (!dll_)
     return chrome::RESULT_CODE_MISSING_DATA;
 
@@ -162,7 +165,7 @@ int MainDllLoader::Launch(HINSTANCE instance,
                                    SHUTDOWN_NORETRY);
   }
 
-  OnBeforeLaunch(cmd_line, process_type_, file);
+  OnBeforeLaunch(process_type_, file);
   DLL_MAIN chrome_main =
       reinterpret_cast<DLL_MAIN>(::GetProcAddress(dll_, "ChromeMain"));
   int rc = chrome_main(instance, &sandbox_info,
@@ -189,17 +192,16 @@ void MainDllLoader::RelaunchChromeBrowserWithNewCommandLineIfNeeded() {
 class ChromeDllLoader : public MainDllLoader {
  protected:
   // MainDllLoader implementation.
-  void OnBeforeLaunch(const base::CommandLine& cmd_line,
-                      const std::string& process_type,
+  void OnBeforeLaunch(const std::string& process_type,
                       const base::FilePath& dll_path) override;
 };
 
-void ChromeDllLoader::OnBeforeLaunch(const base::CommandLine& cmd_line,
-                                     const std::string& process_type,
+void ChromeDllLoader::OnBeforeLaunch(const std::string& process_type,
                                      const base::FilePath& dll_path) {
   if (process_type.empty()) {
-    if (ShouldRecordActiveUse(cmd_line))
+    if constexpr (kShouldRecordActiveUse) {
       RecordDidRun(dll_path);
+    }
   } else {
     // Set non-browser processes up to be killed by the system after the browser
     // goes away. The browser uses the default shutdown order, which is 0x280.
@@ -213,17 +215,10 @@ void ChromeDllLoader::OnBeforeLaunch(const base::CommandLine& cmd_line,
 
 //=============================================================================
 
-class ChromiumDllLoader : public MainDllLoader {
- protected:
-  void OnBeforeLaunch(const base::CommandLine& cmd_line,
-                      const std::string& process_type,
-                      const base::FilePath& dll_path) override {}
-};
-
 MainDllLoader* MakeMainDllLoader() {
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   return new ChromeDllLoader();
 #else
-  return new ChromiumDllLoader();
+  return new MainDllLoader();
 #endif
 }

@@ -4,19 +4,11 @@ import("//build/config/ios/asset_catalog.gni")
 
 group("resources") {
   deps = [
-    ":onboarding_bg_static",
     ":onboarding_start",
     ":onboarding_default_browser",
     ":onboarding_tabs",
     ":onboarding_tabs_on",
     ":onboarding_tabs_off",
-  ]
-}
-
-imageset("onboarding_bg_static") {
-  sources = [
-    "onboarding_bg_static.imageset/Contents.json",
-    "onboarding_bg_static.imageset/onboarding_bg_static.png",
   ]
 }
 

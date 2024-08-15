@@ -510,6 +510,10 @@ below:
         show closed captions menu
       </message>
 
+      <message name="IDS_AX_MEDIA_SHOW_AUDIO_DESCRIPTIONS_MENU_BUTTON" desc="Accessibility label for show audio descriptions menu button">
+        show audio descriptions menu
+      </message>
+
       <message name="IDS_AX_MEDIA_SHOW_PLAYBACK_SPEED_MENU_BUTTON" desc="Accessibility label for show playback speed menu button">
         show playback speed menu
       </message>
@@ -669,6 +673,23 @@ below:
       </message>
       <message name="IDS_PRETTY_PRINT_JSON" desc="Label for the checkbox that enables 'pretty-printing' of JSON documents.To pretty-print JSON, carriage returns and spaces are inserted to cleanly format the JSON and make it readable.">
         Pretty-print
+      </message>
+
+      <message name="IDS_PERMISSION_REQUEST_CAMERA" desc="Label for a permission element that will trigger a camera request">
+        Allow camera
+      </message>
+      <message name="IDS_PERMISSION_REQUEST_MICROPHONE" desc="Label for a permission element that will trigger a microphone request">
+        Allow microphone
+      </message>
+      <message name="IDS_PERMISSION_REQUEST_CAMERA_MICROPHONE" desc="Label for a permission element that will trigger a camera and microphone request">
+        Allow microphone and camera
+      </message>
+      <message name="IDS_PERMISSION_REQUEST_GEOLOCATION" desc="Label for a permission element that will trigger a geolocation request">
+        Share location
+      </message>
+
+      <message name="IDS_STRONG_PASSWORD_LABEL" desc="Label displayed in the password input form in the sign-up flow when it is generated">
+        Strong password
       </message>
 
 <!-- The following IDS_FORM_VALIDATION_* messages were taken from Mozilla's dom.properties file.

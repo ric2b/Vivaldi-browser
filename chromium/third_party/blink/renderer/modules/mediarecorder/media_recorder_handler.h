@@ -7,11 +7,13 @@
 
 #include <memory>
 
+#include "base/feature_list.h"
 #include "base/strings/string_piece.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "media/base/video_encoder.h"
+#include "media/muxers/muxer_timestamp_adapter.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream.h"
 #include "third_party/blink/public/web/modules/mediastream/encoded_video_frame.h"
@@ -22,6 +24,10 @@
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
+
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
+#include "media/formats/mp4/h264_annex_b_to_avc_bitstream_converter.h"
+#endif
 
 namespace media {
 class AudioBus;
@@ -37,6 +43,8 @@ class MediaRecorder;
 class MediaStreamDescriptor;
 struct WebMediaCapabilitiesInfo;
 struct WebMediaConfiguration;
+
+MODULES_EXPORT BASE_DECLARE_FEATURE(kMediaRecorderEnableMp4Muxer);
 
 // MediaRecorderHandler orchestrates the creation, lifetime management and
 // mapping between:
@@ -186,6 +194,7 @@ class MODULES_EXPORT MediaRecorderHandler final
   bool invalidated_ = false;
   bool recording_ = false;
 
+  String type_;
   // True if we're observing track changes to `media_stream_`.
   bool is_media_stream_observer_ = false;
   // The MediaStream being recorded.
@@ -199,7 +208,11 @@ class MODULES_EXPORT MediaRecorderHandler final
   Vector<std::unique_ptr<AudioTrackRecorder>> audio_recorders_;
 
   // Worker class doing the actual muxing work.
-  std::unique_ptr<media::Muxer> muxer_;
+  std::unique_ptr<media::MuxerTimestampAdapter> muxer_adapter_;
+
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
+  std::unique_ptr<media::H264AnnexBToAvcBitstreamConverter> h264_converter_;
+#endif
 };
 
 }  // namespace blink

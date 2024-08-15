@@ -78,9 +78,11 @@
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/dom_keyboard_layout_map.h"
 #include "ui/gfx/geometry/dip_util.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/mac/coordinate_conversion.h"
 
 #include "app/vivaldi_apptools.h"
+#include "content/browser/renderer_host/vivaldi_renderer_host_util.h"
 
 using blink::WebInputEvent;
 using blink::WebMouseEvent;
@@ -232,13 +234,6 @@ RenderWidgetHostViewMac::RenderWidgetHostViewMac(RenderWidgetHost* widget)
   DCHECK(![GetInProcessNSView() window]);
 
   host()->SetView(this);
-
-  // Let the page-level input event router know about our surface ID
-  // namespace for surface-based hit testing.
-  if (host()->delegate() && host()->delegate()->GetInputEventRouter()) {
-    host()->delegate()->GetInputEventRouter()->AddFrameSinkIdOwner(
-        GetFrameSinkId(), this);
-  }
 
   RenderWidgetHostOwnerDelegate* owner_delegate = host()->owner_delegate();
   if (owner_delegate) {
@@ -448,6 +443,7 @@ void RenderWidgetHostViewMac::InitAsPopup(
 
   // This path is used by the time/date picker.
   ns_view_->InitAsPopup(pos, popup_parent_host_view_->ns_view_id_);
+  Show();
 }
 
 RenderWidgetHostViewBase*
@@ -489,6 +485,11 @@ void RenderWidgetHostViewMac::Hide() {
   ns_view_->SetVisible(is_visible_);
   browser_compositor_->SetViewVisible(is_visible_);
   WasOccluded();
+
+  if (base::FeatureList::IsEnabled(::features::kHideDelegatedFrameHostMac)) {
+    browser_compositor_->GetDelegatedFrameHost()->WasHidden(
+        DelegatedFrameHost::HiddenCause::kOther);
+  }
 }
 
 void RenderWidgetHostViewMac::WasUnOccluded() {
@@ -1576,9 +1577,9 @@ void RenderWidgetHostViewMac::SetActive(bool active) {
     UpdateActiveState(active);
     if (active) {
       if (HasFocus())
-        host()->Focus();
+        host()->GotFocus();
     } else {
-      host()->Blur();
+      host()->LostFocus();
     }
   }
   if (HasFocus())
@@ -2034,6 +2035,15 @@ void RenderWidgetHostViewMac::LookUpDictionaryOverlayAtPoint(
 
   int32_t target_widget_process_id = widget_host->GetProcess()->GetID();
   int32_t target_widget_routing_id = widget_host->GetRoutingID();
+
+  // VB-86514 macOS Lookup dictionary appears above the selected word
+  if (vivaldi::IsVivaldiRunning()) {
+    gfx::Point vivaldi_offset = vivaldi::GetVivaldiUIOffset(
+            host(), widget_host, GetDeviceScaleFactor());
+    transformed_point.Offset(vivaldi_offset.x(),vivaldi_offset.y());
+  } // End Vivaldi
+
+
   TextInputClientMac::GetInstance()->GetStringAtPoint(
       widget_host, gfx::ToFlooredPoint(transformed_point),
       base::BindOnce(&RenderWidgetHostViewMac::OnGotStringForDictionaryOverlay,
@@ -2089,8 +2099,13 @@ bool RenderWidgetHostViewMac::SyncGetFirstRectForRange(
     // https://crbug.com/121917
     base::ScopedAllowBlocking allow_wait;
     // TODO(thakis): Pipe |actualRange| through TextInputClientMac machinery.
-    *rect = TextInputClientMac::GetInstance()->GetFirstRectForRange(
-        GetFocusedWidget(), requested_range);
+    gfx::Rect blink_rect =
+        TextInputClientMac::GetInstance()->GetFirstRectForRange(
+            GetFocusedWidget(), requested_range);
+
+    // With zoom-for-dsf, RenderWidgetHost coordinate system is physical points,
+    // which means we have to scale the rect by the device scale factor.
+    *rect = gfx::ScaleToEnclosingRect(blink_rect, 1.f / GetDeviceScaleFactor());
   }
   return true;
 }
@@ -2385,6 +2400,14 @@ void RenderWidgetHostViewMac::OnGotStringForDictionaryOverlay(
         updated_baseline_point = rwhv->TransformPointToRootCoordSpace(
             baseline_point_in_layout_space);
       }
+
+      // VB-86514 macOS Lookup dictionary appears above the selected word
+      if (vivaldi::IsVivaldiRunning()) {
+        RenderWidgetHostImpl* rwhi = RenderWidgetHostImpl::From(widget_host);
+        gfx::Point vivaldi_offset = vivaldi::GetVivaldiUIOffset(
+            host(), rwhi, GetDeviceScaleFactor());
+        updated_baseline_point.Offset(-vivaldi_offset.x(),-vivaldi_offset.y());
+      } // End Vivaldi
     }
     // Layout space is physical pixels. Scale
     // it to get DIPs, which is what ns_view_ expects.

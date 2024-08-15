@@ -7,14 +7,18 @@
 
 #include <memory>
 
+#include "ash/wm/overview/overview_item.h"
 #include "ash/wm/overview/overview_item_base.h"
 #include "base/memory/raw_ptr.h"
-#include "ui/aura/window.h"
+#include "base/memory/weak_ptr.h"
+
+namespace aura {
+class Window;
+}  // namespace aura
 
 namespace ash {
 
 class OverviewGroupContainerView;
-class OverviewItem;
 class OverviewSession;
 
 // This class implements `OverviewItemBase` and represents a window group in
@@ -22,7 +26,8 @@ class OverviewSession;
 // contains two individual `OverviewItem`s. It is responsible to place the group
 // item in the correct bounds calculated by `OverviewGrid`. It will also be the
 // target when handling overview group item drag events.
-class OverviewGroupItem : public OverviewItemBase {
+class OverviewGroupItem : public OverviewItemBase,
+                          public OverviewItem::WindowDestructionDelegate {
  public:
   using Windows = aura::Window::Windows;
 
@@ -36,40 +41,37 @@ class OverviewGroupItem : public OverviewItemBase {
   // OverviewItemBase:
   aura::Window* GetWindow() override;
   std::vector<aura::Window*> GetWindows() override;
+  bool HasVisibleOnAllDesksWindow() override;
   bool Contains(const aura::Window* target) const override;
   OverviewItem* GetLeafItemForWindow(aura::Window* window) override;
   void RestoreWindow(bool reset_transform, bool animate) override;
   void SetBounds(const gfx::RectF& target_bounds,
                  OverviewAnimationType animation_type) override;
-  gfx::RectF GetTargetBoundsInScreen() const override;
-  gfx::RectF GetWindowTargetBoundsWithInsets() const override;
+  gfx::Transform ComputeTargetTransform(
+      const gfx::RectF& target_bounds) override;
+  gfx::RectF GetWindowsUnionScreenBounds() const override;
+  gfx::RectF GetTargetBoundsWithInsets() const override;
   gfx::RectF GetTransformedBounds() const override;
-  float GetItemScale(const gfx::Size& size) override;
+  float GetItemScale(int height) override;
   void ScaleUpSelectedItem(OverviewAnimationType animation_type) override;
   void EnsureVisible() override;
   OverviewFocusableView* GetFocusableView() const override;
   views::View* GetBackDropView() const override;
   void UpdateRoundedCornersAndShadow() override;
-  void SetShadowBounds(absl::optional<gfx::RectF> bounds_in_screen) override;
   void SetOpacity(float opacity) override;
   float GetOpacity() const override;
   void PrepareForOverview() override;
   void OnStartingAnimationComplete() override;
   void HideForSavedDeskLibrary(bool animate) override;
   void RevertHideForSavedDeskLibrary(bool animate) override;
-  void CloseWindow() override;
+  void CloseWindows() override;
   void Restack() override;
-  void HandleMouseEvent(const ui::MouseEvent& event) override;
-  void HandleGestureEvent(ui::GestureEvent* event) override;
-  void OnFocusedViewActivated() override;
-  void OnFocusedViewClosed() override;
+  void StartDrag() override;
   void OnOverviewItemDragStarted(OverviewItemBase* item) override;
   void OnOverviewItemDragEnded(bool snap) override;
-  void OnOverviewItemContinuousScroll(const gfx::RectF& target_bouns,
-                                      bool first_scroll,
+  void OnOverviewItemContinuousScroll(const gfx::Transform& target_transform,
                                       float scroll_ratio) override;
   void SetVisibleDuringItemDragging(bool visible, bool animate) override;
-  void UpdateShadowTypeForDrag(bool is_dragging) override;
   void UpdateCannotSnapWarningVisibility(bool animate) override;
   void HideCannotSnapWarning(bool animate) override;
   void OnMovingItemToAnotherDesk() override;
@@ -81,8 +83,14 @@ class OverviewGroupItem : public OverviewItemBase {
   OverviewGridWindowFillMode GetWindowDimensionsType() const override;
   void UpdateWindowDimensionsType() override;
   gfx::Point GetMagnifierFocusPointInScreen() const override;
+  const gfx::RoundedCornersF GetRoundedCorners() const override;
+
+  // OverviewItem::WindowDestructionDelegate:
+  void OnOverviewItemWindowDestroying(OverviewItem* overview_item,
+                                      bool reposition) override;
 
  protected:
+  // OverviewItemBase:
   void CreateItemWidget() override;
 
  private:
@@ -91,6 +99,8 @@ class OverviewGroupItem : public OverviewItemBase {
 
   // The contents view of the `item_widget_`.
   raw_ptr<OverviewGroupContainerView> overview_group_container_view_ = nullptr;
+
+  base::WeakPtrFactory<OverviewGroupItem> weak_ptr_factory_{this};
 };
 
 }  // namespace ash

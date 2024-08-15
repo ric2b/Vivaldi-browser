@@ -35,9 +35,10 @@ static bool ShouldFullyInvalidateFillLayersOnWidthChange(
   if (!image || !image->CanRender())
     return false;
 
-  if (layer.RepeatX() != EFillRepeat::kRepeatFill &&
-      layer.RepeatX() != EFillRepeat::kNoRepeatFill)
+  if (layer.Repeat().x != EFillRepeat::kRepeatFill &&
+      layer.Repeat().x != EFillRepeat::kNoRepeatFill) {
     return true;
+  }
 
   // TODO(alancutter): Make this work correctly for calc lengths.
   if (layer.PositionX().IsPercentOrCalc() && !layer.PositionX().IsZero())
@@ -77,9 +78,10 @@ static bool ShouldFullyInvalidateFillLayersOnHeightChange(
   if (!image || !image->CanRender())
     return false;
 
-  if (layer.RepeatY() != EFillRepeat::kRepeatFill &&
-      layer.RepeatY() != EFillRepeat::kNoRepeatFill)
+  if (layer.Repeat().y != EFillRepeat::kRepeatFill &&
+      layer.Repeat().y != EFillRepeat::kNoRepeatFill) {
     return true;
+  }
 
   // TODO(alancutter): Make this work correctly for calc lengths.
   if (layer.PositionY().IsPercentOrCalc() && !layer.PositionY().IsZero())
@@ -140,10 +142,9 @@ PaintInvalidationReason BoxPaintInvalidator::ComputePaintInvalidationReason() {
     return PaintInvalidationReason::kLayout;
 
   if (const auto* layout_replaced = DynamicTo<LayoutReplaced>(box_)) {
-    if (RuntimeEnabledFeatures::PaintNewReplacedInvalidationEnabled() &&
-        layout_replaced->ReplacedContentRect() !=
-            layout_replaced->ReplacedContentRectFrom(
-                box_.PreviousPhysicalContentBoxRect())) {
+    if (layout_replaced->ReplacedContentRect() !=
+        layout_replaced->ReplacedContentRectFrom(
+            box_.PreviousPhysicalContentBoxRect())) {
       return PaintInvalidationReason::kLayout;
     }
   }
@@ -153,17 +154,15 @@ PaintInvalidationReason BoxPaintInvalidator::ComputePaintInvalidationReason() {
   NGInkOverflow::ReadUnsetAsNoneScope read_unset_as_none;
 #endif
   if (box_.PreviousSize() == box_.Size() &&
-      box_.PreviousPhysicalSelfVisualOverflowRect() ==
-          box_.PhysicalSelfVisualOverflowRect()) {
+      box_.PreviousSelfVisualOverflowRect() == box_.SelfVisualOverflowRect()) {
     return IsFullPaintInvalidationReason(reason)
                ? reason
                : PaintInvalidationReason::kNone;
   }
 
   // Incremental invalidation is not applicable if there is visual overflow.
-  if (box_.PreviousPhysicalSelfVisualOverflowRect().size !=
-          box_.PreviousSize() ||
-      box_.PhysicalSelfVisualOverflowRect().size != box_.Size()) {
+  if (box_.PreviousSelfVisualOverflowRect().size != box_.PreviousSize() ||
+      box_.SelfVisualOverflowRect().size != box_.Size()) {
     return PaintInvalidationReason::kLayout;
   }
 
@@ -427,8 +426,9 @@ bool BoxPaintInvalidator::NeedsToSavePreviousOverflowData() {
   // (see: ComputeViewBackgroundInvalidation).
   if ((BackgroundGeometryDependsOnLayoutOverflowRect() ||
        BackgroundPaintsInContentsSpace() || box_.IsDocumentElement()) &&
-      box_.LayoutOverflowRect() != box_.BorderBoxRect())
+      box_.PhysicalLayoutOverflowRect() != box_.PhysicalBorderBoxRect()) {
     return true;
+  }
 
   return false;
 }

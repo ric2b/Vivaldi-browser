@@ -5,12 +5,26 @@
 #ifndef COMPONENTS_POLICY_CORE_BROWSER_SIGNIN_PROFILE_SEPARATION_POLICIES_H_
 #define COMPONENTS_POLICY_CORE_BROWSER_SIGNIN_PROFILE_SEPARATION_POLICIES_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "components/policy/policy_export.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace policy {
+
+enum ProfileSeparationSettings : uint16_t {
+  SUGGESTED = 0,
+  ENFORCED = 1,
+  DISABLED = 2
+};
+
+enum ProfileSeparationDataMigrationSettings : uint16_t {
+  USER_OPT_IN = 1,
+  USER_OPT_OUT = 2,
+  ALWAYS_SEPARATE = 3
+};
 
 class POLICY_EXPORT ProfileSeparationPolicies {
  public:

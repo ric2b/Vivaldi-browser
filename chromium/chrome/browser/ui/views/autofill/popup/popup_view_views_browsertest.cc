@@ -74,7 +74,8 @@ class PopupViewViewsBrowsertestBase
     PopupPixelTest::ShowUi(name);
     view()->Show(AutoselectFirstSuggestion(false));
     if (selected_cell_) {
-      view()->SetSelectedCell(selected_cell_);
+      view()->SetSelectedCell(selected_cell_,
+                              PopupCellSelectionSource::kNonUserInput);
     }
   }
 
@@ -114,6 +115,26 @@ IN_PROC_BROWSER_TEST_P(PopupViewViewsBrowsertest,
                        InvokeUi_Autofill_Profile_Selected_Profile) {
   PrepareSuggestions(CreateAutofillProfileSuggestions());
   PrepareSelectedCell(CellIndex{0, CellType::kContent});
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_P(PopupViewViewsBrowsertest,
+                       InvokeUi_Autofill_Profile_Selected_Content_WithSubpoup) {
+  std::vector<Suggestion> suggestions = CreateAutofillProfileSuggestions();
+  suggestions[0].children = CreateAutofillProfileSuggestions();
+
+  PrepareSuggestions(std::move(suggestions));
+  PrepareSelectedCell(CellIndex{0, CellType::kContent});
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_P(PopupViewViewsBrowsertest,
+                       InvokeUi_Autofill_Profile_Selected_Control_WithSubpoup) {
+  std::vector<Suggestion> suggestions = CreateAutofillProfileSuggestions();
+  suggestions[0].children = CreateAutofillProfileSuggestions();
+
+  PrepareSuggestions(std::move(suggestions));
+  PrepareSelectedCell(CellIndex{0, CellType::kControl});
   ShowAndVerifyUi();
 }
 

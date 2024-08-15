@@ -237,7 +237,6 @@ class CAPTURE_EXPORT VideoCaptureDevice
     // contains the captured content.
     virtual void OnIncomingCapturedExternalBuffer(
         CapturedExternalVideoBuffer buffer,
-        std::vector<CapturedExternalVideoBuffer> scaled_buffers,
         base::TimeTicks reference_time,
         base::TimeDelta timestamp,
         const gfx::Rect& visible_rect) = 0;
@@ -352,8 +351,8 @@ class CAPTURE_EXPORT VideoCaptureDevice
   // Non-empty |crop_id| sets (or changes) the crop-target.
   // Empty |crop_id| reverts the capture to its original, uncropped state.
   //
-  // |crop_version| must be incremented by at least one for each call.
-  // By including it in frame's metadata, Viz informs Blink what was the
+  // |sub_capture_target_version| must be incremented by at least one for each
+  // call. By including it in frame's metadata, Viz informs Blink what was the
   // latest invocation of cropTo() before a given frame was produced.
   //
   // The callback reports success/failure. It is called on an unspecified
@@ -361,8 +360,9 @@ class CAPTURE_EXPORT VideoCaptureDevice
   // as needed.
   virtual void Crop(
       const base::Token& crop_id,
-      uint32_t crop_version,
-      base::OnceCallback<void(media::mojom::CropRequestResult)> callback);
+      uint32_t sub_capture_target_version,
+      base::OnceCallback<void(media::mojom::ApplySubCaptureTargetResult)>
+          callback);
 
   // Deallocates the video capturer, possibly asynchronously.
   //

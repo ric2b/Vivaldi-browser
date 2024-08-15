@@ -127,7 +127,7 @@ class PictureInPictureBrowserFrameView
   SkColor GetIconLabelBubbleBackgroundColor() const override;
 
   // ContentSettingImageView::Delegate:
-  bool ShouldHideContentSettingImage(ImageType type) override;
+  bool ShouldHideContentSettingImage() override;
   content::WebContents* GetContentSettingWebContents() override;
   ContentSettingBubbleModelDelegate* GetContentSettingBubbleModelDelegate()
       override;
@@ -135,6 +135,8 @@ class PictureInPictureBrowserFrameView
   // views::WidgetObserver:
   void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
   void OnWidgetDestroying(views::Widget* widget) override;
+  void OnWidgetBoundsChanged(views::Widget* widget,
+                             const gfx::Rect& new_bounds) override;
 
   // gfx::AnimationDelegate:
   void AnimationEnded(const gfx::Animation* animation) override;
@@ -186,6 +188,9 @@ class PictureInPictureBrowserFrameView
   // Called when mouse entered or exited the pip window.
   void OnMouseEnteredOrExitedWindow(bool entered);
 
+  // Returns true if there's an overlay view that's currently shown.
+  bool IsOverlayViewVisible() const;
+
 #if BUILDFLAG(IS_LINUX)
   // Sets the window frame provider so that it will be used for drawing.
   void SetWindowFrameProvider(ui::WindowFrameProvider* window_frame_provider);
@@ -209,7 +214,6 @@ class PictureInPictureBrowserFrameView
   views::View* GetCloseButtonForTesting();
   views::Label* GetWindowTitleForTesting();
 
- private:
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
   enum class CloseReason {
@@ -219,6 +223,11 @@ class PictureInPictureBrowserFrameView
     kMaxValue = kCloseButton
   };
 
+  void set_close_reason(CloseReason close_reason) {
+    close_reason_ = close_reason;
+  }
+
+ private:
   CloseReason close_reason_ = CloseReason::kOther;
 
 #if RESIZE_DOCUMENT_PICTURE_IN_PICTURE_TO_DIALOG
@@ -362,10 +371,8 @@ class PictureInPictureBrowserFrameView
   // Used to monitor key and mouse events from native window.
   std::unique_ptr<WindowEventObserver> window_event_observer_;
 
-#if !BUILDFLAG(IS_ANDROID)
   // If non-null, this displays the allow / block setting overlay for autopip.
-  raw_ptr<views::View> auto_pip_setting_overlay_ = nullptr;
-#endif
+  raw_ptr<AutoPipSettingOverlayView> auto_pip_setting_overlay_ = nullptr;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_FRAME_PICTURE_IN_PICTURE_BROWSER_FRAME_VIEW_H_

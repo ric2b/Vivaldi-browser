@@ -45,7 +45,7 @@ class CORE_EXPORT FetchRequestData final
                                   mojom::blink::FetchAPIRequestPtr,
                                   ForServiceWorkerFetchEvent);
   FetchRequestData* Clone(ScriptState*, ExceptionState&);
-  FetchRequestData* Pass(ScriptState*);
+  FetchRequestData* Pass(ScriptState*, ExceptionState&);
 
   explicit FetchRequestData(ExecutionContext* execution_context);
   FetchRequestData(const FetchRequestData&) = delete;
@@ -119,8 +119,12 @@ class CORE_EXPORT FetchRequestData final
   void SetHeaderList(FetchHeaderList* header_list) {
     header_list_ = header_list;
   }
-  BodyStreamBuffer* Buffer() const { return buffer_; }
-  void SetBuffer(BodyStreamBuffer* buffer) { buffer_ = buffer; }
+  BodyStreamBuffer* Buffer() const { return buffer_.Get(); }
+  void SetBuffer(BodyStreamBuffer* buffer, uint64_t length = 0) {
+    buffer_ = buffer;
+    buffer_byte_length_ = length;
+  }
+  uint64_t BufferByteLength() const { return buffer_byte_length_; }
   String MimeType() const { return mime_type_; }
   void SetMimeType(const String& type) { mime_type_ = type; }
   String Integrity() const { return integrity_; }
@@ -231,6 +235,7 @@ class CORE_EXPORT FetchRequestData final
   // FIXME: Support m_useURLCredentialsFlag;
   // FIXME: Support m_redirectCount;
   Member<BodyStreamBuffer> buffer_;
+  uint64_t buffer_byte_length_ = 0;
   String mime_type_;
   String integrity_;
   ResourceLoadPriority priority_ = ResourceLoadPriority::kUnresolved;

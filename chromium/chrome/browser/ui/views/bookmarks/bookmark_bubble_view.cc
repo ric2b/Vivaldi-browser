@@ -30,7 +30,7 @@
 #include "chrome/browser/ui/views/commerce/price_tracking_email_dialog_view.h"
 #include "chrome/browser/ui/views/commerce/price_tracking_view.h"
 #include "chrome/browser/ui/views/commerce/shopping_collection_iph_view.h"
-#include "chrome/grit/chromium_strings.h"
+#include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
@@ -116,7 +116,8 @@ gfx::ImageSkia GetFaviconForWebContents(content::WebContents* web_contents) {
   constexpr int kMainImageDimension = 112;
   gfx::ImageSkia centered_favicon =
       gfx::ImageSkiaOperations::CreateImageWithRoundRectBackground(
-          kMainImageDimension, 0, background_color, favicon);
+          gfx::SizeF(kMainImageDimension, kMainImageDimension), /*radius=*/0,
+          background_color, favicon);
   return centered_favicon;
 }
 
@@ -328,10 +329,8 @@ class BookmarkBubbleView::BookmarkBubbleDelegate
                   ->GetComboboxByUniqueId(kBookmarkFolderFieldId)
                   ->selected_index());
 
-    if (base::FeatureList::IsEnabled(features::kPowerBookmarksSidePanel)) {
-      browser_->window()->MaybeShowFeaturePromo(
-          feature_engagement::kIPHPowerBookmarksSidePanelFeature);
-    }
+    browser_->window()->MaybeShowFeaturePromo(
+        feature_engagement::kIPHPowerBookmarksSidePanelFeature);
   }
 
   RecentlyUsedFoldersComboModel* GetFolderModel() {
@@ -395,34 +394,24 @@ void BookmarkBubbleView::ShowBubble(
     product_info = shopping_service->GetAvailableProductInfoForUrl(url);
     auto* tab_helper =
         commerce::ShoppingListUiTabHelper::FromWebContents(web_contents);
-    CHECK(tab_helper);
-
-    product_image = tab_helper->GetProductImage();
+    if (tab_helper) {
+      product_image = tab_helper->GetProductImage();
+    }
   }
 
   auto dialog_model_builder =
       ui::DialogModel::Builder(std::move(bubble_delegate_unique));
-  if (base::FeatureList::IsEnabled(features::kPowerBookmarksSidePanel)) {
-    gfx::ImageSkia main_image = product_image.AsImageSkia();
+  gfx::ImageSkia main_image = product_image.AsImageSkia();
 
-    if (product_image.IsEmpty()) {
-      // Fetch image from ImageService asynchronously
-      FetchImageForUrl(url, profile);
-      // Display favicon while awaiting ImageService response
-      const auto centered_favicon = GetFaviconForWebContents(web_contents);
-      main_image = centered_favicon;
-    }
-
-    dialog_model_builder.SetMainImage(
-        ui::ImageModel::FromImageSkia(main_image));
-  } else {
-    dialog_model_builder.AddExtraButton(
-        base::BindRepeating(&BookmarkBubbleDelegate::OnEditButton,
-                            base::Unretained(bubble_delegate)),
-        ui::DialogModelButton::Params()
-            .SetLabel(l10n_util::GetStringUTF16(IDS_BOOKMARK_BUBBLE_OPTIONS))
-            .AddAccelerator(ui::Accelerator(ui::VKEY_E, ui::EF_ALT_DOWN)));
+  if (product_image.IsEmpty()) {
+    // Fetch image from ImageService asynchronously
+    FetchImageForUrl(url, profile);
+    // Display favicon while awaiting ImageService response
+    const auto centered_favicon = GetFaviconForWebContents(web_contents);
+    main_image = centered_favicon;
   }
+
+  dialog_model_builder.SetMainImage(ui::ImageModel::FromImageSkia(main_image));
 
   ui::ElementIdentifier initially_focused_field = kBookmarkNameFieldId;
   std::u16string secondary_button_label =
@@ -510,9 +499,6 @@ void BookmarkBubbleView::ShowBubble(
     bool is_price_tracked = shopping_service->IsSubscribedFromCache(
         commerce::BuildUserSubscriptionForClusterId(
             product_info->product_cluster_id.value()));
-    if (!base::FeatureList::IsEnabled(features::kPowerBookmarksSidePanel)) {
-      dialog_model_builder.AddSeparator();
-    }
     dialog_model_builder.AddCustomField(
         std::make_unique<views::BubbleDialogModelHost::CustomView>(
             std::make_unique<PriceTrackingView>(
@@ -536,7 +522,8 @@ void BookmarkBubbleView::ShowBubble(
   if (highlighted_button)
     bubble->SetHighlightedButton(highlighted_button);
 
-  if (ShouldShowShoppingCollectionFootnote(profile, bookmark_model, bookmark_node)) {
+  if (ShouldShowShoppingCollectionFootnote(profile, bookmark_model,
+                                           bookmark_node)) {
     bubble->SetFootnoteView(
         std::make_unique<commerce::ShoppingCollectionIphView>());
   } else if (SyncPromoUI::ShouldShowSyncPromo(profile)) {

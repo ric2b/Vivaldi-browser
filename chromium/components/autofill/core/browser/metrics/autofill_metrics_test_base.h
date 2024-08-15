@@ -179,9 +179,9 @@ class AutofillMetricsBaseTest {
   }
 
   void FillTestProfile(const FormData& form) {
-    autofill_manager().FillOrPreviewForm(
-        mojom::AutofillActionPersistence::kFill, form, form.fields.front(),
-        Suggestion::BackendId(kTestProfileId),
+    autofill_manager().FillOrPreviewProfileForm(
+        mojom::ActionPersistence::kFill, form, form.fields.front(),
+        *personal_data().GetProfileByGUID(kTestProfileId),
         {.trigger_source = AutofillTriggerSource::kPopup});
   }
 
@@ -231,7 +231,7 @@ class AutofillMetricsBaseTest {
   void CreateTestAutofillProfiles();
 
   base::test::ScopedFeatureList scoped_feature_list_async_parse_form_;
-  CreditCard credit_card_ = test::GetMaskedServerCardWithCvc();
+  CreditCard credit_card_ = test::WithCvc(test::GetMaskedServerCard());
 };
 
 }  // namespace autofill::autofill_metrics

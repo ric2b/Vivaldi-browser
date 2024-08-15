@@ -90,6 +90,10 @@ struct PolicyError {
   // The name of the first file among those under block restriction. Used for
   // notifications.
   std::string file_name;
+  // Normally the review button is only shown when `blocked_files` is >1, this
+  // option allows to force the display of the review button irrespective of
+  // other conditions.
+  bool always_show_review = false;
 
   bool operator==(const PolicyError& other) const;
   bool operator!=(const PolicyError& other) const;
@@ -129,6 +133,10 @@ struct PolicyPauseParams {
   // The name of the first file among those under warning restriction. Used for
   // notifications.
   std::string file_name;
+  // Normally the review button is only shown when `warning_files_count` is >1,
+  // this option allows to force the display of the review button irrespective
+  // of other conditions.
+  bool always_show_review = false;
 
   bool operator==(const PolicyPauseParams& other) const;
 };
@@ -342,8 +350,9 @@ class IOTask {
   // synchronously after this call returns.
   virtual void Cancel() = 0;
 
-  // Aborts the task because of policy error. This should set `policy_error` in
-  // the progress and complete the task setting the progress state to |kError|.
+  // Aborts the task because of policy error. This should set the progress state
+  // to be |kError| with `policy_error` but not call any of Execute()'s
+  // callbacks. The task will be deleted synchronously after this call returns.
   virtual void CompleteWithError(PolicyError policy_error);
 
   // Gets the current progress status of the task.
@@ -368,7 +377,8 @@ class DummyIOTask : public IOTask {
   DummyIOTask(std::vector<storage::FileSystemURL> source_urls,
               storage::FileSystemURL destination_folder,
               OperationType type,
-              bool show_notification = true);
+              bool show_notification = true,
+              bool progress_succeeds = true);
   ~DummyIOTask() override;
 
   // IOTask overrides:
@@ -385,6 +395,10 @@ class DummyIOTask : public IOTask {
 
   ProgressCallback progress_callback_;
   CompleteCallback complete_callback_;
+
+  // Whether progressing the task should automatically complete it with
+  // kSuccess.
+  bool progress_succeeds_;
 
   base::WeakPtrFactory<DummyIOTask> weak_ptr_factory_{this};
 };

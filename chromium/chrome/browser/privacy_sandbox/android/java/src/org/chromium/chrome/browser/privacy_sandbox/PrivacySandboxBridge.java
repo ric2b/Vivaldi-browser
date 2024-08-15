@@ -4,15 +4,17 @@
 
 package org.chromium.chrome.browser.privacy_sandbox;
 
+import org.jni_zero.CalledByNative;
+import org.jni_zero.NativeMethods;
+
 import org.chromium.base.Callback;
-import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.annotations.NativeMethods;
 
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 /** Bridge, providing access to the native-side Privacy Sandbox configuration. */
+// TODO(crbug.com/1410601): Pass in the profile and remove GetActiveUserProfile in C++.
 public class PrivacySandboxBridge {
     public static boolean isPrivacySandboxEnabled() {
         if (org.chromium.build.BuildConfig.IS_VIVALDI) return false;
@@ -86,6 +88,7 @@ public class PrivacySandboxBridge {
     }
 
     public static boolean isFirstPartySetsDataAccessEnabled() {
+        if (org.chromium.build.BuildConfig.IS_VIVALDI) return false;
         return PrivacySandboxBridgeJni.get().isFirstPartySetsDataAccessEnabled();
     }
 

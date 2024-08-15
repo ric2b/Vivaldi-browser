@@ -112,7 +112,8 @@ class AutofillManager
 
     virtual void OnBeforeAskForValuesToFill(AutofillManager& manager,
                                             FormGlobalId form,
-                                            FieldGlobalId field) {}
+                                            FieldGlobalId field,
+                                            const FormData& form_data) {}
     virtual void OnAfterAskForValuesToFill(AutofillManager& manager,
                                            FormGlobalId form,
                                            FieldGlobalId field) {}
@@ -158,9 +159,8 @@ class AutofillManager
     virtual void OnFillOrPreviewDataModelForm(
         AutofillManager& manager,
         FormGlobalId form,
-        mojom::AutofillActionPersistence action_persistence,
-        base::span<const std::pair<const FormFieldData*, const AutofillField*>>
-            filled_fields,
+        mojom::ActionPersistence action_persistence,
+        base::span<const FormFieldData* const> filled_fields,
         absl::variant<const AutofillProfile*, const CreditCard*>
             profile_or_credit_card) {}
 
@@ -250,17 +250,6 @@ class AutofillManager
                                bool known_success,
                                mojom::SubmissionSource source);
 
-  void FillCreditCardForm(const FormData& form,
-                          const FormFieldData& field,
-                          const CreditCard& credit_card,
-                          const std::u16string& cvc,
-                          const AutofillTriggerDetails& trigger_details);
-
-  void FillProfileForm(const AutofillProfile& profile,
-                       const FormData& form,
-                       const FormFieldData& field,
-                       const AutofillTriggerDetails& trigger_details);
-
   // Invoked when |form| has been filled with the value given by
   // FillOrPreviewForm.
   // Virtual for testing.
@@ -279,7 +268,7 @@ class AutofillManager
   // whether focus was previously on a form with which the user had interacted.
   void OnFocusNoLongerOnForm(bool had_interacted_form);
 
-  // Invoked when textfeild editing ended
+  // Invoked when textfield editing ended
   void OnDidEndTextFieldEditing();
 
   // Invoked when popup window should be hidden.
@@ -425,18 +414,6 @@ class AutofillManager
       const FormData& form,
       const base::TimeTicks timestamp) = 0;
 
-  virtual void FillCreditCardFormImpl(
-      const FormData& form,
-      const FormFieldData& field,
-      const CreditCard& credit_card,
-      const std::u16string& cvc,
-      const AutofillTriggerDetails& trigger_details) = 0;
-  virtual void FillProfileFormImpl(
-      const FormData& form,
-      const FormFieldData& field,
-      const AutofillProfile& profile,
-      const AutofillTriggerDetails& trigger_details) = 0;
-
   virtual void OnFocusNoLongerOnFormImpl(bool had_interacted_form) = 0;
 
   virtual void OnDidEndTextFieldEditingImpl() = 0;
@@ -492,7 +469,7 @@ class AutofillManager
   // TODO(crbug.com/1309848): Add unit tests.
   // TODO(crbug.com/1345089): Eliminate either the ParseFormsAsync() or
   // ParseFormAsync(). There are a few possible directions:
-  // - Let ParseFormAync() wrap the FormData in a vector, call
+  // - Let ParseFormAsync() wrap the FormData in a vector, call
   //   ParseFormsAsync(), and then unwrap the vector again.
   // - Let OnFormsSeen() take a single FormData. That simplifies also
   //   ContentAutofillDriver and AutofillDriverRouter a bit, but then the
@@ -514,8 +491,6 @@ class AutofillManager
   // the returned form structure to the |form_structures_|.
   FormStructure* ParseForm(const FormData& form,
                            const FormStructure* cached_form);
-
-  bool value_from_dynamic_change_form_ = false;
 
   std::map<FormGlobalId, std::unique_ptr<FormStructure>>*
   mutable_form_structures() {

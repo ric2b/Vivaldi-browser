@@ -109,6 +109,11 @@ OrganizedRulesManager::~OrganizedRulesManager() {
   rule_manager_->RemoveObserver(this);
 }
 
+void OrganizedRulesManager::SetIncognitoBrowserState(
+    web::BrowserState* browser_state) {
+  content_rule_list_provider_->SetIncognitoBrowserState(browser_state);
+}
+
 void OrganizedRulesManager::OnRulesSourceUpdated(
     const RuleSource& rule_source) {
   if (rule_source.group != group_ || rule_source.is_fetching)

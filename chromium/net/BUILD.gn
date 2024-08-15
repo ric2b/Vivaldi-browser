@@ -20,6 +20,7 @@ import("//url/features.gni")
 if (is_android) {
   import("//build/config/android/config.gni")
   import("//build/config/android/rules.gni")
+  import("//third_party/jni_zero/jni_zero.gni")
 } else if (is_mac) {
   import("//build/config/mac/mac_sdk.gni")
 } else if (is_ios) {
@@ -100,7 +101,6 @@ buildflag_header("buildflags") {
     "INCLUDE_TRANSPORT_SECURITY_STATE_PRELOAD_LIST=$include_transport_security_state_preload_list",
     "USE_KERBEROS=$use_kerberos",
     "USE_EXTERNAL_GSSAPI=$use_external_gssapi",
-    "TRIAL_COMPARISON_CERT_VERIFIER_SUPPORTED=$trial_comparison_cert_verifier_supported",
     "CHROME_ROOT_STORE_OPTIONAL=$chrome_root_store_optional",
     "CHROME_ROOT_STORE_ONLY=$chrome_root_store_only",
     "CHROME_ROOT_STORE_SUPPORTED=$chrome_root_store_supported",
@@ -244,6 +244,8 @@ component("net") {
     "base/priority_queue.h",
     "base/privacy_mode.cc",
     "base/privacy_mode.h",
+    "base/proxy_chain.cc",
+    "base/proxy_chain.h",
     "base/proxy_delegate.h",
     "base/proxy_server.cc",
     "base/proxy_server.h",
@@ -424,8 +426,6 @@ component("net") {
     "cert/test_root_certs.h",
     "cert/time_conversions.cc",
     "cert/time_conversions.h",
-    "cert/trial_comparison_cert_verifier_util.cc",
-    "cert/trial_comparison_cert_verifier_util.h",
     "cert/x509_cert_types.cc",
     "cert/x509_cert_types.h",
     "cert/x509_certificate.cc",
@@ -1094,7 +1094,7 @@ component("net") {
     ":cronet_buildflags",
     ":net_deps",
     "//build:chromeos_buildflags",
-    "//net/data/ssl/chrome_root_store:gen_root_store_inc",
+    "//components/miracle_parameter/common",
     "//net/http:transport_security_state_generated_files",
   ]
 
@@ -1240,10 +1240,6 @@ component("net") {
     ]
   }
 
-  if (is_chromeos) {
-    deps += [ "//third_party/xdg_shared_mime_info" ]
-  }
-
   if (is_mac) {
     sources += [
       "base/network_notification_thread_mac.cc",
@@ -1274,11 +1270,12 @@ component("net") {
       "base/network_config_watcher_mac.cc",
       "base/network_config_watcher_mac.h",
       "base/platform_mime_util_mac.mm",
-      "base/proxy_string_util_mac.cc",
       "cert/x509_util_apple.cc",
       "cert/x509_util_apple.h",
       "proxy_resolution/proxy_resolver_mac.cc",
       "proxy_resolution/proxy_resolver_mac.h",
+      "proxy_resolution/proxy_server_util_mac.cc",
+      "proxy_resolution/proxy_server_util_mac.h",
     ]
   }
 
@@ -1442,8 +1439,6 @@ component("net") {
       "cert/internal/system_trust_store_nss.h",
       "cert/internal/trust_store_nss.cc",
       "cert/internal/trust_store_nss.h",
-      "cert/known_roots_nss.cc",
-      "cert/known_roots_nss.h",
       "cert/nss_cert_database.cc",
       "cert/nss_cert_database.h",
       "cert/test_root_certs_builtin.cc",
@@ -1473,7 +1468,10 @@ component("net") {
   }
 
   if (is_fuchsia) {
-    deps += [ "//third_party/fuchsia-sdk/sdk/pkg/async-loop-cpp" ]
+    deps += [
+      "//net/data/ssl/chrome_root_store:gen_root_store_inc",
+      "//third_party/fuchsia-sdk/sdk/pkg/async-loop-cpp",
+    ]
     public_deps += [ "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.net.interfaces:fuchsia.net.interfaces_hlcpp" ]
     sources += [
       "base/fuchsia/network_interface_cache.cc",
@@ -1484,13 +1482,6 @@ component("net") {
       "base/network_interfaces_fuchsia.h",
       "base/platform_mime_util_fuchsia.cc",
       "cert/test_root_certs_builtin.cc",
-    ]
-  }
-
-  if (trial_comparison_cert_verifier_supported) {
-    sources += [
-      "cert/trial_comparison_cert_verifier.cc",
-      "cert/trial_comparison_cert_verifier.h",
     ]
   }
 
@@ -1684,7 +1675,6 @@ source_set("net_deps") {
     ":cronet_buildflags",
     ":isolation_info_proto",
     ":net_export_header",
-    ":net_resources",
     ":preload_decoder",
     "//base",
     "//base/third_party/dynamic_annotations",
@@ -1693,6 +1683,10 @@ source_set("net_deps") {
     "//third_party/zlib",
     "//url:buildflags",
   ]
+
+  if (!disable_file_support) {
+    public_deps += [ ":net_resources" ]
+  }
 
   public_configs = net_configs
 
@@ -1957,6 +1951,8 @@ static_library("test_support") {
     "filter/filter_source_stream_test_util.h",
     "filter/mock_source_stream.cc",
     "filter/mock_source_stream.h",
+    "http/http_response_headers_test_util.cc",
+    "http/http_response_headers_test_util.h",
     "http/http_stream_factory_test_util.cc",
     "http/http_stream_factory_test_util.h",
     "http/http_transaction_test_util.cc",
@@ -2441,6 +2437,7 @@ source_set("quic_test_tools") {
 }
 
 source_set("simple_quic_tools") {
+  testonly = true
   sources = [
     "tools/quic/quic_client_message_loop_network_helper.cc",
     "tools/quic/quic_client_message_loop_network_helper.h",
@@ -2482,6 +2479,7 @@ if (!is_ios) {
     ]
   }
   executable("quic_server") {
+    testonly = true
     sources = [
       "tools/quic/quic_simple_server_backend_factory.cc",
       "tools/quic/quic_simple_server_backend_factory.h",
@@ -2498,6 +2496,7 @@ if (!is_ios) {
     ]
   }
   executable("crypto_message_printer") {
+    testonly = true
     sources = [ "tools/quic/crypto_message_printer_bin.cc" ]
     deps = [
       ":net",
@@ -2549,6 +2548,7 @@ test("net_unittests") {
     "base/prioritized_dispatcher_unittest.cc",
     "base/prioritized_task_runner_unittest.cc",
     "base/priority_queue_unittest.cc",
+    "base/proxy_chain_unittest.cc",
     "base/proxy_server_unittest.cc",
     "base/proxy_string_util_unittest.cc",
     "base/registry_controlled_domains/registry_controlled_domain_unittest.cc",
@@ -2812,6 +2812,7 @@ test("net_unittests") {
     "spdy/spdy_network_transaction_unittest.cc",
     "spdy/spdy_proxy_client_socket_unittest.cc",
     "spdy/spdy_read_queue_unittest.cc",
+    "spdy/spdy_session_key_unittest.cc",
     "spdy/spdy_session_pool_unittest.cc",
     "spdy/spdy_session_test_util.cc",
     "spdy/spdy_session_test_util.h",
@@ -2857,15 +2858,6 @@ test("net_unittests") {
     "url_request/view_cache_helper_unittest.cc",
   ]
 
-  if (!is_cronet_build) {
-    sources += [
-      "extras/shared_dictionary/shared_dictionary_isolation_key_unittest.cc",
-      "extras/sqlite/sqlite_persistent_cookie_store_unittest.cc",
-      "extras/sqlite/sqlite_persistent_shared_dictionary_store_unittest.cc",
-      "log/trace_net_log_observer_unittest.cc",
-    ]
-  }
-
   if (is_android) {
     sources += [
       "android/dummy_spnego_authenticator.cc",
@@ -2910,7 +2902,10 @@ test("net_unittests") {
   }
 
   if (is_apple) {
-    sources += [ "cert/x509_util_apple_unittest.cc" ]
+    sources += [
+      "cert/x509_util_apple_unittest.cc",
+      "proxy_resolution/proxy_server_util_mac_unittest.cc",
+    ]
   }
 
   if (is_win) {
@@ -2956,25 +2951,31 @@ test("net_unittests") {
     "//net/tools/huffman_trie:huffman_trie_generator_sources",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/anonymous_tokens:anonymous_tokens_tests",
     "//third_party/protobuf:protobuf_lite",
     "//third_party/zlib",
     "//url",
     "//url:buildflags",
   ]
 
-  if (enable_websockets) {
-    deps += [ "//net/server:tests" ]
-  }
+  if (!is_cronet_build) {
+    sources += [
+      "extras/shared_dictionary/shared_dictionary_isolation_key_unittest.cc",
+      "extras/sqlite/sqlite_persistent_cookie_store_unittest.cc",
+      "extras/sqlite/sqlite_persistent_shared_dictionary_store_unittest.cc",
+      "log/trace_net_log_observer_unittest.cc",
+    ]
 
-  if (is_cronet_build) {
-    deps += [ "//third_party/perfetto/include/perfetto/test:test_support" ]
-  } else {
     deps += [
       ":extras",
       "//components/sqlite_proto",
       "//sql",
       "//sql:test_support",
     ]
+  }
+
+  if (enable_websockets) {
+    deps += [ "//net/server:tests" ]
   }
 
   if (is_posix) {
@@ -3025,7 +3026,6 @@ test("net_unittests") {
     "data/quic_http_response_cache_data_with_push/",
     "data/spdy_tests/",
     "data/test.html",
-    "data/trial_comparison_cert_verifier_unittest/",
     "data/verify_certificate_chain_unittest/",
     "data/verify_name_match_unittest/",
     "data/verify_signed_data_unittest/",
@@ -3266,10 +3266,6 @@ test("net_unittests") {
     }
   }
 
-  if (trial_comparison_cert_verifier_supported) {
-    sources += [ "cert/trial_comparison_cert_verifier_unittest.cc" ]
-  }
-
   # Include transport_security_state_generator tests.
   if (host_toolchain == current_toolchain) {
     deps += [
@@ -3290,6 +3286,7 @@ if (!is_ios) {
       "disk_cache/disk_cache_perftest.cc",
       "extras/sqlite/sqlite_persistent_cookie_store_perftest.cc",
       "socket/udp_socket_perftest.cc",
+      "spdy/spdy_http_utils_perftest.cc",
       "url_request/url_request_quic_perftest.cc",
     ]
 
@@ -3304,6 +3301,7 @@ if (!is_ios) {
       "//base/test:test_support_perf",
       "//testing/gtest",
       "//testing/perf",
+      "//third_party/google_benchmark:google_benchmark",
       "//url",
     ]
     data_deps = [
@@ -3365,6 +3363,11 @@ fuzzer_test("net_der_parser_fuzzer") {
     "//net",
     "//third_party/abseil-cpp:absl",
   ]
+}
+
+fuzzer_test("host_port_pair_fuzzer") {
+  sources = [ "base/host_port_pair_fuzzer.cc" ]
+  deps = [ "//net" ]
 }
 
 proto_library("disk_cache_lpm_fuzzer_proto") {
@@ -3625,6 +3628,15 @@ fuzzer_test("net_cert_parse_certificate_fuzzer") {
   ]
 }
 
+fuzzer_test("net_cert_parse_crldp_fuzzer") {
+  sources = [ "cert/pki/parse_crldp_fuzzer.cc" ]
+  seed_corpus = "data/fuzzer_data/parse_crldp_fuzzer"
+  deps = [
+    "//base",
+    "//net",
+  ]
+}
+
 fuzzer_test("net_canonical_cookie_fuzzer") {
   sources = [ "cookies/canonical_cookie_fuzzer.cc" ]
   deps = [
@@ -3735,6 +3747,17 @@ fuzzer_test("net_crl_set_fuzzer") {
     "//net",
   ]
   seed_corpus = "data/fuzzer_data/net_crl_set_fuzzer/"
+}
+
+fuzzer_test("net_spdy_headers_to_http_response_headers_fuzzer") {
+  sources = [ "spdy/spdy_headers_to_http_response_headers_fuzzer.cc" ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//base",
+    "//net",
+  ]
+  dict = "data/fuzzer_dictionaries/net_http_stream_parser_fuzzer.dict"
+  libfuzzer_options = [ "max_len = 512" ]
 }
 
 fuzzer_test("net_unescape_url_component_fuzzer") {

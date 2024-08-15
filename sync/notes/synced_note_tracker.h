@@ -24,7 +24,6 @@ class EntitySpecifics;
 }  // namespace sync_pb
 
 namespace vivaldi {
-class NotesModel;
 class NoteNode;
 }  // namespace vivaldi
 
@@ -34,6 +33,7 @@ class SyncedFileStore;
 
 namespace sync_notes {
 
+class NoteModelView;
 class SyncedNoteTrackerEntity;
 
 // This class is responsible for keeping the mapping between note nodes in
@@ -55,7 +55,7 @@ class SyncedNoteTracker {
   // data is inconsistent with sync metadata (i.e. corrupt). |model| must not be
   // null.
   static std::unique_ptr<SyncedNoteTracker> CreateFromNotesModelAndMetadata(
-      const vivaldi::NotesModel* model,
+      const NoteModelView* model,
       sync_pb::NotesModelMetadata model_metadata,
       file_sync::SyncedFileStore* synced_file_store);
 
@@ -182,9 +182,9 @@ class SyncedNoteTracker {
   // Returns number of tracked entities. Used only in test.
   size_t TrackedEntitiesCountForTest() const;
 
-  // Checks whther all nodes in |notes_model| that *should* be tracked are
-  // tracked.
-  void CheckAllNodesTracked(const vivaldi::NotesModel* notes_model) const;
+  // Checks whether all nodes in |note_model| that *should* be tracked as
+  // per IsNodeSyncable() are tracked.
+  void CheckAllNodesTracked(const NoteModelView* notes_model) const;
 
   // This method is used to mark all entities except permanent nodes as
   // unsynced. This will cause reuploading of all notes. The reupload will be
@@ -218,7 +218,7 @@ class SyncedNoteTracker {
   // |model_metadata|. Validates the integrity of |*model| and |model_metadata|
   // and returns an enum representing any inconsistency.
   bool InitEntitiesFromModelAndMetadata(
-      const vivaldi::NotesModel* model,
+      const NoteModelView* model,
       sync_pb::NotesModelMetadata model_metadata);
 
   // Conceptually, find a tracked entity that matches |entity| and returns a

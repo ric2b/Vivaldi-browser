@@ -9,6 +9,7 @@
 
 #include "base/files/file_path.h"
 #include "chrome/browser/ash/file_manager/io_task.h"
+#include "chrome/browser/ash/policy/dlp/dialogs/files_policy_dialog.h"
 #include "chrome/browser/chromeos/policy/dlp/dialogs/policy_dialog_base.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_file_destination.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_files_utils.h"
@@ -38,15 +39,16 @@ class MockFilesPolicyNotificationManager
               (override));
 
   MOCK_METHOD(void,
-              AddConnectorsBlockedFiles,
+              SetConnectorsBlockedFiles,
               (file_manager::io_task::IOTaskId task_id,
-               std::vector<base::FilePath> blocked_files,
-               dlp::FileAction action),
+               dlp::FileAction action,
+               FilesPolicyDialog::BlockReason reason,
+               FilesPolicyDialog::Info dialog_into),
               (override));
 
   MOCK_METHOD(void,
               ShowDlpWarning,
-              (OnDlpRestrictionCheckedCallback callback,
+              (WarningWithJustificationCallback callback,
                absl::optional<file_manager::io_task::IOTaskId> task_id,
                std::vector<base::FilePath> warning_files,
                const DlpFileDestination& destination,
@@ -55,16 +57,21 @@ class MockFilesPolicyNotificationManager
 
   MOCK_METHOD(void,
               ShowConnectorsWarning,
-              (OnDlpRestrictionCheckedCallback callback,
+              (WarningWithJustificationCallback callback,
                file_manager::io_task::IOTaskId task_id,
-               std::vector<base::FilePath> warning_files,
-               dlp::FileAction action),
+               dlp::FileAction action,
+               FilesPolicyDialog::Info dialog_info),
               (override));
 
   MOCK_METHOD(void,
               ShowFilesPolicyNotification,
               (const std::string& notification_id,
                const file_manager::io_task::ProgressStatus& status),
+              (override));
+
+  MOCK_METHOD(void,
+              ShowDialog,
+              (file_manager::io_task::IOTaskId task_id, FilesDialogType),
               (override));
 
   MOCK_METHOD(void,
@@ -75,6 +82,11 @@ class MockFilesPolicyNotificationManager
   MOCK_METHOD(void,
               OnErrorItemDismissed,
               (file_manager::io_task::IOTaskId task_id),
+              (override));
+
+  MOCK_METHOD(void,
+              OnIOTaskStatus,
+              (const file_manager::io_task::ProgressStatus&),
               (override));
 };
 

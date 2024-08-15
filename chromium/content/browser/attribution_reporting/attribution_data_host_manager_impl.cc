@@ -14,6 +14,7 @@
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/containers/circular_deque.h"
+#include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/feature_list.h"
@@ -45,6 +46,8 @@
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/global_routing_id.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -412,10 +415,16 @@ struct AttributionDataHostManagerImpl::RegistrarAndHeader {
     }
 
     if (has_web) {
+      // Max header size is 256 KB, use 1M count to encapsulate.
+      base::UmaHistogramCounts1M("Conversions.HeadersSize.RegisterSource",
+                                 web_source.size());
       return RegistrarAndHeader{.registrar = Registrar::kWeb,
                                 .header = std::move(web_source)};
     }
     if (has_os) {
+      // Max header size is 256 KB, use 1M count to encapsulate.
+      base::UmaHistogramCounts1M("Conversions.HeadersSize.RegisterOsSource",
+                                 os_source.size());
       return RegistrarAndHeader{.registrar = Registrar::kOs,
                                 .header = std::move(os_source)};
     }
@@ -499,10 +508,13 @@ void AttributionDataHostManagerImpl::ParseSource(
     Registrar registrar) {
   DCHECK(it != registrations_.end());
 
+  network::mojom::AttributionSupport attribution_support =
+      AttributionManager::GetAttributionSupport(
+          content::WebContents::FromRenderFrameHost(
+              RenderFrameHost::FromID(it->render_frame_id())));
   switch (registrar) {
     case Registrar::kWeb:
-      if (!network::HasAttributionWebSupport(
-              AttributionManager::GetSupport())) {
+      if (!network::HasAttributionWebSupport(attribution_support)) {
         CHECK(it->devtools_request_id());
         LogAuditIssue(
             it->render_frame_id(),
@@ -522,7 +534,7 @@ void AttributionDataHostManagerImpl::ParseSource(
       }
       break;
     case Registrar::kOs:
-      if (!network::HasAttributionOsSupport(AttributionManager::GetSupport())) {
+      if (!network::HasAttributionOsSupport(attribution_support)) {
         CHECK(it->devtools_request_id());
         LogAuditIssue(
             it->render_frame_id(),
@@ -720,6 +732,12 @@ void AttributionDataHostManagerImpl::SourceDataAvailable(
     source_type = SourceType::kNavigation;
   }
 
+  if (!data.IsValidForSourceType(source_type)) {
+    mojo::ReportBadMessage(
+        "AttributionDataHost: Source invalid for source type.");
+    return;
+  }
+
   attribution_manager_->HandleSource(
       StorableSource(std::move(reporting_origin), std::move(data),
                      /*source_origin=*/context->context_origin(), source_type,
@@ -761,11 +779,10 @@ void AttributionDataHostManagerImpl::OsSourceDataAvailable(
     input_event = context->navigation()->input_event();
   }
   for (auto& item : registration_items) {
-    attribution_manager_->HandleOsRegistration(
-        OsRegistration(std::move(item.url), item.debug_reporting,
-                       context->context_origin(), input_event,
-                       context->is_within_fenced_frame()),
-        context->render_frame_id());
+    attribution_manager_->HandleOsRegistration(OsRegistration(
+        std::move(item.url), item.debug_reporting, context->context_origin(),
+        input_event, context->is_within_fenced_frame(),
+        context->render_frame_id()));
   }
 }
 
@@ -778,12 +795,10 @@ void AttributionDataHostManagerImpl::OsTriggerDataAvailable(
   }
 
   for (auto& item : registration_items) {
-    attribution_manager_->HandleOsRegistration(
-        OsRegistration(std::move(item.url), item.debug_reporting,
-                       context->context_origin(),
-                       /*input_event=*/absl::nullopt,
-                       context->is_within_fenced_frame()),
-        context->render_frame_id());
+    attribution_manager_->HandleOsRegistration(OsRegistration(
+        std::move(item.url), item.debug_reporting, context->context_origin(),
+        /*input_event=*/absl::nullopt, context->is_within_fenced_frame(),
+        context->render_frame_id()));
   }
 }
 
@@ -866,6 +881,7 @@ void AttributionDataHostManagerImpl::NotifyFencedFrameReportingBeaconData(
                   /*violation_type=*/attribution_header->error(),
                   /*request_url=*/reporting_url, *it->devtools_request_id(),
                   /*invalid_parameter=*/absl::nullopt);
+    MaybeOnRegistrationsFinished(it);
     return;
   }
 
@@ -905,7 +921,7 @@ void AttributionDataHostManagerImpl::OnWebSourceParsed(
       }
       ASSIGN_OR_RETURN(auto registration,
                        attribution_reporting::SourceRegistration::Parse(
-                           std::move(*result).TakeDict()));
+                           std::move(*result).TakeDict(), source_type));
       return StorableSource(pending_decode.reporting_origin,
                             std::move(registration),
                             registrations->source_origin(), source_type,
@@ -956,8 +972,8 @@ void AttributionDataHostManagerImpl::OnOsSourceParsed(SourceRegistrationsId id,
         attribution_manager_->HandleOsRegistration(
             OsRegistration(std::move(item.url), item.debug_reporting,
                            registrations->source_origin(), input_event,
-                           registrations->is_within_fenced_frame()),
-            registrations->render_frame_id());
+                           registrations->is_within_fenced_frame(),
+                           registrations->render_frame_id()));
       }
     } else {
       const auto& pending_decode = registrations->pending_os_decodes().front();
@@ -1058,8 +1074,7 @@ void AttributionDataHostManagerImpl::MaybeBindDeferredReceivers(
     }
   } else {
     // We skip binding the receiver if any registrations are still ongoing
-    if (ongoing_background_registrations_.find(navigation_id) !=
-        ongoing_background_registrations_.end()) {
+    if (base::Contains(ongoing_background_registrations_, navigation_id)) {
       return;
     }
 

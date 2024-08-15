@@ -6,7 +6,6 @@
 namespace vivaldi {
 
 bool HasKeychainAccess();
-void MaybeSetupVivaldiKeychain();
 
 }  // namespace vivaldi
 

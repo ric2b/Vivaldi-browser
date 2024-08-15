@@ -48,29 +48,35 @@ class AuxiliarySearchProvider : public KeyedService {
  private:
   FRIEND_TEST_ALL_PREFIXES(AuxiliarySearchProviderTest, QueryBookmarks);
   FRIEND_TEST_ALL_PREFIXES(AuxiliarySearchProviderTest,
+                           QueryBookmarks_flagTest);
+  FRIEND_TEST_ALL_PREFIXES(AuxiliarySearchProviderTest,
                            QueryBookmarks_nativePageShouldBeFiltered);
   FRIEND_TEST_ALL_PREFIXES(AuxiliarySearchProviderBrowserTest,
                            QuerySensitiveTab);
   FRIEND_TEST_ALL_PREFIXES(AuxiliarySearchProviderBrowserTest,
                            QueryNonSensitiveTab);
   FRIEND_TEST_ALL_PREFIXES(AuxiliarySearchProviderBrowserTest,
+                           QueryNonSensitiveTab_flagTest);
+  FRIEND_TEST_ALL_PREFIXES(AuxiliarySearchProviderBrowserTest,
                            QueryEmptyTabList);
   FRIEND_TEST_ALL_PREFIXES(AuxiliarySearchProviderBrowserTest, NativeTabTest);
   FRIEND_TEST_ALL_PREFIXES(AuxiliarySearchProviderBrowserTest, FilterTabsTest);
 
-  using NonSensitiveTabsCallback =
-      base::OnceCallback<void(std::unique_ptr<std::vector<TabAndroid*>>)>;
+  using NonSensitiveTabsCallback = base::OnceCallback<void(
+      std::unique_ptr<std::vector<base::WeakPtr<TabAndroid>>>)>;
 
   auxiliary_search::AuxiliarySearchBookmarkGroup GetBookmarks(
       bookmarks::BookmarkModel* model) const;
 
-  static std::vector<TabAndroid*> FilterTabsByScheme(
+  static std::vector<base::WeakPtr<TabAndroid>> FilterTabsByScheme(
       const std::vector<TabAndroid*>& tabs);
 
   void GetNonSensitiveTabsInternal(const std::vector<TabAndroid*>& all_tabs,
                                    NonSensitiveTabsCallback callback) const;
 
   raw_ptr<Profile> profile_;
+  size_t max_bookmark_donation_count_;
+  size_t max_tab_donation_count_;
 
   base::WeakPtrFactory<AuxiliarySearchProvider> weak_ptr_factory_{this};
 };

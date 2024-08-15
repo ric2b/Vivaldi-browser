@@ -142,12 +142,12 @@ scoped_refptr<FontData> CSSSegmentedFontFace::GetFontData(
   const FontSelectionRequest& font_selection_request =
       font_description.GetFontSelectionRequest();
   requested_font_description.SetSyntheticBold(
-      font_selection_capabilities_.weight.maximum < BoldThreshold() &&
-      font_selection_request.weight >= BoldThreshold() &&
+      font_selection_capabilities_.weight.maximum < kBoldThreshold &&
+      font_selection_request.weight >= kBoldThreshold &&
       font_description.SyntheticBoldAllowed());
   requested_font_description.SetSyntheticItalic(
-      font_selection_capabilities_.slope.maximum < ItalicSlopeValue() &&
-      font_selection_request.slope >= ItalicSlopeValue() &&
+      font_selection_capabilities_.slope.maximum < kItalicSlopeValue &&
+      font_selection_request.slope >= kItalicSlopeValue &&
       font_description.SyntheticItalicAllowed());
 
   font_faces_->ForEachReverse(WTF::BindRepeating(
@@ -223,16 +223,16 @@ void CSSSegmentedFontFace::WillUseRange(
       font_description, range_set));
 }
 
-bool CSSSegmentedFontFace::CheckFont(const String& text) const {
+bool CSSSegmentedFontFace::CheckFont(UChar32 c) const {
   return font_faces_->ForEachUntilFalse(WTF::BindRepeating(
-      [](const String& text, Member<FontFace> font_face) -> bool {
+      [](UChar32 c, Member<FontFace> font_face) -> bool {
         if (font_face->LoadStatus() != FontFace::kLoaded &&
-            font_face->CssFontFace()->Ranges()->IntersectsWith(text)) {
+            font_face->CssFontFace()->Ranges()->Contains(c)) {
           return false;
         }
         return true;
       },
-      text));
+      c));
 }
 
 void CSSSegmentedFontFace::Match(const String& text,

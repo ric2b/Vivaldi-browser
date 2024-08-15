@@ -19,7 +19,7 @@
            completionHandler:(void (^)(BOOL success))completionHandler;
 
 - (void)importPasskey:(NSURL*)encryptionPassword
-    completionHandler:(void (^)(BOOL success))completionHandler;
+    completionHandler:(void (^)(NSString* errorMessage))completionHandler;
 
 - (void)logOutButtonPressed;
 

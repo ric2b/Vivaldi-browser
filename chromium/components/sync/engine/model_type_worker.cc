@@ -61,6 +61,8 @@ const char kBlockedByUndecryptableUpdateHistogramName[] =
     "Sync.ModelTypeBlockedDueToUndecryptableUpdate";
 const char kPasswordNotesStateHistogramName[] =
     "Sync.PasswordNotesStateInUpdate";
+constexpr char kEntityEncryptionResultHistogramName[] =
+    "Sync.EntityEncryptionSucceeded";
 
 BASE_FEATURE(kSyncKeepGcDirectiveDuringSyncCycle,
              "SyncKeepGcDirectiveDuringSyncCycle",
@@ -68,6 +70,14 @@ BASE_FEATURE(kSyncKeepGcDirectiveDuringSyncCycle,
 
 void LogPasswordNotesState(PasswordNotesStateForUMA state) {
   base::UmaHistogramEnumeration(kPasswordNotesStateHistogramName, state);
+}
+
+void LogEncryptionResult(ModelType type, bool success) {
+  base::UmaHistogramBoolean(kEntityEncryptionResultHistogramName, success);
+  base::UmaHistogramBoolean(
+      base::StrCat({kEntityEncryptionResultHistogramName, ".",
+                    ModelTypeToHistogramSuffix(type)}),
+      success);
 }
 
 // A proxy which can be called from any sequence and delegates the work to the
@@ -124,14 +134,16 @@ void AdaptWebAuthnClientTagHash(syncer::EntityData* data) {
   // Valid ClientTagHash values are Base64(SHA1(protobuf_prefix + client_tag))
   // and therefore always 28 bytes.
   const std::string& client_tag_hash = data->client_tag_hash.value();
+  std::string sync_id;
   if (client_tag_hash.size() == 32 &&
-      // base::HexEncode() returns upper case, `client_tag_hash` is lower case.
-      base::ToUpperASCII(client_tag_hash) ==
-          base::HexEncode(base::as_bytes(base::make_span(
-              data->specifics.webauthn_credential().sync_id())))) {
-    data->client_tag_hash = ClientTagHash::FromUnhashed(
-        ModelType::WEBAUTHN_CREDENTIAL,
-        data->specifics.webauthn_credential().sync_id());
+      base::HexStringToString(client_tag_hash, &sync_id) &&
+      // Deletions don't include the specifics, only the client_tag_hash.
+      (!data->specifics.has_webauthn_credential() ||
+       // Otherwise, check that the client_tag_hash really is the hex encoded
+       // sync_id.
+       sync_id == data->specifics.webauthn_credential().sync_id())) {
+    data->client_tag_hash =
+        ClientTagHash::FromUnhashed(ModelType::WEBAUTHN_CREDENTIAL, sync_id);
   }
 }
 
@@ -844,6 +856,8 @@ std::unique_ptr<CommitContribution> ModelTypeWorker::GetContribution(
     EncryptOutgoingPasswordSharingInvitations(&response);
   } else if (type_ == PASSWORDS) {
     EncryptPasswordSpecificsData(&response);
+  } else if (encryption_enabled_) {
+    EncryptSpecifics(&response);
   }
 
   DCHECK(!AlwaysEncryptedUserTypes().Has(type_) || encryption_enabled_);
@@ -857,8 +871,7 @@ std::unique_ptr<CommitContribution> ModelTypeWorker::GetContribution(
                      weak_ptr_factory_.GetWeakPtr()),
       base::BindOnce(&ModelTypeWorker::OnFullCommitFailure,
                      weak_ptr_factory_.GetWeakPtr()),
-      encryption_enabled_ ? cryptographer_.get() : nullptr, passphrase_type_,
-      CommitOnlyTypes().Has(type_));
+      passphrase_type_, CommitOnlyTypes().Has(type_));
 }
 
 bool ModelTypeWorker::HasLocalChanges() const {
@@ -1329,6 +1342,7 @@ void ModelTypeWorker::EncryptPasswordSpecificsData(
     CommitRequestDataList* request_data_list) {
   CHECK(cryptographer_);
   CHECK(encryption_enabled_);
+  CHECK_EQ(type_, PASSWORDS);
 
   for (std::unique_ptr<CommitRequestData>& request_data : *request_data_list) {
     EntityData* entity_data = request_data->entity.get();
@@ -1351,7 +1365,7 @@ void ModelTypeWorker::EncryptPasswordSpecificsData(
     bool result = cryptographer_->Encrypt(
         password_data,
         encrypted_password.mutable_password()->mutable_encrypted());
-    DCHECK(result);
+    LogEncryptionResult(type_, result);
     if (base::FeatureList::IsEnabled(syncer::kPasswordNotesWithBackup)) {
       // `encrypted_notes_backup` field needs to be populated regardless of
       // whether or not there are any notes.
@@ -1375,6 +1389,7 @@ void ModelTypeWorker::EncryptPasswordSpecificsData(
 void ModelTypeWorker::EncryptOutgoingPasswordSharingInvitations(
     CommitRequestDataList* request_data_list) {
   CHECK(cryptographer_);
+  CHECK_EQ(type_, OUTGOING_PASSWORD_SHARING_INVITATION);
 
   for (std::unique_ptr<CommitRequestData>& request_data : *request_data_list) {
     EntityData* entity_data = request_data->entity.get();
@@ -1396,7 +1411,7 @@ void ModelTypeWorker::EncryptOutgoingPasswordSharingInvitations(
     // There should not be encryption failure but DCHECK is not used because
     // it's not guaranteed. In the worst case, the entity will be committed with
     // empty specifics (no unencrypted data will be committed to the server).
-    // TODO(crbug.com/1468523): add a metric to record encryption failures.
+    LogEncryptionResult(type_, encrypted_data.has_value());
     if (encrypted_data) {
       specifics->set_encrypted_password_sharing_invitation_data(
           encrypted_data->data(), encrypted_data->size());
@@ -1405,6 +1420,29 @@ void ModelTypeWorker::EncryptOutgoingPasswordSharingInvitations(
     } else {
       DLOG(ERROR) << "Failed to encrypt outgoing password sharing invitation";
     }
+  }
+}
+
+void ModelTypeWorker::EncryptSpecifics(
+    CommitRequestDataList* request_data_list) {
+  CHECK(cryptographer_);
+  CHECK(encryption_enabled_);
+  CHECK_NE(type_, PASSWORDS);
+  CHECK_NE(type_, OUTGOING_PASSWORD_SHARING_INVITATION);
+
+  for (std::unique_ptr<CommitRequestData>& request_data : *request_data_list) {
+    EntityData* entity_data = request_data->entity.get();
+    entity_data->name = "encrypted";
+    if (entity_data->is_deleted()) {
+      // EntityData::is_deleted() means that the specifics is empty, so nothing
+      // to encrypt.
+      continue;
+    }
+    sync_pb::EntitySpecifics encrypted_specifics;
+    bool success = cryptographer_->Encrypt(
+        entity_data->specifics, encrypted_specifics.mutable_encrypted());
+    LogEncryptionResult(type_, success);
+    entity_data->specifics.CopyFrom(encrypted_specifics);
   }
 }
 

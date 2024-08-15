@@ -327,6 +327,7 @@ namespace http://www.w3.org/1999/xhtml
     property setAttributeNode
     property setAttributeNodeNS
     property setHTML
+    property setHTMLUnsafe
     property setPointerCapture
     property shadowRoot
     property showPopover
@@ -340,7 +341,6 @@ namespace http://www.w3.org/1999/xhtml
     property toString
     property toggleAttribute
     property togglePopover
-    property toggles
     property translate
     property virtualKeyboardPolicy
     property webkitMatchesSelector
@@ -502,6 +502,8 @@ html element button
     property formMethod
     property formNoValidate
     property formTarget
+    property invokeAction
+    property invokeTargetElement
     property labels
     property name
     property popoverTargetAction
@@ -752,6 +754,8 @@ html element input
     property height
     property incremental
     property indeterminate
+    property invokeAction
+    property invokeTargetElement
     property labels
     property list
     property max
@@ -936,6 +940,10 @@ html element param
     property type
     property value
     property valueType
+html element permission
+    property ondismiss
+    property onresolve
+    property type
 html element picture
 html element plaintext
 html element pre
@@ -990,6 +998,7 @@ html element select
     property selectedIndex
     property selectedOptions
     property setCustomValidity
+    property showPicker
     property size
     property type
     property validationMessage
@@ -1089,6 +1098,7 @@ html element td
     property width
 html element template
     property content
+    property parseparts
     property shadowRootMode
 html element textarea
     property autocomplete
@@ -1568,6 +1578,7 @@ namespace http://www.w3.org/2000/svg
     property setAttributeNode
     property setAttributeNodeNS
     property setHTML
+    property setHTMLUnsafe
     property setPointerCapture
     property shadowRoot
     property slot
@@ -1576,7 +1587,6 @@ namespace http://www.w3.org/2000/svg
     property tagName
     property textContent
     property toggleAttribute
-    property toggles
     property viewportElement
     property webkitMatchesSelector
     property webkitRequestFullScreen
@@ -1654,13 +1664,6 @@ svg element circle
     property transform
 svg element clipPath
     property clipPathUnits
-    property farthestViewportElement
-    property getBBox
-    property getCTM
-    property getScreenCTM
-    property nearestViewportElement
-    property requiredExtensions
-    property systemLanguage
     property transform
 svg element defs
     property farthestViewportElement

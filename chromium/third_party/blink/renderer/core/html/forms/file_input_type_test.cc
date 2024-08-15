@@ -59,7 +59,8 @@ TEST(FileInputTypeTest, createFileList) {
   // Non-native file.
   KURL url("filesystem:http://example.com/isolated/hash/non-native-file");
   files.push_back(CreateFileChooserFileInfoFileSystem(
-      url, base::Time::FromJsTime(1.0 * kMsPerDay + 3), 64));
+      url, base::Time::FromMillisecondsSinceUnixEpoch(1.0 * kMsPerDay + 3),
+      64));
 
   ScopedNullExecutionContext execution_context;
   FileList* list = FileInputType::CreateFileList(
@@ -87,7 +88,8 @@ TEST(FileInputTypeTest, ignoreDroppedNonNativeFiles) {
 
   DataObject* native_file_raw_drag_data = DataObject::Create();
   const DragData native_file_drag_data(native_file_raw_drag_data, gfx::PointF(),
-                                       gfx::PointF(), kDragOperationCopy);
+                                       gfx::PointF(), kDragOperationCopy,
+                                       false);
   native_file_drag_data.PlatformData()->Add(MakeGarbageCollected<File>(
       &execution_context.GetExecutionContext(), "/native/path"));
   native_file_drag_data.PlatformData()->SetFilesystemId("fileSystemId");
@@ -99,7 +101,7 @@ TEST(FileInputTypeTest, ignoreDroppedNonNativeFiles) {
   DataObject* non_native_file_raw_drag_data = DataObject::Create();
   const DragData non_native_file_drag_data(non_native_file_raw_drag_data,
                                            gfx::PointF(), gfx::PointF(),
-                                           kDragOperationCopy);
+                                           kDragOperationCopy, false);
   FileMetadata metadata;
   metadata.length = 1234;
   const KURL url("filesystem:http://example.com/isolated/hash/non-native-file");
@@ -161,7 +163,7 @@ TEST(FileInputTypeTest, DropTouchesNoPopupOpeningObserver) {
   MockFileChooser chooser(doc.GetFrame()->GetBrowserInterfaceBroker(),
                           run_loop.QuitClosure());
   DragData drag_data(DataObject::Create(), gfx::PointF(), gfx::PointF(),
-                     kDragOperationCopy);
+                     kDragOperationCopy, false);
   drag_data.PlatformData()->Add(MakeGarbageCollected<File>(
       &execution_context.GetExecutionContext(), "/foo/bar"));
   input.ReceiveDroppedFiles(&drag_data);

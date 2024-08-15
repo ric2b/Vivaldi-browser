@@ -7,14 +7,15 @@ package org.chromium.chrome.browser.tab;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.Callback;
+import org.chromium.base.ContextUtils;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.net.NetError;
 import org.chromium.ui.base.WindowAndroid;
 
 // Vivaldi
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.url.GURL;
 import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
@@ -27,7 +28,7 @@ public class TabThemeColorHelper extends EmptyTabObserver {
     private final Callback mUpdateCallback;
 
     // Vivaldi
-    private final SharedPreferencesManager.Observer mPreferenceObserver;
+    private SharedPreferences.OnSharedPreferenceChangeListener mPrefsListener;
 
     TabThemeColorHelper(Tab tab, Callback<Integer> updateCallback) {
         mTab = tab;
@@ -35,10 +36,11 @@ public class TabThemeColorHelper extends EmptyTabObserver {
         tab.addObserver(this);
 
         // Vivaldi
-        mPreferenceObserver = key -> {
+        mPrefsListener = (sharedPrefs, key) -> {
             if (VivaldiPreferences.UI_ACCENT_COLOR_SETTING.equals(key)) updateIfNeeded(mTab, false);
         };
-        VivaldiPreferences.getSharedPreferencesManager().addObserver(mPreferenceObserver);
+        ContextUtils.getAppSharedPreferences()
+                .registerOnSharedPreferenceChangeListener(mPrefsListener);
     }
 
     /**
@@ -77,8 +79,6 @@ public class TabThemeColorHelper extends EmptyTabObserver {
     @Override
     public void onDestroyed(Tab tab) {
         tab.removeObserver(this);
-        // Vivaldi
-        VivaldiPreferences.getSharedPreferencesManager().removeObserver(mPreferenceObserver);
     }
 
     @Override

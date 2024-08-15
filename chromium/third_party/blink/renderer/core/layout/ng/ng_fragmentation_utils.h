@@ -6,9 +6,9 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_NG_FRAGMENTATION_UTILS_H_
 
 #include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/blink/renderer/core/layout/ng/geometry/ng_box_strut.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_break_token.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_item.h"
+#include "third_party/blink/renderer/core/layout/geometry/box_strut.h"
+#include "third_party/blink/renderer/core/layout/inline/inline_break_token.h"
+#include "third_party/blink/renderer/core/layout/inline/inline_item.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_block_break_token.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_block_node.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_box_fragment_builder.h"
@@ -196,7 +196,7 @@ inline LayoutUnit UnclampedFragmentainerSpaceLeft(
 // below). For all other fragments, leading/trailing block margins must be
 // ignored.
 inline void AdjustMarginsForFragmentation(const NGBlockBreakToken* break_token,
-                                          NGBoxStrut* box_strut) {
+                                          BoxStrut* box_strut) {
   if (!break_token)
     return;
 
@@ -378,7 +378,7 @@ void PropagateSpaceShortage(
     const NGConstraintSpace&,
     const NGLayoutResult*,
     LayoutUnit fragmentainer_block_offset,
-    NGBoxFragmentBuilder*,
+    NGFragmentBuilder*,
     absl::optional<LayoutUnit> block_size_override = absl::nullopt);
 // Calculate how much we would need to stretch the column block-size to fit the
 // current result (if applicable). |block_size_override| should only be supplied
@@ -401,6 +401,16 @@ void UpdateMinimalSpaceShortage(absl::optional<LayoutUnit> space_shortage,
 bool MovePastBreakpoint(
     const NGConstraintSpace& space,
     NGLayoutInputNode child,
+    const NGLayoutResult& layout_result,
+    LayoutUnit fragmentainer_block_offset,
+    NGBreakAppeal appeal_before,
+    NGBoxFragmentBuilder* builder,
+    bool is_row_item = false,
+    NGFlexColumnBreakInfo* flex_column_break_info = nullptr);
+
+// Same as above, but without the parts that require an NGLayoutInputNode.
+bool MovePastBreakpoint(
+    const NGConstraintSpace& space,
     const NGLayoutResult& layout_result,
     LayoutUnit fragmentainer_block_offset,
     NGBreakAppeal appeal_before,
@@ -476,7 +486,7 @@ NGConstraintSpace CreateConstraintSpaceForFragmentainer(
 NGBoxFragmentBuilder CreateContainerBuilderForMulticol(
     const NGBlockNode& multicol,
     const NGConstraintSpace& space,
-    const NGFragmentGeometry& fragment_geometry);
+    const FragmentGeometry& fragment_geometry);
 NGConstraintSpace CreateConstraintSpaceForMulticol(const NGBlockNode& multicol);
 
 // Return the adjusted child margin to be applied at the end of a fragment.
@@ -504,6 +514,9 @@ const NGBlockBreakToken* PreviousFragmentainerBreakToken(
 // possible. This function should no longer be necessary once everything has
 // been properly converted to LayoutNG.
 const NGBlockBreakToken* FindPreviousBreakToken(const NGPhysicalBoxFragment&);
+
+// Return the LayoutBox::PhysicalFragments() index for this fragment.
+wtf_size_t BoxFragmentIndex(const NGPhysicalBoxFragment&);
 
 // Return the index of the fragmentainer preceding the first fragmentainer
 // inside this fragment. Used by nested block fragmentation.

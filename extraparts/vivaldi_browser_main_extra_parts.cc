@@ -53,8 +53,8 @@
 #include "components/browser/vivaldi_brand_select.h"
 
 #include "components/datasource/vivaldi_image_store.h"
+#include "components/notes/notes_factory.h"
 #include "contact/contact_service_factory.h"
-#include "notes/notes_factory.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "ui/webui/vivaldi_web_ui_controller_factory.h"
 
@@ -143,7 +143,7 @@ void VivaldiBrowserMainExtraParts::
   vivaldi::NotesModelFactory::GetInstance();
   VivaldiImageStore::InitFactory();
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  extensions::AutoUpdateAPI::Init();
+  extensions::AutoUpdateAPI::GetFactoryInstance();
   extensions::BookmarkContextMenuAPI::GetFactoryInstance();
   extensions::CalendarAPI::GetFactoryInstance();
   extensions::ContactsAPI::GetFactoryInstance();
@@ -258,7 +258,7 @@ void VivaldiBrowserMainExtraParts::PostProfileInit(Profile* profile,
     }
   }
 
-  auto *image_store = VivaldiImageStore::FromBrowserContext(profile);
+  auto* image_store = VivaldiImageStore::FromBrowserContext(profile);
   DCHECK(image_store);
   if (image_store) {
     image_store->ScheduleThumbnalSanitizer();
@@ -287,8 +287,4 @@ void VivaldiBrowserMainExtraParts::PreMainMessageLoopRun() {
 
 void VivaldiBrowserMainExtraParts::PostMainMessageLoopRun() {
   vivaldi::ClientHintsBrandRegisterProfilePrefs(nullptr);
-
-#if !BUILDFLAG(IS_ANDROID)
-  extensions::AutoUpdateAPI::Shutdown();
-#endif  // IS_ANDROID
 }

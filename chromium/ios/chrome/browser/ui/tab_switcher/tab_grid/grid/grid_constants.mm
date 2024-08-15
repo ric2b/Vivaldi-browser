@@ -21,8 +21,13 @@ NSString* const kGridSectionHeaderIdentifier = @"GridSectionHeaderIdentifier";
 NSString* const kSuggestedActionsGridCellIdentifier =
     @"SuggestedActionsGridCellIdentifier";
 
+#if defined(VIVALDI_BUILD)
+NSString* const kGridBackgroundColor = @"vivaldi_grid_background_color";
+#else
 // Grid styling.
 NSString* const kGridBackgroundColor = @"grid_background_color";
+#endif
+// End Vivaldi
 
 // Definition of limited width for applicable size classes. The first refers to
 // the horizontal size class; the second to the vertical.
@@ -86,5 +91,3 @@ const CGFloat kGridCellSelectionRingTintWidth = 5.0f;
 const CGFloat kGridCellPriceDropTopSpacing = 10.0f;
 const CGFloat kGridCellPriceDropLeadingSpacing = 10.0f;
 const CGFloat kGridCellPriceDropTrailingSpacing = 10.0f;
-
-const CGFloat kGridExpectedTopContentInset = 20.0f;

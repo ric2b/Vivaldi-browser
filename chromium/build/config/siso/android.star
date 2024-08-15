@@ -11,10 +11,13 @@ load("./config.star", "config")
 
 def __enabled(ctx):
     if "args.gn" in ctx.metadata:
-        gn_args = gn.parse_args(ctx.metadata["args.gn"])
+        gn_args = gn.args(ctx)
         if gn_args.get("target_os") == '"android"':
             return True
     return False
+
+def __filegroups(ctx):
+    return {}
 
 def __step_config(ctx, step_config):
     __input_deps(ctx, step_config["input_deps"])
@@ -52,8 +55,7 @@ def __step_config(ctx, step_config):
                 # Slow actions that exceed deadline on the default worker pool.
                 "./obj/chrome/android/chrome_test_java.turbine.jar": {"platform_ref": "large"},
             },
-            # TODO(b/284252142): Run turbine actions locally by default because it slows down developer builds.
-            "remote": config.get(ctx, "remote_all"),
+            "remote": remote_run,
             "platform_ref": "large",
             "canonicalize_dir": True,
             "timeout": "2m",
@@ -117,8 +119,7 @@ def __step_config(ctx, step_config):
             # Fo remote actions, let's ignore them, assuming remote cache hits compensate.
             "ignore_extra_input_pattern": ".*\\.dex",
             "ignore_extra_output_pattern": ".*\\.dex",
-            # TODO(b/284252142): Run dex actions locally by default because it slows down developer builds.
-            "remote": config.get(ctx, "remote_all"),
+            "remote": remote_run,
             "platform_ref": "large",
             "canonicalize_dir": True,
             "timeout": "2m",
@@ -227,10 +228,11 @@ def __android_compile_java_handler(ctx, cmd):
 
     inputs = []
     for i, arg in enumerate(cmd.args):
-        if arg == '--enable-errorprone':
-          # errorprone requires the plugin directory to detect src dir.
-          # https://source.chromium.org/chromium/chromium/src/+/main:tools/android/errorprone_plugin/src/org/chromium/tools/errorprone/plugin/UseNetworkAnnotations.java;l=84;drc=dfd88085261b662a5c0a1abea1a3b120b08e8e48
-          inputs.append(ctx.fs.canonpath("../../tools/android/errorprone_plugin"))
+        if arg == "--enable-errorprone":
+            # errorprone requires the plugin directory to detect src dir.
+            # https://source.chromium.org/chromium/chromium/src/+/main:tools/android/errorprone_plugin/src/org/chromium/tools/errorprone/plugin/UseNetworkAnnotations.java;l=84;drc=dfd88085261b662a5c0a1abea1a3b120b08e8e48
+            inputs.append(ctx.fs.canonpath("../../tools/android/errorprone_plugin"))
+
         # read .sources file.
         if arg.startswith("@"):
             sources = str(ctx.fs.read(ctx.fs.canonpath(arg.removeprefix("@")))).splitlines()
@@ -409,7 +411,7 @@ android = module(
     "android",
     enabled = __enabled,
     step_config = __step_config,
-    filegroups = {},
+    filegroups = __filegroups,
     handlers = __handlers,
     input_deps = __input_deps,
 )

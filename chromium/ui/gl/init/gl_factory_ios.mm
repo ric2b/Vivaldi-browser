@@ -16,7 +16,7 @@ namespace gl::init {
 
 std::vector<GLImplementationParts> GetAllowedGLImplementations() {
   std::vector<GLImplementationParts> impls;
-  impls.emplace_back(kGLImplementationEGLANGLE);
+  impls.emplace_back(gl::ANGLEImplementation::kMetal);
   return impls;
 }
 
@@ -63,7 +63,7 @@ scoped_refptr<GLSurface> CreateViewGLSurface(GLDisplay* display,
       }
     case kGLImplementationMockGL:
     case kGLImplementationStubGL:
-      return new GLSurfaceStub;
+      return InitializeGLSurface(new GLSurfaceStub());
     default:
       NOTREACHED();
       return nullptr;
@@ -89,7 +89,7 @@ scoped_refptr<GLSurface> CreateOffscreenGLSurfaceWithFormat(
     }
     case kGLImplementationMockGL:
     case kGLImplementationStubGL:
-      return new GLSurfaceStub;
+      return InitializeGLSurface(new GLSurfaceStub());
     default:
       NOTREACHED();
       return nullptr;

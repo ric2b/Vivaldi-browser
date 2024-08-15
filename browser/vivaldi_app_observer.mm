@@ -31,7 +31,7 @@ VivaldiAppObserver* VivaldiAppObserver::Get(
       browser_context);
 }
 
-void VivaldiAppObserver::SetCommand(NSInteger tag, Browser* browser) {
+void VivaldiAppObserver::SetCommand(int tag, Browser* browser) {
   browser_ = browser;
   tag_ = tag;
 }

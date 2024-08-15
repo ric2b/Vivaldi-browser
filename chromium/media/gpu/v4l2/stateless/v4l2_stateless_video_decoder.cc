@@ -4,10 +4,12 @@
 
 #include "media/gpu/v4l2/stateless/v4l2_stateless_video_decoder.h"
 
+#include "base/memory/ptr_util.h"
 #include "base/notreached.h"
 #include "media/gpu/gpu_video_decode_accelerator_helpers.h"
 #include "media/gpu/macros.h"
 #include "media/gpu/v4l2/stateless/utils.h"
+#include "media/gpu/v4l2/stateless/vp9_delegate.h"
 #include "media/gpu/v4l2/v4l2_status.h"
 
 namespace media {
@@ -73,7 +75,7 @@ void V4L2StatelessVideoDecoder::Initialize(const VideoDecoderConfig& config,
 
   device_->Close();
   if (!device_->Open()) {
-    DVLOGF(1) << "Failed to open device device.";
+    DVLOGF(1) << "Failed to open device.";
     std::move(init_cb).Run(
         DecoderStatus(DecoderStatus::Codes::kNotInitialized)
             .AddCause(V4L2Status(V4L2Status::Codes::kNoDevice)));
@@ -90,6 +92,14 @@ void V4L2StatelessVideoDecoder::Initialize(const VideoDecoderConfig& config,
     return;
   }
 
+  if (!CreateDecoder(config.profile(), config.color_space_info())) {
+    std::move(init_cb).Run(
+        DecoderStatus(DecoderStatus::Codes::kNotInitialized)
+            .AddCause(
+                V4L2Status(V4L2Status::Codes::kNoDriverSupportForFourcc)));
+    return;
+  }
+
   output_cb_ = std::move(output_cb);
   std::move(init_cb).Run(DecoderStatus::Codes::kOk);
 }
@@ -97,7 +107,13 @@ void V4L2StatelessVideoDecoder::Initialize(const VideoDecoderConfig& config,
 void V4L2StatelessVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
                                        DecodeCB decode_cb) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(decoder_sequence_checker_);
-  NOTIMPLEMENTED();
+  DVLOGF(4) << buffer->AsHumanReadableString(/*verbose=*/false);
+
+  const int32_t bitstream_id =
+      bitstream_id_generator_.GenerateNextId().GetUnsafeValue();
+
+  ProcessCompressedBuffer(std::move(buffer), std::move(decode_cb),
+                          bitstream_id);
 }
 
 void V4L2StatelessVideoDecoder::Reset(base::OnceClosure reset_cb) {
@@ -147,18 +163,13 @@ scoped_refptr<V4L2DecodeSurface> V4L2StatelessVideoDecoder::CreateSurface() {
   return nullptr;
 }
 
-bool V4L2StatelessVideoDecoder::SubmitSlice(V4L2DecodeSurface* dec_surface,
+bool V4L2StatelessVideoDecoder::SubmitFrame(void* ctrls,
                                             const uint8_t* data,
-                                            size_t size) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(decoder_sequence_checker_);
+                                            size_t size,
+                                            int32_t bitstream_id) {
+  DVLOGF(4);
   NOTIMPLEMENTED();
   return false;
-}
-
-void V4L2StatelessVideoDecoder::DecodeSurface(
-    scoped_refptr<V4L2DecodeSurface> dec_surface) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(decoder_sequence_checker_);
-  NOTIMPLEMENTED();
 }
 
 void V4L2StatelessVideoDecoder::SurfaceReady(
@@ -167,7 +178,118 @@ void V4L2StatelessVideoDecoder::SurfaceReady(
     const gfx::Rect& visible_rect,
     const VideoColorSpace& color_space) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(decoder_sequence_checker_);
+  NOTREACHED();
   NOTIMPLEMENTED();
+}
+
+bool V4L2StatelessVideoDecoder::CreateDecoder(VideoCodecProfile profile,
+                                              VideoColorSpace color_space) {
+  DVLOGF(3);
+
+  switch (VideoCodecProfileToVideoCodec(profile)) {
+    case VideoCodec::kVP9:
+      decoder_ = std::make_unique<VP9Decoder>(
+          std::make_unique<VP9Delegate>(
+              this, device_->IsCompressedVP9HeaderSupported()),
+          profile, color_space);
+      break;
+    default:
+      DVLOGF(1) << GetCodecName(VideoCodecProfileToVideoCodec(profile))
+                << " not supported.";
+      return false;
+  }
+
+  return true;
+}
+
+bool V4L2StatelessVideoDecoder::CreateInputQueue(VideoCodecProfile profile,
+                                                 const gfx::Size resolution) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(decoder_sequence_checker_);
+  DVLOGF(4);
+  DCHECK(!input_queue_);
+
+  const VideoCodec codec = VideoCodecProfileToVideoCodec(profile);
+  input_queue_ = InputQueue::Create(device_, codec, resolution);
+
+  if (input_queue_) {
+    input_queue_->PrepareBuffers();
+    input_queue_->StartStreaming();
+  }
+
+  return !!input_queue_;
+}
+
+void V4L2StatelessVideoDecoder::ProcessCompressedBuffer(
+    scoped_refptr<DecoderBuffer> compressed_buffer,
+    VideoDecoder::DecodeCB decode_cb,
+    int32_t bitstream_id) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(decoder_sequence_checker_);
+  DVLOGF(4);
+  DCHECK(decoder_);
+
+  // The |decoder_| does not own the |compressed_buffer|. The
+  // |compressed_buffer| needs to be held onto until |Decode| returns
+  // AcceleratedVideoDecoder::kRanOutOfStreamData. Multiple calls to |Decode|
+  // can process the same |compressed_buffer|. This function can not return
+  // until the |decoder_| no longer needs to use that data.
+  AcceleratedVideoDecoder::DecodeResult decode_result = decoder_->Decode();
+
+  // This function expects that the decoder will be in a state ready to
+  // receive compressed data. Because the lifetime of the |compressed_buffer|
+  // is only for this function every time through the decoder should
+  // be requesting more data.
+  // TODO(frkoenig): There is the possibility of this function being called
+  // and |decode_result| being a decode error.  Should that be handled
+  // here?  or else where?
+  CHECK_EQ(decode_result, AcceleratedVideoDecoder::kRanOutOfStreamData);
+
+  if (!compressed_buffer->end_of_stream()) {
+    decoder_->SetStream(bitstream_id, *compressed_buffer);
+
+    do {
+      decode_result = decoder_->Decode();
+      switch (decode_result) {
+        case AcceleratedVideoDecoder::kConfigChange:
+          VLOGF(2) << "AcceleratedVideoDecoder::kConfigChange";
+          if (!CreateInputQueue(decoder_->GetProfile(),
+                                decoder_->GetPicSize())) {
+            std::move(decode_cb).Run(
+                DecoderStatus::Codes::kPlatformDecodeFailure);
+            VLOGF(1) << "Unable to create an input queue for "
+                     << GetProfileName(decoder_->GetProfile())
+                     << " of resolution " << decoder_->GetPicSize().ToString();
+          }
+          break;
+        case AcceleratedVideoDecoder::kRanOutOfStreamData:
+          VLOGF(2) << "AcceleratedVideoDecoder::kRanOutOfStreamData";
+          // Handled on first entry to function.
+          break;
+        case AcceleratedVideoDecoder::kRanOutOfSurfaces:
+          VLOGF(2) << "AcceleratedVideoDecoder::kRanOutOfSurfaces";
+          NOTREACHED();
+          break;
+        case AcceleratedVideoDecoder::kNeedContextUpdate:
+          VLOGF(2) << "AcceleratedVideoDecoder::kNeedContextUpdate";
+          NOTIMPLEMENTED();
+          break;
+        case AcceleratedVideoDecoder::kDecodeError:
+          VLOGF(2) << "AcceleratedVideoDecoder::kDecodeError";
+          NOTREACHED();
+          break;
+        case AcceleratedVideoDecoder::kTryAgain:
+          VLOGF(2) << "AcceleratedVideoDecoder::kTryAgain";
+          NOTIMPLEMENTED();
+          break;
+      }
+    } while (AcceleratedVideoDecoder::kRanOutOfStreamData != decode_result &&
+             AcceleratedVideoDecoder::kDecodeError != decode_result);
+  }
+
+  // TODO: This PostTask is blindly sending a positive status. Errors need
+  // to be handled correctly.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(decode_cb), DecoderStatus::Codes::kOk));
 }
 
 }  // namespace media

@@ -354,6 +354,9 @@ struct NavigateParams {
   // Ext data to assign to |contents_to_insert| on creation.
   std::string viv_ext_data;
 
+  // Should workspace link routing be ignored when tab is opened.
+  bool ignore_link_routing = false;
+
   // Create webcontentsview as a guest.
   bool should_create_guestframe = false;
 

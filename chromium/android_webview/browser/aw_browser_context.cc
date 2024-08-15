@@ -18,7 +18,6 @@
 #include "android_webview/browser/aw_form_database_service.h"
 #include "android_webview/browser/aw_permission_manager.h"
 #include "android_webview/browser/aw_quota_manager_bridge.h"
-#include "android_webview/browser/aw_resource_context.h"
 #include "android_webview/browser/aw_web_ui_controller_factory.h"
 #include "android_webview/browser/cookie_manager.h"
 #include "android_webview/browser/metrics/aw_metrics_service_client.h"
@@ -71,6 +70,7 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_request_utils.h"
+#include "content/public/browser/resource_context.h"
 #include "content/public/browser/ssl_host_state_delegate.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
@@ -415,7 +415,7 @@ bool AwBrowserContext::IsOffTheRecord() {
 
 content::ResourceContext* AwBrowserContext::GetResourceContext() {
   if (!resource_context_) {
-    resource_context_ = std::make_unique<AwResourceContext>();
+    resource_context_ = std::make_unique<content::ResourceContext>();
   }
   return resource_context_.get();
 }
@@ -687,6 +687,23 @@ std::string AwBrowserContext::GetExtraHeaders(const GURL& url) {
   return iter != extra_headers_.end() ? iter->second : std::string();
 }
 
+void AwBrowserContext::SetServiceWorkerIoThreadClient(
+    JNIEnv* const env,
+    const base::android::JavaParamRef<jobject>& io_thread_client) {
+  sw_io_thread_client_ =
+      base::android::ScopedJavaGlobalRef<jobject>(io_thread_client);
+}
+
+std::unique_ptr<AwContentsIoThreadClient>
+AwBrowserContext::GetServiceWorkerIoThreadClientThreadSafe() {
+  base::android::ScopedJavaLocalRef<jobject> java_delegate =
+      base::android::ScopedJavaLocalRef<jobject>(sw_io_thread_client_);
+  if (java_delegate) {
+    return std::make_unique<AwContentsIoThreadClient>(java_delegate);
+  }
+  return nullptr;
+}
+
 jboolean JNI_AwBrowserContext_CheckNamedContextExists(
     JNIEnv* const env,
     const base::android::JavaParamRef<jstring>& jname) {
@@ -787,6 +804,10 @@ void AwBrowserContext::DeleteContext(const base::FilePath& relative_path) {
   CHECK(storage_deleted);
   bool cache_deleted = base::DeletePathRecursively(cache_path);
   CHECK(cache_deleted);
+
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_AwBrowserContext_deleteSharedPreferences(
+      env, base::android::ConvertUTF8ToJavaString(env, relative_path.value()));
 }
 
 }  // namespace android_webview

@@ -947,7 +947,7 @@ void URLRequest::PrepareToRestart() {
 
   status_ = OK;
   is_pending_ = false;
-  proxy_server_ = ProxyServer();
+  proxy_chain_ = ProxyChain();
 }
 
 void URLRequest::Redirect(
@@ -1216,7 +1216,7 @@ IsolationInfo URLRequest::CreateIsolationInfoFromNetworkAnonymizationKey(
   auto isolation_info = IsolationInfo::Create(
       IsolationInfo::RequestType::kOther, top_frame_origin,
       frame_origin.value(), SiteForCookies(),
-      /*party_context=*/absl::nullopt, network_anonymization_key.GetNonce());
+      network_anonymization_key.GetNonce());
   // TODO(crbug/1343856): DCHECK isolation info is fully populated.
   return isolation_info;
 }

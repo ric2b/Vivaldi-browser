@@ -7,9 +7,8 @@ import './connect_onedrive.js';
 import './file_handler_page.js';
 import './strings.m.js';
 
-import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
 import {ColorChangeUpdater} from 'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
-import {assert} from 'chrome://resources/js/assert_ts.js';
+import {assert} from 'chrome://resources/js/assert.js';
 
 import {DialogPage} from './cloud_upload.mojom-webui.js';
 import {CloudUploadBrowserProxy} from './cloud_upload_browser_proxy.js';
@@ -17,9 +16,6 @@ import {CloudProvider, MoveConfirmationPageElement} from './move_confirmation_pa
 
 
 window.addEventListener('load', () => {
-  const jellyEnabled = loadTimeData.getBoolean('isJellyEnabled');
-  const theme = jellyEnabled ? 'refresh23' : 'legacy';
-  document.documentElement.setAttribute('theme', theme);
   ColorChangeUpdater.forDocument().start();
 });
 

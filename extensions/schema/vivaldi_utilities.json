@@ -607,6 +607,15 @@
         }
       },
       {
+        "id": "ProxyInfo",
+        "type": "object",
+        "properties": {
+          "hasOther": {
+            "type": "boolean"
+          }
+        }
+      },
+      {
         "id": "ProxyHost",
         "type": "object",
         "properties": {
@@ -646,6 +655,26 @@
           },
           "token": {
             "type": "string"
+          }
+        }
+      },
+      {
+        "id": "ReadImageData",
+        "type": "object",
+        "description": "An object that defines the data read from the image file.",
+        "properties": {
+          "data": {
+            "name": "data",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "Read image as raw bytes."
+          },
+          "type": {
+            "name": "type",
+            "type": "string",
+            "description": "Mime type of the read image."
           }
         }
       }
@@ -834,9 +863,21 @@
         }
       },
       {
+        "name": "cleanUnusedImages",
+        "type": "function",
+        "description": "Cleans unused images (thumbnails)",
+        "parameters": [
+          {
+            "name": "createdBefore",
+            "type": "integer",
+            "description": "Run only if createdBefore <= the number of the images created sinct the last cleanup."
+          }
+        ]
+      },
+      {
         "name": "storeImage",
         "type": "function",
-        "description": "Save image from a memory blob to image store and put its URL to preferences or bookmarks.",
+        "description": "Save image from the memory blob to the image store and return related chrome:// URL.",
         "parameters": [
           {
             "name": "options",
@@ -1867,16 +1908,37 @@
       {
         "name": "supportsProxy",
         "type": "function",
-        "description": "Returns true or false depending on invisiv proxy can be used or not. This is a platform test, not a test of other condtitions.",
+        "description": "Returns true or false depending on invisv proxy can be used or not. This is a platform test, not a test of other condtitions.",
         "parameters": [],
         "returns": {
           "$ref": "ProxyPlatformSupport"
         }
       },
       {
+        "name": "getOtherProxies",
+        "type": "function",
+        "description": "Get information of other proxies running.",
+        "parameters": [
+           {
+            "name": "options",
+            "$ref": "ProxyHost",
+            "description": "Ignore this proxy. Can be used to filter out our own."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "info",
+              "$ref": "ProxyInfo"
+            }
+          ]
+        }
+      },
+      {
         "name": "connectProxy",
         "type": "function",
-        "description": "Connects to invisiv proxy.",
+        "description": "Connects to invisv proxy.",
         "parameters": [
           {
             "name": "options",
@@ -1896,7 +1958,7 @@
       {
         "name": "disconnectProxy",
         "type": "function",
-        "description": "Disconnects from invisiv proxy.",
+        "description": "Disconnects from invisv proxy.",
         "parameters": [],
         "returns_async": {
           "name": "callback",
@@ -1904,6 +1966,47 @@
             {
               "name": "result",
               "type": "boolean"
+            }
+          ]
+        }
+      },
+       {
+        "name": "browserWindowReady",
+        "type": "function",
+        "description": "Signals that JS has fully set up browser window and its event listeners.",
+        "parameters": [
+          {
+            "name": "windowId",
+            "type": "number"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
+      },
+      {
+        "name": "readImage",
+        "type": "function",
+        "description": "Reads an image file from the file system from the specified URL to the object.",
+        "parameters": [
+          {
+            "name": "url",
+            "type": "string"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "data",
+              "$ref": "ReadImageData"
             }
           ]
         }

@@ -200,14 +200,16 @@ void VivaldiFrameServiceImpl::MoveSpatnavRect(
     MoveSpatnavRectCallback callback) {
   vivaldi::mojom::SpatnavRectPtr spatnav_rect(
       vivaldi::mojom::SpatnavRect::New());
+  std::string href;
 
   blink::DOMRect new_rect(0, 0, 0, 0);
-  spatnav_controller_->MoveRect(direction, &new_rect);
+  spatnav_controller_->MoveRect(direction, &new_rect, &href);
 
   spatnav_rect->x = new_rect.x();
   spatnav_rect->y = new_rect.y();
   spatnav_rect->width = new_rect.width();
   spatnav_rect->height = new_rect.height();
+  spatnav_rect->href = href;
 
   std::move(callback).Run(std::move(spatnav_rect));
 }

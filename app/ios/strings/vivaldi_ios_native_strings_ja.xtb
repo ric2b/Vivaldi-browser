@@ -2,7 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ja">
 <translation id="1016495303386450659">アイテムが更新されました</translation>
+<translation id="1041637248958093184">プライベートタブを使用している場合、検索、訪問したサイト、Cookie、一時ファイルは Vivaldi に保存されません。</translation>
 <translation id="1066692930984703744">トラッカー・広告ブロッカーを有効にして、より高速で安全なブラウジングを実現します</translation>
+<translation id="1076258485383101882">入力した URL を同期する</translation>
 <translation id="1116694919640316211">About</translation>
 <translation id="1123707809902612118">トラッカーと広告をブロック</translation>
 <translation id="1151972924205500581">パスワードを入力してください</translation>
@@ -20,6 +22,7 @@
 <translation id="1315107593850379616">リカバリーメールアドレス</translation>
 <translation id="1325473901257014816">Vivaldi を使用すると、すべてのタブを１つのブラウザに保持し、すべてのデバイス間で同期できます。</translation>
 <translation id="132683371494960526">親フォルダーを変更するにはダブルタップしてください。</translation>
+<translation id="1354002567845495520">Vivaldi のメモを同期する（添付は同期対象外）</translation>
 <translation id="1379470994139227452">Vivaldi をデフォルトとして設定する</translation>
 <translation id="1381484244248892686">保存したパスワードは、どのデバイスでも使用可能です。<ph name="EMAIL" />の Vivaldi パスワードマネージャーに保存されます</translation>
 <translation id="1383876407941801731">検索</translation>
@@ -28,6 +31,7 @@
 <translation id="1430638949087011281">ブロックなし</translation>
 <translation id="1446108955355168157">あなたの同期データ（パスワード、ブックマーク、メモ等）を暗号化し保護するため、暗号化パスワードを作成してください。そのパスワードは私たちには決して送信されません。</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> アイテム</translation>
+<translation id="1468415711258933398">スタンダードタブ</translation>
 <translation id="1521731267649138856">リカバリーメールアドレス。</translation>
 <translation id="1573784689611551537">個別設定</translation>
 <translation id="1577761519530347814">ウェブページのパスワードを同期する</translation>
@@ -48,7 +52,6 @@
 <translation id="1861262398884155592">このフォルダーは空です</translation>
 <translation id="1887193815546011584">新しいスピードダイヤル</translation>
 <translation id="1929299157575856072">デフォルトのブロックレベル</translation>
-<translation id="1979539205367899613">下部のプラスアイコンをタップして、新しいプライベートタブを開きます。</translation>
 <translation id="2030706494969937066">認証情報の取得に失敗しました。再度ログインしてください。</translation>
 <translation id="2034405583989639424">スピードダイヤルを編集</translation>
 <translation id="2048247880942380698">アラビア語 (<ph name="ORIGIN" />)</translation>
@@ -56,7 +59,6 @@
 <translation id="2117093051794889870">内容順</translation>
 <translation id="2129408066358825297">年齢</translation>
 <translation id="2148384276939959392">選択したデータ項目を同期</translation>
-<translation id="21693288559538605">広告およびトラッカーブロッカーの概要</translation>
 <translation id="2195713384412091023">これを行うと、サーバー上の同期データはすべて消去され、暗号化パスワードもリセットされ、ログアウトされます。</translation>
 <translation id="2243210264130642074">メモが保存されました</translation>
 <translation id="2272338747456392228">アカウントがロックされています</translation>
@@ -65,6 +67,7 @@
 <translation id="2336309953058658733">ごみ箱を空にする</translation>
 <translation id="2359808026110333948">続ける</translation>
 <translation id="2386793615875593361">１件のアイテムを選択中</translation>
+<translation id="2387049655823108978">別のデバイスで開かれているタブを同期する</translation>
 <translation id="2388224692799337242">ブラウジングを開始すると、履歴がここに表示されます</translation>
 <translation id="2391028308389203648">トルコ語 (<ph name="ORIGIN" />)</translation>
 <translation id="2392369802118427583">有効化</translation>
@@ -80,23 +83,24 @@
 <translation id="2709516037105925701">自動入力</translation>
 <translation id="271033894570825754">新規</translation>
 <translation id="2745324713975967671">暗号化パスワード</translation>
+<translation id="276436995507680929">リーディングリストを同期する</translation>
 <translation id="2765217105034171413">小</translation>
 <translation id="2825232297853754349">利用規約への同意が必要です。</translation>
 <translation id="2842985007712546952">親フォルダー</translation>
 <translation id="2843343418360315034">ハンガリー語 (<ph name="ORIGIN" />)</translation>
 <translation id="2850144663494818309">同期を開始しています...</translation>
 <translation id="2874111661876416905">Vivaldi で検索</translation>
-<translation id="2874121295511641364">入力した URL と開いているタブを同期する</translation>
 <translation id="2898963176829412617">新しいフォルダー…</translation>
 <translation id="2961573414320947355">すべてのリンクを Vivaldi で開きたい場合は、必ずデフォルトに設定してください。</translation>
 <translation id="3006429105107822794">このパスワードを覚えておく必要はありません。Vivaldi パスワードマネージャーに保存されます。</translation>
 <translation id="3018244467214569202">ギリシャ語 (<ph name="ORIGIN" />)</translation>
 <translation id="3039671569659952257">フォルダーを削除</translation>
-<translation id="3073196329485613487">アカウントにログイン</translation>
+<translation id="3073196329485613487">アカウントへログイン</translation>
 <translation id="307859903981308731">続けることで、以下の規約に同意したものとみなします。</translation>
 <translation id="3086746722712840547">メモ</translation>
-<translation id="3091563570137981919">トラッカー・広告ブロック</translation>
-<translation id="313566647356924831">ブロッカー設定管理</translation>
+<translation id="3091563570137981919">トラッカーと広告のブロック</translation>
+<translation id="3134385238404760368">直近で開かれたタブはありません</translation>
+<translation id="3157931365184549694">復元</translation>
 <translation id="3177673846235066154">ログイン情報がサーバーにより拒否されました。</translation>
 <translation id="3229182533910980085">下部のプラスアイコンをタップして、最初のブックマークを追加してください</translation>
 <translation id="3236835587712044564">Vivaldi、気に入っていただけてますか？スマホのデフォルトブラウザにしてみませんか？</translation>
@@ -131,15 +135,17 @@
 <translation id="3897092660631435901">メニュー</translation>
 <translation id="3953599441418463312">日本語 (<ph name="ORIGIN" />)</translation>
 <translation id="395506590020066151">トラッカーブロック数</translation>
+<translation id="3958433364221339259"><ph name="SEARCH_ENGINE" /> で検索</translation>
 <translation id="3997823869212225788">6 桁のコードを入力してください</translation>
 <translation id="4002066346123236978">タイトル</translation>
 <translation id="4032606071208172574">（デフォルト）</translation>
-<translation id="4048057312173843244">他のデバイスから同期したタブはここに表示されます。同期を使用するにはサインインを行なってください。</translation>
+<translation id="4048057312173843244">他のデバイスから同期したタブはここに表示されます。同期を使用するにはログインを行なってください。</translation>
 <translation id="4073968054795398875">同期サーバーに問題が発生しています。まもなく同期の初期化を再度試みます...</translation>
 <translation id="4096707694175478403">パネル</translation>
 <translation id="414098425907666915">プライベート検索</translation>
 <translation id="4141861385728508836">北欧 (<ph name="ORIGIN" />)</translation>
 <translation id="4145489350420416595">予期せぬエラーが発生しました。</translation>
+<translation id="4151468644762710975">検索エンジンを初期状態に復元する</translation>
 <translation id="4152011295694446843">ブックマークはここに表示されます</translation>
 <translation id="4152623049003960417">トラッカーリスト</translation>
 <translation id="4176463684765177261">無効</translation>
@@ -173,12 +179,14 @@
 <translation id="4655510151391078468">送信したコードと一致しません。
         残り<ph name="ATTEMPTS" />回入力できます。</translation>
 <translation id="466494460776294423">認証コードを入力してください</translation>
+<translation id="4714431804859029826">初期状態に戻す</translation>
 <translation id="4727698999970341158">アイスランド語 (<ph name="ORIGIN" />)</translation>
 <translation id="473775607612524610">更新</translation>
 <translation id="4739712911308055817">フェッチされていません</translation>
 <translation id="4780953868408193639">トラッカー
 ブロック数</translation>
 <translation id="4807415245238822255">パスワードが一致している必要があります。</translation>
+<translation id="4821701638681626529">Vivaldi は、プライベートタブの使用中における閲覧履歴は記録しません</translation>
 <translation id="4833044618885331665">同期を使用するには Vivaldi のアップグレードが必要です。</translation>
 <translation id="4852383705713307704">広告ブロック数</translation>
 <translation id="4871370605780490696">ブックマークを追加</translation>
@@ -262,6 +270,7 @@
 <translation id="6937750621455385628">ログインには Vivaldi アカウントが必要です。</translation>
 <translation id="6945221475159498467">選択</translation>
 <translation id="6946395294519639514">パネルにはよく使う便利機能がたくさん。サイドバーから簡単にアクセスすることが可能です。</translation>
+<translation id="6951435330868954105">デフォルト設定の管理</translation>
 <translation id="6967884871145366229">プライバシー設定を管理</translation>
 <translation id="6973630695168034713">フォルダー</translation>
 <translation id="7006864796794806241">パスワードの復元</translation>
@@ -282,6 +291,7 @@
 <translation id="7379938540614588640">オランダ語 (<ph name="ORIGIN" />)</translation>
 <translation id="7388525939184421699">新しいソースを追加</translation>
 <translation id="7400418766976504921">URL</translation>
+<translation id="7417521636956146248">検索エンジンの設定を初期状態に復元します。追加した検索エンジンも削除されます。</translation>
 <translation id="7454640759045234067">トラッカーブロック数</translation>
 <translation id="7461899062138731833">ソース</translation>
 <translation id="750493650310597496">０件選択中</translation>
@@ -315,6 +325,8 @@
 <translation id="8261506727792406068">削除</translation>
 <translation id="8273666073173891138">メモが <ph name="FOLDER_TITLE" /> へ保存されました</translation>
 <translation id="8275038454117074363">インポート</translation>
+<translation id="8284356787013856231">ファイルを開く権限がありません</translation>
+<translation id="8326104954595890674">新しいプライベートタブ</translation>
 <translation id="8329813750766387010">更新しました: <ph name="DATE" /></translation>
 <translation id="8347535536909603600">Cookie 同意ポップアップ除去 (<ph name="TYPE" />)</translation>
 <translation id="8359194106448244241">他のデバイスのタブを表示するには、同期を有効にする必要があります。</translation>
@@ -355,6 +367,8 @@
 <translation id="9212737146310746733">ペルシャ語 (<ph name="ORIGIN" />)</translation>
 <translation id="9218693288527810093">トラッカーをブロック</translation>
 <translation id="937440209447114831">どの広告・トラッカーもブロックしていません。</translation>
+<translation id="958688202859970851">直近で開かれたタブがここに表示されます</translation>
 <translation id="984650419570014454">有効化コードは 6 桁です。</translation>
-<translation id="992440609313570947">Vivaldi を使うのは初めてですか？<ph name="BEGIN_LINK" /> アカウントを作成する ➔ <ph name="END_LINK" /></translation>
+<translation id="992440609313570947">アカウントをまだお持ちでないですか？
+<ph name="BEGIN_LINK" /> アカウントを作成する ➔ <ph name="END_LINK" /></translation>
 </translationbundle>

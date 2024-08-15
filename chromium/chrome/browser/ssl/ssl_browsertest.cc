@@ -131,7 +131,6 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/network_service_util.h"
-#include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_frame_host.h"
@@ -353,8 +352,8 @@ class ChromeContentBrowserClientForMixedContentTest
 
 std::string EncodeQuery(const std::string& query) {
   url::RawCanonOutputT<char> buffer;
-  url::EncodeURIComponent(query.data(), query.size(), &buffer);
-  return std::string(buffer.data(), buffer.length());
+  url::EncodeURIComponent(query, &buffer);
+  return std::string(buffer.view());
 }
 
 // Returns the Sha256 hash of the SPKI of |cert|.
@@ -872,7 +871,7 @@ class SSLUITestBase : public InProcessBrowserTest,
 
     Profile* profile = browser()->profile();
 
-    web_app::AppId app_id =
+    webapps::AppId app_id =
         web_app::test::InstallWebApp(profile, std::move(web_app_info));
 
     Browser* app_browser = web_app::LaunchWebAppBrowserAndWait(profile, app_id);
@@ -4744,8 +4743,8 @@ IN_PROC_BROWSER_TEST_F(SSLNetworkTimeBrowserTest, OnDemandFetchClockOk) {
   // returns, to simulate the system clock matching the network time.
   base::SimpleTestClock testing_clock;
   SSLErrorHandler::SetClockForTesting(&testing_clock);
-  testing_clock.SetNow(
-      base::Time::FromJsTime(network_time::kGoodTimeResponseHandlerJsTime[0]));
+  testing_clock.SetNow(base::Time::FromMillisecondsSinceUnixEpoch(
+      network_time::kGoodTimeResponseHandlerJsTime[0]));
   // Set the build time to match the testing clock, to ensure that the
   // build time heuristic doesn't fire.
   ssl_errors::SetBuildTimeForTesting(testing_clock.Now());
@@ -4789,8 +4788,8 @@ IN_PROC_BROWSER_TEST_F(SSLNetworkTimeBrowserTest, OnDemandFetchClockWrong) {
   // 30 days ahead of the network time.
   base::SimpleTestClock testing_clock;
   SSLErrorHandler::SetClockForTesting(&testing_clock);
-  testing_clock.SetNow(
-      base::Time::FromJsTime(network_time::kGoodTimeResponseHandlerJsTime[0]));
+  testing_clock.SetNow(base::Time::FromMillisecondsSinceUnixEpoch(
+      network_time::kGoodTimeResponseHandlerJsTime[0]));
   testing_clock.Advance(base::Days(30));
   // Set the build time to match the testing clock, to ensure that the
   // build time heuristic doesn't fire.
@@ -5863,10 +5862,9 @@ class SSLUITestNoCert : public SSLUITest,
   SSLUITestNoCert() = default;
   ~SSLUITestNoCert() override = default;
 
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(switches::kDisableTestCerts);
+  void SetUp() override {
     net::TestRootCerts::GetInstance()->Clear();
-    SSLUITest::SetUpCommandLine(command_line);
+    SSLUITest::SetUp();
   }
 
   // CertificateManagerModel::Observer implementation:

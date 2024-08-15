@@ -5,24 +5,24 @@
 import './input_key.js';
 import 'chrome://resources/cr_elements/cr_input/cr_input.js';
 
+import {strictQuery} from 'chrome://resources/ash/common/typescript_utils/strict_query.js';
+import {getInstance as getAnnouncerInstance} from 'chrome://resources/cr_elements/cr_a11y_announcer/cr_a11y_announcer.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
-import {assert, assertNotReached} from 'chrome://resources/js/assert_ts.js';
+import {assert, assertNotReached} from 'chrome://resources/js/assert.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.js';
 import {mojoString16ToString} from 'chrome://resources/js/mojo_type_util.js';
 import {String16} from 'chrome://resources/mojo/mojo/public/mojom/base/string16.mojom-webui.js';
 import {PolymerElementProperties} from 'chrome://resources/polymer/v3_0/polymer/interfaces.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {AcceleratorResultData, UserAction} from '../mojom-webui/ash/webui/shortcut_customization_ui/mojom/shortcut_customization.mojom-webui.js';
+import {AcceleratorResultData, Subactions, UserAction} from '../mojom-webui/ash/webui/shortcut_customization_ui/mojom/shortcut_customization.mojom-webui.js';
 
 import {AcceleratorLookupManager} from './accelerator_lookup_manager.js';
 import {getTemplate} from './accelerator_view.html.js';
-import {keyToIconNameMap} from './input_key.js';
 import {getShortcutProvider} from './mojo_interface_provider.js';
 import {ModifierKeyCodes} from './shortcut_input.js';
-import {Accelerator, AcceleratorConfigResult, AcceleratorKeyState, AcceleratorSource, AcceleratorState, Modifier, ShortcutProviderInterface, StandardAcceleratorInfo} from './shortcut_types.js';
-import {createEmptyAcceleratorInfo, getAccelerator, getModifiersForAcceleratorInfo, isCustomizationDisabled, isFunctionKey, isStandardAcceleratorInfo, keyCodeToModifier, LWIN_KEY, META_KEY, unidentifiedKeyCodeToKey} from './shortcut_utils.js';
-
+import {Accelerator, AcceleratorConfigResult, AcceleratorKeyState, AcceleratorSource, AcceleratorState, EditAction, Modifier, ShortcutProviderInterface, StandardAcceleratorInfo} from './shortcut_types.js';
+import {areAcceleratorsEqual, canBypassErrorWithRetry, createEmptyAcceleratorInfo, getAccelerator, getKeyDisplay, getModifiersForAcceleratorInfo, isCustomizationAllowed, isFunctionKey, isStandardAcceleratorInfo, keyCodeToModifier, keyToIconNameMap, LWIN_KEY, META_KEY, unidentifiedKeyCodeToKey} from './shortcut_utils.js';
 export interface AcceleratorViewElement {
   $: {
     container: HTMLDivElement,
@@ -98,6 +98,15 @@ export class AcceleratorViewElement extends AcceleratorViewElementBase {
         type: Boolean,
         value: false,
         notify: true,
+        observer: AcceleratorViewElement.prototype.onErrorUpdated,
+      },
+
+      // Keeps track if there was ever an error when interacting with this
+      // accelerator.
+      recordedError: {
+        type: Boolean,
+        value: false,
+        notify: true,
       },
 
       action: {
@@ -134,11 +143,6 @@ export class AcceleratorViewElement extends AcceleratorViewElementBase {
         computed: 'computeIsDisabled(acceleratorInfo.*)',
         reflectToAttribute: true,
       },
-
-      highlighted: {
-        type: Boolean,
-        reflectToAttribute: true,
-      },
     };
   }
 
@@ -146,6 +150,7 @@ export class AcceleratorViewElement extends AcceleratorViewElementBase {
   viewState: ViewState;
   statusMessage: string;
   hasError: boolean;
+  recordedError: boolean;
   action: number;
   source: AcceleratorSource;
   sourceIsLocked: boolean;
@@ -153,14 +158,16 @@ export class AcceleratorViewElement extends AcceleratorViewElementBase {
   categoryIsLocked: boolean;
   isFirstAccelerator: boolean;
   isDisabled: boolean;
-  highlighted: boolean;
   protected pendingAcceleratorInfo: StandardAcceleratorInfo;
   protected isCapturing: boolean;
+  protected lastAccelerator: Accelerator;
+  protected lastResult: AcceleratorConfigResult;
   private modifiers: string[];
   private shortcutProvider: ShortcutProviderInterface = getShortcutProvider();
   private lookupManager: AcceleratorLookupManager =
       AcceleratorLookupManager.getInstance();
   private eventTracker: EventTracker = new EventTracker();
+  private editAction: EditAction = EditAction.NONE;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -192,8 +199,6 @@ export class AcceleratorViewElement extends AcceleratorViewElementBase {
     this.eventTracker.add(this, 'keyup', (e: KeyboardEvent) => this.onKeyUp(e));
     this.eventTracker.add(this, 'focus', () => this.startCapture());
     this.eventTracker.add(this, 'mouseup', () => this.startCapture());
-    this.eventTracker.add(
-        this, 'blur', () => this.endCapture(/*should_delay=*/ false));
     this.$.container.focus();
   }
 
@@ -217,15 +222,18 @@ export class AcceleratorViewElement extends AcceleratorViewElementBase {
 
     // Block processing accelerators.
     await this.shortcutProvider.preventProcessingAccelerators(true);
+    // Announce hint message when focus and start capture.
+    this.makeA11yAnnouncement(this.i18n('editViewStatusMessage'));
   }
 
-  private async endCapture(shouldDelay: boolean): Promise<void> {
+  async endCapture(shouldDelay: boolean): Promise<void> {
     if (!this.isCapturing) {
       return;
     }
     await this.shortcutProvider.preventProcessingAccelerators(false);
 
     this.isCapturing = false;
+    this.editAction = EditAction.NONE;
     this.dispatchEvent(new CustomEvent('accelerator-capturing-ended', {
       bubbles: true,
       composed: true,
@@ -234,6 +242,12 @@ export class AcceleratorViewElement extends AcceleratorViewElementBase {
     // Delay if an update event is fired.
     if (shouldDelay) {
       await new Promise(resolve => setTimeout(resolve, kAnimationTimeoutMs));
+      // Dispatch event to update subsections and dialog accelerators.
+      this.dispatchEvent(new CustomEvent('request-update-accelerator', {
+        bubbles: true,
+        composed: true,
+        detail: {source: this.source, action: this.action},
+      }));
     }
 
     this.viewState = ViewState.VIEW;
@@ -250,6 +264,8 @@ export class AcceleratorViewElement extends AcceleratorViewElementBase {
     }
     e.preventDefault();
     e.stopPropagation();
+    // Announce pressed key.
+    this.makeA11yAnnouncement(e.key);
     this.handleKeyDown(e);
   }
 
@@ -263,13 +279,22 @@ export class AcceleratorViewElement extends AcceleratorViewElementBase {
   }
 
   private handleKeyDown(e: KeyboardEvent): void {
+    const pendingAccelerator = this.keystrokeToAccelerator(e);
     if (this.hasError) {
-      // Reset status state when pressing the a new key.
+      // If an error occurred, check if the pending accelerator matches the
+      // last. If they match and a retry on the same accelerator
+      // cannot bypass the error, exit early to prevent flickering error
+      // messages.
+      if (areAcceleratorsEqual(pendingAccelerator, this.lastAccelerator) &&
+          !canBypassErrorWithRetry(this.lastResult)) {
+        return;
+      }
+      // Reset status state when pressing a new key.
       this.statusMessage = '';
       this.hasError = false;
     }
 
-    const pendingAccelerator = this.keystrokeToAccelerator(e);
+    this.lastAccelerator = {...pendingAccelerator};
     // Alt + Esc will exit input handling immediately.
     if (pendingAccelerator.modifiers === Modifier.ALT &&
         pendingAccelerator.keyCode === kEscapeKey) {
@@ -333,6 +358,11 @@ export class AcceleratorViewElement extends AcceleratorViewElementBase {
 
   private async processPendingAccelerator(
       pendingAccelInfo: StandardAcceleratorInfo): Promise<void> {
+    // Dispatch an event indicating that accelerator update is in progress.
+    this.dispatchEvent(new CustomEvent('accelerator-update-in-progress', {
+      bubbles: true,
+      composed: true,
+    }));
     // Reset status state when processing the new accelerator.
     this.statusMessage = '';
     this.hasError = false;
@@ -345,11 +375,13 @@ export class AcceleratorViewElement extends AcceleratorViewElementBase {
         this.acceleratorInfo.state === AcceleratorState.kDisabledByUser;
 
     if (this.viewState === ViewState.ADD || isDisabledAccelerator) {
+      this.editAction = EditAction.ADD;
       result = await this.shortcutProvider.addAccelerator(
           this.source, this.action, getAccelerator(pendingAccelInfo));
     }
 
     if (this.viewState === ViewState.EDIT && !isDisabledAccelerator) {
+      this.editAction = EditAction.EDIT;
       const originalAccelerator: Accelerator|undefined =
           this.acceleratorInfo.layoutProperties.standardAccelerator
               ?.originalAccelerator;
@@ -362,13 +394,14 @@ export class AcceleratorViewElement extends AcceleratorViewElementBase {
     this.handleAcceleratorResultData(result!.result);
   }
 
-  // TODO(longbowei): Finalize and localize these messages.
   private handleAcceleratorResultData(result: AcceleratorResultData): void {
+    this.lastResult = result.result;
     switch (result.result) {
       // Shift is the only modifier.
       case AcceleratorConfigResult.kShiftOnlyNotAllowed: {
         this.statusMessage = this.i18n('shiftOnlyNotAllowedStatusMessage');
         this.hasError = true;
+        this.makeA11yAnnouncement(this.statusMessage);
         return;
       }
       // No modifiers is pressed before primary key.
@@ -378,12 +411,22 @@ export class AcceleratorViewElement extends AcceleratorViewElementBase {
         // function key.
         this.statusMessage = this.i18n('missingModifierStatusMessage');
         this.hasError = true;
+        this.makeA11yAnnouncement(this.statusMessage);
         return;
       }
       // Top row key used as activation keys(no search key pressed).
       case AcceleratorConfigResult.kKeyNotAllowed: {
         this.statusMessage = this.i18n('keyNotAllowedStatusMessage');
         this.hasError = true;
+        this.makeA11yAnnouncement(this.statusMessage);
+        return;
+      }
+      // Search with function keys are not allowed.
+      case AcceleratorConfigResult.kSearchWithFunctionKeyNotAllowed: {
+        this.statusMessage =
+            this.i18n('searchWithFunctionKeyNotAllowedStatusMessage');
+        this.hasError = true;
+        this.makeA11yAnnouncement(this.statusMessage);
         return;
       }
       // Conflict with a locked accelerator.
@@ -393,6 +436,7 @@ export class AcceleratorViewElement extends AcceleratorViewElementBase {
             'lockedShortcutStatusMessage',
             mojoString16ToString(result.shortcutName as String16));
         this.hasError = true;
+        this.makeA11yAnnouncement(this.statusMessage);
         return;
       }
       // Conflict with an editable shortcut.
@@ -401,24 +445,45 @@ export class AcceleratorViewElement extends AcceleratorViewElementBase {
             'shortcutWithConflictStatusMessage',
             mojoString16ToString(result.shortcutName as String16));
         this.hasError = true;
+        this.makeA11yAnnouncement(this.statusMessage);
         return;
       }
       // Limit to only 5 accelerators allowed.
       case AcceleratorConfigResult.kMaximumAcceleratorsReached: {
         this.statusMessage = this.i18n('maxAcceleratorsReachedHint');
         this.hasError = true;
+        this.makeA11yAnnouncement(this.statusMessage);
         return;
       }
       case AcceleratorConfigResult.kNonSearchAcceleratorWarning: {
         // TODO(jimmyxgong): Add the "Learn More" link when available.
         this.statusMessage = this.i18n('warningSearchNotIncluded');
         this.hasError = true;
+        this.makeA11yAnnouncement(this.statusMessage);
+        return;
+      }
+      case AcceleratorConfigResult.kReservedKeyNotAllowed: {
+        this.statusMessage = this.i18n(
+            'reservedKeyNotAllowedStatusMessage',
+            this.pendingAcceleratorInfo.layoutProperties.standardAccelerator
+                .keyDisplay);
+        this.hasError = true;
+        this.makeA11yAnnouncement(this.statusMessage);
         return;
       }
       case AcceleratorConfigResult.kSuccess: {
-        this.fireUpdateEvent();
+        this.fireEditCompletedActionEvent(this.editAction);
+        getShortcutProvider().recordAddOrEditSubactions(
+            this.viewState === ViewState.ADD,
+            this.recordedError ? Subactions.kErrorSuccess :
+                                 Subactions.kNoErrorSuccess);
         getShortcutProvider().recordUserAction(
             UserAction.kSuccessfulModification);
+        const message = (this.viewState == ViewState.ADD) ?
+            this.i18n('shortcutAdded') :
+            this.i18n('shortcutEdited');
+        this.makeA11yAnnouncement(message);
+        this.fireUpdateEvent();
         return;
       }
     }
@@ -467,6 +532,13 @@ export class AcceleratorViewElement extends AcceleratorViewElementBase {
                               // 'LaunchApplication1' and will display as
                               // 'overview' icon.
         return 'LaunchApplication1';
+      case 'Backquote':
+        // Backquote `key` will become 'unidentified' when ctrl
+        // is pressed.
+        if (e.ctrlKey && e.key === 'Unidentified') {
+          return unidentifiedKeyCodeToKey[e.keyCode];
+        }
+        return e.key;
       case '':
         // If there is no `code`, check the `key`. If the `key` is
         // `unidentified`, we need to manually lookup the key.
@@ -478,6 +550,16 @@ export class AcceleratorViewElement extends AcceleratorViewElementBase {
 
   private isModifierKey(e: KeyboardEvent): boolean {
     return ModifierKeyCodes.includes(e.keyCode);
+  }
+
+  private makeA11yAnnouncement(message: string): void {
+    const announcer = getAnnouncerInstance(this.$.container);
+    // Remove "role = alert" to avoid chromevox announcing "alert" before
+    // message.
+    strictQuery('#messages', announcer.shadowRoot, HTMLDivElement)
+        .removeAttribute('role');
+    // Announce the messages.
+    announcer.announce(message);
   }
 
   /**
@@ -549,8 +631,7 @@ export class AcceleratorViewElement extends AcceleratorViewElementBase {
       }
       return keyDisplay.toLowerCase();
     }
-    // TODO(jimmyxgong): Reset to a localized default empty state.
-    return 'key';
+    return this.i18n('inputKeyPlaceholder');
   }
 
   /**
@@ -592,20 +673,22 @@ export class AcceleratorViewElement extends AcceleratorViewElementBase {
 
     // Always end input capturing if an update event was fired.
     this.endCapture(/*should_delay=*/ true);
+  }
 
-    setTimeout(() => {
-      this.dispatchEvent(new CustomEvent('request-update-accelerator', {
-        bubbles: true,
-        composed: true,
-        detail: {source: this.source, action: this.action},
-      }));
-    }, kAnimationTimeoutMs);
+  private fireEditCompletedActionEvent(editAction: EditAction): void {
+    this.dispatchEvent(new CustomEvent('edit-action-completed', {
+      bubbles: true,
+      composed: true,
+      detail: {
+        editAction: editAction,
+      },
+    }));
   }
 
   private shouldShowLockIcon(): boolean {
     // Do not show lock icon in each row if customization is disabled or its
     // category is locked.
-    if (isCustomizationDisabled() || this.categoryIsLocked) {
+    if (!isCustomizationAllowed() || this.categoryIsLocked) {
       return false;
     }
     // Show lock icon if accelerator is locked.
@@ -616,7 +699,7 @@ export class AcceleratorViewElement extends AcceleratorViewElementBase {
   private shouldShowEditIcon(): boolean {
     // Do not show edit icon in each row if customization is disabled, the row
     // is displayed in edit-dialog(!showEditIcon) or category is locked.
-    if (isCustomizationDisabled() || !this.showEditIcon ||
+    if (!isCustomizationAllowed() || !this.showEditIcon ||
         this.categoryIsLocked) {
       return false;
     }
@@ -631,6 +714,11 @@ export class AcceleratorViewElement extends AcceleratorViewElementBase {
   }
 
   private getAriaLabel(): string {
+    // Clear aria-label during editing to avoid unnecessary chromevox
+    // announcements.
+    if (this.viewState !== ViewState.VIEW) {
+      return '';
+    }
     let keyOrIcon =
         this.acceleratorInfo.layoutProperties.standardAccelerator.keyDisplay;
     const metaKeyAriaLabel = this.lookupManager.getHasLauncherButton() ?
@@ -645,12 +733,7 @@ export class AcceleratorViewElement extends AcceleratorViewElementBase {
                 modifier =>
                     modifier === META_KEY ? metaKeyAriaLabel : modifier);
 
-    return [...modifiers, this.getAriaKeyDisplay(keyOrIcon)].join(' ');
-  }
-
-  private getAriaKeyDisplay(keyOrIcon: string): string {
-    const iconName = keyToIconNameMap[keyOrIcon];
-    return iconName ? iconName : keyOrIcon;
+    return [...modifiers, getKeyDisplay(keyOrIcon)].join(' ');
   }
 
   static get template(): HTMLTemplateElement {
@@ -660,6 +743,14 @@ export class AcceleratorViewElement extends AcceleratorViewElementBase {
   private computeIsDisabled(): boolean {
     return this.acceleratorInfo.state === AcceleratorState.kDisabledByUser ||
         this.acceleratorInfo.state === AcceleratorState.kDisabledByConflict;
+  }
+
+  private onErrorUpdated(): void {
+    // `recordedError` will only update if it was previously false and
+    // an error has been detected.
+    if (!this.recordedError && this.hasError) {
+      this.recordedError = true;
+    }
   }
 }
 

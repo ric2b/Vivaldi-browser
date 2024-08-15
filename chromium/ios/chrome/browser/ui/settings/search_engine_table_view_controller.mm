@@ -13,12 +13,16 @@
 #import "base/ranges/algorithm.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/password_manager/core/common/password_manager_features.h"
+#import "components/prefs/pref_service.h"
+#import "components/search_engines/search_engine_choice_utils.h"
+#import "components/search_engines/search_engines_pref_names.h"
 #import "components/search_engines/template_url_service.h"
 #import "components/search_engines/template_url_service_observer.h"
+#import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/favicon/favicon_loader.h"
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
-#import "ios/chrome/browser/search_engines/search_engine_observer_bridge.h"
-#import "ios/chrome/browser/search_engines/template_url_service_factory.h"
+#import "ios/chrome/browser/search_engines/model/search_engine_observer_bridge.h"
+#import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_header_footer_item.h"
@@ -81,17 +85,29 @@ const char kUmaSelectDefaultSearchEngine[] =
 
 @implementation SearchEngineTableViewController {
   TemplateURLService* _templateURLService;  // weak
+  PrefService* _prefService;
   std::unique_ptr<SearchEngineObserverBridge> _observer;
-  // The first list in the page which contains prepopulted search engines and
+  // The list of choice screen search engines retrieved from the
+  // TemplateURLService.
+  std::vector<std::unique_ptr<TemplateURL>> _choiceScreenTemplateURLs;
+  // The first list in the page which contains prepopulated search engines and
   // search engines that are created by policy, and possibly one custom search
   // engine if it's selected as default search engine.
+  // Note that `TemplateURL` pointers should not be freed. They either come from
+  // `TemplateURLService::GetTemplateURLs()`, or they are owned by
+  // `_choiceScreenTemplateUrls`.
   std::vector<TemplateURL*> _firstList;
   // The second list in the page which contains all remaining custom search
   // engines.
+  // Note that `TemplateURL` pointers should not be freed. They either come from
+  // `TemplateURLService::GetTemplateURLs()`, or they are owned by
+  // `_choiceScreenTemplateUrls`.
   std::vector<TemplateURL*> _secondList;
   // FaviconLoader is a keyed service that uses LargeIconService to retrieve
   // favicon images.
   FaviconLoader* _faviconLoader;
+  // Determines which version of the settings UI should be displayed.
+  BOOL _shouldShowUpdatedSettings;
 }
 
 #pragma mark - Initialization
@@ -108,13 +124,15 @@ const char kUmaSelectDefaultSearchEngine[] =
     _templateURLService->Load();
     _faviconLoader =
         IOSChromeFaviconLoaderFactory::GetForBrowserState(browserState);
+    _prefService = browserState->GetPrefs();
+    _shouldShowUpdatedSettings =
+        search_engines::ShouldShowUpdatedSettings(*_prefService);
 
     if (!IsVivaldiRunning()) {
     [self setTitle:l10n_util::GetNSString(IDS_IOS_SEARCH_ENGINE_SETTING_TITLE)];
     } // End Vivaldi
 
     self.shouldDisableDoneButtonOnEdit = YES;
-    [self updateUIForEditState];
   }
   return self;
 }
@@ -127,8 +145,9 @@ const char kUmaSelectDefaultSearchEngine[] =
 
   _updatingBackend = updatingBackend;
 
-  if (!self.searchEngineChangedInBackground)
+  if (!self.searchEngineChangedInBackground) {
     return;
+  }
 
   [self loadSearchEngines];
 
@@ -156,8 +175,8 @@ const char kUmaSelectDefaultSearchEngine[] =
   NSArray* firstListItem = [self.tableViewModel
       itemsInSectionWithIdentifier:SectionIdentifierFirstList];
   for (NSUInteger index = 0; index < firstListItem.count; index++) {
-    if ([self isItem:firstListItem[index]
-            differentForTemplateURL:_firstList[index]]) {
+    if (![self isItem:firstListItem[index]
+            equalForTemplateURL:_firstList[index]]) {
       // Item has changed, reload the TableView.
       [self reloadData];
       return;
@@ -168,8 +187,8 @@ const char kUmaSelectDefaultSearchEngine[] =
     NSArray* secondListItem = [self.tableViewModel
         itemsInSectionWithIdentifier:SectionIdentifierSecondList];
     for (NSUInteger index = 0; index < secondListItem.count; index++) {
-      if ([self isItem:secondListItem[index]
-              differentForTemplateURL:_secondList[index]]) {
+      if (![self isItem:secondListItem[index]
+              equalForTemplateURL:_secondList[index]]) {
         // Item has changed, reload the TableView.
         [self reloadData];
         return;
@@ -193,7 +212,10 @@ const char kUmaSelectDefaultSearchEngine[] =
   self.tableView.separatorInset =
       UIEdgeInsetsMake(0, kTableViewSeparatorLeadingInset, 0, 0);
 
+  [self updateUIForEditState];
   [self loadModel];
+  // The toolbar edit button's state depends on the `loadModel`.
+  [self updatedToolbarForEditState];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -233,6 +255,15 @@ const char kUmaSelectDefaultSearchEngine[] =
   // Add prior search engines.
   if (_firstList.size() > 0) {
     [model addSectionWithIdentifier:SectionIdentifierFirstList];
+
+    if (_shouldShowUpdatedSettings) {
+      TableViewTextHeaderFooterItem* header =
+          [[TableViewTextHeaderFooterItem alloc] initWithType:ItemTypeHeader];
+      header.subtitle =
+          l10n_util::GetNSString(IDS_SEARCH_ENGINE_CHOICE_SETTINGS_SUBTITLE);
+      [model setHeader:header
+          forSectionWithIdentifier:SectionIdentifierFirstList];
+    }
 
     for (const TemplateURL* templateURL : _firstList) {
       [model addItem:[self createSearchEngineItemFromTemplateURL:templateURL]
@@ -278,6 +309,7 @@ const char kUmaSelectDefaultSearchEngine[] =
 
   // Clear C++ ivars.
   _templateURLService = nullptr;
+  _prefService = nullptr;
   _faviconLoader = nullptr;
 
   _settingsAreDismissed = YES;
@@ -403,6 +435,11 @@ const char kUmaSelectDefaultSearchEngine[] =
   }
   [self recordUmaOfDefaultSearchEngine];
   self.updatingBackend = NO;
+
+  // For choice screen eligible users, set the corresponding timestamp pref if
+  // it wasn't already set before.
+  search_engines::RecordChoiceMade(
+      _prefService, search_engines::ChoiceMadeLocation::kSearchEngineSettings);
 }
 
 - (void)tableView:(UITableView*)tableView
@@ -496,6 +533,10 @@ const char kUmaSelectDefaultSearchEngine[] =
   if (_settingsAreDismissed)
     return;
 
+  // TODO(b/280753739) Update this method to return the correct list of search
+  // engines directly (for both choice-screen-eligible users and
+  // non-choice-screen-eligible users). This way we don't have to worry about
+  // calling two different methods anymore.
   std::vector<TemplateURL*> urls = _templateURLService->GetTemplateURLs();
   _firstList.clear();
   _firstList.reserve(urls.size());
@@ -509,13 +550,31 @@ const char kUmaSelectDefaultSearchEngine[] =
     }
   } else {
 
-  // Classify TemplateURLs.
-  for (TemplateURL* url : urls) {
-    if (_templateURLService->IsPrepopulatedOrCreatedByPolicy(url) ||
-        url == _templateURLService->GetDefaultSearchProvider())
-      _firstList.push_back(url);
-    else
-      _secondList.push_back(url);
+  if (_shouldShowUpdatedSettings) {
+    // This method returns all the required prepopulated search engines and
+    // possibly one custom search engine if it's selected as default search
+    // engine.
+    _choiceScreenTemplateURLs =
+        _templateURLService->GetTemplateURLsForChoiceScreen();
+    _firstList.reserve(_choiceScreenTemplateURLs.size());
+    for (auto& url : _choiceScreenTemplateURLs) {
+      _firstList.push_back(url.get());
+    }
+    // Add the custom search egines to the second list.
+    for (TemplateURL* url : urls) {
+      if (![self isPrepopulatedOrDefaultSearchEngine:url]) {
+        _secondList.push_back(url);
+      }
+    }
+  } else {
+    // Classify TemplateURLs.
+    for (TemplateURL* url : urls) {
+      if ([self isPrepopulatedOrDefaultSearchEngine:url]) {
+        _firstList.push_back(url);
+      } else {
+        _secondList.push_back(url);
+      }
+    }
   }
 
   } // End Vivaldi
@@ -574,7 +633,9 @@ const char kUmaSelectDefaultSearchEngine[] =
       [item setAccessoryType:UITableViewCellAccessoryCheckmark];
     }
   } else {
-  if (templateURL == _templateURLService->GetDefaultSearchProvider()) {
+  if ([self isItem:item
+          equalForTemplateURL:_templateURLService
+                                  ->GetDefaultSearchProvider()]) {
     [item setAccessoryType:UITableViewCellAccessoryCheckmark];
   }
   } // End Vivaldi
@@ -613,11 +674,18 @@ const char kUmaSelectDefaultSearchEngine[] =
       TableViewItem* item = [self.tableViewModel itemAtIndexPath:path];
       // Only custom search engine can be deleted.
       DCHECK(item.type == ItemTypeCustomEngine);
-      // The custom search engine in the first section should be the last one.
-      DCHECK(path.row == static_cast<int>(_firstList.size()) - 1);
-
-      engine = _firstList.back();
-      _firstList.pop_back();
+      if (_shouldShowUpdatedSettings) {
+        // The custom search engine in the first section should be the first
+        // one.
+        DCHECK(path.row == static_cast<int>(0));
+        engine = _firstList.front();
+        _firstList.erase(_firstList.begin());
+      } else {
+        // The custom search engine in the first section should be the last one.
+        DCHECK(path.row == static_cast<int>(_firstList.size()) - 1);
+        engine = _firstList.back();
+        _firstList.pop_back();
+      }
     } else {
       DCHECK(path.row < static_cast<int>(_secondList.size()));
 
@@ -720,8 +788,9 @@ const char kUmaSelectDefaultSearchEngine[] =
     SearchEngineItem* engineItem =
         base::apple::ObjCCastStrict<SearchEngineItem>(item);
     engineItem.enabled = !editing;
-    if (!editing && _firstList[indexPath.item] ==
-                        _templateURLService->GetDefaultSearchProvider()) {
+    if (!editing && [self isItem:engineItem
+                        equalForTemplateURL:_templateURLService
+                                                ->GetDefaultSearchProvider()]) {
       engineItem.accessoryType = UITableViewCellAccessoryCheckmark;
     } else {
       engineItem.accessoryType = UITableViewCellAccessoryNone;
@@ -731,14 +800,22 @@ const char kUmaSelectDefaultSearchEngine[] =
                         withRowAnimation:UITableViewRowAnimationAutomatic];
 }
 
-// Returns whether the `item` is different from an item that would be created
+// Returns whether the `item` is the same as an item that would be created
 // from `templateURL`.
 - (BOOL)isItem:(SearchEngineItem*)item
-    differentForTemplateURL:(TemplateURL*)templateURL {
+    equalForTemplateURL:(const TemplateURL*)templateURL {
+  if (!templateURL) {
+    return NO;
+  }
   NSString* name = base::SysUTF16ToNSString(templateURL->short_name());
   NSString* keyword = base::SysUTF16ToNSString(templateURL->keyword());
-  return ![item.text isEqualToString:name] ||
-         ![item.detailText isEqualToString:keyword];
+  return [item.text isEqualToString:name] &&
+         [item.detailText isEqualToString:keyword];
+}
+
+- (BOOL)isPrepopulatedOrDefaultSearchEngine:(const TemplateURL*)templateURL {
+  return _templateURLService->IsPrepopulatedOrCreatedByPolicy(templateURL) ||
+         templateURL == _templateURLService->GetDefaultSearchProvider();
 }
 
 #pragma mark - VIVALDI

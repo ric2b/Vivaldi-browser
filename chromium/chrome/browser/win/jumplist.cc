@@ -27,7 +27,6 @@
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/metrics/jumplist_metrics_win.h"
@@ -144,9 +143,7 @@ bool CreateIconFile(const gfx::ImageSkia& image_skia,
   // save it as the temporary file.
   gfx::ImageFamily image_family;
   if (!image_skia.isNull()) {
-    const std::vector<ui::ResourceScaleFactor> supported_scales =
-        ui::GetSupportedResourceScaleFactors();
-    for (const auto scale : supported_scales) {
+    for (const auto scale : ui::GetSupportedResourceScaleFactors()) {
       gfx::ImageSkiaRep image_skia_rep = image_skia.GetRepresentation(
           ui::GetScaleForResourceScaleFactor(scale));
       if (!image_skia_rep.is_null()) {

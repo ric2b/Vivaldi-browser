@@ -101,14 +101,6 @@ export class SettingsDisplayAndMagnificationSubpageElement extends
         },
       },
 
-      experimentalColorEnhancementSettingsEnabled_: {
-        type: Boolean,
-        value() {
-          return loadTimeData.getBoolean(
-              'areExperimentalAccessibilityColorEnhancementSettingsEnabled');
-        },
-      },
-
       /**
        * Whether the user is in kiosk mode.
        */
@@ -138,7 +130,6 @@ export class SettingsDisplayAndMagnificationSubpageElement extends
   }
 
   private isKioskModeActive_: boolean;
-  private experimentalColorEnhancementSettingsEnabled_: boolean;
   private screenMagnifierMouseFollowingModePrefValues_: {[key: string]: number};
   private screenMagnifierZoomOptions_: Array<{value: number, name: string}>;
 
@@ -150,7 +141,7 @@ export class SettingsDisplayAndMagnificationSubpageElement extends
     this.route = routes.A11Y_DISPLAY_AND_MAGNIFICATION;
   }
 
-  override ready() {
+  override ready(): void {
     super.ready();
 
     this.addFocusConfig(routes.DISPLAY, '#displaySubpageButton');
@@ -159,7 +150,7 @@ export class SettingsDisplayAndMagnificationSubpageElement extends
   /**
    * Note: Overrides RouteOriginMixin implementation
    */
-  override currentRouteChanged(newRoute: Route, prevRoute?: Route) {
+  override currentRouteChanged(newRoute: Route, prevRoute?: Route): void {
     super.currentRouteChanged(newRoute, prevRoute);
 
     // Does not apply to this page.

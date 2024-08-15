@@ -12,11 +12,11 @@
 #include "base/base64url.h"
 #include "base/check.h"
 #include "base/containers/flat_set.h"
+#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
-#include "base/strings/string_piece.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "components/webauthn/json/value_conversions.h"
@@ -210,21 +210,29 @@ bool AddTransportsFromCertificate(
 base::TimeDelta AdjustTimeout(absl::optional<base::TimeDelta> timeout,
                               RenderFrameHost* render_frame_host) {
   // Time to wait for an authenticator to successfully complete an operation.
-  static constexpr base::TimeDelta kAdjustedTimeoutLower = base::Seconds(10);
-  static constexpr base::TimeDelta kAdjustedTimeoutUpper = base::Minutes(10);
-
+  base::TimeDelta adjusted_timeout_lower;
+  base::TimeDelta adjusted_timeout_upper;
+  if (base::FeatureList::IsEnabled(device::kWebAuthnAccessibleTimeouts)) {
+    adjusted_timeout_lower = base::Minutes(3);
+    adjusted_timeout_upper = base::Hours(20);
+  } else {
+    adjusted_timeout_lower = base::Seconds(10);
+    adjusted_timeout_upper = base::Minutes(10);
+  }
   if (!timeout) {
-    return kAdjustedTimeoutUpper;
+    return adjusted_timeout_upper;
   }
   const bool testing_api_enabled =
       AuthenticatorEnvironment::GetInstance()->IsVirtualAuthenticatorEnabledFor(
           static_cast<RenderFrameHostImpl*>(render_frame_host)
-              ->frame_tree_node());
+              ->frame_tree_node()) ||
+      AuthenticatorEnvironment::GetInstance()
+          ->MaybeGetDiscoveryFactoryTestOverride();
   if (testing_api_enabled) {
     return *timeout;
   }
-  return std::max(kAdjustedTimeoutLower,
-                  std::min(kAdjustedTimeoutUpper, *timeout));
+  return std::max(adjusted_timeout_lower,
+                  std::min(adjusted_timeout_upper, *timeout));
 }
 
 bool UsesDiscoverableCreds(const device::MakeCredentialOptions& options) {
@@ -402,7 +410,24 @@ std::array<uint8_t, 32> HashPRFValue(base::span<const uint8_t> value) {
   return digest;
 }
 
-absl::optional<std::vector<device::PRFInput>> ParsePRFInputs(
+absl::optional<device::PRFInput> ParsePRFInputForMakeCredential(
+    const blink::mojom::PRFValuesPtr& prf_input_from_renderer) {
+  // The input cannot be credential-specific because we haven't created the
+  // credential yet.
+  if (prf_input_from_renderer->id) {
+    return absl::nullopt;
+  }
+
+  device::PRFInput prf_input;
+  prf_input.salt1 = HashPRFValue(prf_input_from_renderer->first);
+  if (prf_input_from_renderer->second) {
+    prf_input.salt2 = HashPRFValue(*prf_input_from_renderer->second);
+  }
+
+  return prf_input;
+}
+
+absl::optional<std::vector<device::PRFInput>> ParsePRFInputsForGetAssertion(
     base::span<const blink::mojom::PRFValuesPtr> inputs) {
   std::vector<device::PRFInput> ret;
   bool is_first = true;
@@ -440,6 +465,20 @@ absl::optional<std::vector<device::PRFInput>> ParsePRFInputs(
   }
 
   return ret;
+}
+
+blink::mojom::PRFValuesPtr PRFResultsToValues(
+    base::span<const uint8_t> results) {
+  auto prf_values = blink::mojom::PRFValues::New();
+  DCHECK(results.size() == 32 || results.size() == 64);
+  prf_values->first =
+      device::fido_parsing_utils::Materialize(results.subspan(0, 32));
+  if (results.size() == 64) {
+    prf_values->second =
+        device::fido_parsing_utils::Materialize(results.subspan(32, 32));
+  }
+
+  return prf_values;
 }
 
 }  // namespace
@@ -489,6 +528,7 @@ struct AuthenticatorCommonImpl::RequestState {
   bool awaiting_attestation_response = false;
   blink::mojom::AuthenticatorStatus error_awaiting_user_acknowledgement =
       blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR;
+  absl::optional<GetAssertionResult> get_assertion_result;
   bool discoverable_credential_request = false;
   // no_cable_linking requests that both QR-linked and pre-linked phones be
   // ignored for this request.
@@ -600,6 +640,7 @@ void AuthenticatorCommonImpl::StartMakeCredentialRequest(
 
 void AuthenticatorCommonImpl::StartGetAssertionRequest(
     bool allow_skipping_pin_touch) {
+  req_state_->get_assertion_result.reset();
   InitDiscoveryFactory();
 
   discovery_factory()->no_cable_linking = req_state_->no_cable_linking;
@@ -896,6 +937,20 @@ void AuthenticatorCommonImpl::MakeCredential(
   if (options->prf_enable) {
     req_state_->requested_extensions.insert(RequestExtension::kPRF);
     req_state_->ctap_make_credential_request->hmac_secret = true;
+
+    if (options->prf_input &&
+        base::FeatureList::IsEnabled(device::kWebAuthnPRFEvalDuringCreate)) {
+      absl::optional<device::PRFInput> prf_input =
+          ParsePRFInputForMakeCredential(options->prf_input);
+      if (!prf_input) {
+        mojo::ReportBadMessage("invalid PRF inputs");
+        CompleteMakeCredentialRequest(
+            blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR);
+        return;
+      }
+      req_state_->ctap_make_credential_request->prf_input =
+          std::move(*prf_input);
+    }
   }
   if (options->hmac_create_secret) {
     req_state_->requested_extensions.insert(RequestExtension::kHMACSecret);
@@ -1224,7 +1279,7 @@ void AuthenticatorCommonImpl::GetAssertion(
     req_state_->requested_extensions.insert(RequestExtension::kPRF);
 
     absl::optional<std::vector<device::PRFInput>> prf_inputs =
-        ParsePRFInputs(options->extensions->prf_inputs);
+        ParsePRFInputsForGetAssertion(options->extensions->prf_inputs);
 
     // This should never happen for inputs from the renderer, which should sort
     // the values itself. Additionally, `prf_inputs_hashed` is for hybrid
@@ -1348,14 +1403,6 @@ void AuthenticatorCommonImpl::IsConditionalMediationAvailable(
     url::Origin caller_origin,
     blink::mojom::Authenticator::IsConditionalMediationAvailableCallback
         callback) {
-  // Passkeys from a phone can always be discovered through conditional
-  // mediation. To avoid leaking bluetooth or sync status, always advertise the
-  // feature is available.
-  if (base::FeatureList::IsEnabled(device::kWebAuthnListSyncedPasskeys) &&
-      base::FeatureList::IsEnabled(device::kWebAuthnNewPasskeyUI)) {
-    std::move(callback).Run(true);
-    return;
-  }
   // Conditional mediation is always supported if the virtual environment is
   // providing a platform authenticator.
   absl::optional<bool> embedder_isuvpaa_override =
@@ -1366,13 +1413,18 @@ void AuthenticatorCommonImpl::IsConditionalMediationAvailable(
     std::move(callback).Run(*embedder_isuvpaa_override);
     return;
   }
-
+  // Conditional requests cannot be proxied, signal the feature as unavailable.
   if (GetWebAuthnRequestProxyIfActive(caller_origin)) {
-    // Conditional requests cannot be proxied, signal the feature as
-    // unavailable.
     std::move(callback).Run(false);
     return;
   }
+  // Passkeys from a phone can be discovered through conditional mediation. To
+  // avoid leaking bluetooth or sync status, advertise the feature as available.
+  if (GetWebAuthenticationDelegate()->SupportsPasskeyMetadataSyncing()) {
+    std::move(callback).Run(true);
+    return;
+  }
+
 #if BUILDFLAG(IS_MAC)
   std::move(callback).Run(true);
 #elif BUILDFLAG(IS_WIN)
@@ -1657,6 +1709,51 @@ void AuthenticatorCommonImpl::OnSignResponse(
     return;
   }
 
+  switch (authenticator->GetType()) {
+    case device::AuthenticatorType::kChromeOS:
+      req_state_->get_assertion_result =
+          status_code == device::GetAssertionStatus::kSuccess
+              ? GetAssertionResult::kChromeOSSuccess
+              : GetAssertionResult::kChromeOSError;
+      break;
+    case device::AuthenticatorType::kEnclave:
+      req_state_->get_assertion_result =
+          status_code == device::GetAssertionStatus::kSuccess
+              ? GetAssertionResult::kEnclaveSuccess
+              : GetAssertionResult::kEnclaveError;
+      break;
+    case device::AuthenticatorType::kICloudKeychain:
+      req_state_->get_assertion_result =
+          status_code == device::GetAssertionStatus::kSuccess
+              ? GetAssertionResult::kICloudKeychainSuccess
+              : GetAssertionResult::kICloudKeychainError;
+      break;
+    case device::AuthenticatorType::kOther:
+      req_state_->get_assertion_result =
+          status_code == device::GetAssertionStatus::kSuccess
+              ? GetAssertionResult::kOtherSuccess
+              : GetAssertionResult::kOtherError;
+      break;
+    case device::AuthenticatorType::kPhone:
+      req_state_->get_assertion_result =
+          status_code == device::GetAssertionStatus::kSuccess
+              ? GetAssertionResult::kPhoneSuccess
+              : GetAssertionResult::kPhoneError;
+      break;
+    case device::AuthenticatorType::kTouchID:
+      req_state_->get_assertion_result =
+          status_code == device::GetAssertionStatus::kSuccess
+              ? GetAssertionResult::kTouchIDSuccess
+              : GetAssertionResult::kTouchIDError;
+      break;
+    case device::AuthenticatorType::kWinNative:
+      req_state_->get_assertion_result =
+          status_code == device::GetAssertionStatus::kSuccess
+              ? GetAssertionResult::kWinNativeSuccess
+              : GetAssertionResult::kWinNativeError;
+      break;
+  }
+
   switch (status_code) {
     case device::GetAssertionStatus::kUserConsentButCredentialNotRecognized:
       SignalFailureToRequestDelegate(
@@ -1814,6 +1911,9 @@ void AuthenticatorCommonImpl::OnTimeout() {
   }
 
   DCHECK(req_state_->request_delegate);
+  if (req_state_->get_assertion_response_callback) {
+    req_state_->get_assertion_result = GetAssertionResult::kTimeout;
+  }
   SignalFailureToRequestDelegate(
       AuthenticatorRequestClientDelegate::InterestingFailureReason::kTimeout,
       blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR);
@@ -1847,6 +1947,11 @@ void AuthenticatorCommonImpl::CancelWithStatus(
 }
 
 void AuthenticatorCommonImpl::OnCancelFromUI() {
+  if (!req_state_->get_assertion_result &&
+      req_state_->get_assertion_response_callback) {
+    // The user cancelled before the request finished.
+    req_state_->get_assertion_result = GetAssertionResult::kUserCancelled;
+  }
   CancelWithStatus(req_state_->error_awaiting_user_acknowledgement);
 }
 
@@ -1968,6 +2073,10 @@ AuthenticatorCommonImpl::CreateMakeCredentialResponse(
       case RequestExtension::kPRF:
         response->echo_prf = true;
         response->prf = did_create_hmac_secret;
+        if (response_data.prf_results) {
+          response->prf_results =
+              PRFResultsToValues(*response_data.prf_results);
+        }
         break;
       case RequestExtension::kHMACSecret:
         response->echo_hmac_create_secret = true;
@@ -2063,6 +2172,8 @@ AuthenticatorCommonImpl::CreateGetAssertionResponse(
     device::AuthenticatorGetAssertionResponse response_data) {
   auto response = blink::mojom::GetAssertionAuthenticatorResponse::New();
   auto common_info = blink::mojom::CommonCredentialInfo::New();
+  auto response_extensions =
+      blink::mojom::AuthenticationExtensionsClientOutputs::New();
   common_info->client_data_json.assign(req_state_->client_data_json.begin(),
                                        req_state_->client_data_json.end());
   common_info->raw_id = response_data.credential->id;
@@ -2084,39 +2195,32 @@ AuthenticatorCommonImpl::CreateGetAssertionResponse(
     switch (ext) {
       case RequestExtension::kAppID:
         DCHECK(req_state_->app_id);
-        response->echo_appid_extension = true;
+        response_extensions->echo_appid_extension = true;
         if (response_data.authenticator_data.application_parameter() ==
             CreateApplicationParameter(*req_state_->app_id)) {
-          response->appid_extension = true;
+          response_extensions->appid_extension = true;
         }
         break;
       case RequestExtension::kPRF: {
-        response->echo_prf = true;
-        absl::optional<base::span<const uint8_t>> hmac_secret =
-            response_data.hmac_secret;
-        if (hmac_secret) {
-          auto prf_values = blink::mojom::PRFValues::New();
-          DCHECK(hmac_secret->size() == 32 || hmac_secret->size() == 64);
-          prf_values->first = device::fido_parsing_utils::Materialize(
-              hmac_secret->subspan(0, 32));
-          if (hmac_secret->size() == 64) {
-            prf_values->second = device::fido_parsing_utils::Materialize(
-                hmac_secret->subspan(32, 32));
-          }
-          response->prf_results = std::move(prf_values);
+        response_extensions->echo_prf = true;
+        if (response_data.hmac_secret) {
+          response_extensions->prf_results =
+              PRFResultsToValues(*response_data.hmac_secret);
         } else {
-          response->prf_not_evaluated = response_data.hmac_secret_not_evaluated;
+          response_extensions->prf_not_evaluated =
+              response_data.hmac_secret_not_evaluated;
         }
         break;
       }
       case RequestExtension::kLargeBlobRead:
-        response->echo_large_blob = true;
-        response->large_blob = response_data.large_blob;
+        response_extensions->echo_large_blob = true;
+        response_extensions->large_blob = response_data.large_blob;
         break;
       case RequestExtension::kLargeBlobWrite:
-        response->echo_large_blob = true;
-        response->echo_large_blob_written = true;
-        response->large_blob_written = response_data.large_blob_written;
+        response_extensions->echo_large_blob = true;
+        response_extensions->echo_large_blob_written = true;
+        response_extensions->large_blob_written =
+            response_data.large_blob_written;
         break;
       case RequestExtension::kGetCredBlob: {
         const absl::optional<cbor::Value>& extensions =
@@ -2125,14 +2229,14 @@ AuthenticatorCommonImpl::CreateGetAssertionResponse(
           const cbor::Value::MapValue& map = extensions->GetMap();
           const auto& it = map.find(cbor::Value(device::kExtensionCredBlob));
           if (it != map.end() && it->second.is_bytestring()) {
-            response->get_cred_blob = it->second.GetBytestring();
+            response_extensions->get_cred_blob = it->second.GetBytestring();
           }
         }
-        if (!response->get_cred_blob.has_value()) {
+        if (!response_extensions->get_cred_blob.has_value()) {
           // The authenticator is supposed to return an empty byte string if it
           // does not have a credBlob for the credential. But in case it
           // doesn't, we return one to the caller anyway.
-          response->get_cred_blob = std::vector<uint8_t>();
+          response_extensions->get_cred_blob = std::vector<uint8_t>();
         }
 
         break;
@@ -2147,11 +2251,11 @@ AuthenticatorCommonImpl::CreateGetAssertionResponse(
           const auto it =
               extensions.find(cbor::Value(device::kExtensionDevicePublicKey));
           if (it != extensions.end() && it->second.is_bytestring()) {
-            response->device_public_key =
+            response_extensions->device_public_key =
                 blink::mojom::DevicePublicKeyResponse::New();
-            response->device_public_key->authenticator_output =
+            response_extensions->device_public_key->authenticator_output =
                 it->second.GetBytestring();
-            response->device_public_key->signature =
+            response_extensions->device_public_key->signature =
                 *response_data.device_public_key_signature;
           }
         }
@@ -2166,6 +2270,7 @@ AuthenticatorCommonImpl::CreateGetAssertionResponse(
         break;
     }
   }
+  response->extensions = std::move(response_extensions);
 
   return response;
 }
@@ -2175,6 +2280,11 @@ void AuthenticatorCommonImpl::CompleteGetAssertionRequest(
     blink::mojom::GetAssertionAuthenticatorResponsePtr response,
     blink::mojom::WebAuthnDOMExceptionDetailsPtr dom_exception_details) {
   DCHECK(req_state_->get_assertion_response_callback);
+
+  if (req_state_->get_assertion_result) {
+    UMA_HISTOGRAM_ENUMERATION("WebAuthentication.GetAssertion.Result",
+                              *req_state_->get_assertion_result);
+  }
 
   if (status == blink::mojom::AuthenticatorStatus::SUCCESS) {
     static_cast<RenderFrameHostImpl*>(GetRenderFrameHost())

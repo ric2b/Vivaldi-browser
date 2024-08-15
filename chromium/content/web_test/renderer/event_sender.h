@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/containers/circular_deque.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -196,7 +197,9 @@ class EventSender {
                              float* radius_x,
                              float* radius_y);
 
-  void FinishDragAndDrop(const blink::WebMouseEvent&, ui::mojom::DragOperation);
+  void FinishDragAndDrop(const blink::WebMouseEvent&,
+                         ui::mojom::DragOperation,
+                         bool);
 
   int ModifiersForPointer(int pointer_id);
   void DoDragAfterMouseUp(const blink::WebMouseEvent&);
@@ -262,8 +265,8 @@ class EventSender {
   int wm_sys_dead_char_;
 #endif
 
-  blink::WebFrameWidget* const web_frame_widget_;
-  TestRunner* const test_runner_;
+  const raw_ptr<blink::WebFrameWidget, ExperimentalRenderer> web_frame_widget_;
+  const raw_ptr<TestRunner, ExperimentalRenderer> test_runner_;
 
   bool force_layout_on_events_;
 

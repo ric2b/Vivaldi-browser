@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.customtabs;
 
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -29,30 +28,26 @@ import org.robolectric.annotation.Config;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Batch;
+import org.chromium.base.test.util.MaxAndroidSdkLevel;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 
-/**
- * Robolectric tests for {@link IncognitoCustomTabSnapshotController}.
- */
+/** Robolectric tests for {@link IncognitoCustomTabSnapshotController}. */
 @RunWith(BaseRobolectricTestRunner.class)
 @Batch(Batch.UNIT_TESTS)
 @Config(manifest = Config.NONE)
 public class IncognitoCustomTabSnapshotControllerTest {
-    @Mock
-    private Window mWindowMock;
+    @Mock private Window mWindowMock;
 
-    @Mock
-    private Activity mActivityMock;
+    @Mock private Activity mActivityMock;
 
     private boolean mIsIncognitoShowing;
     private WindowManager.LayoutParams mParams;
     private final Supplier<Boolean> mIsIncognitoShowingSupplier = () -> mIsIncognitoShowing;
 
-    @Rule
-    public TestRule mJunitProcessor = new Features.JUnitProcessor();
+    @Rule public TestRule mJunitProcessor = new Features.JUnitProcessor();
 
     @Before
     public void setUp() {
@@ -64,10 +59,9 @@ public class IncognitoCustomTabSnapshotControllerTest {
 
     @Test
     @SmallTest
-    @DisableFeatures({ChromeFeatureList.INCOGNITO_SCREENSHOT,
-            ChromeFeatureList.IMPROVED_INCOGNITO_SCREENSHOT})
-    public void
-    testSecureFlagsAdded() {
+    @DisableFeatures({ChromeFeatureList.INCOGNITO_SCREENSHOT})
+    @MaxAndroidSdkLevel(Build.VERSION_CODES.S_V2)
+    public void testSecureFlagsAdded() {
         mParams.flags = 0;
         mIsIncognitoShowing = true;
         new IncognitoCustomTabSnapshotController(mActivityMock, mIsIncognitoShowingSupplier);
@@ -78,7 +72,7 @@ public class IncognitoCustomTabSnapshotControllerTest {
     @Test
     @SmallTest
     @EnableFeatures({ChromeFeatureList.INCOGNITO_SCREENSHOT})
-    @DisableFeatures({ChromeFeatureList.IMPROVED_INCOGNITO_SCREENSHOT})
+    @MaxAndroidSdkLevel(Build.VERSION_CODES.S_V2)
     public void testSecureFlagsRemoved() {
         mParams.flags = WindowManager.LayoutParams.FLAG_SECURE;
         mIsIncognitoShowing = true;
@@ -89,7 +83,6 @@ public class IncognitoCustomTabSnapshotControllerTest {
 
     @Test
     @SmallTest
-    @EnableFeatures({ChromeFeatureList.IMPROVED_INCOGNITO_SCREENSHOT})
     @Config(minSdk = Build.VERSION_CODES.TIRAMISU)
     public void testRecentsScreenshotsEnabled_ForAndroidTOrAbove_AfterSwitchingToNonIncognito() {
         mIsIncognitoShowing = false;
@@ -101,7 +94,6 @@ public class IncognitoCustomTabSnapshotControllerTest {
 
     @Test
     @SmallTest
-    @EnableFeatures({ChromeFeatureList.IMPROVED_INCOGNITO_SCREENSHOT})
     @Config(minSdk = Build.VERSION_CODES.TIRAMISU)
     public void testRecentsScreenshotsDisabled_ForAndroidTOrAbove_AfterSwitchingToIncognito() {
         mIsIncognitoShowing = true;
@@ -109,20 +101,5 @@ public class IncognitoCustomTabSnapshotControllerTest {
 
         verify(mActivityMock, times(1)).setRecentsScreenshotEnabled(false);
         assertEquals(0, mParams.flags);
-    }
-
-    @Test
-    @SmallTest
-    @DisableFeatures({ChromeFeatureList.INCOGNITO_SCREENSHOT,
-            ChromeFeatureList.IMPROVED_INCOGNITO_SCREENSHOT})
-    @Config(minSdk = Build.VERSION_CODES.TIRAMISU)
-    public void
-    testSecureFlagsAdded_ForAndroidTOrAbove_WhenImprovedIncognitoScreenshotDisabled() {
-        mParams.flags = 0;
-        mIsIncognitoShowing = true;
-        new IncognitoCustomTabSnapshotController(mActivityMock, mIsIncognitoShowingSupplier);
-
-        verify(mActivityMock, never()).setRecentsScreenshotEnabled(false);
-        verify(mWindowMock, times(1)).addFlags(WindowManager.LayoutParams.FLAG_SECURE);
     }
 }

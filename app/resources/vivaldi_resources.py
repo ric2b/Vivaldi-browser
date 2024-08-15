@@ -211,6 +211,7 @@ def update_resources(res, input_file, params={}, allowlist_support=None, active_
       continue
     if isinstance(node, (message.PhNode, message.ExNode)):
       continue
+    node.vivaldi_keep_item = True
     resource_list.setdefault(node.attrs["name"], []).append(node)
 
   names = list(resource_list.keys())
@@ -231,6 +232,8 @@ def update_resources(res, input_file, params={}, allowlist_support=None, active_
         index = par_node.children.index(node)
         # non-active mode: We already inserted all our entries earlier.
         # Remove all other entries with this name in the upstream resources
+        if getattr(par_node.children[index], "vivaldi_keep_item", False):
+          continue
         del par_node.children[index]
       continue
 

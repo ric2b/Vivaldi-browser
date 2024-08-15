@@ -16,7 +16,7 @@
 #import "ios/chrome/browser/policy/policy_util.h"
 #import "ios/chrome/browser/shared/coordinator/scene/connection_information.h"
 #import "ios/chrome/browser/shared/model/url/url_util.h"
-#import "ios/chrome/browser/url_loading/url_loading_params.h"
+#import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "url/gurl.h"
 
 namespace {
@@ -73,7 +73,10 @@ const char* const kUMAShowDefaultPromoFromAppsHistogram =
       // As applicationDidBecomeActive: will not be called again,
       // _startupParameters will not include the command from openURL.
       // Pass the startup parameters from here.
-      DCHECK(!connectionInformation.startupParameters);
+
+      // TODO(crbug.com/1496951): Investigate why
+      // connectionInformation.startupParamters can be not nil and what to do in
+      // that case.
       [connectionInformation setStartupParameters:params];
       ProceduralBlock tabOpenedCompletion = ^{
         [connectionInformation setStartupParameters:nil];

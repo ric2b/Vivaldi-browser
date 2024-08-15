@@ -92,10 +92,10 @@ class MockBaseFetchContext final : public BaseFetchContext {
   bool ShouldBlockFetchByMixedContentCheck(
       mojom::blink::RequestContextType,
       network::mojom::blink::IPAddressSpace,
-      const absl::optional<ResourceRequest::RedirectInfo>&,
+      base::optional_ref<const ResourceRequest::RedirectInfo>,
       const KURL&,
       ReportingDisposition,
-      const absl::optional<String>&) const override {
+      const String&) const override {
     return false;
   }
   bool ShouldBlockFetchAsCredentialedSubresource(const ResourceRequest&,
@@ -115,7 +115,7 @@ class MockBaseFetchContext final : public BaseFetchContext {
   }
 
   ExecutionContext* GetExecutionContext() const override {
-    return execution_context_;
+    return execution_context_.Get();
   }
 
  private:

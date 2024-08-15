@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert, assertNotReached} from 'chrome://resources/js/assert_ts.js';
+import {assert, assertNotReached} from 'chrome://resources/js/assert.js';
 import {CustomElement} from 'chrome://resources/js/custom_element.js';
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.js';
 import {Url} from 'chrome://resources/mojo/url/mojom/url.mojom-webui.js';
@@ -185,8 +185,7 @@ export class SiteEngagementAppElement extends CustomElement {
     } catch {
       return;
     }
-    const origin = new Url();
-    origin.url = originInput.value;
+    const origin: Url = {url: originInput.value};
     const score = parseFloat(scoreInput.value);
 
     this.engagementDetailsProvider.setSiteEngagementBaseScoreForUrl(

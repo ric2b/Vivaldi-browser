@@ -10,6 +10,7 @@
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/vivaldi_switches.h"
 #include "base/win/windows_version.h"
@@ -33,7 +34,7 @@ void KillVivaldiProcesses(std::vector<DWORD>& process_ids) {
   std::vector<DWORD>::iterator it;
   for (it = process_ids.begin(); it != process_ids.end(); it++) {
     DWORD pid = *it;
-    cmd_line_string += base::StringPrintf(L" /PID %d", pid);
+    cmd_line_string.append(base::UTF8ToWide(base::StringPrintf(" /PID %lu", pid)));
   }
 
   std::unique_ptr<wchar_t[]> cmd_line(

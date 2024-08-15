@@ -9,6 +9,7 @@ aggregate_vector_icons("vivaldi_vector_icons") {
       "vivaldi_mute.icon",
       "vivaldi_mute_muted.icon",
       "vivaldi_splash.icon",
+      "vivaldi_splash_ghost.icon",
     ]
   }
 }

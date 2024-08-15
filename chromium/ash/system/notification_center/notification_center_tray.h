@@ -55,6 +55,9 @@ class ASH_EXPORT NotificationCenterTray : public TrayBackgroundView,
   // Called when UnifiedSystemTray's preferred visibility changes.
   void OnSystemTrayVisibilityChanged(bool system_tray_visible);
 
+  // Callback called when this TrayBackgroundView is pressed.
+  void OnTrayButtonPressed();
+
   NotificationListView* GetNotificationListView();
 
   // True if the bubble is shown.
@@ -79,8 +82,6 @@ class ASH_EXPORT NotificationCenterTray : public TrayBackgroundView,
   void UpdateAfterLoginStatusChange() override;
   TrayBubbleView* GetBubbleView() override;
   views::Widget* GetBubbleWidget() const override;
-  void OnAnyBubbleVisibilityChanged(views::Widget* bubble_widget,
-                                    bool visible) override;
   void UpdateLayout() override;
 
   // ash::TrayItemView::Observer:

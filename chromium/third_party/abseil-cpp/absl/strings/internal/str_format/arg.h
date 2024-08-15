@@ -31,7 +31,7 @@
 #include "absl/base/port.h"
 #include "absl/meta/type_traits.h"
 #include "absl/numeric/int128.h"
-#include "absl/strings/internal/has_absl_stringify.h"
+#include "absl/strings/has_absl_stringify.h"
 #include "absl/strings/internal/str_format/extension.h"
 #include "absl/strings/string_view.h"
 
@@ -158,6 +158,7 @@ template <typename T>
 auto FormatConvertImpl(const T& v, FormatConversionSpecImpl,
                        FormatSinkImpl* sink)
     -> std::enable_if_t<!std::is_enum<T>::value &&
+                            !std::is_same<T, absl::Cord>::value &&
                             std::is_void<decltype(AbslStringify(
                                 std::declval<FormatSink&>(), v))>::value,
                         ArgConvertResult<FormatConversionCharSetInternal::v>> {
@@ -333,7 +334,7 @@ IntegralConvertResult FormatConvertImpl(T v, FormatConversionSpecImpl conv,
 template <typename T>
 typename std::enable_if<std::is_enum<T>::value &&
                             !HasUserDefinedConvert<T>::value &&
-                            !strings_internal::HasAbslStringify<T>::value,
+                            !HasAbslStringify<T>::value,
                         IntegralConvertResult>::type
 FormatConvertImpl(T v, FormatConversionSpecImpl conv, FormatSinkImpl* sink);
 
@@ -447,7 +448,7 @@ class FormatArgImpl {
   struct DecayType {
     static constexpr bool kHasUserDefined =
         str_format_internal::HasUserDefinedConvert<T>::value ||
-        strings_internal::HasAbslStringify<T>::value;
+        HasAbslStringify<T>::value;
     using type = typename std::conditional<
         !kHasUserDefined && std::is_convertible<T, const char*>::value,
         const char*,
@@ -456,11 +457,10 @@ class FormatArgImpl {
                                   VoidPtr, const T&>::type>::type;
   };
   template <typename T>
-  struct DecayType<T,
-                   typename std::enable_if<
-                       !str_format_internal::HasUserDefinedConvert<T>::value &&
-                       !strings_internal::HasAbslStringify<T>::value &&
-                       std::is_enum<T>::value>::type> {
+  struct DecayType<
+      T, typename std::enable_if<
+             !str_format_internal::HasUserDefinedConvert<T>::value &&
+             !HasAbslStringify<T>::value && std::is_enum<T>::value>::type> {
     using type = decltype(+typename std::underlying_type<T>::type());
   };
 

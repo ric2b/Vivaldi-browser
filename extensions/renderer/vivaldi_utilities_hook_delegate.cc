@@ -39,10 +39,10 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleRequest(
     const std::string& method_name,
     const APISignature* signature,
     v8::Local<v8::Context> context,
-    std::vector<v8::Local<v8::Value>>* arguments,
+    v8::LocalVector<v8::Value>* arguments,
     const APITypeReferenceMap& refs) {
   using Handler = RequestResult (VivaldiUtilitiesHookDelegate::*)(
-      v8::Local<v8::Context>, const std::vector<v8::Local<v8::Value>>&);
+      v8::Local<v8::Context>, v8::LocalVector<v8::Value> &);
   static struct {
     Handler handler;
     base::StringPiece method;
@@ -81,7 +81,7 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleRequest(
 
 RequestResult VivaldiUtilitiesHookDelegate::HandleGetUrlFragments(
     v8::Local<v8::Context> context,
-    const std::vector<v8::Local<v8::Value>>& arguments) {
+    v8::LocalVector<v8::Value>& arguments) {
   DCHECK_EQ(1u, arguments.size());
   DCHECK(arguments[0]->IsString());
   v8::Isolate* isolate = context->GetIsolate();
@@ -209,7 +209,7 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleGetUrlFragments(
 
 RequestResult VivaldiUtilitiesHookDelegate::HandleUrlToThumbnailText(
     v8::Local<v8::Context> context,
-    const std::vector<v8::Local<v8::Value>>& arguments) {
+    v8::LocalVector<v8::Value> &arguments) {
   constexpr char kChrome[] = "chrome";
   DCHECK_EQ(1u, arguments.size());
   DCHECK(arguments[0]->IsString());
@@ -242,7 +242,7 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleUrlToThumbnailText(
 
 RequestResult VivaldiUtilitiesHookDelegate::HandleGetVersion(
     v8::Local<v8::Context> context,
-    const std::vector<v8::Local<v8::Value>>& arguments) {
+    v8::LocalVector<v8::Value> &arguments) {
   v8::Isolate* isolate = context->GetIsolate();
   v8::Local<v8::Object> version_object = v8::Object::New(isolate);
   version_object
@@ -281,7 +281,7 @@ bool DoesBrowserHandleUrl(const GURL& url) {
 }  // namespace
 RequestResult VivaldiUtilitiesHookDelegate::HandleIsUrlValid(
     v8::Local<v8::Context> context,
-    const std::vector<v8::Local<v8::Value>>& arguments) {
+    v8::LocalVector<v8::Value> &arguments) {
   DCHECK_EQ(1u, arguments.size());
   DCHECK(arguments[0]->IsString());
   v8::Isolate* isolate = context->GetIsolate();
@@ -319,7 +319,7 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleIsUrlValid(
 
 RequestResult VivaldiUtilitiesHookDelegate::HandleSupportsProxy(
     v8::Local<v8::Context> context,
-    const std::vector<v8::Local<v8::Value>>& arguments) {
+    v8::LocalVector<v8::Value> &arguments) {
   bool support =
 #if defined(ARCH_CPU_ARM_FAMILY) && (BUILDFLAG(IS_LINUX))
       false;

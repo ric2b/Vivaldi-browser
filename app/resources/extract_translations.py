@@ -51,7 +51,7 @@ def write_message(f, options, node, locale=None, have_variants=False):
   clique = node.GetCliques()[0]
   tid = clique.GetId()
 
-  unique = (name, message)
+  unique = (name, tid, message)
   if unique in generated_translation:
     return
   generated_translation.add(unique)
@@ -112,7 +112,7 @@ def main():
   for node in resources:
     node.unique_id = None
     if "name" in node.attrs and node.GetCliques():
-      node.unique_id = "{}.{}".format(node.attrs["name"], node.GetCliques()[0].GetId())
+      node.unique_id = "{}.{}.{}".format(node.attrs["name"], node.GetCliques()[0].GetId(),node.attrs["desc"])
 
   message_list = None
   if options.messages:

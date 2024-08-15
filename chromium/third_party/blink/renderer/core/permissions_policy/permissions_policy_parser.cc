@@ -196,9 +196,9 @@ ParsingContext::ParseFeatureName(const String& feature_name) {
                       WebFeature::kWindowManagementPermissionPolicyParsed);
   }
   const String& effective_feature_name =
-      (feature_name == "window-management" &&
-       RuntimeEnabledFeatures::WindowManagementPermissionAliasEnabled())
-          ? "window-placement"
+      (feature_name == "window-placement" &&
+       RuntimeEnabledFeatures::WindowPlacementPermissionAliasEnabled())
+          ? "window-management"
           : feature_name;
   if (!feature_names_.Contains(effective_feature_name)) {
     logger_.Warn("Unrecognized feature: '" + effective_feature_name + "'.");
@@ -214,17 +214,8 @@ ParsingContext::ParseFeatureName(const String& feature_name) {
   mojom::blink::PermissionsPolicyFeature feature =
       feature_names_.at(effective_feature_name);
 
-  // TODO(https://crbug.com/1324111): Remove this after OT.
   if (feature == mojom::blink::PermissionsPolicyFeature::kUnload) {
-    if (!execution_context_ ||
-        !RuntimeEnabledFeatures::PermissionsPolicyUnloadEnabled(
-            execution_context_)) {
-      // kUnload should not be recognised unless the OT is enabled.
-      feature = mojom::blink::PermissionsPolicyFeature::kNotFound;
-    } else if (execution_context_->IsWindow()) {
-      // Counter is required for Origin Trial.
-      execution_context_->CountUse(WebFeature::kPermissionsPolicyUnload);
-    }
+    UseCounter::Count(execution_context_, WebFeature::kPermissionsPolicyUnload);
   }
   return feature;
 }
@@ -374,6 +365,11 @@ absl::optional<ParsedPermissionsPolicyDeclaration> ParsingContext::ParseFeature(
   parsed_feature.self_if_matches = parsed_allowlist.self_if_matches;
   parsed_feature.matches_all_origins = parsed_allowlist.matches_all_origins;
   parsed_feature.matches_opaque_src = parsed_allowlist.matches_opaque_src;
+  if (declaration_node.endpoint.IsNull()) {
+    parsed_feature.reporting_endpoint = absl::nullopt;
+  } else {
+    parsed_feature.reporting_endpoint = declaration_node.endpoint.Ascii();
+  }
 
   // "window-placement" permission policy is deprecated, so add the deprecation
   // feature to the policy declaration.
@@ -501,10 +497,14 @@ PermissionsPolicyParser::Node ParsingContext::ParsePermissionsPolicyToIR(
     const auto& key = feature_entry.first;
     const char* feature_name = key.c_str();
     const auto& value = feature_entry.second;
+    String endpoint;
 
     if (!value.params.empty()) {
-      logger_.Warn(
-          String::Format("Feature %s's parameters are ignored.", feature_name));
+      for (const auto& param : value.params) {
+        if (param.first == "report-to" && param.second.is_token()) {
+          endpoint = String(param.second.GetString());
+        }
+      }
     }
 
     Vector<String> allowlist;
@@ -549,8 +549,8 @@ PermissionsPolicyParser::Node ParsingContext::ParsePermissionsPolicyToIR(
       allowlist.push_back("'none'");
     }
 
-    ir_root.declarations.push_back(
-        PermissionsPolicyParser::Declaration{feature_name, allowlist});
+    ir_root.declarations.push_back(PermissionsPolicyParser::Declaration{
+        feature_name, allowlist, endpoint});
   }
 
   return ir_root;

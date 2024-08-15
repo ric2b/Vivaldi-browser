@@ -821,6 +821,14 @@ be describing additional metrics about the same event.
       can independently filter this based on the value of NumInterestGroups.
     </summary>
   </metric>
+  <metric name="MaxAdditionalBidDecodeLatencyInMillis">
+    <summary>
+      Max latency of the time spent decoding each additional bid. This only
+      includes additional bids that were successfully decoded, so those negative
+      targeted or sent for scoring, and not those that encountered any error
+      while being decoded, e.g. invalid base64, JSON parsing errors, etc.
+    </summary>
+  </metric>
   <metric name="MaxBidForOneInterestGroupLatencyInMillis">
     <summary>
       Aggregated across all components for a multi-seller auctions, this records
@@ -842,6 +850,31 @@ be describing additional metrics about the same event.
       This metric only has a value for entries that represent multi-seller
       auctions, as indicated by a value for the NumSellersWithBidders metric of
       two or greater.
+    </summary>
+  </metric>
+  <metric name="MaxConfigPromisesResolvedCriticalPathLatencyInMillis">
+    <summary>
+      Max latency between the start of the BiddingAndScoring phase and when
+      config promises are resolved. In a single-seller auction, this is only
+      recorded if the auction has config promises; in a multi-seller auction,
+      this is only recorded for component auctions and the top-level auction for
+      those that have config promises. In auctions for which the config promises
+      are resolved before the bidding and auction phase, a critical path latency
+      of zero is recorded. This shows how long additional bids would have had to
+      wait for the config promises to be resolved, since they couldn't be
+      processed until the BiddingAndScoring phase anyway.
+    </summary>
+  </metric>
+  <metric name="MaxConfigPromisesResolvedLatencyInMillis">
+    <summary>
+      Max latency between the auction start time and when config promises are
+      resolved. In a single-seller auction, this is only recorded if the auction
+      has config promises; in a multi-seller auction, this is only recorded for
+      component auctions and the top-level auction for those that have config
+      promises. This is not the same as how long the auction needed to wait for
+      a config promise, since other work happened simultaneously. That's better
+      captured by the GenerateBid critical path metrics and the
+      ConfigPromisesResolved critical path metrics.
     </summary>
   </metric>
   <metric name="MaxGenerateBidCodeReadyLatencyInMillis">
@@ -929,6 +962,14 @@ be describing additional metrics about the same event.
       reprioritize InterestGroups and apply per-buyer group limits.
     </summary>
   </metric>
+  <metric name="MeanAdditionalBidDecodeLatencyInMillis">
+    <summary>
+      Mean latency of the time spent decoding each additional bid. This only
+      includes additional bids that were successfully decoded, so those negative
+      targeted or sent for scoring, and not those that encountered any error
+      while being decoded, e.g. invalid base64, JSON parsing errors, etc.
+    </summary>
+  </metric>
   <metric name="MeanBidForOneInterestGroupLatencyInMillis">
     <summary>
       Aggregated across all components for a multi-seller auctions, this records
@@ -950,6 +991,31 @@ be describing additional metrics about the same event.
       This metric only has a value for entries that represent multi-seller
       auctions, as indicated by a value for the NumSellersWithBidders metric of
       two or greater.
+    </summary>
+  </metric>
+  <metric name="MeanConfigPromisesResolvedCriticalPathLatencyInMillis">
+    <summary>
+      Mean latency between the start of the BiddingAndScoring phase and when
+      config promises are resolved. In a single-seller auction, this is only
+      recorded if the auction has config promises; in a multi-seller auction,
+      this is only recorded for component auctions and the top-level auction for
+      those that have config promises. In auctions for which the config promises
+      are resolved before the bidding and auction phase, a critical path latency
+      of zero is recorded. This shows how long additional bids would have had to
+      wait for the config promises to be resolved, since they couldn't be
+      processed until the BiddingAndScoring phase anyway.
+    </summary>
+  </metric>
+  <metric name="MeanConfigPromisesResolvedLatencyInMillis">
+    <summary>
+      Mean latency between the auction start time and when config promises are
+      resolved. In a single-seller auction, this is only recorded if the auction
+      has config promises; in a multi-seller auction, this is only recorded for
+      component auctions and the top-level auction for those that have config
+      promises. This is not the same as how long the auction needed to wait for
+      a config promise, since other work happened simultaneously. That's better
+      captured by the GenerateBid critical path metrics and the
+      ConfigPromisesResolved critical path metrics.
     </summary>
   </metric>
   <metric name="MeanGenerateBidCodeReadyCriticalPathLatencyInMillis">
@@ -1137,6 +1203,88 @@ be describing additional metrics about the same event.
       became available were blocked waiting on the seller worklet.
     </summary>
   </metric>
+  <metric name="NumAdditionalBidsNegativeTargeted">
+    <summary>
+      Number of additional bids intentionally suppressed because at least one of
+      the additional bid's specified negative interest groups was present. This
+      is not an error condition; this is the intentional behavior of negative
+      targeting. Still so, these additional bids are not scored, and do not
+      participate in the auction.
+    </summary>
+  </metric>
+  <metric name="NumAdditionalBidsRejectedDueToBuyerNotAllowed">
+    <summary>
+      Number of additional bids rejected because the additional bid's owner was
+      not allowed to bid in that auction by IsInterestGroupAPIAllowed. These
+      additional bids are not scored, and do not participate in the auction.
+    </summary>
+  </metric>
+  <metric name="NumAdditionalBidsRejectedDueToCurrencyMismatch">
+    <summary>
+      Number of additional bids rejected because the additional bid specified a
+      currency that didn't match the currency associated with that buyer. These
+      additional bids are not scored, and do not participate in the auction.
+    </summary>
+  </metric>
+  <metric name="NumAdditionalBidsRejectedDueToDecodeError">
+    <summary>
+      Number of additional bids rejected because the additional bid from inside
+      the signed additional bid was not structured as expected (encountered an
+      error in DecodeAdditionalBid). This includes additional bids whose
+      replay-prevention fields - auctionNonce, seller and topLevelSeller - are
+      missing or don't match those of the auction. This also includes additional
+      bids whose owner was not found in the auction's interestGroupBuyers. These
+      additional bids are not scored, and do not participate in the auction.
+    </summary>
+  </metric>
+  <metric name="NumAdditionalBidsRejectedDueToInvalidBase64">
+    <summary>
+      Number of additional bids rejected because the signed additional bid in
+      the Ad-Auction-Additional-Bid response header was not a valid base64
+      string, and so could not be base64-decoded to JSON. These additional bids
+      are not scored, and do not participate in the auction.
+    </summary>
+  </metric>
+  <metric name="NumAdditionalBidsRejectedDueToJsonParseError">
+    <summary>
+      Number of additional bids rejected because the additional bid from inside
+      the signed additional bid was invalid JSON, and so failed to parse. These
+      additional bids are not scored, and do not participate in the auction.
+    </summary>
+  </metric>
+  <metric name="NumAdditionalBidsRejectedDueToSignedBidDecodeError">
+    <summary>
+      Number of additional bids rejected because the signed additional bid JSON
+      was not structured as expected (encountered an error in
+      DecodeSignedAdditionalBid). These additional bids are not scored, and do
+      not participate in the auction.
+    </summary>
+  </metric>
+  <metric name="NumAdditionalBidsRejectedDueToSignedBidJsonParseError">
+    <summary>
+      Number of additional bids rejected because the signed additional bid was
+      invalid JSON, and so failed to parse. These additional bids are not
+      scored, and do not participate in the auction.
+    </summary>
+  </metric>
+  <metric name="NumAdditionalBidsSentForScoring">
+    <summary>
+      Number of additional bids scored. These additional bids participate in the
+      auction alongside other additional bids and bids created by calls to
+      generateBid().
+    </summary>
+  </metric>
+  <metric name="NumAuctionsWithConfigPromises">
+    <summary>
+      In a single-seller auction, this is either zero if the auction doesn't
+      have any config promises or one if it does. This could also be inferred
+      from NumConfigPromises, which would be zero or non-zero respectively in
+      those cases. In a multi-seller auction, this is the number of component
+      auctions that have any config promises, which is different from
+      NumConfigPromises, in that each component auction may independently have
+      any number of config promises.
+    </summary>
+  </metric>
   <metric name="NumBidderWorklets">
     <summary>
       The number of distinct BidderWorklets. Interest groups with the same owner
@@ -1312,6 +1460,42 @@ be describing additional metrics about the same event.
       will be 0, because there won't be a separate kAnon bid.
     </summary>
   </metric>
+  <metric name="NumNegativeInterestGroups">
+    <summary>
+      Total number of negative targeting interest groups aggregated across all
+      owners and component auctions, equivalent to UMA metric,
+      Ads.InterestGroup.Auction.NumNegativeInterestGroups. This is the number of
+      negative targeting interest groups loaded into the
+      AdAuctionNegativeTargeter, regardless of which of these, if any, are later
+      referenced by additional bids. No value is defined for this metric if the
+      auction may not have additional bids, i.e. the additionalBids promise was
+      not provided on the auction config. However, a value is defined for this
+      metric even if no additional bids are provided to the auction, i.e. no
+      additional bids appear in Ad-Auction-Additional-Bid response headers.
+    </summary>
+  </metric>
+  <metric name="NumNegativeInterestGroupsIgnoredDueToInvalidSignature">
+    <summary>
+      Number of negative interest groups ignored because they had no matching
+      valid signature on the signed additional bid. By ignoring this negative
+      interest group, the additional bid may participate in the auction where
+      the intent was for it be suppressed by negative targeting. This
+      &quot;failing open&quot; ensures that only the owner of the negative
+      interest group, who created the additonalBidKey, is allowed to negatively
+      target the interest group, and that nobody else can learn whether the
+      interest group is present on the device.
+    </summary>
+  </metric>
+  <metric name="NumNegativeInterestGroupsIgnoredDueToJoiningOriginMismatch">
+    <summary>
+      Number of negative interest groups ignored because they had a joining
+      origin different from that specified on the additional bid. By ignoring
+      this negative interest group, the additional bid may participate in the
+      auction where the intent was for it be suppressed by negative targeting.
+      This &quot;failing open&quot; ensures that negative targeting can only use
+      targeting data from a single origin.
+    </summary>
+  </metric>
   <metric name="NumOwnersWithInterestGroups">
     <summary>
       The number of buyers with InterestGroups participating in an auction,
@@ -1413,6 +1597,10 @@ be describing additional metrics about the same event.
   </metric>
   <metric
       name="SubFrame.InteractiveTiming.AverageUserInteractionLatencyOverBudget.MaxEventDuration2">
+    <obsolete>
+      Removed September 2023 in favor of
+      SubFrame.InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration
+    </obsolete>
     <summary>
       The average value of user interaction latency above budget of a page load
       in AMP subframes, in ms. For this metric, we measure the latency of user
@@ -1426,7 +1614,7 @@ be describing additional metrics about the same event.
       name="SubFrame.InteractiveTiming.AverageUserInteractionLatencyOverBudget.TotalEventDuration2">
     <obsolete>
       Removed March 2022 in favor of
-      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
+      SubFrame.InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       The average value of user interaction latency above budget of a page load
@@ -1467,7 +1655,7 @@ be describing additional metrics about the same event.
       name="SubFrame.InteractiveTiming.SlowUserInteractionLatencyOverBudget.HighPercentile.MaxEventDuration2">
     <obsolete>
       Removed March 2022 in favor of
-      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
+      SubFrame.InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       An approximation of high percentile of user interaction latency above
@@ -1482,7 +1670,7 @@ be describing additional metrics about the same event.
       name="SubFrame.InteractiveTiming.SlowUserInteractionLatencyOverBudget.HighPercentile.TotalEventDuration2">
     <obsolete>
       Removed March 2022 in favor of
-      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
+      SubFrame.InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       An approximation of high percentile of user interaction latency above
@@ -1495,6 +1683,10 @@ be describing additional metrics about the same event.
   </metric>
   <metric
       name="SubFrame.InteractiveTiming.SlowUserInteractionLatencyOverBudget.HighPercentile2.MaxEventDuration2">
+    <obsolete>
+      Removed September 2023 in favor of
+      SubFrame.InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration
+    </obsolete>
     <summary>
       An approximation of high percentile of user interaction latency above
       budget of a page load in AMP subframes, in ms. For this metric, we measure
@@ -1508,7 +1700,7 @@ be describing additional metrics about the same event.
       name="SubFrame.InteractiveTiming.SlowUserInteractionLatencyOverBudget.HighPercentile2.TotalEventDuration2">
     <obsolete>
       Removed March 2022 in favor of
-      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
+      SubFrame.InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       An approximation of high percentile of user interaction latency above
@@ -1521,6 +1713,10 @@ be describing additional metrics about the same event.
   </metric>
   <metric
       name="SubFrame.InteractiveTiming.SumOfUserInteractionLatencyOverBudget.MaxEventDuration2">
+    <obsolete>
+      Removed September 2023 in favor of
+      SubFrame.InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration
+    </obsolete>
     <summary>
       The sum of user interaction latency above budget of a page load in AMP
       subframes, in ms. For this metric, we measure the latency of user
@@ -1534,7 +1730,7 @@ be describing additional metrics about the same event.
       name="SubFrame.InteractiveTiming.SumOfUserInteractionLatencyOverBudget.TotalEventDuration2">
     <obsolete>
       Removed March 2022 in favor of
-      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
+      SubFrame.InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       The sum of user interaction latency above budget of a page load in AMP
@@ -1566,7 +1762,7 @@ be describing additional metrics about the same event.
       name="SubFrame.InteractiveTiming.WorstUserInteractionLatency.TotalEventDuration2">
     <obsolete>
       Removed March 2022 in favor of
-      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
+      SubFrame.InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       The maximum value of high percentile of user interaction latency above
@@ -1579,7 +1775,7 @@ be describing additional metrics about the same event.
       name="SubFrame.InteractiveTiming.WorstUserInteractionLatencyOverBudget.MaxEventDuration2">
     <obsolete>
       Removed March 2022 in favor of
-      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
+      SubFrame.InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       The maximum value of user interaction latency above budget of a page load
@@ -1594,7 +1790,7 @@ be describing additional metrics about the same event.
       name="SubFrame.InteractiveTiming.WorstUserInteractionLatencyOverBudget.TotalEventDuration2">
     <obsolete>
       Removed March 2022 in favor of
-      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
+      SubFrame.InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       The maximum value of user interaction latency above budget of a page load
@@ -3439,7 +3635,7 @@ be describing additional metrics about the same event.
     <summary>
       Whether filling the field was skipped during autofill, and if it was
       skipped, what the skipping reasons were. Recorded as a DenseSet of
-      |SkipStatus|.
+      |FieldFillingSkipReason|.
     </summary>
   </metric>
   <metric name="AutofillStatusVector">
@@ -3479,7 +3675,13 @@ be describing additional metrics about the same event.
     <summary>
       A form control type of a web form-associated element. We only list the
       very common ones that are seen in autofill, such as text, textarea,
-      checkbox, radio, select-one, see |autofill::FormControlType|.
+      checkbox, radio, select-one, see |autofill::DeprecatedFormControlType|.
+    </summary>
+  </metric>
+  <metric name="FormControlType2" enum="AutofillFormControlType2">
+    <summary>
+      A form control type of a web form-associated element. We only list the
+      ones that are handled by Autofill, see |autofill::FormControlType|.
     </summary>
   </metric>
   <metric name="FormSessionIdentifier">
@@ -3692,6 +3894,71 @@ be describing additional metrics about the same event.
     </obsolete>
     <summary>
       Whether the form was refilled by autofill.
+    </summary>
+  </metric>
+</event>
+
+<event name="Autofill2.FieldInfoAfterSubmission">
+  <owner>battre@chromium.org</owner>
+  <owner>chrome-autofill-team@google.com</owner>
+  <summary>
+    Information about a specific field, recorded after form submission.
+  </summary>
+  <metric name="FieldSessionIdentifier">
+    <summary>
+      A random variable assigned to a specific instance of a form control (e.g.
+      a HTML input element). This should be globally unique and suitable for
+      distinguishing fields. Two different users would have different values.
+      For the same user, the same field in the same form in two different tabs
+      would have two different values. FormSessionIdentifier and
+      FieldSessionIdentifier together are used to link to the field in
+      Autofill2.FieldInfo.
+    </summary>
+  </metric>
+  <metric name="FormSessionIdentifier">
+    <summary>
+      A random variable assigned to a specific instance of a HTML form in a
+      specific renderer. This should be globally unique and suitable for
+      counting distinct forms. Two different users would have different values.
+      A single user loading the same form in two different tabs would have two
+      different values. FormSessionIdentifier and FieldSessionIdentifier
+      together are used to link to the field in Autofill2.FieldInfo.
+    </summary>
+  </metric>
+  <metric name="MillisecondsFromFormParsedUntilSubmission">
+    <summary>
+      The time interval from form parse to form submission in ms in exponential
+      buckets from |GetSemanticBucketMinForDurationTiming()|.
+    </summary>
+  </metric>
+  <metric name="SubmissionSource" enum="AutofillSubmissionSource">
+    <summary>
+      The source of form submission. The source is from
+      autofill::mojom::SubmissionSource.
+    </summary>
+  </metric>
+  <metric name="SubmittedType1" enum="AutofillServerFieldType">
+    <summary>
+      The first possible field submitted type is determined by comparing the
+      submitted value in the field with the stored user profiles. We will have
+      at most three possible field submitted types. The types are from
+      |autofill::ServerFieldType|.
+    </summary>
+  </metric>
+  <metric name="SubmittedType2" enum="AutofillServerFieldType">
+    <summary>
+      The second possible field submitted type is determined by comparing the
+      submitted value in the field with the stored user profiles. We will have
+      at most three possible field submitted types. The types are from
+      |autofill::ServerFieldType|.
+    </summary>
+  </metric>
+  <metric name="SubmittedType3" enum="AutofillServerFieldType">
+    <summary>
+      The third possible field submitted type is determined by comparing the
+      submitted value in the field with the stored user profiles. We will have
+      at most three possible field submitted types. The types are from
+      |autofill::ServerFieldType|.
     </summary>
   </metric>
 </event>
@@ -4143,6 +4410,24 @@ be describing additional metrics about the same event.
       `kFederatedIdentityAutoReauthnEmbargoDuration`).
     </summary>
   </metric>
+  <metric name="Error.ErrorDialogResult" enum="FedCmErrorDialogResult">
+    <summary>
+      Records the outcome of the error dialog. Recorded at most once per API
+      call when the error dialog is displayed.
+    </summary>
+  </metric>
+  <metric name="Error.ErrorDialogType" enum="FedCmErrorDialogType">
+    <summary>
+      Records the type of error dialog shown. Recorded at most once per API call
+      when the error dialog is displayed.
+    </summary>
+  </metric>
+  <metric name="Error.TokenResponseType" enum="FedCmTokenResponseType">
+    <summary>
+      Records the type of token response received. Recorded at most once per API
+      call when a token response received.
+    </summary>
+  </metric>
   <metric name="FedCmSessionID">
     <summary>
       Records the session ID associated to the FedCM call for which this event
@@ -4194,6 +4479,12 @@ be describing additional metrics about the same event.
     </obsolete>
     <summary>
       Records the status of a revoke call to the FedCM API.
+    </summary>
+  </metric>
+  <metric name="Status.Revoke2" enum="FedCmRevokeStatus2">
+    <summary>
+      Records the status of a revoke call to the FedCM API. Recorded once per
+      IdentityCredential.revoke() call, once the browser knows the result.
     </summary>
   </metric>
   <metric name="Timing.AccountsDialogShownDuration">
@@ -4268,6 +4559,31 @@ be describing additional metrics about the same event.
       Records a 1 each time a request is sent to the accounts endpoint.
     </summary>
   </metric>
+  <metric name="Error.ErrorDialogResult" enum="FedCmErrorDialogResult">
+    <summary>
+      Records the outcome of the error dialog. Recorded at most once per API
+      call when the error dialog is displayed.
+    </summary>
+  </metric>
+  <metric name="Error.ErrorDialogType" enum="FedCmErrorDialogType">
+    <summary>
+      Records the type of error dialog shown. Recorded at most once per API call
+      when the error dialog is displayed.
+    </summary>
+  </metric>
+  <metric name="Error.ErrorUrlType" enum="FedCmErrorUrlType">
+    <summary>
+      Records whether the error URL is same-origin, cross-origin but same-site
+      or cross-site with the config URL. Recorded at most once per API call when
+      a valid error URL is received.
+    </summary>
+  </metric>
+  <metric name="Error.TokenResponseType" enum="FedCmTokenResponseType">
+    <summary>
+      Records the type of token response received. Recorded at most once per API
+      call when a token response received.
+    </summary>
+  </metric>
   <metric name="FedCmSessionID">
     <summary>
       Records the session ID associated to the FedCM call for which this event
@@ -4291,6 +4607,12 @@ be describing additional metrics about the same event.
   <metric name="Status.RequestIdToken" enum="FedCmRequestIdTokenStatus">
     <summary>
       Records the status of a request id token call to the FedCM API.
+    </summary>
+  </metric>
+  <metric name="Status.Revoke2" enum="FedCmRevokeStatus2">
+    <summary>
+      Records the status of a revoke call to the FedCM API. Recorded once per
+      IdentityCredential.revoke() call, once the browser knows the result.
     </summary>
   </metric>
   <metric name="Status.SignInStateMatch" enum="FedCmSignInStateMatchStatus">
@@ -7881,6 +8203,43 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="CookieHasNonAsciiCharacter">
+  <owner>bingler@chromium.org</owner>
+  <summary>
+    A collection of metrics which are recorded for cookies which include at
+    least one non-ascii unicode character in either their name or value fields.
+    This metric is only interested in an event being generated, the value it
+    records is meaningless.
+  </summary>
+  <metric name="Name" enum="Boolean">
+    <summary>
+      Records events when a cookie has a non-ascii unicode character in its name
+      field.
+    </summary>
+  </metric>
+  <metric name="Value" enum="Boolean">
+    <summary>
+      Records events when a cookie has a non-ascii unicode character in its
+      value field.
+    </summary>
+  </metric>
+</event>
+
+<event name="Cookies.FirstPartyPartitionedInCrossSiteContext">
+  <owner>selya@chromium.org</owner>
+  <owner>dylancutler@google.com</owner>
+  <summary>
+    Recorded when a page loads that has a first-party partitioned cookie present
+    and is in a cross site context.
+  </summary>
+  <metric name="CookiePresent" enum="Boolean">
+    <summary>
+      Records true if one or more first-party partitioned cookies in a cross
+      site context are present.
+    </summary>
+  </metric>
+</event>
+
 <event name="CPUUsageMeasurement">
   <owner>chrisha@chromium.org</owner>
   <owner>siggi@chromium.org</owner>
@@ -8091,6 +8450,27 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="DevTools.Opened">
+  <owner>skrakowi@chromium.org</owner>
+  <owner>chrome-counter-abuse-core@google.com</owner>
+  <summary>
+    Records that the DevTools were opened by the user.
+  </summary>
+  <metric name="HasOccurred" enum="Boolean">
+    <summary>
+      A boolean signaling that the DevTools menu was opened by the user; only
+      records true values.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
 <event name="DIPS.Deletion" singular="True">
   <owner>rtarpine@google.com</owner>
   <owner>dc-komics@google.com</owner>
@@ -8252,7 +8632,8 @@ be describing additional metrics about the same event.
 </event>
 
 <event name="DocumentCreated">
-  <owner>beccahughes@chromium.org</owner>
+  <owner>rakina@chromium.org</owner>
+  <owner>navigation-dev@chromium.org</owner>
   <summary>
     Recorded when a Document object is created and records the source ID of the
     navigation and whether the document was in the main frame. This can be used
@@ -8570,6 +8951,19 @@ be describing additional metrics about the same event.
         </statistics>
       </history>
     </aggregation>
+  </metric>
+</event>
+
+<event name="Extensions.BackgroundContentsCreated">
+  <owner>erikchen@chromium.org</owner>
+  <summary>
+    Recorded each time a background contents creates its first renderer by
+    navigating its initial WebContents.
+  </summary>
+  <metric name="Seen" enum="Boolean">
+    <summary>
+      Dummy Boolean as UKM does not support events with no metrics.
+    </summary>
   </metric>
 </event>
 
@@ -11458,6 +11852,10 @@ be describing additional metrics about the same event.
   </metric>
   <metric
       name="AverageUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore.MaxEventDuration2">
+    <obsolete>
+      Deprecated September 2023 in favor of
+      SlowUserInteractionLatencyAfterBackForwardCacheRestore.HighPercentile2.MaxEventDuration
+    </obsolete>
     <summary>
       The average value of user interaction latency above budget of a page after
       it is restored from the back-forward, in ms. For this metric, we measure
@@ -11761,6 +12159,10 @@ be describing additional metrics about the same event.
   </metric>
   <metric
       name="SlowUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore.HighPercentile2.MaxEventDuration2">
+    <obsolete>
+      Deprecated September 2023 in favor of
+      SlowUserInteractionLatencyAfterBackForwardCacheRestore.HighPercentile2.MaxEventDuration
+    </obsolete>
     <summary>
       An approximation of high percentile of user interaction latency above
       budget of a page after it is restored from the back-forward, in ms. For
@@ -11787,6 +12189,10 @@ be describing additional metrics about the same event.
   </metric>
   <metric
       name="SumOfUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore.MaxEventDuration2">
+    <obsolete>
+      Deprecated September 2023 in favor of
+      SlowUserInteractionLatencyAfterBackForwardCacheRestore.HighPercentile2.MaxEventDuration
+    </obsolete>
     <summary>
       The sum of user interaction latency above budget of a page after it is
       restored from the back-forward, in ms. For this metric, we measure the
@@ -11940,6 +12346,9 @@ be describing additional metrics about the same event.
 </event>
 
 <event name="InputEvent">
+  <obsolete>
+    Deprecated in favor of PerformanceAPI.LongAnimationFrame events.
+  </obsolete>
   <owner>mmocny@chromium.org</owner>
   <owner>sullivan@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
@@ -16008,7 +16417,7 @@ be describing additional metrics about the same event.
   <metric name="HoursSincePopupOpened" enum="PopupProvider">
     <summary>
       The number of hours before the cookie access that the initial
-      OpenerHeuristic.TopLevel event was recorded. Bucketized evenly with 120
+      OpenerHeuristic.TopLevel event was recorded. Bucketized evenly with 50
       buckets up to 60 days.
     </summary>
   </metric>
@@ -16034,6 +16443,11 @@ be describing additional metrics about the same event.
       belongs to the same registrable domain as the pop-up. &quot;Unknown&quot;
       if the top-level page is closed or the user navigates the main frame to
       another page before interacting with the pop-up.
+    </summary>
+  </metric>
+  <metric name="IsAdTaggedPopupClick" enum="Boolean">
+    <summary>
+      Whether the popup frame was opened by a click on an ad-tagged frame.
     </summary>
   </metric>
   <metric name="PopupId">
@@ -16312,6 +16726,9 @@ be describing additional metrics about the same event.
     </aggregation>
   </metric>
   <metric name="ForegroundNumInputEvents">
+    <obsolete>
+      Depreacated October 2023.
+    </obsolete>
     <summary>
       The number of Input Events, including click, tap, key press, cancellable
       touchstart, or pointer down followed by apointer up. This metric gets
@@ -16331,6 +16748,9 @@ be describing additional metrics about the same event.
     </aggregation>
   </metric>
   <metric name="ForegroundTotalAdjustedInputDelay">
+    <obsolete>
+      Depreacated October 2023.
+    </obsolete>
     <summary>
       sum(max(Input Delay - 50, 0)), recorded each time the page is
       backgrounded. The Input Delay refers to the duration between the hardware
@@ -16679,6 +17099,10 @@ be describing additional metrics about the same event.
   </metric>
   <metric
       name="InteractiveTiming.AverageUserInteractionLatencyOverBudget.MaxEventDuration">
+    <obsolete>
+      Deprecated September 2023 for
+      InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration
+    </obsolete>
     <summary>
       The average value of user interaction latency above budget of a page load,
       in ms. For this metric, we measure the latency of user interactions by
@@ -16691,7 +17115,7 @@ be describing additional metrics about the same event.
       name="InteractiveTiming.AverageUserInteractionLatencyOverBudget.TotalEventDuration">
     <obsolete>
       Deprecated March 2022 for
-      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
+      InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       The average value of user interaction latency above budget of a page load,
@@ -16780,6 +17204,9 @@ be describing additional metrics about the same event.
     </aggregation>
   </metric>
   <metric name="InteractiveTiming.FirstInputProcessingTimes">
+    <obsolete>
+      This metric isn't being used; removed October 2023.
+    </obsolete>
     <summary>
       Measures First Input Processing Time, the duration of event handlers
       processing the first input event. In ms.
@@ -16921,6 +17348,9 @@ be describing additional metrics about the same event.
     </aggregation>
   </metric>
   <metric name="InteractiveTiming.LongestInputDelay4">
+    <obsolete>
+      Removed October 2023; no longer needed after https://web.dev/inp.
+    </obsolete>
     <summary>
       Measures longest Input Delay, the longest duration between the hardware
       timestamp and the start of event processing on the main thread for the
@@ -16968,12 +17398,18 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric name="InteractiveTiming.LongestInputTimestamp4">
+    <obsolete>
+      Removed October 2023; no longer needed after https://web.dev/inp.
+    </obsolete>
     <summary>
       The duration between navigation start and the hardware timestamp of the
       meaningful input with longest queuing delay per navigation. In ms.
     </summary>
   </metric>
   <metric name="InteractiveTiming.NumInputEvents">
+    <obsolete>
+      Deprecated October 2023 in favor of InteractiveTiming.NumInteractions.
+    </obsolete>
     <summary>
       The number of Input Events, including click, tap, key press, cancellable
       touchstart, or pointer down followed by a pointer up.
@@ -16997,7 +17433,7 @@ be describing additional metrics about the same event.
       name="InteractiveTiming.SlowUserInteractionLatencyOverBudget.HighPercentile.MaxEventDuration">
     <obsolete>
       Deprecated March 2022 for
-      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
+      InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       An approximation of a high percentile of user interaction latency above
@@ -17012,7 +17448,7 @@ be describing additional metrics about the same event.
       name="InteractiveTiming.SlowUserInteractionLatencyOverBudget.HighPercentile.TotalEventDuration">
     <obsolete>
       Deprecated March 2022 for
-      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
+      InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       An approximation of a high percentile of user interaction latency above
@@ -17025,6 +17461,10 @@ be describing additional metrics about the same event.
   </metric>
   <metric
       name="InteractiveTiming.SlowUserInteractionLatencyOverBudget.HighPercentile2.MaxEventDuration">
+    <obsolete>
+      Deprecated September 2023 for
+      InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration
+    </obsolete>
     <summary>
       An approximation of a high percentile of user interaction latency above
       budget of a page load, in ms. For this metric, we measure the latency of
@@ -17038,7 +17478,7 @@ be describing additional metrics about the same event.
       name="InteractiveTiming.SlowUserInteractionLatencyOverBudget.HighPercentile2.TotalEventDuration">
     <obsolete>
       Deprecated March 2022 for
-      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
+      InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       An approximation of a high percentile of user interaction latency above
@@ -17051,6 +17491,10 @@ be describing additional metrics about the same event.
   </metric>
   <metric
       name="InteractiveTiming.SumOfUserInteractionLatencyOverBudget.MaxEventDuration">
+    <obsolete>
+      Deprecated September 2023 for
+      InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration
+    </obsolete>
     <summary>
       The sum of user interaction latency above budget of a page load, in ms.
       For this metric, we measure the latency of user interactions by
@@ -17063,7 +17507,7 @@ be describing additional metrics about the same event.
       name="InteractiveTiming.SumOfUserInteractionLatencyOverBudget.TotalEventDuration">
     <obsolete>
       Deprecated March 2022 for
-      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
+      InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       The sum of user interaction latency above budget of a page load, in ms.
@@ -17074,6 +17518,9 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric name="InteractiveTiming.TotalAdjustedInputDelay">
+    <obsolete>
+      Depreacated October 2023.
+    </obsolete>
     <summary>
       sum(max(Input Delay - 50, 0)). The Input Delay refers to the duration
       between the hardware timestamp and the start of event processing on the
@@ -17088,6 +17535,9 @@ be describing additional metrics about the same event.
     </aggregation>
   </metric>
   <metric name="InteractiveTiming.TotalInputDelay">
+    <obsolete>
+      Depreacated October 2023.
+    </obsolete>
     <summary>
       sum(Input Delay). The Input Delay refers to the duration between the
       hardware timestamp and the start of event processing on the main thread
@@ -17162,7 +17612,7 @@ be describing additional metrics about the same event.
       name="InteractiveTiming.WorstUserInteractionLatency.TotalEventDuration">
     <obsolete>
       Deprecated March 2022 for
-      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
+      InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       The maximum value of user interaction latency of a page load, in ms. For
@@ -17175,7 +17625,7 @@ be describing additional metrics about the same event.
       name="InteractiveTiming.WorstUserInteractionLatencyOverBudget.MaxEventDuration">
     <obsolete>
       Deprecated March 2022 for
-      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
+      InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       The maximum value of user interaction latency above budget of a page load,
@@ -17189,7 +17639,7 @@ be describing additional metrics about the same event.
       name="InteractiveTiming.WorstUserInteractionLatencyOverBudget.TotalEventDuration">
     <obsolete>
       Deprecated March 2022 for
-      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
+      InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       The maximum value of user interaction latency above budget of a page load,
@@ -18522,6 +18972,14 @@ be describing additional metrics about the same event.
       Metric is recorded on a password form detection. Recorded values
       correspond to the enum
       password_manager::PasswordFormMetricsRecorder::ParsingComparisonResult.
+    </summary>
+  </metric>
+  <metric name="ParsingDiffFillingAndSaving"
+      enum="PasswordFormParsingDifference">
+    <summary>
+      Records comparison of username and password fields picked during parsing
+      when the form is filled and when the form is saved. Recorded only if the
+      form is submitted successfully, on corresponding form manager destruction.
     </summary>
   </metric>
   <metric name="ParsingOnSavingDifference">
@@ -20218,6 +20676,9 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric name="EnergyImpactScore">
+    <obsolete>
+      Removed 10/2023
+    </obsolete>
     <summary>
       Sum of the energy impact score for all Chrome processes (Mac-only).
     </summary>
@@ -20607,6 +21068,29 @@ be describing additional metrics about the same event.
       verifying that the preloading attempt was eligible.
     </summary>
   </metric>
+  <metric name="PrefetchServiceWorkerRegisteredCheck"
+      enum="ServiceWorkerRegisteredCheck">
+    <summary>
+      Records how many times are we checking if a Service Worker is registered
+      for an origin (fast check) or for a certain path of the origin (slow
+      check) to decide if we are proceeding with a prefetch or not. Enum values
+      would be: OriginOnly and Path. OriginOnly value describes the case when
+      there are no Service Workers registered for the origin and we only need to
+      run the fast check. Path value describes the case when there are Service
+      Workers registered for the origin and we need to do a more expensive path
+      check to find out if the prefetch URL falls under a registered Service
+      Worker.
+    </summary>
+  </metric>
+  <metric name="PrefetchServiceWorkerRegisteredForURLCheckDuration">
+    <summary>
+      Records how long (in microseconds) does the slow check for a Service
+      Worker being registered for a certain path take when deciding if we are
+      proceeding with a prefetch or not. We expect this check to take up to 2
+      ms. Exponentially bucketed using GetExponentialBucketMin with a value of
+      1.15.
+    </summary>
+  </metric>
   <metric name="PreloadingPredictor">
     <summary>
       The type of preloading predictor which made the prediction. Values are
@@ -20706,6 +21190,29 @@ be describing additional metrics about the same event.
       verifying the eligibility of a preloading attempt. In general, eligibility
       checks can be reordered, but the holdback check always needs to come after
       verifying that the preloading attempt was eligible.
+    </summary>
+  </metric>
+  <metric name="PrefetchServiceWorkerRegisteredCheck"
+      enum="ServiceWorkerRegisteredCheck">
+    <summary>
+      Records how many times are we checking if a Service Worker is registered
+      for an origin (fast check) or for a certain path of the origin (slow
+      check) to decide if we are proceeding with a prefetch or not. Enum values
+      would be: OriginOnly and Path. OriginOnly value describes the case when
+      there are no Service Workers registered for the origin and we only need to
+      run the fast check. Path value describes the case when there are Service
+      Workers registered for the origin and we need to do a more expensive path
+      check to find out if the prefetch URL falls under a registered Service
+      Worker.
+    </summary>
+  </metric>
+  <metric name="PrefetchServiceWorkerRegisteredForURLCheckDuration">
+    <summary>
+      Records how long (in microseconds) does the slow check for a Service
+      Worker being registered for a certain path take when deciding if we are
+      proceeding with a prefetch or not. We expect this check to take up to 2
+      ms. Exponentially bucketed using GetExponentialBucketMin with a value of
+      1.15.
     </summary>
   </metric>
   <metric name="PreloadingPredictor">
@@ -20865,6 +21372,10 @@ be describing additional metrics about the same event.
   </metric>
   <metric
       name="InteractiveTiming.AverageUserInteractionLatencyOverBudget.MaxEventDuration">
+    <obsolete>
+      Deprecated September 2023 in favor of
+      InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration.
+    </obsolete>
     <summary>
       The average value of user interaction latency above budget of a
       prerendered page after it is successfully activated, in ms. For this
@@ -21564,19 +22075,32 @@ be describing additional metrics about the same event.
       with a RedirectHeuristic.CookieAccessThirdParty event.
     </summary>
   </metric>
+  <metric name="DoesFirstPartyPrecedeThirdParty" enum="Boolean">
+    <summary>
+      Whether this top-level site appeared in the tab history (or current
+      navigation) directly before the third party. Used to check for an A-B-A
+      site flow that may narrow the heuristic.
+    </summary>
+  </metric>
   <metric name="HoursSinceLastInteraction">
     <summary>
       The number of hours before the cookie access that the user last interacted
-      with the tracking site. Bucketized evenly with 120 buckets up to 60 days.
-      Set to -1 if there has never been a user interaction from the tracking
-      site.
+      with the tracking site. Clamped to 60 days at most, and rounded down to
+      the nearest exponential bucket (out of 50 buckets). Set to -1 if there has
+      never been a user interaction from the tracking site.
+    </summary>
+  </metric>
+  <metric name="IsCurrentInteraction" enum="Boolean">
+    <summary>
+      Whether there was a user interaction on the tracking site when it was
+      loaded in the current redirect chain.
     </summary>
   </metric>
   <metric name="MillisecondsSinceRedirect">
     <summary>
       The number of milliseconds between the redirect to the cookie access.
-      Clamped to three minutes at most, and rounded down to the nearest
-      exponential bucket (out of 50 buckets).
+      Clamped to 15 minutes at most, and rounded down to the nearest exponential
+      bucket (out of 50 buckets).
     </summary>
   </metric>
   <metric name="OpenerHasSameSiteIframe" enum="HasSameSiteIframe">
@@ -23701,6 +24225,9 @@ be describing additional metrics about the same event.
 </event>
 
 <event name="Tab.RendererOOM">
+  <obsolete>
+    Deprecated as of Oct 2023.
+  </obsolete>
   <owner>ssid@chromium.org</owner>
   <summary>
     Metrics about renderer OOM, recorded for each detected OOM of renderer
@@ -24118,6 +24645,12 @@ be describing additional metrics about the same event.
     <summary>
       Boolean indicating that the tab explicitly opted out of the intervention
       via feature policy.
+    </summary>
+  </metric>
+  <metric name="FailureLivePictureInPicture" enum="Boolean">
+    <summary>
+      Boolean indicating that the intervention was disallowed because the tab is
+      displaying content in picture-in-picture.
     </summary>
   </metric>
   <metric name="FailureLiveStateCapturing" enum="Boolean">

@@ -5,6 +5,7 @@
 
 #include <string>
 
+#include "base/containers/fixed_flat_set.h"
 #include "base/functional/callback.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
@@ -31,6 +32,10 @@ using RunAfterModelLoadCallback =
     base::OnceCallback<void(BookmarkModel* model)>;
 void RunAfterModelLoad(BookmarkModel* model,
                        RunAfterModelLoadCallback callback);
+
+constexpr auto kNonClonableKeys =
+    base::MakeFixedFlatSetSorted<std::string_view>(
+        { "bookmarkbar", "nickname", "partner", "speeddial"});
 
 const std::string& ThumbnailString();
 
@@ -71,8 +76,6 @@ std::string GetThemeColorForCSS(const BookmarkNode* node);
 
 bool IsSeparator(const BookmarkNode* node);
 bool IsTrash(const BookmarkNode* node);
-
-void InitModelNonClonedKeys(BookmarkModel* bookmark_model);
 
 // Returns true if the nickname exists in the bookmark model, false otherwise
 // If updated_node is null then the bookmark is being created, otherwise the

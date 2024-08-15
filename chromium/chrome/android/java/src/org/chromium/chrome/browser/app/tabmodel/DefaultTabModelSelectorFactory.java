@@ -27,8 +27,9 @@ public class DefaultTabModelSelectorFactory implements TabModelSelectorFactory {
         TabModelFilterFactory tabModelFilterFactory = new ChromeTabModelFilterFactory(activity);
         AsyncTabParamsManager asyncTabParamsManager = AsyncTabParamsManagerSingleton.getInstance();
 
+        // Vivaldi: NOTE(jarle@vivaldi): Disable undo tab closure. Ref. VAB-8221.
         return new TabModelSelectorImpl(/*windowAndroidSupplier=*/null, tabCreatorManager,
-                tabModelFilterFactory, nextTabPolicySupplier, asyncTabParamsManager, true,
+                tabModelFilterFactory, nextTabPolicySupplier, asyncTabParamsManager, false,
                 ActivityType.TABBED, false);
     }
 }

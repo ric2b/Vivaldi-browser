@@ -27,6 +27,9 @@
 #include "components/datasource/vivaldi_data_source.h"
 #include "components/datasource/vivaldi_web_source.h"
 #include "components/db/mail_client/mail_client_service_factory.h"
+#include "components/notes/notes_factory.h"
+#include "components/notes/notes_model.h"
+#include "components/notes/notes_model_loaded_observer.h"
 #include "components/page_actions/page_actions_service_factory.h"
 #include "components/ping_block/ping_block.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
@@ -40,9 +43,6 @@
 #include "menus/main_menu_service_factory.h"
 #include "menus/menu_model.h"
 #include "menus/menu_model_loaded_observer.h"
-#include "notes/notes_factory.h"
-#include "notes/notes_model.h"
-#include "notes/notes_model_loaded_observer.h"
 #include "sessions/index_service_factory.h"
 #include "ui/lazy_load_service_factory.h"
 #include "vivaldi/prefs/vivaldi_gen_pref_enums.h"
@@ -187,8 +187,7 @@ void VivaldiInitProfile(Profile* profile) {
     sessions::IndexServiceFactory::GetForBrowserContext(profile);
 
     extensions::VivaldiUtilitiesAPI* utility_api =
-        extensions::VivaldiUtilitiesAPI::GetFactoryInstance()
-          ->Get(profile);
+        extensions::VivaldiUtilitiesAPI::GetFactoryInstance()->Get(profile);
     if (utility_api) {
       utility_api->PostProfileSetup();
     }

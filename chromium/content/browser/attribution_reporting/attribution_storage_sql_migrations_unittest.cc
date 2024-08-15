@@ -8,6 +8,8 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/path_service.h"
+#include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -21,11 +23,14 @@
 #include "sql/database.h"
 #include "sql/statement.h"
 #include "sql/test/test_helpers.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace content {
 
 namespace {
+
+using ::testing::ElementsAre;
 
 // Normalize schema strings to compare them reliabily. Notably, applies the
 // following transformations:
@@ -65,10 +70,8 @@ class AttributionStorageSqlMigrationsTest : public testing::Test {
   }
 
   static base::FilePath GetVersionFilePath(int version_id) {
-    // Should be safe cross platform because StringPrintf has overloads for wide
-    // strings.
-    return base::FilePath(
-        base::StringPrintf(FILE_PATH_LITERAL("version_%d.sql"), version_id));
+    return base::FilePath::FromASCII(
+        base::StrCat({"version_", base::NumberToString(version_id), ".sql"}));
   }
 
   std::string GetCurrentSchema() {
@@ -89,7 +92,7 @@ class AttributionStorageSqlMigrationsTest : public testing::Test {
   // successfully, false otherwise.
   bool GetDatabaseData(const base::FilePath& file, std::string* contents) {
     base::FilePath source_path;
-    base::PathService::Get(base::DIR_SOURCE_ROOT, &source_path);
+    base::PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, &source_path);
     source_path = source_path.AppendASCII(
         "content/test/data/attribution_reporting/databases");
     source_path = source_path.Append(file);
@@ -360,7 +363,11 @@ TEST_F(AttributionStorageSqlMigrationsTest, MigrateVersion55ToCurrent) {
     ASSERT_TRUE(s.Step());
     proto::AttributionReadOnlySourceData msg;
     ASSERT_TRUE(msg.ParseFromString(s.ColumnString(0)));
-    ASSERT_EQ(3, msg.max_event_level_reports());
+    EXPECT_EQ(3, msg.max_event_level_reports());
+    EXPECT_FALSE(msg.has_randomized_response_rate());
+    EXPECT_EQ(0, msg.event_level_report_window_start_time());
+    EXPECT_THAT(msg.event_level_report_window_end_times(),
+                ElementsAre(base::Hours(1).InMicroseconds()));
     ASSERT_FALSE(s.Step());
   }
 

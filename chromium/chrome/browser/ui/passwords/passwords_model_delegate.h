@@ -57,8 +57,8 @@ class PasswordsModelDelegate {
   virtual password_manager::ui::State GetState() const = 0;
 
   // Returns the pending password in PENDING_PASSWORD_STATE and
-  // PENDING_PASSWORD_UPDATE_STATE, the saved password in CONFIRMATION_STATE,
-  // the returned credential in AUTO_SIGNIN_STATE.
+  // PENDING_PASSWORD_UPDATE_STATE, the saved password in
+  // SAVE_CONFIRMATION_STATE, the returned credential in AUTO_SIGNIN_STATE.
   virtual const password_manager::PasswordForm& GetPendingPassword() const = 0;
 
   // Returns unsynced credentials being deleted upon signout.
@@ -187,6 +187,9 @@ class PasswordsModelDelegate {
   // Called when user clicked "No thanks" button on Biometric Authentication
   // before filling promo dialog.
   virtual void OnBiometricAuthBeforeFillingDeclined() = 0;
+
+  // Called when user clicked "Add username" button in AddUsername bubble.
+  virtual void OnAddUsernameSaveClicked(const std::u16string& username) = 0;
 
   // Called from the Save/Update bubble controller to decide whether or not we
   // should show the user the Chrome for iOS promo.

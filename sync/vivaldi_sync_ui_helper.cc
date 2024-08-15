@@ -7,7 +7,7 @@
 #include "base/base64.h"
 #include "components/os_crypt/sync/os_crypt.h"
 #include "components/prefs/pref_service.h"
-#include "components/sync/base/syncer_error.h"
+#include "components/sync/engine/syncer_error.h"
 #include "sync/vivaldi_sync_service_impl.h"
 #include "vivaldi/prefs/vivaldi_gen_pref_enums.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
@@ -46,61 +46,69 @@ VivaldiSyncUIHelper::CycleData VivaldiSyncUIHelper::GetCycleData() {
   }
 
   switch (cycle_snapshot.model_neutral_state()
-              .last_download_updates_result.value()) {
-    case syncer::SyncerError::UNSET:
-    case syncer::SyncerError::SYNCER_OK:
+              .last_download_updates_result.type()) {
+    case syncer::SyncerError::Type::kSuccess:
       cycle_data.download_updates_status = SUCCESS;
       break;
-    case syncer::SyncerError::SYNC_AUTH_ERROR:
-      cycle_data.download_updates_status = AUTH_ERROR;
+    case syncer::SyncerError::Type::kHttpError:
+      if (cycle_snapshot.model_neutral_state()
+              .last_download_updates_result.GetHttpErrorOrDie() ==
+          net::HTTP_UNAUTHORIZED) {
+        cycle_data.download_updates_status = AUTH_ERROR;
+      } else {
+        cycle_data.download_updates_status = SERVER_ERROR;
+      }
       break;
-    case syncer::SyncerError::SYNC_SERVER_ERROR:
-    case syncer::SyncerError::SERVER_RESPONSE_VALIDATION_FAILED:
-    case syncer::SyncerError::SERVER_RETURN_TRANSIENT_ERROR:
-      cycle_data.download_updates_status = SERVER_ERROR;
-      break;
-    case syncer::SyncerError::NETWORK_CONNECTION_UNAVAILABLE:
-    case syncer::SyncerError::NETWORK_IO_ERROR:
+    case syncer::SyncerError::Type::kNetworkError:
       cycle_data.download_updates_status = NETWORK_ERROR;
       break;
-    case syncer::SyncerError::SERVER_RETURN_THROTTLED:
-      cycle_data.download_updates_status = THROTTLED;
+    case syncer::SyncerError::Type::kProtocolError:
+      switch (cycle_snapshot.model_neutral_state()
+                  .last_download_updates_result.GetProtocolErrorOrDie()) {
+        case syncer::SyncProtocolErrorType::THROTTLED:
+          cycle_data.download_updates_status = THROTTLED;
+          break;
+        default:
+          cycle_data.download_updates_status = OTHER_ERROR;
+      }
       break;
-    default:
-      // These errors should not occur either because they do not make sense or
-      // are already covered elsewhere
+    case syncer::SyncerError::Type::kProtocolViolationError:
       cycle_data.download_updates_status = OTHER_ERROR;
+      break;
   }
 
-  switch (cycle_snapshot.model_neutral_state().commit_result.value()) {
-    case syncer::SyncerError::UNSET:
-    case syncer::SyncerError::SYNCER_OK:
+  switch (cycle_snapshot.model_neutral_state().commit_result.type()) {
+    case syncer::SyncerError::Type::kSuccess:
       if (cycle_data.download_updates_status != SUCCESS)
         cycle_data.commit_status = NOT_SYNCED;
       else
         cycle_data.commit_status = SUCCESS;
       break;
-    case syncer::SyncerError::SYNC_AUTH_ERROR:
-      cycle_data.commit_status = AUTH_ERROR;
+    case syncer::SyncerError::Type::kHttpError:
+      if (cycle_snapshot.model_neutral_state()
+              .commit_result.GetHttpErrorOrDie() == net::HTTP_UNAUTHORIZED) {
+        cycle_data.commit_status = AUTH_ERROR;
+      } else {
+        cycle_data.commit_status = SERVER_ERROR;
+      }
       break;
-    case syncer::SyncerError::SYNC_SERVER_ERROR:
-    case syncer::SyncerError::SERVER_RESPONSE_VALIDATION_FAILED:
-    case syncer::SyncerError::SERVER_RETURN_TRANSIENT_ERROR:
-      cycle_data.commit_status = SERVER_ERROR;
-      break;
-    case syncer::SyncerError::NETWORK_CONNECTION_UNAVAILABLE:
-    case syncer::SyncerError::NETWORK_IO_ERROR:
+    case syncer::SyncerError::Type::kNetworkError:
       cycle_data.commit_status = NETWORK_ERROR;
       break;
-    case syncer::SyncerError::SERVER_RETURN_CONFLICT:
-      cycle_data.commit_status = CONFLICT;
+    case syncer::SyncerError::Type::kProtocolError:
+      switch (cycle_snapshot.model_neutral_state()
+                  .commit_result.GetProtocolErrorOrDie()) {
+        case syncer::SyncProtocolErrorType::THROTTLED:
+          cycle_data.commit_status = THROTTLED;
+          break;
+        case syncer::SyncProtocolErrorType::CONFLICT:
+          cycle_data.commit_status = CONFLICT;
+          break;
+        default:
+          cycle_data.commit_status = OTHER_ERROR;
+      }
       break;
-    case syncer::SyncerError::SERVER_RETURN_THROTTLED:
-      cycle_data.commit_status = THROTTLED;
-      break;
-    default:
-      // These errors should not occur either because they do not make sense or
-      // are already covered elsewhere
+    case syncer::SyncerError::Type::kProtocolViolationError:
       cycle_data.commit_status = OTHER_ERROR;
   }
 

@@ -108,9 +108,12 @@ class CORE_EXPORT HTMLInputElement
   // Returns true if the type is email, number, password, search, tel, text,
   // or url.
   bool IsTextField() const;
+  bool IsTelephone() const;
+  // To override from TextControlElement
+  bool ShouldAutoDirUseValue() const final;
   // Do not add type check predicates for concrete input types; e.g.  isImage,
   // isRadio, isFile.  If you want to check the input type, you may use
-  // |input->type() == input_type_names::kImage|, etc.
+  // |input->FormControlType() == FormControlType::kInputImage|, etc.
 
   // Returns whether this field is or has ever been a password field, or if
   // autofill classified the field as password by predictions, so that its value
@@ -334,6 +337,12 @@ class CORE_EXPORT HTMLInputElement
   bool ShouldDrawCapsLockIndicator() const;
   void SetShouldRevealPassword(bool value);
   bool ShouldRevealPassword() const { return should_reveal_password_; }
+  void SetShouldShowStrongPasswordLabel(bool value) {
+    should_show_strong_password_label_ = value;
+  }
+  bool ShouldShowStrongPasswordLabel() const {
+    return should_show_strong_password_label_;
+  }
 #if BUILDFLAG(IS_ANDROID)
   bool IsLastInputElementInForm();
   void DispatchSimulatedEnter();
@@ -361,6 +370,7 @@ class CORE_EXPORT HTMLInputElement
 
   bool IsDraggedSlider() const;
 
+  mojom::blink::FormControlType FormControlType() const final;
   FormElementPiiType GetFormElementPiiType() const override {
     return form_element_pii_type_;
   }
@@ -402,7 +412,7 @@ class CORE_EXPORT HTMLInputElement
 
   bool CanTriggerImplicitSubmission() const final { return IsTextField(); }
 
-  const AtomicString& FormControlType() const final;
+  const AtomicString& FormControlTypeAsString() const override;
 
   bool ShouldSaveAndRestoreFormControlState() const final;
   FormControlState SaveFormControlState() const final;
@@ -436,7 +446,6 @@ class CORE_EXPORT HTMLInputElement
 
   bool IsURLAttribute(const Attribute&) const final;
   bool HasLegalLinkAttribute(const QualifiedName&) const final;
-  const QualifiedName& SubResourceAttributeName() const final;
   bool IsInRange() const final;
   bool IsOutOfRange() const final;
 
@@ -445,7 +454,6 @@ class CORE_EXPORT HTMLInputElement
 
   TextControlInnerEditorElement* EnsureInnerEditorElement() const final;
   void UpdatePlaceholderText() final;
-  bool IsEmptyValue() const final { return InnerEditorValue().empty(); }
   void HandleBlurEvent() final;
   void DispatchFocusInEvent(const AtomicString& event_type,
                             Element* old_focused_element,
@@ -468,6 +476,8 @@ class CORE_EXPORT HTMLInputElement
 
   void AddToRadioButtonGroup();
   void RemoveFromRadioButtonGroup();
+  const ComputedStyle* CustomStyleForLayoutObject(
+      const StyleRecalcContext&) override;
   void AdjustStyle(ComputedStyleBuilder&) override;
 
   void MaybeReportPiiMetrics();
@@ -493,6 +503,7 @@ class CORE_EXPORT HTMLInputElement
   unsigned needs_to_update_view_value_ : 1;
   unsigned is_placeholder_visible_ : 1;
   unsigned has_been_password_field_ : 1;
+  unsigned should_show_strong_password_label_ : 1;
   Member<InputType> input_type_;
   Member<InputTypeView> input_type_view_;
   // The ImageLoader must be owned by this element because the loader code

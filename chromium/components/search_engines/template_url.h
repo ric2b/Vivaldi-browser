@@ -293,8 +293,6 @@ class TemplateURLRef {
 
     // The target locale used for image translations.
     std::string image_translate_target_locale;
-
-    absl::optional<std::bitset<3>> vivaldi_ad_blocking_state;
   };
 
   TemplateURLRef(const TemplateURL* owner, Type type);

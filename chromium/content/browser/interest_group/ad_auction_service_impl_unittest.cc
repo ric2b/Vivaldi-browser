@@ -5,6 +5,7 @@
 #include "content/browser/interest_group/ad_auction_service_impl.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -14,8 +15,8 @@
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
-#include "base/feature_list.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
@@ -35,6 +36,8 @@
 #include "base/uuid.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
+#include "components/aggregation_service/aggregation_coordinator_utils.h"
+#include "components/aggregation_service/features.h"
 #include "components/cbor/diagnostic_writer.h"
 #include "components/cbor/reader.h"
 #include "components/services/storage/shared_storage/shared_storage_manager.h"
@@ -42,16 +45,19 @@
 #include "content/browser/fenced_frame/fenced_frame_url_mapping.h"
 #include "content/browser/interest_group/ad_auction_page_data.h"
 #include "content/browser/interest_group/auction_process_manager.h"
+#include "content/browser/interest_group/interest_group_caching_storage.h"
 #include "content/browser/interest_group/interest_group_manager_impl.h"
 #include "content/browser/interest_group/interest_group_storage.h"
+#include "content/browser/interest_group/storage_interest_group.h"
+#include "content/browser/private_aggregation/private_aggregation_budgeter.h"
 #include "content/browser/private_aggregation/private_aggregation_manager_impl.h"
 #include "content/browser/private_aggregation/private_aggregation_test_utils.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/storage_partition_impl.h"
+#include "content/common/features.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/privacy_sandbox_invoking_api.h"
 #include "content/public/common/content_client.h"
-#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_renderer_host.h"
@@ -65,6 +71,8 @@
 #include "content/test/test_content_browser_client.h"
 #include "crypto/sha2.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/public/cpp/test_support/test_utils.h"
+#include "net/base/isolation_info.h"
 #include "net/third_party/quiche/src/quiche/oblivious_http/oblivious_http_gateway.h"
 #include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -129,17 +137,6 @@ const uint8_t kTestPublicKey[] = {
     0x7d, 0x50, 0xa5, 0x8b, 0x01, 0x68, 0x3e, 0x60, 0x05, 0x2d,
 };
 
-constexpr blink::InterestGroup::AdditionalBidKey kAdditionalBidKey1 = {
-    0x7d, 0x4d, 0x0e, 0x7f, 0x61, 0x53, 0xa6, 0x9b, 0x62, 0x42, 0xb5,
-    0x22, 0xab, 0xbe, 0xe6, 0x85, 0xfd, 0xa4, 0x42, 0x0f, 0x88, 0x34,
-    0xb1, 0x08, 0xc3, 0xbd, 0xae, 0x36, 0x9e, 0xf5, 0x49, 0xfa};
-constexpr blink::InterestGroup::AdditionalBidKey kAdditionalBidKey2 = {
-    0x10, 0x0f, 0xdf, 0x47, 0xfb, 0x94, 0xf1, 0x53, 0x6a, 0x4f, 0x7c,
-    0x3f, 0xda, 0x27, 0x38, 0x3f, 0xa0, 0x33, 0x75, 0xa8, 0xf5, 0x27,
-    0xc5, 0x37, 0xe6, 0xf1, 0x70, 0x3c, 0x47, 0xf9, 0x4f, 0x86};
-constexpr char kAdditionalBidKey2Base64[] =
-    "EA/fR/uU8VNqT3w/2ic4P6Azdaj1J8U35vFwPEf5T4Y=";
-
 // Returns a basic bidder script that sends reports to
 // kOriginStringA/report_bidder.
 std::string BasicBiddingReportScript() {
@@ -200,7 +197,8 @@ class AllowInterestGroupContentBrowserClient : public TestContentBrowserClient {
 
     // Can join A interest groups on A top frames, B interest groups on B top
     // frames, C interest groups on C top frames, C interest groups on A top
-    // frames, and no.update.test interest groups on no.update.test top frames.
+    // frames, C interest groups on D top frames, and no.update.test interest
+    // groups on no.update.test top frames.
     return (top_frame_origin.host() == "a.test" &&
             api_origin.host() == "a.test") ||
            (top_frame_origin.host() == "b.test" &&
@@ -208,6 +206,8 @@ class AllowInterestGroupContentBrowserClient : public TestContentBrowserClient {
            (top_frame_origin.host() == "c.test" &&
             api_origin.host() == "c.test") ||
            (top_frame_origin.host() == "a.test" &&
+            api_origin.host() == "c.test") ||
+           (top_frame_origin.host() == "d.test" &&
             api_origin.host() == "c.test") ||
            (top_frame_origin.host() == "no.update.test" &&
             api_origin.host() == "no.update.test");
@@ -220,7 +220,8 @@ class AllowInterestGroupContentBrowserClient : public TestContentBrowserClient {
   bool IsPrivacySandboxReportingDestinationAttested(
       content::BrowserContext* browser_context,
       const url::Origin& destination_origin,
-      content::PrivacySandboxInvokingAPI invoking_api) override {
+      content::PrivacySandboxInvokingAPI invoking_api,
+      bool post_impression_reporting) override {
     if (!allow_list_) {
       return true;
     }
@@ -236,16 +237,16 @@ class AllowInterestGroupContentBrowserClient : public TestContentBrowserClient {
 constexpr char kFledgeUpdateHeaders[] =
     "HTTP/1.1 200 OK\n"
     "Content-type: Application/JSON\n"
-    "X-Allow-FLEDGE: true\n";
+    "Ad-Auction-Allowed: true\n";
 
 constexpr char kFledgeScriptHeaders[] =
     "HTTP/1.1 200 OK\n"
     "Content-type: Application/Javascript\n"
-    "X-Allow-FLEDGE: true\n";
+    "Ad-Auction-Allowed: true\n";
 
 constexpr char kFledgeReportHeaders[] =
     "HTTP/1.1 200 OK\n"
-    "X-Allow-FLEDGE: true\n";
+    "Ad-Auction-Allowed: true\n";
 
 // Allows registering network responses to update and scoring / bidding script
 // requests; *must* be destroyed before the task environment is shutdown (which
@@ -256,8 +257,11 @@ constexpr char kFledgeReportHeaders[] =
 // own URLLoaderInterceptor...so these are combined in this same class.
 class NetworkResponder {
  public:
-  // Register interest group update `response` to be served with JSON content
-  // type when a request to `url_path` is made.
+  using NetCallback =
+      base::RepeatingCallback<void(URLLoaderInterceptor::RequestParams*)>;
+
+  // Register interest group update `response` to be served with JSON
+  // content type when a request to `url_path` is made.
   void RegisterUpdateResponse(const std::string& url_path,
                               const std::string& response) {
     base::AutoLock auto_lock(lock_);
@@ -278,6 +282,14 @@ class NetworkResponder {
                               const std::string& response) {
     base::AutoLock auto_lock(lock_);
     report_map_[url_path] = response;
+  }
+
+  // Register a repeat callback to be served when a request to `url_path` is
+  // made.
+  void RegisterRepeatCallback(const std::string& url_path,
+                              const NetCallback callback) {
+    base::AutoLock auto_lock(lock_);
+    net_callback_map_[url_path] = callback;
   }
 
   // Registers a URL to use a "deferred" script response. For a deferred
@@ -407,8 +419,14 @@ class NetworkResponder {
  private:
   bool RequestHandler(URLLoaderInterceptor::RequestParams* params) {
     base::AutoLock auto_lock(lock_);
+    // Check if there is a registered repeat callback.
+    const auto callback_it =
+        net_callback_map_.find(params->url_request.url.path());
+    if (callback_it != net_callback_map_.end()) {
+      callback_it->second.Run(params);
+    }
 
-    // Check deferred responses map first.
+    // Check deferred responses map.
     const auto deferred_it =
         deferred_responses_map_.find(params->url_request.url.path());
     if (deferred_it != deferred_responses_map_.end()) {
@@ -550,6 +568,10 @@ class NetworkResponder {
 
   // Like `json_update_map_`, but for reporting requests.
   base::flat_map<std::string, std::string> report_map_ GUARDED_BY(lock_);
+
+  // Like `json_update_map_`, but for registered callbacks that will be given
+  // the `URLLoaderInterceptor::RequestParams*`.
+  base::flat_map<std::string, NetCallback> net_callback_map_ GUARDED_BY(lock_);
 
   // Only saves reporting requests that auctually received responses.
   std::vector<std::string> sent_reports_ GUARDED_BY(lock_);
@@ -699,10 +721,13 @@ class AdAuctionServiceImplTest : public RenderViewHostTestHarness {
       : RenderViewHostTestHarness(
             base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
     feature_list_.InitWithFeatures(
-        /*enabled_features=*/{blink::features::kInterestGroupStorage,
-                              blink::features::kAdInterestGroupAPI,
-                              blink::features::kFledge,
-                              blink::features::kFledgeNegativeTargeting},
+        /*enabled_features=*/
+        {blink::features::kInterestGroupStorage,
+         blink::features::kAdInterestGroupAPI, blink::features::kFledge,
+         blink::features::kFledgeClearOriginJoinedAdInterestGroups,
+         blink::features::kFledgeNegativeTargeting,
+         blink::features::kPrivateAggregationApiMultipleCloudProviders,
+         aggregation_service::kAggregationServiceMultipleCloudProviders},
         /*disabled_features=*/{});
     fenced_frame_feature_list_.InitAndEnableFeatureWithParameters(
         blink::features::kFencedFrames, {{"implementation_type", "mparch"}});
@@ -736,17 +761,18 @@ class AdAuctionServiceImplTest : public RenderViewHostTestHarness {
     // which gets destroyed by RenderViewHostTestHarness::TearDown(), is still
     // active.
     network_responder_.reset();
+    manager_ = nullptr;  // avoid dangling.
     RenderViewHostTestHarness::TearDown();
   }
 
-  std::vector<StorageInterestGroup> GetInterestGroupsForOwner(
+  scoped_refptr<StorageInterestGroups> GetInterestGroupsForOwner(
       const url::Origin& owner) {
-    std::vector<StorageInterestGroup> interest_groups;
+    scoped_refptr<StorageInterestGroups> interest_groups;
     base::RunLoop run_loop;
     manager_->GetInterestGroupsForOwner(
         owner, base::BindLambdaForTesting(
                    [&run_loop, &interest_groups](
-                       std::vector<StorageInterestGroup> groups) {
+                       scoped_refptr<StorageInterestGroups> groups) {
                      interest_groups = std::move(groups);
                      run_loop.Quit();
                    }));
@@ -755,31 +781,35 @@ class AdAuctionServiceImplTest : public RenderViewHostTestHarness {
   }
 
   // Returns the specified interest group, if it exists.
-  absl::optional<StorageInterestGroup> GetInterestGroup(
+  std::optional<SingleStorageInterestGroup> GetInterestGroup(
       const url::Origin& owner,
       const std::string& name) {
-    for (auto& interest_group : GetInterestGroupsForOwner(owner)) {
-      if (interest_group.interest_group.name == name) {
-        return std::move(interest_group);
+    scoped_refptr<StorageInterestGroups> igs = GetInterestGroupsForOwner(owner);
+    for (const SingleStorageInterestGroup& interest_group :
+         igs->GetInterestGroups()) {
+      if (interest_group->interest_group.name == name) {
+        return interest_group;
       }
     }
     return absl::nullopt;
   }
 
   int GetJoinCount(const url::Origin& owner, const std::string& name) {
-    auto interest_group = GetInterestGroup(owner, name);
+    std::optional<SingleStorageInterestGroup> interest_group(
+        GetInterestGroup(owner, name));
     if (!interest_group) {
       return 0;
     }
-    return interest_group->bidding_browser_signals->join_count;
+    return interest_group.value()->bidding_browser_signals->join_count;
   }
 
   double GetPriority(const url::Origin& owner, const std::string& name) {
-    auto interest_group = GetInterestGroup(owner, name);
+    std::optional<SingleStorageInterestGroup> interest_group(
+        GetInterestGroup(owner, name));
     if (!interest_group) {
       return 0;
     }
-    return interest_group->interest_group.priority;
+    return interest_group.value()->interest_group.priority;
   }
 
   // Retrieves the FencedFrameProperties for the specified URN from the main
@@ -836,23 +866,26 @@ class AdAuctionServiceImplTest : public RenderViewHostTestHarness {
     run_loop.Run();
 
     // Pipe should not have been closed - if it is expected to be closed, use
-    // JoinInterestGroupAndExpectPipeClosed().
+    // JoinInterestGroupAndExpectBadMessage().
     EXPECT_TRUE(interest_service.is_bound());
     EXPECT_TRUE(interest_service.is_connected());
   }
 
-  // Attempt to join an interest group and expect the Mojo pipe to be closed.
-  // This happens when an operation should have been rejected in the renderer,
-  // so should only happen if the renderer has been compromised.
+  // Attempts to join an interest group and expects the pipe to be closed and
+  // the passed in bad message Mojo error to be recorded. This happens when an
+  // operation should have been rejected in the renderer, so should only happen
+  // if the renderer has been compromised.
   //
   // If `rfh` is nullptr, uses the main frame.
-  void JoinInterestGroupAndExpectPipeClosed(
+  void JoinInterestGroupAndExpectBadMessage(
       const blink::InterestGroup& interest_group,
+      base::StringPiece expected_bad_message,
       RenderFrameHost* rfh = nullptr) {
     mojo::Remote<blink::mojom::AdAuctionService> interest_service;
     AdAuctionServiceImpl::CreateMojoService(
         rfh ? rfh : main_rfh(), interest_service.BindNewPipeAndPassReceiver());
 
+    mojo::test::BadMessageObserver observer;
     base::RunLoop run_loop;
     interest_service.set_disconnect_handler(run_loop.QuitClosure());
     interest_service->JoinInterestGroup(
@@ -860,6 +893,7 @@ class AdAuctionServiceImplTest : public RenderViewHostTestHarness {
           ADD_FAILURE() << "This callback should not be invoked.";
         }));
     run_loop.Run();
+    EXPECT_EQ(expected_bad_message, observer.WaitForBadMessage());
   }
 
   // Analogous to JoinInterestGroupAndFlush(), but leaves an interest
@@ -879,20 +913,23 @@ class AdAuctionServiceImplTest : public RenderViewHostTestHarness {
     run_loop.Run();
 
     // Pipe should not have been closed - if it is expected to be closed, use
-    // LeaveInterestGroupAndExpectPipeClosed().
+    // LeaveInterestGroupAndExpectBadMessage().
     EXPECT_TRUE(interest_service.is_bound());
     EXPECT_TRUE(interest_service.is_connected());
   }
 
-  // Analogous to JoinInterestGroupAndExpectPipeClosed(), but leaves an interest
+  // Analogous to JoinInterestGroupAndExpectBadMessage(), but leaves an interest
   // group instead of joining one.
-  void LeaveInterestGroupAndExpectPipeClosed(const url::Origin& owner,
-                                             const std::string& name,
-                                             RenderFrameHost* rfh = nullptr) {
+  void LeaveInterestGroupAndExpectBadMessage(
+      const url::Origin& owner,
+      const std::string& name,
+      base::StringPiece expected_bad_message,
+      RenderFrameHost* rfh = nullptr) {
     mojo::Remote<blink::mojom::AdAuctionService> interest_service;
     AdAuctionServiceImpl::CreateMojoService(
         rfh ? rfh : main_rfh(), interest_service.BindNewPipeAndPassReceiver());
 
+    mojo::test::BadMessageObserver observer;
     base::RunLoop run_loop;
     interest_service.set_disconnect_handler(run_loop.QuitClosure());
     interest_service->LeaveInterestGroup(
@@ -900,6 +937,30 @@ class AdAuctionServiceImplTest : public RenderViewHostTestHarness {
           ADD_FAILURE() << "This callback should not be invoked.";
         }));
     run_loop.Run();
+    EXPECT_EQ(expected_bad_message, observer.WaitForBadMessage());
+  }
+
+  // Calls ClearOriginJoinedInterestGroups() with the provided parameters, and
+  // expects the pipe to be closed and the passed in bad message Mojo error to
+  // be recorded.
+  void ClearOriginJoinedInterestGroupsAndExpectBadMessage(
+      const url::Origin& owner,
+      const base::StringPiece expected_bad_message,
+      RenderFrameHost* rfh = nullptr) {
+    mojo::Remote<blink::mojom::AdAuctionService> interest_service;
+    AdAuctionServiceImpl::CreateMojoService(
+        rfh ? rfh : main_rfh(), interest_service.BindNewPipeAndPassReceiver());
+
+    mojo::test::BadMessageObserver observer;
+    base::RunLoop run_loop;
+    interest_service.set_disconnect_handler(run_loop.QuitClosure());
+    interest_service->ClearOriginJoinedInterestGroups(
+        owner, /*interest_groups_to_keep=*/{},
+        base::BindOnce([](bool failed_well_known_check) {
+          ADD_FAILURE() << "This callback should not be invoked.";
+        }));
+    run_loop.Run();
+    EXPECT_EQ(expected_bad_message, observer.WaitForBadMessage());
   }
 
   // Updates registered interest groups according to their registered update
@@ -952,10 +1013,10 @@ class AdAuctionServiceImplTest : public RenderViewHostTestHarness {
         auction_config, mojo::NullReceiver(),
         base::BindLambdaForTesting(
             [&run_loop, &maybe_config](
-                bool manually_aborted,
+                bool aborted_by_script,
                 const absl::optional<
                     blink::FencedFrame::RedactedFencedFrameConfig>& config) {
-              EXPECT_FALSE(manually_aborted);
+              EXPECT_FALSE(aborted_by_script);
               maybe_config = config;
               run_loop.Quit();
             }));
@@ -1062,7 +1123,7 @@ class AdAuctionServiceImplTest : public RenderViewHostTestHarness {
   AllowInterestGroupContentBrowserClient content_browser_client_;
   TestKAnonymityServiceDelegate k_anon_delegate_;
   raw_ptr<ContentBrowserClient> old_content_browser_client_ = nullptr;
-  raw_ptr<InterestGroupManagerImpl, AcrossTasksDanglingUntriaged> manager_;
+  raw_ptr<InterestGroupManagerImpl> manager_;
   data_decoder::test::InProcessDataDecoder in_process_data_decoder_;
 
   // Must be destroyed before RenderViewHostTestHarness::TearDown().
@@ -1097,12 +1158,18 @@ TEST_F(AdAuctionServiceImplTest, JoinInterestGroupFrameNotHttps) {
 
   // Try to join an HTTPS interest group.
   blink::InterestGroup interest_group = CreateInterestGroup();
-  JoinInterestGroupAndExpectPipeClosed(interest_group);
+  JoinInterestGroupAndExpectBadMessage(
+      interest_group,
+      "Unexpected request: Interest groups may only be joined or left from "
+      "https origins");
   EXPECT_EQ(0, GetJoinCount(interest_group.owner, kInterestGroupName));
 
   // Try to join a same-origin HTTP interest group.
   interest_group.owner = kHttpOriginA;
-  JoinInterestGroupAndExpectPipeClosed(interest_group);
+  JoinInterestGroupAndExpectBadMessage(
+      interest_group,
+      "Validation failed for blink.mojom.AdAuctionService.4  "
+      "[VALIDATION_ERROR_DESERIALIZATION_FAILED]");
   EXPECT_EQ(0, GetJoinCount(kHttpOriginA, kInterestGroupName));
 }
 
@@ -1110,12 +1177,18 @@ TEST_F(AdAuctionServiceImplTest, JoinInterestGroupFrameNotHttps) {
 TEST_F(AdAuctionServiceImplTest, JoinInterestGroupOwnerNotHttps) {
   blink::InterestGroup interest_group = CreateInterestGroup();
   interest_group.owner = url::Origin::Create(GURL("http://a.test/"));
-  JoinInterestGroupAndExpectPipeClosed(interest_group);
+  JoinInterestGroupAndExpectBadMessage(
+      interest_group,
+      "Validation failed for blink.mojom.AdAuctionService.4  "
+      "[VALIDATION_ERROR_DESERIALIZATION_FAILED]");
   EXPECT_EQ(0, GetJoinCount(interest_group.owner, kInterestGroupName));
 
   // Secure, but not HTTPS.
   interest_group.owner = url::Origin::Create(GURL("wss://a.test/"));
-  JoinInterestGroupAndExpectPipeClosed(interest_group);
+  JoinInterestGroupAndExpectBadMessage(
+      interest_group,
+      "Validation failed for blink.mojom.AdAuctionService.4  "
+      "[VALIDATION_ERROR_DESERIALIZATION_FAILED]");
   EXPECT_EQ(0, GetJoinCount(interest_group.owner, kInterestGroupName));
 }
 
@@ -1128,19 +1201,28 @@ TEST_F(AdAuctionServiceImplTest, JoinInterestGroupDisallowedUrls) {
   // Test `bidding_url`.
   blink::InterestGroup interest_group = CreateInterestGroup();
   interest_group.bidding_url = kBadUrl;
-  JoinInterestGroupAndExpectPipeClosed(interest_group);
+  JoinInterestGroupAndExpectBadMessage(
+      interest_group,
+      "Validation failed for blink.mojom.AdAuctionService.4  "
+      "[VALIDATION_ERROR_DESERIALIZATION_FAILED]");
   EXPECT_EQ(0, GetJoinCount(kOriginA, kInterestGroupName));
 
   // Test `update_url`.
   interest_group = CreateInterestGroup();
   interest_group.update_url = kBadUrl;
-  JoinInterestGroupAndExpectPipeClosed(interest_group);
+  JoinInterestGroupAndExpectBadMessage(
+      interest_group,
+      "Validation failed for blink.mojom.AdAuctionService.4  "
+      "[VALIDATION_ERROR_DESERIALIZATION_FAILED]");
   EXPECT_EQ(0, GetJoinCount(kOriginA, kInterestGroupName));
 
   // Test `trusted_bidding_signals_url`.
   interest_group = CreateInterestGroup();
   interest_group.trusted_bidding_signals_url = kBadUrl;
-  JoinInterestGroupAndExpectPipeClosed(interest_group);
+  JoinInterestGroupAndExpectBadMessage(
+      interest_group,
+      "Validation failed for blink.mojom.AdAuctionService.4  "
+      "[VALIDATION_ERROR_DESERIALIZATION_FAILED]");
   EXPECT_EQ(0, GetJoinCount(kOriginA, kInterestGroupName));
 }
 
@@ -1164,8 +1246,8 @@ TEST_F(AdAuctionServiceImplTest,
   JoinInterestGroupAndFlush(interest_group);
   EXPECT_EQ(1, GetJoinCount(kOriginA, kInterestGroupName));
   auto groups = GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  auto group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  auto group = groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group.ads.has_value());
   ASSERT_EQ(group.ads->size(), 1u);
   absl::optional<std::vector<int>> x = {{1, 2, 3}};
@@ -1205,17 +1287,35 @@ TEST_F(AdAuctionServiceImplTest, JoinMassiveInterestGroupFails) {
   blink::InterestGroup interest_group = CreateInterestGroup();
   // 1 MiB of '5' characters is over the size limit.
   interest_group.user_bidding_signals = std::string(1024 * 1024, '5');
-  JoinInterestGroupAndExpectPipeClosed(interest_group);
+  JoinInterestGroupAndExpectBadMessage(
+      interest_group,
+      "Validation failed for blink.mojom.AdAuctionService.4  "
+      "[VALIDATION_ERROR_DESERIALIZATION_FAILED]");
 
   EXPECT_EQ(0, GetJoinCount(kOriginA, kInterestGroupName));
-  std::vector<StorageInterestGroup> groups =
-      GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 0u);
+  auto groups = GetInterestGroupsForOwner(kOriginA);
+  ASSERT_EQ(groups->size(), 0u);
 }
 
-// Non-HTTPS interest groups should be rejected, and result in the pipe being
-// closed.
-TEST_F(AdAuctionServiceImplTest, LeaveInterestGroupOriginNotHttps) {
+// Trying to leave Non-HTTPS interest groups should not be possible, and result
+// in the pipe being closed. Can't check there's an HTTP group that isn't left,
+// since it should be impossible to join one in the first place.
+TEST_F(AdAuctionServiceImplTest, LeaveClearInterestGroupOriginNotHttps) {
+  const GURL kHttpUrl = GURL("http://a.test/");
+  const url::Origin kHttpOrigin = url::Origin::Create(kHttpUrl);
+
+  NavigateAndCommit(kUrlA);
+  LeaveInterestGroupAndExpectBadMessage(
+      kHttpOrigin, kInterestGroupName,
+      "Unexpected request: Interest groups may only be owned by https origins");
+  ClearOriginJoinedInterestGroupsAndExpectBadMessage(
+      kHttpOrigin,
+      "Unexpected request: Interest groups may only be owned by https origins");
+}
+
+// Non-HTTPS interest origins should not be able to leave groups should be
+// rejected, and result in the pipe being closed.
+TEST_F(AdAuctionServiceImplTest, LeaveClearInterestGroupFrameNotHttps) {
   const GURL kHttpUrl = GURL("http://a.test/");
   const url::Origin kHttpOrigin = url::Origin::Create(kHttpUrl);
 
@@ -1226,7 +1326,19 @@ TEST_F(AdAuctionServiceImplTest, LeaveInterestGroupOriginNotHttps) {
   // Navigate to an HTTP origin and try to leave a group with an HTTPS owner.
   // The request should be rejected.
   NavigateAndCommit(kHttpUrl);
-  LeaveInterestGroupAndExpectPipeClosed(kOriginA, kInterestGroupName);
+  LeaveInterestGroupAndExpectBadMessage(
+      kOriginA, kInterestGroupName,
+      "Unexpected request: Interest groups may only be joined or left from "
+      "https origins");
+  EXPECT_EQ(1, GetJoinCount(kOriginA, kInterestGroupName));
+
+  // Clearing shouldn't leave the IG, even if it's incorrectly executed, since
+  // the joining origin is wrong, but still make sure there's no effect, just in
+  // case.
+  ClearOriginJoinedInterestGroupsAndExpectBadMessage(
+      kOriginA,
+      "Unexpected request: Interest groups may only be joined or left from "
+      "https origins");
   EXPECT_EQ(1, GetJoinCount(kOriginA, kInterestGroupName));
 }
 
@@ -1238,32 +1350,45 @@ TEST_F(AdAuctionServiceImplTest, FixExpiryOnJoin) {
   // The expiry should be stored without modification.
   interest_group.expiry = base::Time::Now() + kMaxExpiry;
   JoinInterestGroupAndFlush(interest_group);
-  auto storage_interest_group = GetInterestGroup(kOriginA, kInterestGroupName);
-  ASSERT_TRUE(storage_interest_group);
-  EXPECT_EQ(1, storage_interest_group->bidding_browser_signals->join_count);
-  EXPECT_EQ(interest_group.expiry,
-            storage_interest_group->interest_group.expiry);
+  {
+    std::optional<SingleStorageInterestGroup> storage_interest_group(
+        GetInterestGroup(kOriginA, kInterestGroupName));
+    ASSERT_TRUE(storage_interest_group.has_value());
+    EXPECT_EQ(
+        1, storage_interest_group.value()->bidding_browser_signals->join_count);
+    EXPECT_EQ(interest_group.expiry,
+              storage_interest_group.value()->interest_group.expiry);
+  }
 
   // Rejoin the interest group with a short expiry. The expiry should also be
   // stored without modification.
   interest_group.expiry = base::Time::Now() + base::Days(1);
   JoinInterestGroupAndFlush(interest_group);
-  storage_interest_group = GetInterestGroup(kOriginA, kInterestGroupName);
-  ASSERT_TRUE(storage_interest_group);
-  EXPECT_EQ(2, storage_interest_group->bidding_browser_signals->join_count);
-  EXPECT_EQ(interest_group.expiry,
-            storage_interest_group->interest_group.expiry);
+  {
+    std::optional<SingleStorageInterestGroup> storage_interest_group(
+        GetInterestGroup(kOriginA, kInterestGroupName));
+    ASSERT_TRUE(storage_interest_group.has_value());
+    EXPECT_EQ(
+        2, storage_interest_group.value()->bidding_browser_signals->join_count);
+    EXPECT_EQ(interest_group.expiry,
+              storage_interest_group.value()->interest_group.expiry);
+  }
 
   // Rejoin the interest group with an expiry that exceeds the maximum allowed.
   // The expiry should be set to kMaxExpiry days from now.
   interest_group.expiry = base::Time::Now() + base::Days(300);
   JoinInterestGroupAndFlush(interest_group);
-  storage_interest_group = GetInterestGroup(kOriginA, kInterestGroupName);
-  ASSERT_TRUE(storage_interest_group);
-  EXPECT_EQ(3, storage_interest_group->bidding_browser_signals->join_count);
-  base::Time actual_expiry = storage_interest_group->interest_group.expiry;
-  EXPECT_EQ(base::Time::Now() + kMaxExpiry, actual_expiry);
-  EXPECT_NE(interest_group.expiry, actual_expiry);
+  {
+    std::optional<SingleStorageInterestGroup> storage_interest_group(
+        GetInterestGroup(kOriginA, kInterestGroupName));
+    ASSERT_TRUE(storage_interest_group.has_value());
+    EXPECT_EQ(
+        3, storage_interest_group.value()->bidding_browser_signals->join_count);
+    base::Time actual_expiry =
+        storage_interest_group.value()->interest_group.expiry;
+    EXPECT_EQ(base::Time::Now() + kMaxExpiry, actual_expiry);
+    EXPECT_NE(interest_group.expiry, actual_expiry);
+  }
 }
 
 // These tests validate the `updateURL` and navigator.updateAdInterestGroups()
@@ -1276,7 +1401,8 @@ TEST_F(AdAuctionServiceImplTest, UpdateAllUpdatableFields) {
   // supported.
   network_responder_->RegisterUpdateResponse(
       kUpdateUrlPath,
-      base::StringPrintf(R"({
+      base::StringPrintf(
+          R"({
 "priority": 1.59,
 "enableBiddingSignalsPrioritization": true,
 "priorityVector": {"old1": 2, "new1": 1.1},
@@ -1309,10 +1435,14 @@ TEST_F(AdAuctionServiceImplTest, UpdateAllUpdatableFields) {
                  }],
 "adSizes": {"size_new": {"width": "300px", "height": "150px"}},
 "sizeGroups": {"group_new": ["size_new"]},
-"auctionServerRequestFlags": ["omit-ads", "include-full-ads"]
+"auctionServerRequestFlags": ["omit-ads", "include-full-ads"],
+"privateAggregationConfig": {
+  "aggregationCoordinatorOrigin": "%s"
+}
 })",
-                         kOriginStringA, kOriginStringA, kOriginStringA,
-                         kOriginStringA, kOriginStringA, kOriginStringA));
+          kOriginStringA, kOriginStringA, kOriginStringA, kOriginStringA,
+          kOriginStringA, kOriginStringA,
+          aggregation_service::kDefaultAggregationCoordinatorAwsCloud));
 
   blink::InterestGroup interest_group = CreateInterestGroup();
   interest_group.priority = 2.0;
@@ -1363,10 +1493,9 @@ TEST_F(AdAuctionServiceImplTest, UpdateAllUpdatableFields) {
   UpdateInterestGroupNoFlush();
   task_environment()->RunUntilIdle();
 
-  std::vector<StorageInterestGroup> groups =
-      GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  auto groups = GetInterestGroupsForOwner(kOriginA);
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   EXPECT_EQ(group.name, kInterestGroupName);
   EXPECT_EQ(group.priority, 1.59);
   EXPECT_EQ(group.enable_bidding_signals_prioritization, true);
@@ -1453,29 +1582,9 @@ TEST_F(AdAuctionServiceImplTest, UpdateAllUpdatableFields) {
       blink::AuctionServerRequestFlagsEnum::kOmitAds));
   EXPECT_TRUE(group.auction_server_request_flags.Has(
       blink::AuctionServerRequestFlagsEnum::kIncludeFullAds));
-}
-
-// The server JSON updates additionalBidKey for negative interest groups.
-TEST_F(AdAuctionServiceImplTest, UpdateAdditionalBidKey) {
-  network_responder_->RegisterUpdateResponse(
-      kUpdateUrlPath, base::StringPrintf(R"({"additionalBidKey": "%s"})",
-                                         kAdditionalBidKey2Base64));
-
-  blink::InterestGroup interest_group = CreateInterestGroup();
-  interest_group.update_url = kUpdateUrlA;
-  interest_group.additional_bid_key = kAdditionalBidKey1;
-  JoinInterestGroupAndFlush(interest_group);
-  EXPECT_EQ(1, GetJoinCount(kOriginA, kInterestGroupName));
-
-  UpdateInterestGroupNoFlush();
-  task_environment()->RunUntilIdle();
-
-  std::vector<StorageInterestGroup> groups =
-      GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
-  EXPECT_EQ(group.name, kInterestGroupName);
-  EXPECT_EQ(*group.additional_bid_key, kAdditionalBidKey2);
+  EXPECT_EQ(
+      aggregation_service::kDefaultAggregationCoordinatorAwsCloud,
+      group.aggregation_coordinator_origin.value_or(url::Origin()).Serialize());
 }
 
 // Only set the ads field -- the other fields shouldn't be changed.
@@ -1506,10 +1615,10 @@ TEST_F(AdAuctionServiceImplTest, UpdatePartialPerformsMerge) {
   UpdateInterestGroupNoFlush();
   task_environment()->RunUntilIdle();
 
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   EXPECT_EQ(group.name, kInterestGroupName);
   EXPECT_EQ(group.priority, 2.0);
   ASSERT_TRUE(group.bidding_url.has_value());
@@ -1556,19 +1665,20 @@ TEST_F(AdAuctionServiceImplTest, UpdateDoesntChangeExpiration) {
   EXPECT_EQ(1, GetJoinCount(kOriginA, kInterestGroupName));
 
   // Lookup expiry from the database before updating.
-  const auto groups_before_update = GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups_before_update.size(), 1u);
+  scoped_refptr<StorageInterestGroups> groups_before_update =
+      GetInterestGroupsForOwner(kOriginA);
+  ASSERT_EQ(groups_before_update->size(), 1u);
   const base::Time kExpirationTime =
-      groups_before_update[0].interest_group.expiry;
+      groups_before_update->GetInterestGroups()[0]->interest_group.expiry;
 
   UpdateInterestGroupNoFlush();
   task_environment()->RunUntilIdle();
 
   // The expiration time shouldn't change.
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   EXPECT_EQ(group.name, kInterestGroupName);
   EXPECT_EQ(group.expiry, kExpirationTime);
   ASSERT_TRUE(group.ads.has_value());
@@ -1599,10 +1709,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateGroupWithNoAds) {
   UpdateInterestGroupNoFlush();
   task_environment()->RunUntilIdle();
 
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   EXPECT_EQ(group.name, kInterestGroupName);
   ASSERT_TRUE(group.bidding_url.has_value());
   EXPECT_EQ(
@@ -1652,10 +1762,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateSucceedsIfOptionalNameOwnerMatch) {
   UpdateInterestGroupNoFlush();
   task_environment()->RunUntilIdle();
 
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   EXPECT_EQ(group.name, kInterestGroupName);
   ASSERT_TRUE(group.bidding_url.has_value());
   EXPECT_EQ(
@@ -1711,10 +1821,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateIgnoresUnknownFields) {
   task_environment()->RunUntilIdle();
 
   // Check that the ad changed.
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group.ads.has_value());
   ASSERT_EQ(group.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -1752,10 +1862,10 @@ TEST_F(AdAuctionServiceImplTest, NoUpdateIfOptionalNameDoesntMatch) {
   task_environment()->RunUntilIdle();
 
   // Check that the ads didn't change.
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group.ads.has_value());
   ASSERT_EQ(group.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -1792,10 +1902,10 @@ TEST_F(AdAuctionServiceImplTest, NoUpdateIfOptionalOwnerDoesntMatch) {
   task_environment()->RunUntilIdle();
 
   // Check that the ads didn't change.
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group.ads.has_value());
   ASSERT_EQ(group.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -1837,10 +1947,11 @@ TEST_F(AdAuctionServiceImplTest, UpdatePriorityVector) {
   interest_group.expiry = base::Time::Now() + base::Days(30);
   JoinInterestGroupAndFlush(interest_group);
 
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  EXPECT_EQ(groups[0].interest_group.priority_vector, absl::nullopt);
+  ASSERT_EQ(groups->size(), 1u);
+  EXPECT_EQ(groups->GetInterestGroups()[0]->interest_group.priority_vector,
+            absl::nullopt);
 
   for (const auto& test_case : kTestCases) {
     SCOPED_TRACE(test_case.priority_vector_value);
@@ -1858,9 +1969,9 @@ TEST_F(AdAuctionServiceImplTest, UpdatePriorityVector) {
     task_environment()->RunUntilIdle();
 
     groups = GetInterestGroupsForOwner(kOriginA);
-    ASSERT_EQ(groups.size(), 1u);
-    EXPECT_EQ(groups[0].interest_group.priority_vector,
-              test_case.expected_priority_vector);
+    ASSERT_EQ(groups->size(), 1u);
+    const auto& group = groups->GetInterestGroups()[0]->interest_group;
+    EXPECT_EQ(group.priority_vector, test_case.expected_priority_vector);
   }
 }
 
@@ -1900,10 +2011,12 @@ TEST_F(AdAuctionServiceImplTest, UpdatePrioritySignalsOverrides) {
   interest_group.expiry = base::Time::Now() + base::Days(30);
   JoinInterestGroupAndFlush(interest_group);
 
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  EXPECT_EQ(groups[0].interest_group.priority_signals_overrides, absl::nullopt);
+  ASSERT_EQ(groups->size(), 1u);
+  EXPECT_EQ(
+      groups->GetInterestGroups()[0]->interest_group.priority_signals_overrides,
+      absl::nullopt);
 
   for (const auto& test_case : kTestCases) {
     SCOPED_TRACE(test_case.priority_signals_overrides_value);
@@ -1922,8 +2035,9 @@ TEST_F(AdAuctionServiceImplTest, UpdatePrioritySignalsOverrides) {
     task_environment()->RunUntilIdle();
 
     groups = GetInterestGroupsForOwner(kOriginA);
-    ASSERT_EQ(groups.size(), 1u);
-    EXPECT_EQ(groups[0].interest_group.priority_signals_overrides,
+    ASSERT_EQ(groups->size(), 1u);
+    EXPECT_EQ(groups->GetInterestGroups()[0]
+                  ->interest_group.priority_signals_overrides,
               test_case.expected_priority_signals_overrides);
   }
 }
@@ -1976,15 +2090,17 @@ TEST_F(AdAuctionServiceImplTest, UpdateMultipleInterestGroups) {
   task_environment()->RunUntilIdle();
 
   // Both interest groups should update.
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 2u);
-  const auto& first_group = groups[0].interest_group.name == kGroupName1
-                                ? groups[0].interest_group
-                                : groups[1].interest_group;
-  const auto& second_group = groups[0].interest_group.name == kGroupName2
-                                 ? groups[0].interest_group
-                                 : groups[1].interest_group;
+  ASSERT_EQ(groups->size(), 2u);
+  const auto& first_group =
+      groups->GetInterestGroups()[0]->interest_group.name == kGroupName1
+          ? groups->GetInterestGroups()[0]->interest_group
+          : groups->GetInterestGroups()[1]->interest_group;
+  const auto& second_group =
+      groups->GetInterestGroups()[0]->interest_group.name == kGroupName2
+          ? groups->GetInterestGroups()[0]->interest_group
+          : groups->GetInterestGroups()[1]->interest_group;
 
   EXPECT_EQ(first_group.name, kGroupName1);
   ASSERT_TRUE(first_group.ads.has_value());
@@ -1997,6 +2113,831 @@ TEST_F(AdAuctionServiceImplTest, UpdateMultipleInterestGroups) {
   ASSERT_EQ(second_group.ads->size(), 1u);
   EXPECT_EQ(second_group.ads.value()[0].render_url.spec(),
             "https://example.com/new_render2");
+}
+
+class AdAuctionServiceImplDifferentNIKDuringUpdateTest
+    : public AdAuctionServiceImplTest {
+ public:
+  AdAuctionServiceImplDifferentNIKDuringUpdateTest() {
+    feature_list_.InitAndEnableFeature(features::kGroupNIKByJoiningOrigin);
+  }
+
+ protected:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+// Join two interest groups with two different owners but one joining origin.
+// Check if they reuse same isolation info.
+TEST_F(AdAuctionServiceImplDifferentNIKDuringUpdateTest,
+       UpdateCheckNIKForTwoOwnersOneJoiningOrigin) {
+  constexpr char kGroupNameA[] = "groupA";
+  constexpr char kGroupNameC[] = "groupC";
+  net::IsolationInfo isolation_info1;
+  net::IsolationInfo isolation_info2;
+  base::RunLoop run_loop1;
+  base::RunLoop run_loop2;
+
+  network_responder_->RegisterRepeatCallback(
+      kUpdateUrlPath,
+      base::BindLambdaForTesting(
+          [&isolation_info1,
+           &run_loop1](URLLoaderInterceptor::RequestParams* params) {
+            if (params && params->url_request.trusted_params) {
+              isolation_info1 =
+                  params->url_request.trusted_params->isolation_info;
+            } else {
+              ADD_FAILURE() << "No params or trusted_params";
+            }
+            run_loop1.Quit();
+          }));
+  network_responder_->RegisterRepeatCallback(
+      kUpdateUrlPath2,
+      base::BindLambdaForTesting(
+          [&isolation_info2,
+           &run_loop2](URLLoaderInterceptor::RequestParams* params) {
+            if (params && params->url_request.trusted_params) {
+              isolation_info2 =
+                  params->url_request.trusted_params->isolation_info;
+            } else {
+              ADD_FAILURE() << "No params or trusted_params";
+            }
+            run_loop2.Quit();
+          }));
+  network_responder_->RegisterUpdateResponse(kUpdateUrlPath, R"({
+"ads": [{"renderURL": "https://example.com/new_render1"}]
+})");
+  network_responder_->RegisterUpdateResponse(kUpdateUrlPath2, R"({
+"ads": [{"renderURL": "https://example.com/new_render2"}]
+})");
+
+  // Navigate to top frame KUrlA.
+  NavigateAndCommit(kUrlA);
+  content::RenderFrameHostTester* rfh_tester =
+      content::RenderFrameHostTester::For(main_rfh());
+
+  // Attach a subframe with KUrlA to the top frame KUrlA.
+  // Create and update an interest group owned by kOriginA.
+  content::RenderFrameHost* subframeA = rfh_tester->AppendChild("subframeA");
+  subframeA =
+      NavigationSimulator::NavigateAndCommitFromDocument(kUrlA, subframeA);
+  blink::InterestGroup interest_group = CreateInterestGroup();
+  interest_group.name = kGroupNameA;
+  interest_group.update_url = kUrlA.Resolve(kUpdateUrlPath);
+  interest_group.bidding_url = kBiddingLogicUrlA;
+  interest_group.ads.emplace();
+  blink::InterestGroup::Ad ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group, subframeA);
+  EXPECT_EQ(1, GetJoinCount(kOriginA, kGroupNameA));
+  UpdateInterestGroupNoFlushForFrame(subframeA);
+
+  // Attach a subframe with KUrlC to the top frame KUrlA.
+  // Create and update an interest group owned by kOriginC.
+  content::RenderFrameHost* subframeC = rfh_tester->AppendChild("subframeC");
+  subframeC =
+      NavigationSimulator::NavigateAndCommitFromDocument(kUrlC, subframeC);
+  blink::InterestGroup interest_group_2 = CreateInterestGroup();
+  interest_group_2.name = kGroupNameC;
+  interest_group_2.owner = kOriginC;
+  interest_group_2.update_url = kUrlC.Resolve(kUpdateUrlPath2);
+  interest_group_2.bidding_url = kUrlC.Resolve(kBiddingUrlPath);
+  interest_group_2.ads.emplace();
+  ad = blink::InterestGroup::Ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group_2.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group_2, subframeC);
+  EXPECT_EQ(1, GetJoinCount(kOriginC, kGroupNameC));
+  UpdateInterestGroupNoFlushForFrame(subframeC);
+
+  run_loop1.Run();
+  run_loop2.Run();
+  task_environment()->RunUntilIdle();
+  ASSERT_TRUE(isolation_info1.IsEqualForTesting(isolation_info2));
+}
+
+// Join two interest groups with one owner but two different joining origins.
+// Check if they use different isolation info.
+TEST_F(AdAuctionServiceImplDifferentNIKDuringUpdateTest,
+       UpdateCheckNIKForOneOwnerTwoJoiningOrigins) {
+  constexpr char kGroupName1[] = "group1";
+  constexpr char kGroupName2[] = "group2";
+  net::IsolationInfo isolation_info1;
+  net::IsolationInfo isolation_info2;
+  base::RunLoop run_loop1;
+  base::RunLoop run_loop2;
+
+  network_responder_->RegisterRepeatCallback(
+      kUpdateUrlPath,
+      base::BindLambdaForTesting(
+          [&isolation_info1,
+           &run_loop1](URLLoaderInterceptor::RequestParams* params) {
+            if (params && params->url_request.trusted_params) {
+              isolation_info1 =
+                  params->url_request.trusted_params->isolation_info;
+            } else {
+              ADD_FAILURE() << "No params or trusted_params";
+            }
+            run_loop1.Quit();
+          }));
+  network_responder_->RegisterRepeatCallback(
+      kUpdateUrlPath2,
+      base::BindLambdaForTesting(
+          [&isolation_info2,
+           &run_loop2](URLLoaderInterceptor::RequestParams* params) {
+            if (params && params->url_request.trusted_params) {
+              isolation_info2 =
+                  params->url_request.trusted_params->isolation_info;
+            } else {
+              ADD_FAILURE() << "No params or trusted_params";
+            }
+            run_loop2.Quit();
+          }));
+  network_responder_->RegisterUpdateResponse(kUpdateUrlPath, R"({
+"ads": [{"renderURL": "https://example.com/new_render1"}]
+})");
+  network_responder_->RegisterUpdateResponse(kUpdateUrlPath2, R"({
+"ads": [{"renderURL": "https://example.com/new_render2"}]
+})");
+
+  // Navigate to top frame KUrlA.
+  NavigateAndCommit(kUrlA);
+  content::RenderFrameHostTester* rfh_tester_1 =
+      content::RenderFrameHostTester::For(main_rfh());
+
+  // Attach a subframe with KUrlC to the top frame KUrlA.
+  // Create and update an interest group owned by kOriginC.
+  content::RenderFrameHost* subframe_1 = rfh_tester_1->AppendChild("subframe1");
+  subframe_1 =
+      NavigationSimulator::NavigateAndCommitFromDocument(kUrlC, subframe_1);
+  blink::InterestGroup interest_group = CreateInterestGroup();
+  interest_group.name = kGroupName1;
+  interest_group.owner = kOriginC;
+  interest_group.update_url = kUrlC.Resolve(kUpdateUrlPath);
+  interest_group.bidding_url = kUrlC.Resolve(kBiddingUrlPath);
+  interest_group.ads.emplace();
+  blink::InterestGroup::Ad ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group, subframe_1);
+  EXPECT_EQ(1, GetJoinCount(kOriginC, kGroupName1));
+  UpdateInterestGroupNoFlushForFrame(subframe_1);
+
+  // Navigate to top frame kUrlC.
+  NavigateAndCommit(kUrlC);
+  content::RenderFrameHostTester* rfh_tester_2 =
+      content::RenderFrameHostTester::For(main_rfh());
+
+  // Attach a subframe with KUrlC to the top frame KUrlC.
+  // Create and update an interest group owned by kOriginC.
+  content::RenderFrameHost* subframe_2 = rfh_tester_2->AppendChild("subframe2");
+  subframe_2 =
+      NavigationSimulator::NavigateAndCommitFromDocument(kUrlC, subframe_2);
+  blink::InterestGroup interest_group_2 = CreateInterestGroup();
+  interest_group_2.name = kGroupName2;
+  interest_group_2.owner = kOriginC;
+  interest_group_2.update_url = kUrlC.Resolve(kUpdateUrlPath2);
+  interest_group_2.bidding_url = kUrlC.Resolve(kBiddingUrlPath);
+  interest_group_2.ads.emplace();
+  ad = blink::InterestGroup::Ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group_2.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group_2, subframe_2);
+  EXPECT_EQ(1, GetJoinCount(kOriginC, kGroupName2));
+  UpdateInterestGroupNoFlushForFrame(subframe_2);
+
+  run_loop1.Run();
+  run_loop2.Run();
+  ASSERT_FALSE(isolation_info1.IsEqualForTesting(isolation_info2));
+}
+
+// Join two interest groups with two different owners but one joining origin.
+// Ensure the second one join after all updating work completes and the queue is
+// popped empty. Check that the isolation info is different.
+TEST_F(AdAuctionServiceImplDifferentNIKDuringUpdateTest,
+       UpdatePopOwnerQueueToEmptyTriggerClearIsolationMap) {
+  constexpr char kGroupNameA[] = "groupA";
+  constexpr char kGroupNameC[] = "groupC";
+  net::IsolationInfo isolation_info1;
+  net::IsolationInfo isolation_info2;
+  base::RunLoop run_loop1;
+  base::RunLoop run_loop2;
+
+  network_responder_->RegisterRepeatCallback(
+      kUpdateUrlPath,
+      base::BindLambdaForTesting(
+          [&isolation_info1,
+           &run_loop1](URLLoaderInterceptor::RequestParams* params) {
+            if (params && params->url_request.trusted_params) {
+              isolation_info1 =
+                  params->url_request.trusted_params->isolation_info;
+            } else {
+              ADD_FAILURE() << "No params or trusted_params";
+            }
+            run_loop1.Quit();
+          }));
+  network_responder_->RegisterRepeatCallback(
+      kUpdateUrlPath2,
+      base::BindLambdaForTesting(
+          [&isolation_info2,
+           &run_loop2](URLLoaderInterceptor::RequestParams* params) {
+            if (params && params->url_request.trusted_params) {
+              isolation_info2 =
+                  params->url_request.trusted_params->isolation_info;
+            } else {
+              ADD_FAILURE() << "No params or trusted_params";
+            }
+            run_loop2.Quit();
+          }));
+  network_responder_->RegisterUpdateResponse(kUpdateUrlPath, R"({
+"ads": [{"renderURL": "https://example.com/new_render1"}]
+})");
+  network_responder_->RegisterUpdateResponse(kUpdateUrlPath2, R"({
+"ads": [{"renderURL": "https://example.com/new_render2"}]
+})");
+
+  // Navigate to top frame KUrlA.
+  NavigateAndCommit(kUrlA);
+  content::RenderFrameHostTester* rfh_tester =
+      content::RenderFrameHostTester::For(main_rfh());
+
+  // Attach a subframe with KUrlA to the top frame KUrlA.
+  // Create and update an interest group owned by kOriginA.
+  content::RenderFrameHost* subframeA = rfh_tester->AppendChild("subframeA");
+  subframeA =
+      NavigationSimulator::NavigateAndCommitFromDocument(kUrlA, subframeA);
+  blink::InterestGroup interest_group = CreateInterestGroup();
+  interest_group.name = kGroupNameA;
+  interest_group.update_url = kUrlA.Resolve(kUpdateUrlPath);
+  interest_group.bidding_url = kBiddingLogicUrlA;
+  interest_group.ads.emplace();
+  blink::InterestGroup::Ad ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group, subframeA);
+  EXPECT_EQ(1, GetJoinCount(kOriginA, kGroupNameA));
+  UpdateInterestGroupNoFlushForFrame(subframeA);
+  run_loop1.Run();
+
+  // Ensure the update process is done for the first interest group.
+  task_environment()->RunUntilIdle();
+
+  // Attach a subframe with KUrlC to the top frame KUrlA.
+  // Create and update an interest group owned by kOriginC.
+  content::RenderFrameHost* subframeC = rfh_tester->AppendChild("subframeC");
+  subframeC =
+      NavigationSimulator::NavigateAndCommitFromDocument(kUrlC, subframeC);
+  blink::InterestGroup interest_group_2 = CreateInterestGroup();
+  interest_group_2.name = kGroupNameC;
+  interest_group_2.owner = kOriginC;
+  interest_group_2.update_url = kUrlC.Resolve(kUpdateUrlPath2);
+  interest_group_2.bidding_url = kUrlC.Resolve(kBiddingUrlPath);
+  interest_group_2.ads.emplace();
+  ad = blink::InterestGroup::Ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group_2.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group_2, subframeC);
+  EXPECT_EQ(1, GetJoinCount(kOriginC, kGroupNameC));
+  UpdateInterestGroupNoFlushForFrame(subframeC);
+  run_loop2.Run();
+
+  ASSERT_FALSE(isolation_info1.IsEqualForTesting(isolation_info2));
+}
+
+// Join two interest groups with two different owners but one joining origin.
+// Ensure the owner queue gets cleared before the second interest group join.
+TEST_F(AdAuctionServiceImplDifferentNIKDuringUpdateTest,
+       UpdateClearOwnerQueueTriggerClearIsolationMap) {
+  constexpr char kGroupNameA[] = "groupA";
+  constexpr char kGroupNameC[] = "groupC";
+  net::IsolationInfo isolation_info1;
+  net::IsolationInfo isolation_info2;
+  base::RunLoop run_loop1;
+  base::RunLoop run_loop2;
+
+  network_responder_->RegisterRepeatCallback(
+      kUpdateUrlPath,
+      base::BindLambdaForTesting(
+          [&isolation_info1,
+           &run_loop1](URLLoaderInterceptor::RequestParams* params) {
+            if (params && params->url_request.trusted_params) {
+              isolation_info1 =
+                  params->url_request.trusted_params->isolation_info;
+            } else {
+              ADD_FAILURE() << "No params or trusted_params";
+            }
+            run_loop1.Quit();
+          }));
+  network_responder_->RegisterRepeatCallback(
+      kUpdateUrlPath2,
+      base::BindLambdaForTesting(
+          [&isolation_info2,
+           &run_loop2](URLLoaderInterceptor::RequestParams* params) {
+            if (params && params->url_request.trusted_params) {
+              isolation_info2 =
+                  params->url_request.trusted_params->isolation_info;
+            } else {
+              ADD_FAILURE() << "No params or trusted_params";
+            }
+            run_loop2.Quit();
+          }));
+
+  // Disconnect the network during the update process and use network
+  // disconnected error to trigger the clear owner queue action.
+  network_responder_->FailUpdateRequestWithError(
+      kUpdateUrlPath, net::ERR_INTERNET_DISCONNECTED);
+  network_responder_->RegisterUpdateResponse(kUpdateUrlPath2, R"({
+"ads": [{"renderURL": "https://example.com/new_render2"}]
+})");
+
+  // Navigate to top frame KUrlA.
+  NavigateAndCommit(kUrlA);
+  content::RenderFrameHostTester* rfh_tester =
+      content::RenderFrameHostTester::For(main_rfh());
+
+  // Attach a subframe with KUrlA to the top frame KUrlA.
+  // Create and update an interest group owned by kOriginA.
+  content::RenderFrameHost* subframeA = rfh_tester->AppendChild("subframeA");
+  subframeA =
+      NavigationSimulator::NavigateAndCommitFromDocument(kUrlA, subframeA);
+  blink::InterestGroup interest_group = CreateInterestGroup();
+  interest_group.name = kGroupNameA;
+  interest_group.update_url = kUrlA.Resolve(kUpdateUrlPath);
+  interest_group.bidding_url = kBiddingLogicUrlA;
+  interest_group.ads.emplace();
+  blink::InterestGroup::Ad ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group, subframeA);
+  EXPECT_EQ(1, GetJoinCount(kOriginA, kGroupNameA));
+  UpdateInterestGroupNoFlushForFrame(subframeA);
+  run_loop1.Run();
+
+  // Attach a subframe with KUrlC to the top frame KUrlA.
+  // Create and update an interest group owned by kOriginC.
+  content::RenderFrameHost* subframeC = rfh_tester->AppendChild("subframeC");
+  subframeC =
+      NavigationSimulator::NavigateAndCommitFromDocument(kUrlC, subframeC);
+  blink::InterestGroup interest_group_2 = CreateInterestGroup();
+  interest_group_2.name = kGroupNameC;
+  interest_group_2.owner = kOriginC;
+  interest_group_2.update_url = kUrlC.Resolve(kUpdateUrlPath2);
+  interest_group_2.bidding_url = kUrlC.Resolve(kBiddingUrlPath);
+  interest_group_2.ads.emplace();
+  ad = blink::InterestGroup::Ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group_2.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group_2, subframeC);
+  EXPECT_EQ(1, GetJoinCount(kOriginC, kGroupNameC));
+  UpdateInterestGroupNoFlushForFrame(subframeC);
+  run_loop2.Run();
+
+  ASSERT_FALSE(isolation_info1.IsEqualForTesting(isolation_info2));
+}
+
+// If there are two groups with joining origin A, two groups with joining origin
+// C, and batch limitation size as three, it cannot mix different joining
+// origins together in one batch.
+TEST_F(AdAuctionServiceImplDifferentNIKDuringUpdateTest,
+       UpdateMultipleJoiningOriginsAllLessThanBatchSize) {
+  manager_->set_max_parallel_updates_for_testing(3);
+  constexpr char kServerResponse[] = R"({
+"ads": [{"renderURL": "https://example.com/new_render"}]
+})";
+  constexpr char kGroupName1[] = "group1";
+  constexpr char kGroupName2[] = "group2";
+  constexpr char kGroupName3[] = "group3";
+  constexpr char kGroupName4[] = "group4";
+
+  // Navigate to top frame KUrlA.
+  NavigateAndCommit(kUrlA);
+  content::RenderFrameHostTester* rfh_tester_1 =
+      content::RenderFrameHostTester::For(main_rfh());
+
+  // Attach a subframe with KUrlC to the top frame KUrlA.
+  // Create and update an interest group owned by kOriginC.
+  content::RenderFrameHost* subframe_1 = rfh_tester_1->AppendChild("subframe1");
+  subframe_1 =
+      NavigationSimulator::NavigateAndCommitFromDocument(kUrlC, subframe_1);
+
+  blink::InterestGroup interest_group = CreateInterestGroup();
+  interest_group.name = kGroupName1;
+  interest_group.owner = kOriginC;
+  interest_group.update_url = kUrlC.Resolve(kUpdateUrlPath);
+  interest_group.bidding_url = kUrlC.Resolve(kBiddingUrlPath);
+  interest_group.ads.emplace();
+  blink::InterestGroup::Ad ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group, subframe_1);
+  EXPECT_EQ(1, GetJoinCount(kOriginC, kGroupName1));
+
+  blink::InterestGroup interest_group_2 = CreateInterestGroup();
+  interest_group_2.name = kGroupName2;
+  interest_group_2.owner = kOriginC;
+  interest_group_2.update_url = kUrlC.Resolve(kUpdateUrlPath2);
+  interest_group_2.bidding_url = kUrlC.Resolve(kBiddingUrlPath);
+  interest_group_2.ads.emplace();
+  ad = blink::InterestGroup::Ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group_2.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group_2, subframe_1);
+  EXPECT_EQ(1, GetJoinCount(kOriginC, kGroupName2));
+
+  // Navigate to top frame kUrlC.
+  NavigateAndCommit(kUrlC);
+  content::RenderFrameHostTester* rfh_tester_2 =
+      content::RenderFrameHostTester::For(main_rfh());
+
+  // Attach a subframe with KUrlC to the top frame KUrlC.
+  // Create and update an interest group owned by kOriginC.
+  content::RenderFrameHost* subframe_2 = rfh_tester_2->AppendChild("subframe2");
+  subframe_2 =
+      NavigationSimulator::NavigateAndCommitFromDocument(kUrlC, subframe_2);
+
+  blink::InterestGroup interest_group_3 = CreateInterestGroup();
+  interest_group_3.name = kGroupName3;
+  interest_group_3.owner = kOriginC;
+  interest_group_3.update_url = kUrlC.Resolve(kUpdateUrlPath3);
+  interest_group_3.bidding_url = kUrlC.Resolve(kBiddingUrlPath);
+  interest_group_3.ads.emplace();
+  ad = blink::InterestGroup::Ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group_3.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group_3, subframe_2);
+  EXPECT_EQ(1, GetJoinCount(kOriginC, kGroupName3));
+
+  blink::InterestGroup interest_group_4 = CreateInterestGroup();
+  interest_group_4.name = kGroupName4;
+  interest_group_4.owner = kOriginC;
+  interest_group_4.update_url = kUrlC.Resolve(kUpdateUrlPath4);
+  interest_group_4.bidding_url = kUrlC.Resolve(kBiddingUrlPath);
+  interest_group_4.ads.emplace();
+  ad = blink::InterestGroup::Ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group_4.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group_4, subframe_2);
+  EXPECT_EQ(1, GetJoinCount(kOriginC, kGroupName3));
+
+  network_responder_->RegisterDeferredUpdateResponse(kUpdateUrlPath);
+  network_responder_->RegisterDeferredUpdateResponse(kUpdateUrlPath2);
+  network_responder_->RegisterDeferredUpdateResponse(kUpdateUrlPath3);
+  network_responder_->RegisterDeferredUpdateResponse(kUpdateUrlPath4);
+  UpdateInterestGroupNoFlush();
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(network_responder_->UpdateCount(), 2u);
+
+  network_responder_->DoDeferredUpdateResponse(kUpdateUrlPath, kServerResponse);
+  network_responder_->DoDeferredUpdateResponse(kUpdateUrlPath2,
+                                               kServerResponse);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(network_responder_->UpdateCount(), 4u);
+}
+
+// If there are three groups with joining origin A, one group with joining
+// origin C, and batch limitation size as three, it can send three groups with
+// joining origin A in one batch.
+TEST_F(AdAuctionServiceImplDifferentNIKDuringUpdateTest,
+       UpdateMultipleJoiningOriginsAndOneEqualToBatchSize) {
+  manager_->set_max_parallel_updates_for_testing(3);
+  constexpr char kServerResponse[] = R"({
+"ads": [{"renderURL": "https://example.com/new_render"}]
+})";
+  constexpr char kGroupName1[] = "group1";
+  constexpr char kGroupName2[] = "group2";
+  constexpr char kGroupName3[] = "group3";
+  constexpr char kGroupName4[] = "group4";
+
+  // Navigate to top frame KUrlA.
+  NavigateAndCommit(kUrlA);
+  content::RenderFrameHostTester* rfh_tester_1 =
+      content::RenderFrameHostTester::For(main_rfh());
+
+  // Attach a subframe with KUrlC to the top frame KUrlA.
+  // Create and update an interest group owned by kOriginC.
+  content::RenderFrameHost* subframe_1 = rfh_tester_1->AppendChild("subframe1");
+  subframe_1 =
+      NavigationSimulator::NavigateAndCommitFromDocument(kUrlC, subframe_1);
+
+  blink::InterestGroup interest_group = CreateInterestGroup();
+  interest_group.name = kGroupName1;
+  interest_group.owner = kOriginC;
+  interest_group.update_url = kUrlC.Resolve(kUpdateUrlPath);
+  interest_group.bidding_url = kUrlC.Resolve(kBiddingUrlPath);
+  interest_group.ads.emplace();
+  blink::InterestGroup::Ad ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group, subframe_1);
+  EXPECT_EQ(1, GetJoinCount(kOriginC, kGroupName1));
+
+  blink::InterestGroup interest_group_2 = CreateInterestGroup();
+  interest_group_2.name = kGroupName2;
+  interest_group_2.owner = kOriginC;
+  interest_group_2.update_url = kUrlC.Resolve(kUpdateUrlPath2);
+  interest_group_2.bidding_url = kUrlC.Resolve(kBiddingUrlPath);
+  interest_group_2.ads.emplace();
+  ad = blink::InterestGroup::Ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group_2.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group_2, subframe_1);
+  EXPECT_EQ(1, GetJoinCount(kOriginC, kGroupName2));
+
+  blink::InterestGroup interest_group_3 = CreateInterestGroup();
+  interest_group_3.name = kGroupName3;
+  interest_group_3.owner = kOriginC;
+  interest_group_3.update_url = kUrlC.Resolve(kUpdateUrlPath3);
+  interest_group_3.bidding_url = kUrlC.Resolve(kBiddingUrlPath);
+  interest_group_3.ads.emplace();
+  ad = blink::InterestGroup::Ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group_3.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group_3, subframe_1);
+  EXPECT_EQ(1, GetJoinCount(kOriginC, kGroupName3));
+
+  // Navigate to top frame kUrlC.
+  NavigateAndCommit(kUrlC);
+  content::RenderFrameHostTester* rfh_tester_2 =
+      content::RenderFrameHostTester::For(main_rfh());
+
+  // Attach a subframe with KUrlC to the top frame KUrlC.
+  // Create and update an interest group owned by kOriginC.
+  content::RenderFrameHost* subframe_2 = rfh_tester_2->AppendChild("subframe2");
+  subframe_2 =
+      NavigationSimulator::NavigateAndCommitFromDocument(kUrlC, subframe_2);
+
+  blink::InterestGroup interest_group_4 = CreateInterestGroup();
+  interest_group_4.name = kGroupName4;
+  interest_group_4.owner = kOriginC;
+  interest_group_4.update_url = kUrlC.Resolve(kUpdateUrlPath4);
+  interest_group_4.bidding_url = kUrlC.Resolve(kBiddingUrlPath);
+  interest_group_4.ads.emplace();
+  ad = blink::InterestGroup::Ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group_4.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group_4, subframe_2);
+  EXPECT_EQ(1, GetJoinCount(kOriginC, kGroupName4));
+
+  network_responder_->RegisterDeferredUpdateResponse(kUpdateUrlPath);
+  network_responder_->RegisterDeferredUpdateResponse(kUpdateUrlPath2);
+  network_responder_->RegisterDeferredUpdateResponse(kUpdateUrlPath3);
+  network_responder_->RegisterDeferredUpdateResponse(kUpdateUrlPath4);
+  UpdateInterestGroupNoFlush();
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(network_responder_->UpdateCount(), 3u);
+
+  network_responder_->DoDeferredUpdateResponse(kUpdateUrlPath, kServerResponse);
+  network_responder_->DoDeferredUpdateResponse(kUpdateUrlPath2,
+                                               kServerResponse);
+  network_responder_->DoDeferredUpdateResponse(kUpdateUrlPath3,
+                                               kServerResponse);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(network_responder_->UpdateCount(), 4u);
+}
+
+// If there are three groups with joining origin A, one group with joining
+// origin C, and batch limitation size as two, it can send two groups with
+// joining origin A in the first batch, and remain two groups with different
+// joining origins together in the second batch.
+TEST_F(AdAuctionServiceImplDifferentNIKDuringUpdateTest,
+       UpdateMultipleJoiningOriginsAndOneMoreThanBatchSize) {
+  manager_->set_max_parallel_updates_for_testing(2);
+  constexpr char kServerResponse[] = R"({
+"ads": [{"renderURL": "https://example.com/new_render"}]
+})";
+  constexpr char kGroupName1[] = "group1";
+  constexpr char kGroupName2[] = "group2";
+  constexpr char kGroupName3[] = "group3";
+  constexpr char kGroupName4[] = "group4";
+
+  // Navigate to top frame KUrlA.
+  NavigateAndCommit(kUrlA);
+  content::RenderFrameHostTester* rfh_tester_1 =
+      content::RenderFrameHostTester::For(main_rfh());
+
+  // Attach a subframe with KUrlC to the top frame KUrlA.
+  // Create and update an interest group owned by kOriginC.
+  content::RenderFrameHost* subframe_1 = rfh_tester_1->AppendChild("subframe1");
+  subframe_1 =
+      NavigationSimulator::NavigateAndCommitFromDocument(kUrlC, subframe_1);
+
+  blink::InterestGroup interest_group = CreateInterestGroup();
+  interest_group.name = kGroupName1;
+  interest_group.owner = kOriginC;
+  interest_group.update_url = kUrlC.Resolve(kUpdateUrlPath);
+  interest_group.bidding_url = kUrlC.Resolve(kBiddingUrlPath);
+  interest_group.ads.emplace();
+  blink::InterestGroup::Ad ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group, subframe_1);
+  EXPECT_EQ(1, GetJoinCount(kOriginC, kGroupName1));
+
+  blink::InterestGroup interest_group_2 = CreateInterestGroup();
+  interest_group_2.name = kGroupName2;
+  interest_group_2.owner = kOriginC;
+  interest_group_2.update_url = kUrlC.Resolve(kUpdateUrlPath2);
+  interest_group_2.bidding_url = kUrlC.Resolve(kBiddingUrlPath);
+  interest_group_2.ads.emplace();
+  ad = blink::InterestGroup::Ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group_2.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group_2, subframe_1);
+  EXPECT_EQ(1, GetJoinCount(kOriginC, kGroupName2));
+
+  blink::InterestGroup interest_group_3 = CreateInterestGroup();
+  interest_group_3.name = kGroupName3;
+  interest_group_3.owner = kOriginC;
+  interest_group_3.update_url = kUrlC.Resolve(kUpdateUrlPath3);
+  interest_group_3.bidding_url = kUrlC.Resolve(kBiddingUrlPath);
+  interest_group_3.ads.emplace();
+  ad = blink::InterestGroup::Ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group_3.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group_3, subframe_1);
+  EXPECT_EQ(1, GetJoinCount(kOriginC, kGroupName3));
+
+  // Navigate to top frame kUrlC.
+  NavigateAndCommit(kUrlC);
+  content::RenderFrameHostTester* rfh_tester_2 =
+      content::RenderFrameHostTester::For(main_rfh());
+
+  // Attach a subframe with KUrlC to the top frame KUrlC.
+  // Create and update an interest group owned by kOriginC.
+  content::RenderFrameHost* subframe_2 = rfh_tester_2->AppendChild("subframe2");
+  subframe_2 =
+      NavigationSimulator::NavigateAndCommitFromDocument(kUrlC, subframe_2);
+
+  blink::InterestGroup interest_group_4 = CreateInterestGroup();
+  interest_group_4.name = kGroupName4;
+  interest_group_4.owner = kOriginC;
+  interest_group_4.update_url = kUrlC.Resolve(kUpdateUrlPath4);
+  interest_group_4.bidding_url = kUrlC.Resolve(kBiddingUrlPath);
+  interest_group_4.ads.emplace();
+  ad = blink::InterestGroup::Ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group_4.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group_4, subframe_2);
+  EXPECT_EQ(1, GetJoinCount(kOriginC, kGroupName3));
+
+  network_responder_->RegisterDeferredUpdateResponse(kUpdateUrlPath);
+  network_responder_->RegisterDeferredUpdateResponse(kUpdateUrlPath2);
+  network_responder_->RegisterDeferredUpdateResponse(kUpdateUrlPath3);
+  network_responder_->RegisterDeferredUpdateResponse(kUpdateUrlPath4);
+  UpdateInterestGroupNoFlush();
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(network_responder_->UpdateCount(), 2u);
+
+  if (network_responder_->HasPendingResponse(kUpdateUrlPath)) {
+    network_responder_->DoDeferredUpdateResponse(kUpdateUrlPath,
+                                                 kServerResponse);
+  }
+  if (network_responder_->HasPendingResponse(kUpdateUrlPath2)) {
+    network_responder_->DoDeferredUpdateResponse(kUpdateUrlPath2,
+                                                 kServerResponse);
+  }
+  if (network_responder_->HasPendingResponse(kUpdateUrlPath3)) {
+    network_responder_->DoDeferredUpdateResponse(kUpdateUrlPath3,
+                                                 kServerResponse);
+  }
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(network_responder_->UpdateCount(), 4u);
+}
+
+// Test if the interest group can still be able to update after delaying once.
+TEST_F(AdAuctionServiceImplDifferentNIKDuringUpdateTest,
+       UpdateMultipleBatches) {
+  manager_->set_max_parallel_updates_for_testing(2);
+  constexpr char kServerResponse[] = R"({
+"ads": [{"renderURL": "https://example.com/new_render"}]
+})";
+  constexpr char kGroupName1[] = "group1";
+  constexpr char kGroupName2[] = "group2";
+  constexpr char kGroupName3[] = "group3";
+  constexpr char kGroupName4[] = "group4";
+
+  // Navigate to top frame KUrlA.
+  NavigateAndCommit(kUrlA);
+  content::RenderFrameHostTester* rfh_tester_1 =
+      content::RenderFrameHostTester::For(main_rfh());
+
+  // Attach a subframe with KUrlC to the top frame KUrlA.
+  // Create and update an interest group owned by kOriginC.
+  content::RenderFrameHost* subframe_1 = rfh_tester_1->AppendChild("subframe1");
+  subframe_1 =
+      NavigationSimulator::NavigateAndCommitFromDocument(kUrlC, subframe_1);
+
+  blink::InterestGroup interest_group = CreateInterestGroup();
+  interest_group.name = kGroupName1;
+  interest_group.owner = kOriginC;
+  interest_group.update_url = kUrlC.Resolve(kUpdateUrlPath);
+  interest_group.bidding_url = kUrlC.Resolve(kBiddingUrlPath);
+  interest_group.ads.emplace();
+  blink::InterestGroup::Ad ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group, subframe_1);
+  EXPECT_EQ(1, GetJoinCount(kOriginC, kGroupName1));
+
+  // Navigate to top frame kUrlC.
+  NavigateAndCommit(kUrlC);
+  content::RenderFrameHostTester* rfh_tester_2 =
+      content::RenderFrameHostTester::For(main_rfh());
+
+  // Attach a subframe with KUrlC to the top frame KUrlC.
+  // Create and update an interest group owned by kOriginC.
+  content::RenderFrameHost* subframe_2 = rfh_tester_2->AppendChild("subframe2");
+  subframe_2 =
+      NavigationSimulator::NavigateAndCommitFromDocument(kUrlC, subframe_2);
+
+  blink::InterestGroup interest_group_2 = CreateInterestGroup();
+  interest_group_2.name = kGroupName2;
+  interest_group_2.owner = kOriginC;
+  interest_group_2.update_url = kUrlC.Resolve(kUpdateUrlPath2);
+  interest_group_2.bidding_url = kUrlC.Resolve(kBiddingUrlPath);
+  interest_group_2.ads.emplace();
+  ad = blink::InterestGroup::Ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group_2.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group_2, subframe_2);
+  EXPECT_EQ(1, GetJoinCount(kOriginC, kGroupName2));
+
+  blink::InterestGroup interest_group_3 = CreateInterestGroup();
+  interest_group_3.name = kGroupName3;
+  interest_group_3.owner = kOriginC;
+  interest_group_3.update_url = kUrlC.Resolve(kUpdateUrlPath3);
+  interest_group_3.bidding_url = kUrlC.Resolve(kBiddingUrlPath);
+  interest_group_3.ads.emplace();
+  ad = blink::InterestGroup::Ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group_3.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group_3, subframe_2);
+  EXPECT_EQ(1, GetJoinCount(kOriginC, kGroupName3));
+
+  // Navigate to top frame kUrlD.
+  NavigateAndCommit(kUrlD);
+  content::RenderFrameHostTester* rfh_tester_3 =
+      content::RenderFrameHostTester::For(main_rfh());
+
+  // Attach a subframe with KUrlC to the top frame KUrlD.
+  // Create and update an interest group owned by kOriginC.
+  content::RenderFrameHost* subframe_3 = rfh_tester_3->AppendChild("subframe3");
+  subframe_3 =
+      NavigationSimulator::NavigateAndCommitFromDocument(kUrlC, subframe_3);
+  blink::InterestGroup interest_group_4 = CreateInterestGroup();
+  interest_group_4.name = kGroupName4;
+  interest_group_4.owner = kOriginC;
+  interest_group_4.update_url = kUrlC.Resolve(kUpdateUrlPath4);
+  interest_group_4.bidding_url = kUrlC.Resolve(kBiddingUrlPath);
+  interest_group_4.ads.emplace();
+  ad = blink::InterestGroup::Ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group_4.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group_4, subframe_3);
+  EXPECT_EQ(1, GetJoinCount(kOriginC, kGroupName4));
+
+  network_responder_->RegisterDeferredUpdateResponse(kUpdateUrlPath);
+  network_responder_->RegisterDeferredUpdateResponse(kUpdateUrlPath2);
+  network_responder_->RegisterDeferredUpdateResponse(kUpdateUrlPath3);
+  network_responder_->RegisterDeferredUpdateResponse(kUpdateUrlPath4);
+  UpdateInterestGroupNoFlushForFrame(subframe_3);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(network_responder_->UpdateCount(), 1u);
+
+  network_responder_->DoDeferredUpdateResponse(kUpdateUrlPath, kServerResponse);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(network_responder_->UpdateCount(), 3u);
+
+  network_responder_->DoDeferredUpdateResponse(kUpdateUrlPath2,
+                                               kServerResponse);
+  network_responder_->DoDeferredUpdateResponse(kUpdateUrlPath3,
+                                               kServerResponse);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(network_responder_->UpdateCount(), 4u);
 }
 
 // Join 2 interest groups, each with a different owner. When updating interest
@@ -2047,10 +2988,11 @@ TEST_F(AdAuctionServiceImplTest, UpdateOnlyOwnOrigin) {
   task_environment()->RunUntilIdle();
 
   // The `kOriginB` interest group should update...
-  std::vector<StorageInterestGroup> origin_b_groups =
+  scoped_refptr<StorageInterestGroups> origin_b_groups =
       GetInterestGroupsForOwner(kOriginB);
-  ASSERT_EQ(origin_b_groups.size(), 1u);
-  const auto& origin_b_group = origin_b_groups[0].interest_group;
+  ASSERT_EQ(origin_b_groups->size(), 1u);
+  const auto& origin_b_group =
+      origin_b_groups->GetInterestGroups()[0]->interest_group;
   EXPECT_EQ(origin_b_group.name, kInterestGroupName);
   ASSERT_TRUE(origin_b_group.ads.has_value());
   ASSERT_EQ(origin_b_group.ads->size(), 1u);
@@ -2058,10 +3000,11 @@ TEST_F(AdAuctionServiceImplTest, UpdateOnlyOwnOrigin) {
             "https://example.com/new_render");
 
   // ...but the `kOriginA` interest group shouldn't change.
-  std::vector<StorageInterestGroup> origin_a_groups =
+  scoped_refptr<StorageInterestGroups> origin_a_groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(origin_a_groups.size(), 1u);
-  const auto& origin_a_group = origin_a_groups[0].interest_group;
+  ASSERT_EQ(origin_a_groups->size(), 1u);
+  const auto& origin_a_group =
+      origin_a_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(origin_a_group.ads.has_value());
   ASSERT_EQ(origin_a_group.ads->size(), 1u);
   EXPECT_EQ(origin_a_group.ads.value()[0].render_url.spec(),
@@ -2143,10 +3086,11 @@ TEST_F(AdAuctionServiceImplTest, UpdateFromCrossSiteIFrame) {
   // with C as the owner, but the subframe from C should not be able to update
   // groups for A.
   // The `kOriginC` interest group should update...
-  std::vector<StorageInterestGroup> origin_c_groups =
+  scoped_refptr<StorageInterestGroups> origin_c_groups =
       GetInterestGroupsForOwner(kOriginC);
-  ASSERT_EQ(origin_c_groups.size(), 1u);
-  const auto& origin_c_group = origin_c_groups[0].interest_group;
+  ASSERT_EQ(origin_c_groups->size(), 1u);
+  const auto& origin_c_group =
+      origin_c_groups->GetInterestGroups()[0]->interest_group;
   EXPECT_EQ(origin_c_group.name, kInterestGroupName);
   ASSERT_TRUE(origin_c_group.ads.has_value());
   ASSERT_EQ(origin_c_group.ads->size(), 1u);
@@ -2154,10 +3098,11 @@ TEST_F(AdAuctionServiceImplTest, UpdateFromCrossSiteIFrame) {
             "https://example.com/new_render");
 
   // ...but the `kOriginA` interest group shouldn't change.
-  std::vector<StorageInterestGroup> origin_a_groups =
+  scoped_refptr<StorageInterestGroups> origin_a_groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(origin_a_groups.size(), 1u);
-  const auto& origin_a_group = origin_a_groups[0].interest_group;
+  ASSERT_EQ(origin_a_groups->size(), 1u);
+  const auto& origin_a_group =
+      origin_a_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(origin_a_group.ads.has_value());
   ASSERT_EQ(origin_a_group.ads->size(), 1u);
   EXPECT_EQ(origin_a_group.ads.value()[0].render_url.spec(),
@@ -2173,10 +3118,11 @@ TEST_F(AdAuctionServiceImplTest, UpdateFromCrossSiteIFrame) {
 
   // Subframes from origin B with a top frame of A should not (by policy) be
   // allowed to update groups with B as the owner.
-  std::vector<StorageInterestGroup> origin_b_groups =
+  scoped_refptr<StorageInterestGroups> origin_b_groups =
       GetInterestGroupsForOwner(kOriginB);
-  ASSERT_EQ(origin_b_groups.size(), 1u);
-  const auto& origin_b_group = origin_b_groups[0].interest_group;
+  ASSERT_EQ(origin_b_groups->size(), 1u);
+  const auto& origin_b_group =
+      origin_b_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(origin_b_group.ads.has_value());
   ASSERT_EQ(origin_b_group.ads->size(), 1u);
   EXPECT_EQ(origin_b_group.ads.value()[0].render_url.spec(),
@@ -2228,10 +3174,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateInvalidFieldCancelsAllUpdates) {
     task_environment()->RunUntilIdle();
 
     // Check that the ads and bidding logic URL didn't change.
-    std::vector<StorageInterestGroup> groups =
+    scoped_refptr<StorageInterestGroups> groups =
         GetInterestGroupsForOwner(kOriginA);
-    ASSERT_EQ(groups.size(), 1u);
-    const auto& group = groups[0].interest_group;
+    ASSERT_EQ(groups->size(), 1u);
+    const auto& group = groups->GetInterestGroups()[0]->interest_group;
     ASSERT_TRUE(group.ads.has_value());
     ASSERT_EQ(group.ads->size(), 1u);
     EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -2275,10 +3221,10 @@ TEST_F(AdAuctionServiceImplTest,
   task_environment()->RunUntilIdle();
 
   // Check that the ads and bidding logic URL didn't change.
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group.ads.has_value());
   ASSERT_EQ(group.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -2318,10 +3264,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateInvalidPriorityCancelsAllUpdates) {
   task_environment()->RunUntilIdle();
 
   // Check that the priority and bidding logic URL didn't change.
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   EXPECT_EQ(group.priority, 2.0);
   EXPECT_EQ(group.bidding_url, kBiddingLogicUrlA);
 }
@@ -2357,10 +3303,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateInvalidSellerCapabilitiesIgnored) {
 
   // Check that the seller capabilities was updated, with the invalid capability
   // ignored.
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   EXPECT_EQ(group.all_sellers_capabilities,
             blink::SellerCapabilitiesType(
                 {blink::SellerCapabilities::kInterestGroupCounts}));
@@ -2394,105 +3340,14 @@ TEST_F(AdAuctionServiceImplTest, UpdateInvalidJSONIgnored) {
   task_environment()->RunUntilIdle();
 
   // Check that the ads didn't change.
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group.ads.has_value());
   ASSERT_EQ(group.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
             "https://example.com/render");
-}
-
-// An InterestGroup can't have both ads and an additionalBidKey.
-TEST_F(AdAuctionServiceImplTest, UpdateAdsOnNegativeInterestGroupFails) {
-  blink::InterestGroup interest_group = CreateInterestGroup();
-  interest_group.update_url = kUpdateUrlA;
-  interest_group.additional_bid_key = kAdditionalBidKey1;
-  JoinInterestGroupAndFlush(interest_group);
-  EXPECT_EQ(1, GetJoinCount(kOriginA, kInterestGroupName));
-
-  network_responder_->RegisterUpdateResponse(kUpdateUrlPath, R"({
-    "ads": [{"renderURL": "https://example.com/new_render"}]
-  })");
-
-  UpdateInterestGroupNoFlush();
-  task_environment()->RunUntilIdle();
-
-  // Check that the additionalBidKey didn't change.
-  std::vector<StorageInterestGroup> groups =
-      GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
-  ASSERT_TRUE(group.additional_bid_key.has_value());
-  EXPECT_EQ(*group.additional_bid_key, kAdditionalBidKey1);
-
-  // And that the ads weren't set.
-  EXPECT_FALSE(group.ads.has_value());
-}
-
-// An InterestGroup can't have both ads and an additionalBidKey.
-TEST_F(AdAuctionServiceImplTest, UpdateAdsAndAdditionalBidKeyAlwaysFails) {
-  blink::InterestGroup interest_group = CreateInterestGroup();
-  interest_group.update_url = kUpdateUrlA;
-  JoinInterestGroupAndFlush(interest_group);
-  EXPECT_EQ(1, GetJoinCount(kOriginA, kInterestGroupName));
-
-  network_responder_->RegisterUpdateResponse(
-      kUpdateUrlPath, base::StringPrintf(R"({
-          "ads": [{"renderURL": "https://example.com/new_render"}],
-          "additionalBidKey": "%s"
-      })",
-                                         kAdditionalBidKey2Base64));
-
-  UpdateInterestGroupNoFlush();
-  task_environment()->RunUntilIdle();
-
-  // Check that neither field changed.
-  std::vector<StorageInterestGroup> groups =
-      GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
-  EXPECT_FALSE(group.additional_bid_key.has_value());
-  EXPECT_FALSE(group.ads.has_value());
-}
-
-// An InterestGroup can't have both ads and an additionalBidKey.
-TEST_F(AdAuctionServiceImplTest,
-       UpdateAdditionalBidKeyOnAdsInterestGroupFails) {
-  blink::InterestGroup interest_group = CreateInterestGroup();
-  interest_group.update_url = kUpdateUrlA;
-  interest_group.bidding_url = kBiddingLogicUrlA;
-  interest_group.trusted_bidding_signals_url = kTrustedBiddingSignalsUrlA;
-  interest_group.trusted_bidding_signals_keys.emplace();
-  interest_group.trusted_bidding_signals_keys->push_back("key1");
-  interest_group.ads.emplace();
-  blink::InterestGroup::Ad ad(
-      /*render_url=*/GURL("https://example.com/render"),
-      /*metadata=*/absl::nullopt);
-  interest_group.ads->emplace_back(std::move(ad));
-  JoinInterestGroupAndFlush(interest_group);
-  EXPECT_EQ(1, GetJoinCount(kOriginA, kInterestGroupName));
-
-  network_responder_->RegisterUpdateResponse(
-      kUpdateUrlPath, base::StringPrintf(R"({"additionalBidKey": "%s"})",
-                                         kAdditionalBidKey2Base64));
-
-  UpdateInterestGroupNoFlush();
-  task_environment()->RunUntilIdle();
-
-  // Check that the ads didn't change.
-  std::vector<StorageInterestGroup> groups =
-      GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
-  ASSERT_TRUE(group.ads.has_value());
-  ASSERT_EQ(group.ads->size(), 1u);
-  EXPECT_EQ(group.ads.value()[0].render_url.spec(),
-            "https://example.com/render");
-
-  // And the additionalBidKey wasn't set.
-  EXPECT_FALSE(group.additional_bid_key.has_value());
 }
 
 // UpdateJSONParserCrash fails on Android or with the Rust parser because in
@@ -2534,10 +3389,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateJSONParserCrash) {
   task_environment()->RunUntilIdle();
 
   // Check that the ads didn't change.
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  auto group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  auto group = groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group.ads.has_value());
   ASSERT_EQ(group.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -2554,8 +3409,8 @@ TEST_F(AdAuctionServiceImplTest, UpdateJSONParserCrash) {
 
   // Check that the ads *did* change this time.
   groups = GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  group = groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group.ads.has_value());
   ASSERT_EQ(group.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -2587,10 +3442,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateBlockedByContentBrowserClient) {
   UpdateInterestGroupNoFlush();
   task_environment()->RunUntilIdle();
 
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginNoUpdate);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group.ads.has_value());
   ASSERT_EQ(group.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -2620,10 +3475,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateNetworkFailure) {
   task_environment()->RunUntilIdle();
 
   // Check that the ads didn't change.
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group.ads.has_value());
   ASSERT_EQ(group.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -2653,10 +3508,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateTimeout) {
   task_environment()->RunUntilIdle();
 
   // The request times out (ERR_TIMED_OUT), so the ads should not change.
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group.ads.has_value());
   ASSERT_EQ(group.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -2702,7 +3557,7 @@ TEST_F(AdAuctionServiceImplTest,
   task_environment()->FastForwardBy(kExpiryDelta + base::Seconds(1));
   task_environment()->RunUntilIdle();
   EXPECT_EQ(0, GetJoinCount(kOriginA, kInterestGroupName));
-  EXPECT_EQ(0u, GetInterestGroupsForOwner(kOriginA).size());
+  EXPECT_EQ(0u, GetInterestGroupsForOwner(kOriginA)->size());
 
   // Due to FastForwardBy(), we're at this time order:
   // (group expiration, *NOW*, db maintenance).
@@ -2720,7 +3575,7 @@ TEST_F(AdAuctionServiceImplTest,
   network_responder_->DoDeferredUpdateResponse(kUpdateUrlPath, kServerResponse);
   task_environment()->RunUntilIdle();
   EXPECT_EQ(0, GetJoinCount(kOriginA, kInterestGroupName));
-  EXPECT_EQ(0u, GetInterestGroupsForOwner(kOriginA).size());
+  EXPECT_EQ(0u, GetInterestGroupsForOwner(kOriginA)->size());
 
   // Updating again when the interest group has been deleted shouldn't somehow
   // bring it back -- also, advance past the rate limit window to ensure the
@@ -2731,7 +3586,7 @@ TEST_F(AdAuctionServiceImplTest,
   UpdateInterestGroupNoFlush();
   task_environment()->RunUntilIdle();
   EXPECT_EQ(0, GetJoinCount(kOriginA, kInterestGroupName));
-  EXPECT_EQ(0u, GetInterestGroupsForOwner(kOriginA).size());
+  EXPECT_EQ(0u, GetInterestGroupsForOwner(kOriginA)->size());
 
   // DB maintenance never occurs since we never FastForward() past db
   // maintenance. We still are at time order:
@@ -2781,7 +3636,7 @@ TEST_F(AdAuctionServiceImplTest,
                                     base::Seconds(1));
   task_environment()->RunUntilIdle();
   EXPECT_EQ(0, GetJoinCount(kOriginA, kInterestGroupName));
-  EXPECT_EQ(0u, GetInterestGroupsForOwner(kOriginA).size());
+  EXPECT_EQ(0u, GetInterestGroupsForOwner(kOriginA)->size());
 
   // Due to FastForwardBy(), we're at this time order:
   // (group expiration, db maintenance, *NOW*).
@@ -2799,7 +3654,7 @@ TEST_F(AdAuctionServiceImplTest,
   network_responder_->DoDeferredUpdateResponse(kUpdateUrlPath, kServerResponse);
   task_environment()->RunUntilIdle();
   EXPECT_EQ(0, GetJoinCount(kOriginA, kInterestGroupName));
-  EXPECT_EQ(0u, GetInterestGroupsForOwner(kOriginA).size());
+  EXPECT_EQ(0u, GetInterestGroupsForOwner(kOriginA)->size());
 
   // Updating again when the interest group has been deleted shouldn't somehow
   // bring it back -- also, advance past the rate limit window to ensure the
@@ -2810,7 +3665,7 @@ TEST_F(AdAuctionServiceImplTest,
   UpdateInterestGroupNoFlush();
   task_environment()->RunUntilIdle();
   EXPECT_EQ(0, GetJoinCount(kOriginA, kInterestGroupName));
-  EXPECT_EQ(0u, GetInterestGroupsForOwner(kOriginA).size());
+  EXPECT_EQ(0u, GetInterestGroupsForOwner(kOriginA)->size());
 }
 
 // Start an update, and delay the server response so that the test ends before
@@ -2840,10 +3695,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateNeverFinishesBeforeDestruction) {
   task_environment()->RunUntilIdle();
 
   // No updates have happened yet, nor will they before the test ends.
-  std::vector<StorageInterestGroup> a_groups =
+  scoped_refptr<StorageInterestGroups> a_groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(a_groups.size(), 1u);
-  auto a_group = a_groups[0].interest_group;
+  ASSERT_EQ(a_groups->size(), 1u);
+  const auto& a_group = a_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(a_group.ads.has_value());
   ASSERT_EQ(a_group.ads->size(), 1u);
   EXPECT_EQ(a_group.ads.value()[0].render_url.spec(),
@@ -2878,10 +3733,10 @@ TEST_F(AdAuctionServiceImplTest, DoesntChangeGroupsWithNoUpdateUrl) {
   task_environment()->RunUntilIdle();
 
   // Check that the ads didn't change.
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group.ads.has_value());
   ASSERT_EQ(group.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -2916,10 +3771,11 @@ TEST_F(AdAuctionServiceImplTest, UpdateDoesntChangeBrowserSignals) {
   manager_->RecordInterestGroupBids(blink::InterestGroupSet{originA_group_key});
   manager_->RecordInterestGroupWin(originA_group_key, "{}");
 
-  std::vector<StorageInterestGroup> prev_groups =
+  scoped_refptr<StorageInterestGroups> prev_groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(prev_groups.size(), 1u);
-  const auto& prev_signals = prev_groups[0].bidding_browser_signals;
+  ASSERT_EQ(prev_groups->size(), 1u);
+  const auto& prev_signals =
+      prev_groups->GetInterestGroups()[0]->bidding_browser_signals;
   EXPECT_EQ(prev_signals->join_count, 1);
   EXPECT_EQ(prev_signals->bid_count, 2);
   EXPECT_EQ(prev_signals->prev_wins.size(), 1u);
@@ -2928,11 +3784,11 @@ TEST_F(AdAuctionServiceImplTest, UpdateDoesntChangeBrowserSignals) {
   task_environment()->RunUntilIdle();
 
   // The group updates, but the signals don't.
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
-  const auto& signals = groups[0].bidding_browser_signals;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
+  const auto& signals = groups->GetInterestGroups()[0]->bidding_browser_signals;
 
   EXPECT_EQ(signals->join_count, 1);
   EXPECT_EQ(signals->bid_count, 2);
@@ -2974,10 +3830,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateRateLimitedAfterSuccessfulUpdate) {
   task_environment()->RunUntilIdle();
 
   // The first update completes successfully.
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group.ads.has_value());
   ASSERT_EQ(group.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -2992,10 +3848,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateRateLimitedAfterSuccessfulUpdate) {
   task_environment()->RunUntilIdle();
 
   // The update does nothing due to rate limiting, nothing changes.
-  std::vector<StorageInterestGroup> groups2 =
+  scoped_refptr<StorageInterestGroups> groups2 =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups2.size(), 1u);
-  const auto& group2 = groups2[0].interest_group;
+  ASSERT_EQ(groups2->size(), 1u);
+  const auto& group2 = groups2->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group2.ads.has_value());
   ASSERT_EQ(group2.ads->size(), 1u);
   EXPECT_EQ(group2.ads.value()[0].render_url.spec(),
@@ -3010,10 +3866,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateRateLimitedAfterSuccessfulUpdate) {
   task_environment()->RunUntilIdle();
 
   // The update does nothing due to rate limiting, nothing changes.
-  std::vector<StorageInterestGroup> groups3 =
+  scoped_refptr<StorageInterestGroups> groups3 =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups3.size(), 1u);
-  const auto& group3 = groups3[0].interest_group;
+  ASSERT_EQ(groups3->size(), 1u);
+  const auto& group3 = groups3->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group3.ads.has_value());
   ASSERT_EQ(group3.ads->size(), 1u);
   EXPECT_EQ(group3.ads.value()[0].render_url.spec(),
@@ -3027,10 +3883,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateRateLimitedAfterSuccessfulUpdate) {
   task_environment()->RunUntilIdle();
 
   // The update changes the database contents.
-  std::vector<StorageInterestGroup> groups4 =
+  scoped_refptr<StorageInterestGroups> groups4 =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups4.size(), 1u);
-  const auto& group4 = groups4[0].interest_group;
+  ASSERT_EQ(groups4->size(), 1u);
+  const auto& group4 = groups4->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group4.ads.has_value());
   ASSERT_EQ(group4.ads->size(), 1u);
   EXPECT_EQ(group4.ads.value()[0].render_url.spec(),
@@ -3066,10 +3922,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateRateLimitedAfterBadUpdateResponse) {
   task_environment()->RunUntilIdle();
 
   // The first update fails, nothing changes.
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group.ads.has_value());
   ASSERT_EQ(group.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -3084,10 +3940,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateRateLimitedAfterBadUpdateResponse) {
   task_environment()->RunUntilIdle();
 
   // The update does nothing due to rate limiting, nothing changes.
-  std::vector<StorageInterestGroup> groups2 =
+  scoped_refptr<StorageInterestGroups> groups2 =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups2.size(), 1u);
-  const auto& group2 = groups2[0].interest_group;
+  ASSERT_EQ(groups2->size(), 1u);
+  const auto& group2 = groups2->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group2.ads.has_value());
   ASSERT_EQ(group2.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -3103,10 +3959,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateRateLimitedAfterBadUpdateResponse) {
   task_environment()->RunUntilIdle();
 
   // The update does nothing due to rate limiting, nothing changes.
-  std::vector<StorageInterestGroup> groups3 =
+  scoped_refptr<StorageInterestGroups> groups3 =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups3.size(), 1u);
-  const auto& group3 = groups3[0].interest_group;
+  ASSERT_EQ(groups3->size(), 1u);
+  const auto& group3 = groups3->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group3.ads.has_value());
   ASSERT_EQ(group3.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -3120,10 +3976,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateRateLimitedAfterBadUpdateResponse) {
   task_environment()->RunUntilIdle();
 
   // The update changes the database contents.
-  std::vector<StorageInterestGroup> groups4 =
+  scoped_refptr<StorageInterestGroups> groups4 =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups4.size(), 1u);
-  const auto& group4 = groups4[0].interest_group;
+  ASSERT_EQ(groups4->size(), 1u);
+  const auto& group4 = groups4->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group4.ads.has_value());
   ASSERT_EQ(group4.ads->size(), 1u);
   EXPECT_EQ(group4.ads.value()[0].render_url.spec(),
@@ -3169,10 +4025,10 @@ TEST_F(AdAuctionServiceImplTest,
   task_environment()->RunUntilIdle();
 
   // The first update fails, nothing changes.
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group.ads.has_value());
   ASSERT_EQ(group.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -3190,10 +4046,10 @@ TEST_F(AdAuctionServiceImplTest,
   task_environment()->RunUntilIdle();
 
   // The update does nothing due to rate limiting, nothing changes.
-  std::vector<StorageInterestGroup> groups2 =
+  scoped_refptr<StorageInterestGroups> groups2 =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups2.size(), 1u);
-  const auto& group2 = groups2[0].interest_group;
+  ASSERT_EQ(groups2->size(), 1u);
+  const auto& group2 = groups2->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group2.ads.has_value());
   ASSERT_EQ(group2.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -3210,10 +4066,10 @@ TEST_F(AdAuctionServiceImplTest,
   task_environment()->RunUntilIdle();
 
   // The update does nothing due to rate limiting, nothing changes.
-  std::vector<StorageInterestGroup> groups3 =
+  scoped_refptr<StorageInterestGroups> groups3 =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups3.size(), 1u);
-  const auto& group3 = groups3[0].interest_group;
+  ASSERT_EQ(groups3->size(), 1u);
+  const auto& group3 = groups3->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group3.ads.has_value());
   ASSERT_EQ(group3.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -3228,10 +4084,10 @@ TEST_F(AdAuctionServiceImplTest,
   task_environment()->RunUntilIdle();
 
   // The update changes the database contents.
-  std::vector<StorageInterestGroup> groups4 =
+  scoped_refptr<StorageInterestGroups> groups4 =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups4.size(), 1u);
-  const auto& group4 = groups4[0].interest_group;
+  ASSERT_EQ(groups4->size(), 1u);
+  const auto& group4 = groups4->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group4.ads.has_value());
   ASSERT_EQ(group4.ads->size(), 1u);
   EXPECT_EQ(group4.ads.value()[0].render_url.spec(),
@@ -3268,10 +4124,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateRateLimitedAfterFailedUpdate) {
   task_environment()->RunUntilIdle();
 
   // The first update fails, nothing changes.
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group.ads.has_value());
   ASSERT_EQ(group.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -3286,10 +4142,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateRateLimitedAfterFailedUpdate) {
   task_environment()->RunUntilIdle();
 
   // The update does nothing due to rate limiting, nothing changes.
-  std::vector<StorageInterestGroup> groups2 =
+  scoped_refptr<StorageInterestGroups> groups2 =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups2.size(), 1u);
-  const auto& group2 = groups2[0].interest_group;
+  ASSERT_EQ(groups2->size(), 1u);
+  const auto& group2 = groups2->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group2.ads.has_value());
   ASSERT_EQ(group2.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -3304,10 +4160,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateRateLimitedAfterFailedUpdate) {
   task_environment()->RunUntilIdle();
 
   // The update does nothing due to rate limiting, nothing changes.
-  std::vector<StorageInterestGroup> groups3 =
+  scoped_refptr<StorageInterestGroups> groups3 =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups3.size(), 1u);
-  const auto& group3 = groups3[0].interest_group;
+  ASSERT_EQ(groups3->size(), 1u);
+  const auto& group3 = groups3->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group3.ads.has_value());
   ASSERT_EQ(group3.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -3321,10 +4177,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateRateLimitedAfterFailedUpdate) {
   task_environment()->RunUntilIdle();
 
   // The update changes the database contents.
-  std::vector<StorageInterestGroup> groups4 =
+  scoped_refptr<StorageInterestGroups> groups4 =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups4.size(), 1u);
-  const auto& group4 = groups4[0].interest_group;
+  ASSERT_EQ(groups4->size(), 1u);
+  const auto& group4 = groups4->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group4.ads.has_value());
   ASSERT_EQ(group4.ads->size(), 1u);
   EXPECT_EQ(group4.ads.value()[0].render_url.spec(),
@@ -3359,10 +4215,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateNotRateLimitedIfDisconnected) {
   task_environment()->RunUntilIdle();
 
   // The first update fails (internet disconnected), nothing changes.
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group.ads.has_value());
   ASSERT_EQ(group.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -3377,10 +4233,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateNotRateLimitedIfDisconnected) {
   task_environment()->RunUntilIdle();
 
   // The update changes the database contents -- no rate limiting occurs.
-  std::vector<StorageInterestGroup> groups2 =
+  scoped_refptr<StorageInterestGroups> groups2 =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups2.size(), 1u);
-  const auto& group2 = groups2[0].interest_group;
+  ASSERT_EQ(groups2->size(), 1u);
+  const auto& group2 = groups2->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group2.ads.has_value());
   ASSERT_EQ(group2.ads->size(), 1u);
   EXPECT_EQ(group2.ads.value()[0].render_url.spec(),
@@ -3450,12 +4306,13 @@ TEST_F(AdAuctionServiceImplTest, DisconnectedAndSuccessInFlightTogether) {
   // The second update fails (internet disconnected), so that interest group
   // doesn't update. We don't have any particular requirement what happens to
   // the "successful" update that happened at the same time.
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 2u);
-  auto group_2 = groups[0].interest_group.name == kInterestGroupName2
-                     ? groups[0].interest_group
-                     : groups[1].interest_group;
+  ASSERT_EQ(groups->size(), 2u);
+  auto group_2 =
+      groups->GetInterestGroups()[0]->interest_group.name == kInterestGroupName2
+          ? groups->GetInterestGroups()[0]->interest_group
+          : groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group_2.ads.has_value());
   ASSERT_EQ(group_2.ads->size(), 1u);
   EXPECT_EQ(group_2.ads.value()[0].render_url.spec(),
@@ -3473,13 +4330,15 @@ TEST_F(AdAuctionServiceImplTest, DisconnectedAndSuccessInFlightTogether) {
 
   // Check that both groups updated.
   groups = GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 2u);
-  auto group_1 = groups[0].interest_group.name == kInterestGroupName
-                     ? groups[0].interest_group
-                     : groups[1].interest_group;
-  group_2 = groups[0].interest_group.name == kInterestGroupName2
-                ? groups[0].interest_group
-                : groups[1].interest_group;
+  ASSERT_EQ(groups->size(), 2u);
+  auto group_1 =
+      groups->GetInterestGroups()[0]->interest_group.name == kInterestGroupName
+          ? groups->GetInterestGroups()[0]->interest_group
+          : groups->GetInterestGroups()[1]->interest_group;
+  group_2 =
+      groups->GetInterestGroups()[0]->interest_group.name == kInterestGroupName2
+          ? groups->GetInterestGroups()[0]->interest_group
+          : groups->GetInterestGroups()[1]->interest_group;
 
   ASSERT_TRUE(group_1.ads.has_value());
   ASSERT_EQ(group_1.ads->size(), 1u);
@@ -3522,10 +4381,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateRateLimitedTightLoop) {
   EXPECT_EQ(network_responder_->UpdateCount(), 1u);
 
   // One of the updates completes successfully.
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group.ads.has_value());
   ASSERT_EQ(group.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -3607,10 +4466,10 @@ TEST_F(AdAuctionServiceImplTest, OnlyOneOriginUpdatesAtATime) {
   NavigateAndCommit(kUrlA);
   UpdateInterestGroupNoFlush();
   task_environment()->RunUntilIdle();
-  std::vector<StorageInterestGroup> a_groups =
+  scoped_refptr<StorageInterestGroups> a_groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(a_groups.size(), 1u);
-  auto a_group = a_groups[0].interest_group;
+  ASSERT_EQ(a_groups->size(), 1u);
+  auto a_group = a_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(a_group.ads.has_value());
   ASSERT_EQ(a_group.ads->size(), 1u);
   EXPECT_EQ(a_group.ads.value()[0].render_url.spec(),
@@ -3621,10 +4480,10 @@ TEST_F(AdAuctionServiceImplTest, OnlyOneOriginUpdatesAtATime) {
   NavigateAndCommit(kUrlB);
   UpdateInterestGroupNoFlush();
   task_environment()->RunUntilIdle();
-  std::vector<StorageInterestGroup> b_groups =
+  scoped_refptr<StorageInterestGroups> b_groups =
       GetInterestGroupsForOwner(kOriginB);
-  ASSERT_EQ(b_groups.size(), 1u);
-  auto b_group = b_groups[0].interest_group;
+  ASSERT_EQ(b_groups->size(), 1u);
+  auto b_group = b_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(b_group.ads.has_value());
   ASSERT_EQ(b_group.ads->size(), 1u);
   EXPECT_EQ(b_group.ads.value()[0].render_url.spec(),
@@ -3635,10 +4494,10 @@ TEST_F(AdAuctionServiceImplTest, OnlyOneOriginUpdatesAtATime) {
   NavigateAndCommit(kUrlC);
   UpdateInterestGroupNoFlush();
   task_environment()->RunUntilIdle();
-  std::vector<StorageInterestGroup> c_groups =
+  scoped_refptr<StorageInterestGroups> c_groups =
       GetInterestGroupsForOwner(kOriginC);
-  ASSERT_EQ(c_groups.size(), 1u);
-  auto c_group = c_groups[0].interest_group;
+  ASSERT_EQ(c_groups->size(), 1u);
+  auto c_group = c_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(c_group.ads.has_value());
   ASSERT_EQ(c_group.ads->size(), 1u);
   EXPECT_EQ(c_group.ads.value()[0].render_url.spec(),
@@ -3657,8 +4516,8 @@ TEST_F(AdAuctionServiceImplTest, OnlyOneOriginUpdatesAtATime) {
 
   // kOriginA's groups have updated.
   a_groups = GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(a_groups.size(), 1u);
-  a_group = a_groups[0].interest_group;
+  ASSERT_EQ(a_groups->size(), 1u);
+  a_group = a_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(a_group.ads.has_value());
   ASSERT_EQ(a_group.ads->size(), 1u);
   EXPECT_EQ(a_group.ads.value()[0].render_url.spec(),
@@ -3666,8 +4525,8 @@ TEST_F(AdAuctionServiceImplTest, OnlyOneOriginUpdatesAtATime) {
 
   // kOriginB's groups have updated.
   b_groups = GetInterestGroupsForOwner(kOriginB);
-  ASSERT_EQ(b_groups.size(), 1u);
-  b_group = b_groups[0].interest_group;
+  ASSERT_EQ(b_groups->size(), 1u);
+  b_group = b_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(b_group.ads.has_value());
   ASSERT_EQ(b_group.ads->size(), 1u);
   EXPECT_EQ(b_group.ads.value()[0].render_url.spec(),
@@ -3675,8 +4534,8 @@ TEST_F(AdAuctionServiceImplTest, OnlyOneOriginUpdatesAtATime) {
 
   // kOriginC's groups have updated.
   b_groups = GetInterestGroupsForOwner(kOriginC);
-  ASSERT_EQ(b_groups.size(), 1u);
-  b_group = b_groups[0].interest_group;
+  ASSERT_EQ(b_groups->size(), 1u);
+  b_group = b_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(b_group.ads.has_value());
   ASSERT_EQ(b_group.ads->size(), 1u);
   EXPECT_EQ(b_group.ads.value()[0].render_url.spec(),
@@ -3742,16 +4601,14 @@ TEST_F(AdAuctionServiceImplTest, UpdatesInBatches) {
 
   EXPECT_EQ(network_responder_->UpdateCount(), 3u);
 
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 3u);
+  ASSERT_EQ(groups->size(), 3u);
 
-  for (size_t i = 0; i < groups.size(); i++) {
-    SCOPED_TRACE(i);
-    const auto& group = groups[i].interest_group;
-    ASSERT_TRUE(group.ads.has_value());
-    ASSERT_EQ(group.ads->size(), 1u);
-    EXPECT_EQ(group.ads.value()[0].render_url.spec(),
+  for (const SingleStorageInterestGroup& group : groups->GetInterestGroups()) {
+    ASSERT_TRUE(group->interest_group.ads.has_value());
+    ASSERT_EQ(group->interest_group.ads->size(), 1u);
+    EXPECT_EQ(group->interest_group.ads.value()[0].render_url.spec(),
               "https://example.com/new_render");
   }
 }
@@ -3833,22 +4690,20 @@ TEST_F(AdAuctionServiceImplTest, UpdatesInBatchesWithFailuresAndTimeouts) {
   task_environment()->RunUntilIdle();
   EXPECT_EQ(network_responder_->UpdateCount(), 3u);
 
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 3u);
+  ASSERT_EQ(groups->size(), 3u);
 
-  for (size_t i = 0; i < groups.size(); i++) {
-    SCOPED_TRACE(i);
-    const auto& group = groups[i].interest_group;
-    ASSERT_TRUE(group.ads.has_value());
-    ASSERT_EQ(group.ads->size(), 1u);
+  for (const auto& group : groups->GetInterestGroups()) {
+    const auto& ads = group->interest_group.ads;
+    ASSERT_TRUE(ads.has_value());
+    ASSERT_EQ(ads->size(), 1u);
 
-    if (group.update_url == kUpdateUrlA) {
-      EXPECT_EQ(group.ads.value()[0].render_url.spec(),
+    if (group->interest_group.update_url == kUpdateUrlA) {
+      EXPECT_EQ(ads.value()[0].render_url.spec(),
                 "https://example.com/new_render");
     } else {
-      EXPECT_EQ(group.ads.value()[0].render_url.spec(),
-                "https://example.com/render");
+      EXPECT_EQ(ads.value()[0].render_url.spec(), "https://example.com/render");
     }
   }
 }
@@ -3923,10 +4778,10 @@ TEST_F(AdAuctionServiceImplTest, CancelsLongstandingUpdates) {
   NavigateAndCommit(kUrlA);
   UpdateInterestGroupNoFlush();
   task_environment()->RunUntilIdle();
-  std::vector<StorageInterestGroup> a_groups =
+  scoped_refptr<StorageInterestGroups> a_groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(a_groups.size(), 1u);
-  auto a_group = a_groups[0].interest_group;
+  ASSERT_EQ(a_groups->size(), 1u);
+  auto a_group = a_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(a_group.ads.has_value());
   ASSERT_EQ(a_group.ads->size(), 1u);
   EXPECT_EQ(a_group.ads.value()[0].render_url.spec(),
@@ -3937,10 +4792,10 @@ TEST_F(AdAuctionServiceImplTest, CancelsLongstandingUpdates) {
   NavigateAndCommit(kUrlB);
   UpdateInterestGroupNoFlush();
   task_environment()->RunUntilIdle();
-  std::vector<StorageInterestGroup> b_groups =
+  scoped_refptr<StorageInterestGroups> b_groups =
       GetInterestGroupsForOwner(kOriginB);
-  ASSERT_EQ(b_groups.size(), 1u);
-  auto b_group = b_groups[0].interest_group;
+  ASSERT_EQ(b_groups->size(), 1u);
+  auto b_group = b_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(b_group.ads.has_value());
   ASSERT_EQ(b_group.ads->size(), 1u);
   EXPECT_EQ(b_group.ads.value()[0].render_url.spec(),
@@ -3965,8 +4820,8 @@ TEST_F(AdAuctionServiceImplTest, CancelsLongstandingUpdates) {
 
   // kOriginA's groups have updated.
   a_groups = GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(a_groups.size(), 1u);
-  a_group = a_groups[0].interest_group;
+  ASSERT_EQ(a_groups->size(), 1u);
+  a_group = a_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(a_group.ads.has_value());
   ASSERT_EQ(a_group.ads->size(), 1u);
   EXPECT_EQ(a_group.ads.value()[0].render_url.spec(),
@@ -3974,8 +4829,8 @@ TEST_F(AdAuctionServiceImplTest, CancelsLongstandingUpdates) {
 
   // But kOriginB's groups have not updated, because they got cancelled.
   b_groups = GetInterestGroupsForOwner(kOriginB);
-  ASSERT_EQ(b_groups.size(), 1u);
-  b_group = b_groups[0].interest_group;
+  ASSERT_EQ(b_groups->size(), 1u);
+  b_group = b_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(b_group.ads.has_value());
   ASSERT_EQ(b_group.ads->size(), 1u);
   EXPECT_EQ(b_group.ads.value()[0].render_url.spec(),
@@ -3993,8 +4848,8 @@ TEST_F(AdAuctionServiceImplTest, CancelsLongstandingUpdates) {
 
   // kOriginB's groups have updated.
   b_groups = GetInterestGroupsForOwner(kOriginB);
-  ASSERT_EQ(b_groups.size(), 1u);
-  b_group = b_groups[0].interest_group;
+  ASSERT_EQ(b_groups->size(), 1u);
+  b_group = b_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(b_group.ads.has_value());
   ASSERT_EQ(b_group.ads->size(), 1u);
   EXPECT_EQ(b_group.ads.value()[0].render_url.spec(),
@@ -4067,10 +4922,10 @@ TEST_F(AdAuctionServiceImplTest, CancelsLongstandingUpdates2) {
   NavigateAndCommit(kUrlA);
   UpdateInterestGroupNoFlush();
   task_environment()->RunUntilIdle();
-  std::vector<StorageInterestGroup> a_groups =
+  scoped_refptr<StorageInterestGroups> a_groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(a_groups.size(), 1u);
-  auto a_group = a_groups[0].interest_group;
+  ASSERT_EQ(a_groups->size(), 1u);
+  auto a_group = a_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(a_group.ads.has_value());
   ASSERT_EQ(a_group.ads->size(), 1u);
   EXPECT_EQ(a_group.ads.value()[0].render_url.spec(),
@@ -4081,10 +4936,10 @@ TEST_F(AdAuctionServiceImplTest, CancelsLongstandingUpdates2) {
   NavigateAndCommit(kUrlB);
   UpdateInterestGroupNoFlush();
   task_environment()->RunUntilIdle();
-  std::vector<StorageInterestGroup> b_groups =
+  scoped_refptr<StorageInterestGroups> b_groups =
       GetInterestGroupsForOwner(kOriginB);
-  ASSERT_EQ(b_groups.size(), 1u);
-  auto b_group = b_groups[0].interest_group;
+  ASSERT_EQ(b_groups->size(), 1u);
+  auto b_group = b_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(b_group.ads.has_value());
   ASSERT_EQ(b_group.ads->size(), 1u);
   EXPECT_EQ(b_group.ads.value()[0].render_url.spec(),
@@ -4109,8 +4964,8 @@ TEST_F(AdAuctionServiceImplTest, CancelsLongstandingUpdates2) {
 
   // kOriginA's groups have updated.
   a_groups = GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(a_groups.size(), 1u);
-  a_group = a_groups[0].interest_group;
+  ASSERT_EQ(a_groups->size(), 1u);
+  a_group = a_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(a_group.ads.has_value());
   ASSERT_EQ(a_group.ads->size(), 1u);
   EXPECT_EQ(a_group.ads.value()[0].render_url.spec(),
@@ -4118,8 +4973,8 @@ TEST_F(AdAuctionServiceImplTest, CancelsLongstandingUpdates2) {
 
   // But kOriginB's groups have not updated, because they got cancelled.
   b_groups = GetInterestGroupsForOwner(kOriginB);
-  ASSERT_EQ(b_groups.size(), 1u);
-  b_group = b_groups[0].interest_group;
+  ASSERT_EQ(b_groups->size(), 1u);
+  b_group = b_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(b_group.ads.has_value());
   ASSERT_EQ(b_group.ads->size(), 1u);
   EXPECT_EQ(b_group.ads.value()[0].render_url.spec(),
@@ -4152,8 +5007,8 @@ TEST_F(AdAuctionServiceImplTest, CancelsLongstandingUpdates2) {
 
   // kOriginC's groups have updated.
   auto c_groups = GetInterestGroupsForOwner(kOriginC);
-  ASSERT_EQ(c_groups.size(), 1u);
-  auto c_group = c_groups[0].interest_group;
+  ASSERT_EQ(c_groups->size(), 1u);
+  auto c_group = c_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(c_group.ads.has_value());
   ASSERT_EQ(c_group.ads->size(), 1u);
   EXPECT_EQ(c_group.ads.value()[0].render_url.spec(),
@@ -4161,8 +5016,8 @@ TEST_F(AdAuctionServiceImplTest, CancelsLongstandingUpdates2) {
 
   // But kOriginB's groups have not updated.
   b_groups = GetInterestGroupsForOwner(kOriginB);
-  ASSERT_EQ(b_groups.size(), 1u);
-  b_group = b_groups[0].interest_group;
+  ASSERT_EQ(b_groups->size(), 1u);
+  b_group = b_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(b_group.ads.has_value());
   ASSERT_EQ(b_group.ads->size(), 1u);
   EXPECT_EQ(b_group.ads.value()[0].render_url.spec(),
@@ -4228,10 +5083,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateCancellationTimerClearedOnCompletion) {
   UpdateInterestGroupNoFlush();
   task_environment()->RunUntilIdle();
 
-  std::vector<StorageInterestGroup> a_groups =
+  scoped_refptr<StorageInterestGroups> a_groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(a_groups.size(), 1u);
-  auto a_group = a_groups[0].interest_group;
+  ASSERT_EQ(a_groups->size(), 1u);
+  auto a_group = a_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(a_group.ads.has_value());
   ASSERT_EQ(a_group.ads->size(), 1u);
   EXPECT_EQ(a_group.ads.value()[0].render_url.spec(),
@@ -4249,10 +5104,10 @@ TEST_F(AdAuctionServiceImplTest, UpdateCancellationTimerClearedOnCompletion) {
   UpdateInterestGroupNoFlush();
   task_environment()->RunUntilIdle();
 
-  std::vector<StorageInterestGroup> b_groups =
+  scoped_refptr<StorageInterestGroups> b_groups =
       GetInterestGroupsForOwner(kOriginB);
-  ASSERT_EQ(b_groups.size(), 1u);
-  auto b_group = b_groups[0].interest_group;
+  ASSERT_EQ(b_groups->size(), 1u);
+  auto b_group = b_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(b_group.ads.has_value());
   ASSERT_EQ(b_group.ads->size(), 1u);
   EXPECT_EQ(b_group.ads.value()[0].render_url.spec(),
@@ -4349,12 +5204,13 @@ TEST_F(AdAuctionServiceImplTest, CancelsLongstandingUpdatesComplex) {
   NavigateAndCommit(kUrlA);
   UpdateInterestGroupNoFlush();
   task_environment()->RunUntilIdle();
-  std::vector<StorageInterestGroup> a_groups =
+  scoped_refptr<StorageInterestGroups> a_groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(a_groups.size(), 4u);
+  ASSERT_EQ(a_groups->size(), 4u);
   bool seen_succeeded = false, seen_failed = false;
-  for (const auto& a_group : a_groups) {
-    const blink::InterestGroup& group = a_group.interest_group;
+  for (const SingleStorageInterestGroup& a_group :
+       a_groups->GetInterestGroups()) {
+    const blink::InterestGroup& group = a_group->interest_group;
     ASSERT_TRUE(group.ads.has_value());
     ASSERT_EQ(group.ads->size(), 1u);
     if (group.name == kUpdateUrlA.path()) {
@@ -4377,10 +5233,10 @@ TEST_F(AdAuctionServiceImplTest, CancelsLongstandingUpdatesComplex) {
   NavigateAndCommit(kUrlB);
   UpdateInterestGroupNoFlush();
   task_environment()->RunUntilIdle();
-  std::vector<StorageInterestGroup> b_groups =
+  scoped_refptr<StorageInterestGroups> b_groups =
       GetInterestGroupsForOwner(kOriginB);
-  ASSERT_EQ(b_groups.size(), 1u);
-  auto b_group = b_groups[0].interest_group;
+  ASSERT_EQ(b_groups->size(), 1u);
+  auto b_group = b_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(b_group.ads.has_value());
   ASSERT_EQ(b_group.ads->size(), 1u);
   EXPECT_EQ(b_group.ads.value()[0].render_url.spec(),
@@ -4397,9 +5253,10 @@ TEST_F(AdAuctionServiceImplTest, CancelsLongstandingUpdatesComplex) {
                                                kServerResponse);
   task_environment()->RunUntilIdle();
   a_groups = GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(a_groups.size(), 4u);
-  for (const auto& a_group : a_groups) {
-    const blink::InterestGroup& group = a_group.interest_group;
+  ASSERT_EQ(a_groups->size(), 4u);
+  for (const SingleStorageInterestGroup& a_group :
+       a_groups->GetInterestGroups()) {
+    const blink::InterestGroup& group = a_group->interest_group;
     ASSERT_TRUE(group.ads.has_value());
     ASSERT_EQ(group.ads->size(), 1u);
     if (group.name == kUpdateUrlA3.path()) {
@@ -4423,9 +5280,10 @@ TEST_F(AdAuctionServiceImplTest, CancelsLongstandingUpdatesComplex) {
                                                kServerResponse);
   task_environment()->RunUntilIdle();
   a_groups = GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(a_groups.size(), 4u);
-  for (const auto& a_group : a_groups) {
-    const blink::InterestGroup& group = a_group.interest_group;
+  ASSERT_EQ(a_groups->size(), 4u);
+  for (const SingleStorageInterestGroup& a_group :
+       a_groups->GetInterestGroups()) {
+    const blink::InterestGroup& group = a_group->interest_group;
     ASSERT_TRUE(group.ads.has_value());
     ASSERT_EQ(group.ads->size(), 1u);
     if (group.name == kUpdateUrlA4.path()) {
@@ -4438,8 +5296,8 @@ TEST_F(AdAuctionServiceImplTest, CancelsLongstandingUpdatesComplex) {
 
   // kOriginB's group hasn't been updated, because the update got cancelled.
   b_groups = GetInterestGroupsForOwner(kOriginB);
-  ASSERT_EQ(b_groups.size(), 1u);
-  b_group = b_groups[0].interest_group;
+  ASSERT_EQ(b_groups->size(), 1u);
+  b_group = b_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(b_group.ads.has_value());
   ASSERT_EQ(b_group.ads->size(), 1u);
   EXPECT_EQ(b_group.ads.value()[0].render_url.spec(),
@@ -4457,8 +5315,8 @@ TEST_F(AdAuctionServiceImplTest, CancelsLongstandingUpdatesComplex) {
 
   // kOriginB's groups have updated.
   b_groups = GetInterestGroupsForOwner(kOriginB);
-  ASSERT_EQ(b_groups.size(), 1u);
-  b_group = b_groups[0].interest_group;
+  ASSERT_EQ(b_groups->size(), 1u);
+  b_group = b_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(b_group.ads.has_value());
   ASSERT_EQ(b_group.ads->size(), 1u);
   EXPECT_EQ(b_group.ads.value()[0].render_url.spec(),
@@ -4518,7 +5376,7 @@ TEST_F(AdAuctionServiceImplNoNegativeTargetingTest, RunAdAuctionNonceDisabled) {
   ad_auction_service->RunAdAuction(
       auction_config, mojo::NullReceiver(),
       base::BindOnce(
-          [](bool manually_aborted,
+          [](bool aborted_by_script,
              const absl::optional<
                  blink::FencedFrame::RedactedFencedFrameConfig>& config) {
             ADD_FAILURE() << "Callback unexpectedly invoked.";
@@ -4553,7 +5411,7 @@ TEST_F(AdAuctionServiceImplNoNegativeTargetingTest,
   ad_auction_service->RunAdAuction(
       auction_config, mojo::NullReceiver(),
       base::BindOnce(
-          [](bool manually_aborted,
+          [](bool aborted_by_script,
              const absl::optional<
                  blink::FencedFrame::RedactedFencedFrameConfig>& config) {
             ADD_FAILURE() << "Callback unexpectedly invoked.";
@@ -4604,25 +5462,29 @@ function scoreAd(
   // Running the auction alone should not result in updating the interest
   // group's bid count or previous win list, no matter how much time passes.
   task_environment()->RunUntilIdle();
-  auto storage_interest_group =
-      GetInterestGroup(interest_group.owner, interest_group.name);
-  ASSERT_TRUE(storage_interest_group);
-  EXPECT_EQ(0, storage_interest_group->bidding_browser_signals->bid_count);
-  EXPECT_EQ(0u,
-            storage_interest_group->bidding_browser_signals->prev_wins.size());
+  std::optional<SingleStorageInterestGroup> storage_interest_group(
+      GetInterestGroup(interest_group.owner, interest_group.name));
+  ASSERT_TRUE(storage_interest_group.has_value());
+  EXPECT_EQ(0,
+            storage_interest_group.value()->bidding_browser_signals->bid_count);
+  EXPECT_EQ(0u, storage_interest_group.value()
+                    ->bidding_browser_signals->prev_wins.size());
 
   // Invoking the URN callback (which is done when the result is loaded in a
   // frame) updates those fields.
   InvokeCallbackForURN(*auction_result);
-  storage_interest_group =
-      GetInterestGroup(interest_group.owner, interest_group.name);
-  ASSERT_TRUE(storage_interest_group);
-  EXPECT_EQ(1, storage_interest_group->bidding_browser_signals->bid_count);
-  ASSERT_EQ(1u,
-            storage_interest_group->bidding_browser_signals->prev_wins.size());
-  ASSERT_EQ(
-      R"({"renderURL":"https://example.com/render"})",
-      storage_interest_group->bidding_browser_signals->prev_wins[0]->ad_json);
+  std::optional<SingleStorageInterestGroup>
+      storage_interest_group_after_callback(
+          GetInterestGroup(interest_group.owner, interest_group.name));
+  ASSERT_TRUE(storage_interest_group_after_callback.has_value());
+  EXPECT_EQ(1, storage_interest_group_after_callback.value()
+                   ->bidding_browser_signals->bid_count);
+  ASSERT_EQ(1u, storage_interest_group_after_callback.value()
+                    ->bidding_browser_signals->prev_wins.size());
+  ASSERT_EQ(R"({"renderURL":"https://example.com/render"})",
+            storage_interest_group_after_callback.value()
+                ->bidding_browser_signals->prev_wins[0]
+                ->ad_json);
 
   // The auction should also trigger a k-anon "join" for the winning ad.
   EXPECT_THAT(GetKAnonJoinedIds(),
@@ -4673,12 +5535,13 @@ function scoreAd(
 
   // The bid count should be updated immediately, since theere's no URN to wait
   // to be loaded in a frame.
-  auto storage_interest_group =
-      GetInterestGroup(interest_group.owner, interest_group.name);
-  ASSERT_TRUE(storage_interest_group);
-  EXPECT_EQ(1, storage_interest_group->bidding_browser_signals->bid_count);
-  EXPECT_EQ(0u,
-            storage_interest_group->bidding_browser_signals->prev_wins.size());
+  std::optional<SingleStorageInterestGroup> storage_interest_group(
+      GetInterestGroup(interest_group.owner, interest_group.name));
+  ASSERT_TRUE(storage_interest_group.has_value());
+  EXPECT_EQ(1,
+            storage_interest_group.value()->bidding_browser_signals->bid_count);
+  EXPECT_EQ(0u, storage_interest_group.value()
+                    ->bidding_browser_signals->prev_wins.size());
 
   // The auction should not trigger any k-anon "joins".
   EXPECT_THAT(GetKAnonJoinedIds(), ::testing::UnorderedElementsAre());
@@ -4794,8 +5657,8 @@ function scoreAd(
   task_environment()->RunUntilIdle();
 
   auto a_groups = GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(a_groups.size(), 1u);
-  auto a_group = a_groups[0].interest_group;
+  ASSERT_EQ(a_groups->size(), 1u);
+  auto a_group = a_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(a_group.ads.has_value());
   ASSERT_EQ(a_group.ads->size(), 1u);
   EXPECT_EQ(a_group.ads.value()[0].render_url.spec(),
@@ -4854,8 +5717,8 @@ function scoreAd(
   task_environment()->RunUntilIdle();
 
   auto a_groups = GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(a_groups.size(), 1u);
-  auto a_group = a_groups[0].interest_group;
+  ASSERT_EQ(a_groups->size(), 1u);
+  auto a_group = a_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(a_group.ads.has_value());
   ASSERT_EQ(a_group.ads->size(), 1u);
   EXPECT_EQ(a_group.ads.value()[0].render_url.spec(),
@@ -4906,8 +5769,8 @@ function generateBid(
   task_environment()->RunUntilIdle();
 
   auto a_groups = GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(a_groups.size(), 1u);
-  auto a_group = a_groups[0].interest_group;
+  ASSERT_EQ(a_groups->size(), 1u);
+  auto a_group = a_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(a_group.ads.has_value());
   ASSERT_EQ(a_group.ads->size(), 1u);
   EXPECT_EQ(a_group.ads.value()[0].render_url.spec(),
@@ -4968,8 +5831,9 @@ function scoreAd(
   task_environment()->RunUntilIdle();
 
   auto no_update_groups = GetInterestGroupsForOwner(kOriginNoUpdate);
-  ASSERT_EQ(no_update_groups.size(), 1u);
-  auto no_update_group = no_update_groups[0].interest_group;
+  ASSERT_EQ(no_update_groups->size(), 1u);
+  auto no_update_group =
+      no_update_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(no_update_group.ads.has_value());
   ASSERT_EQ(no_update_group.ads->size(), 1u);
   EXPECT_EQ(no_update_group.ads.value()[0].render_url.spec(),
@@ -5082,16 +5946,16 @@ function scoreAd(
   task_environment()->RunUntilIdle();
 
   auto a_groups = GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(a_groups.size(), 1u);
-  auto a_group = a_groups[0].interest_group;
+  ASSERT_EQ(a_groups->size(), 1u);
+  auto a_group = a_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(a_group.ads.has_value());
   ASSERT_EQ(a_group.ads->size(), 1u);
   EXPECT_EQ(a_group.ads.value()[0].render_url.spec(),
             "https://example.com/new_render");
 
   auto c_groups = GetInterestGroupsForOwner(kOriginC);
-  ASSERT_EQ(c_groups.size(), 1u);
-  auto c_group = c_groups[0].interest_group;
+  ASSERT_EQ(c_groups->size(), 1u);
+  auto c_group = c_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(c_group.ads.has_value());
   ASSERT_EQ(c_group.ads->size(), 1u);
   EXPECT_EQ(c_group.ads.value()[0].render_url.spec(),
@@ -5194,16 +6058,16 @@ function scoreAd(
   task_environment()->RunUntilIdle();
 
   auto a_groups = GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(a_groups.size(), 1u);
-  auto a_group = a_groups[0].interest_group;
+  ASSERT_EQ(a_groups->size(), 1u);
+  auto a_group = a_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(a_group.ads.has_value());
   ASSERT_EQ(a_group.ads->size(), 1u);
   EXPECT_EQ(a_group.ads.value()[0].render_url.spec(),
             "https://example.com/new_render");
 
   auto c_groups = GetInterestGroupsForOwner(kOriginC);
-  ASSERT_EQ(c_groups.size(), 1u);
-  auto c_group = c_groups[0].interest_group;
+  ASSERT_EQ(c_groups->size(), 1u);
+  auto c_group = c_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(c_group.ads.has_value());
   ASSERT_EQ(c_group.ads->size(), 1u);
   EXPECT_EQ(c_group.ads.value()[0].render_url.spec(),
@@ -5238,8 +6102,8 @@ TEST_F(AdAuctionServiceImplTest, UpdatesInterestGroupsAfterAuctionNoAds) {
   task_environment()->RunUntilIdle();
 
   auto a_groups = GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(a_groups.size(), 1u);
-  auto a_group = a_groups[0].interest_group;
+  ASSERT_EQ(a_groups->size(), 1u);
+  auto a_group = a_groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(a_group.trusted_bidding_signals_url.has_value());
   EXPECT_EQ(a_group.trusted_bidding_signals_url->spec(),
             base::StringPrintf(
@@ -5276,11 +6140,11 @@ TEST_F(AdAuctionServiceImplTest, UpdateSupportsDeprecatedNames) {
   UpdateInterestGroupNoFlush();
   task_environment()->RunUntilIdle();
 
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
+  ASSERT_EQ(groups->size(), 1u);
 
-  const auto& group = groups[0].interest_group;
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group.ads.has_value());
   ASSERT_EQ(group.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -5318,12 +6182,12 @@ TEST_F(AdAuctionServiceImplTest, UpdateIgnoresUnknownEnumFields) {
   UpdateInterestGroupNoFlush();
   task_environment()->RunUntilIdle();
 
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
+  ASSERT_EQ(groups->size(), 1u);
 
   // The unknown enum values are ignored, and renderURL is updated.
-  const auto& group = groups[0].interest_group;
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   ASSERT_TRUE(group.ads.has_value());
   ASSERT_EQ(group.ads->size(), 1u);
   EXPECT_EQ(group.ads.value()[0].render_url.spec(),
@@ -5474,11 +6338,12 @@ TEST_F(AdAuctionServiceImplTest, UpdateRenamedFields) {
     UpdateInterestGroupNoFlush();
     task_environment()->RunUntilIdle();
 
-    std::vector<StorageInterestGroup> groups =
+    scoped_refptr<StorageInterestGroups> groups =
         GetInterestGroupsForOwner(kOriginA);
-    ASSERT_EQ(groups.size(), 1u);
+    ASSERT_EQ(groups->size(), 1u);
     EXPECT_TRUE(
-        groups[0].interest_group.IsEqualForTesting(*test_case.expected_group));
+        groups->GetInterestGroups()[0]->interest_group.IsEqualForTesting(
+            *test_case.expected_group));
 
     // Reset for the next iteration.
     JoinInterestGroupAndFlush(initial_interest_group);
@@ -5957,10 +6822,10 @@ TEST_F(AdAuctionServiceImplTest, ReportingWorkletsDoNotBlockCompletion) {
       auction_config, mojo::NullReceiver(),
       base::BindLambdaForTesting(
           [&run_loop, &maybe_config](
-              bool manually_aborted,
+              bool aborted_by_script,
               const absl::optional<
                   blink::FencedFrame::RedactedFencedFrameConfig>& config) {
-            EXPECT_FALSE(manually_aborted);
+            EXPECT_FALSE(aborted_by_script);
             maybe_config = config;
             run_loop.Quit();
           }));
@@ -6756,7 +7621,7 @@ function reportResult() {}
         succeed_auction_config, mojo::NullReceiver(),
         base::BindLambdaForTesting(
             [&one_auction_complete](
-                bool manually_aborted,
+                bool aborted_by_script,
                 const absl::optional<
                     blink::FencedFrame::RedactedFencedFrameConfig>&
                     ignored_config) { one_auction_complete.Run(); }));
@@ -6811,10 +7676,10 @@ TEST_F(AdAuctionServiceImplRestrictedPermissionsPolicyTest,
   UpdateInterestGroupNoFlush();
   task_environment()->RunUntilIdle();
 
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   EXPECT_EQ(group.name, kInterestGroupName);
   ASSERT_TRUE(group.bidding_url.has_value());
   EXPECT_EQ(group.bidding_url->spec(),
@@ -6847,10 +7712,10 @@ TEST_F(AdAuctionServiceImplRestrictedPermissionsPolicyTest,
   UpdateInterestGroupNoFlushForFrame(subframe);
   task_environment()->RunUntilIdle();
 
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginA);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   EXPECT_EQ(group.name, kInterestGroupName);
   ASSERT_TRUE(group.bidding_url.has_value());
   EXPECT_EQ(group.bidding_url->spec(),
@@ -6869,12 +7734,14 @@ TEST_F(AdAuctionServiceImplRestrictedPermissionsPolicyTest,
       kUpdateUrlPath, base::StringPrintf(R"({"biddingLogicURL": "%s%s"})",
                                          kOriginStringC, kNewBiddingUrlPath));
 
-  NavigateAndCommit(kUrlC);
-
+  // Join an interest group for origin C from an origin A URL. Do it manually
+  // to bypass permissions checks. It's important to join it from an A URL to
+  // make sure that the ClearOriginJoinedInterestGroups() has no effect,
+  // in addition to the pipe being closed.
   blink::InterestGroup interest_group = CreateInterestGroup();
   interest_group.owner = kOriginC;
   interest_group.bidding_url = kUrlC.Resolve(kBiddingUrlPath);
-  JoinInterestGroupAndFlush(interest_group);
+  manager_->JoinInterestGroup(interest_group, kUrlA);
 
   NavigateAndCommit(kUrlA);
   EXPECT_EQ(1, GetJoinCount(kOriginC, kInterestGroupName));
@@ -6889,23 +7756,38 @@ TEST_F(AdAuctionServiceImplRestrictedPermissionsPolicyTest,
   constexpr char kInterestGroupName2[] = "group2";
   interest_group.owner = kOriginC;
   interest_group.name = kInterestGroupName2;
-  JoinInterestGroupAndExpectPipeClosed(std::move(interest_group_2), subframe);
+  JoinInterestGroupAndExpectBadMessage(
+      std::move(interest_group_2),
+      "Unexpected request: Interest groups may only be joined or left when "
+      "feature join-ad-interest-group is enabled by Permissions Policy",
+      subframe);
   EXPECT_EQ(0, GetJoinCount(kOriginC, kInterestGroupName2));
 
   UpdateInterestGroupNoFlushForFrame(subframe);
   task_environment()->RunUntilIdle();
 
   // `bidding_url` should not change.
-  std::vector<StorageInterestGroup> groups =
+  scoped_refptr<StorageInterestGroups> groups =
       GetInterestGroupsForOwner(kOriginC);
-  ASSERT_EQ(groups.size(), 1u);
-  const auto& group = groups[0].interest_group;
+  ASSERT_EQ(groups->size(), 1u);
+  const auto& group = groups->GetInterestGroups()[0]->interest_group;
   EXPECT_EQ(group.name, kInterestGroupName);
   ASSERT_TRUE(group.bidding_url.has_value());
   EXPECT_EQ(group.bidding_url->spec(),
             base::StringPrintf("%s%s", kOriginStringC, kBiddingUrlPath));
 
-  LeaveInterestGroupAndExpectPipeClosed(kOriginC, kInterestGroupName, subframe);
+  LeaveInterestGroupAndExpectBadMessage(
+      kOriginC, kInterestGroupName,
+      "Unexpected request: Interest groups may only be joined or left when "
+      "feature join-ad-interest-group is enabled by Permissions Policy",
+      subframe);
+  EXPECT_EQ(1, GetJoinCount(kOriginC, kInterestGroupName));
+
+  ClearOriginJoinedInterestGroupsAndExpectBadMessage(
+      kOriginC,
+      "Unexpected request: Interest groups may only be joined or left when "
+      "feature join-ad-interest-group is enabled by Permissions Policy",
+      subframe);
   EXPECT_EQ(1, GetJoinCount(kOriginC, kInterestGroupName));
 }
 
@@ -7222,10 +8104,10 @@ TEST_F(AdAuctionServiceImplTest, FencedFrameUrlMappingChangedDuringAuction) {
       auction_config, mojo::NullReceiver(),
       base::BindLambdaForTesting(
           [&run_loop, &maybe_config](
-              bool manually_aborted,
+              bool aborted_by_script,
               const absl::optional<
                   blink::FencedFrame::RedactedFencedFrameConfig>& config) {
-            EXPECT_FALSE(manually_aborted);
+            EXPECT_FALSE(aborted_by_script);
             maybe_config = config;
             run_loop.Quit();
           }));
@@ -7578,8 +8460,11 @@ function scoreAd(
                                         /*storage_partition=*/nullptr) {}
   };
 
-  base::MockRepeatingCallback<void(AggregatableReportRequest,
-                                   PrivateAggregationBudgetKey)>
+  base::MockRepeatingCallback<void(
+      PrivateAggregationHost::ReportRequestGenerator,
+      std::vector<blink::mojom::AggregatableReportHistogramContribution>,
+      PrivateAggregationBudgetKey,
+      PrivateAggregationBudgeter::BudgetDeniedBehavior)>
       mock_callback;
 
   auto* storage_partition_impl = static_cast<StoragePartitionImpl*>(
@@ -7611,19 +8496,29 @@ function scoreAd(
 
   base::RunLoop run_loop;
   EXPECT_CALL(mock_callback, Run)
-      .WillOnce(testing::Invoke([&](AggregatableReportRequest request,
-                                    PrivateAggregationBudgetKey budget_key) {
-        ASSERT_EQ(request.payload_contents().contributions.size(), 2u);
-        EXPECT_EQ(request.payload_contents().contributions[0].bucket, 1);
-        EXPECT_EQ(request.payload_contents().contributions[0].value, 2);
-        EXPECT_EQ(request.payload_contents().contributions[1].bucket, 3);
-        EXPECT_EQ(request.payload_contents().contributions[1].value, 4);
-        EXPECT_EQ(request.shared_info().reporting_origin, kOriginA);
-        EXPECT_EQ(budget_key.api(),
-                  PrivateAggregationBudgetKey::Api::kProtectedAudience);
-        EXPECT_EQ(budget_key.origin(), kOriginA);
-        run_loop.Quit();
-      }));
+      .WillOnce(testing::Invoke(
+          [&](PrivateAggregationHost::ReportRequestGenerator generator,
+              std::vector<blink::mojom::AggregatableReportHistogramContribution>
+                  contributions,
+              PrivateAggregationBudgetKey budget_key,
+              PrivateAggregationBudgeter::BudgetDeniedBehavior
+                  budget_denied_behavior) {
+            AggregatableReportRequest request =
+                std::move(generator).Run(contributions);
+            ASSERT_EQ(request.payload_contents().contributions.size(), 2u);
+            EXPECT_EQ(request.payload_contents().contributions[0].bucket, 1);
+            EXPECT_EQ(request.payload_contents().contributions[0].value, 2);
+            EXPECT_EQ(request.payload_contents().contributions[1].bucket, 3);
+            EXPECT_EQ(request.payload_contents().contributions[1].value, 4);
+            EXPECT_EQ(request.shared_info().reporting_origin, kOriginA);
+            EXPECT_EQ(budget_key.api(),
+                      PrivateAggregationBudgetKey::Api::kProtectedAudience);
+            EXPECT_EQ(budget_key.origin(), kOriginA);
+            EXPECT_EQ(budget_denied_behavior,
+                      PrivateAggregationBudgeter::BudgetDeniedBehavior::
+                          kDontSendReport);
+            run_loop.Quit();
+          }));
 
   absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
   EXPECT_NE(auction_result, absl::nullopt);
@@ -7865,6 +8760,12 @@ function scoreAd(
       LogWebFeatureForCurrentPage(
           main_rfh(),
           blink::mojom::WebFeature::kPrivateAggregationApiFledgeExtensions));
+  EXPECT_CALL(
+      browser_client,
+      LogWebFeatureForCurrentPage(
+          main_rfh(),
+          blink::mojom::WebFeature::kPrivateAggregationApiEnableDebugMode))
+      .Times(0);
 
   absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
   ASSERT_NE(auction_result, absl::nullopt);
@@ -7924,6 +8825,77 @@ function scoreAd(
           main_rfh(),
           blink::mojom::WebFeature::kPrivateAggregationApiFledgeExtensions))
       .Times(0);
+  EXPECT_CALL(
+      browser_client,
+      LogWebFeatureForCurrentPage(
+          main_rfh(),
+          blink::mojom::WebFeature::kPrivateAggregationApiEnableDebugMode))
+      .Times(0);
+
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
+  ASSERT_NE(auction_result, absl::nullopt);
+  InvokeCallbackForURN(*auction_result);
+}
+
+TEST_F(AdAuctionServiceImplPrivateAggregationEnabledTest,
+       PrivateAggregationEnableDebugModeUseCounterLogged) {
+  constexpr char kBiddingScript[] = R"(
+function generateBid(
+    interestGroup, auctionSignals, perBuyerSignals, trustedBiddingSignals,
+    browserSignals) {
+  privateAggregation.enableDebugMode();
+  privateAggregation.contributeToHistogram({bucket: 1n, value: 2});
+  return {'ad': 'example', 'bid': 1, 'render': 'https://example.com/render'};
+}
+)";
+
+  constexpr char kDecisionScript[] = R"(
+function scoreAd(
+    adMetadata, bid, auctionConfig, trustedScoringSignals, browserSignals) {
+  return bid;
+}
+)";
+
+  PrivateAggregationUseCounterContentBrowserClient browser_client;
+  ScopedContentBrowserClientSetting setting(&browser_client);
+
+  network_responder_->RegisterScriptResponse(kBiddingUrlPath, kBiddingScript);
+  network_responder_->RegisterScriptResponse(kDecisionUrlPath, kDecisionScript);
+
+  blink::InterestGroup interest_group = CreateInterestGroup();
+  interest_group.bidding_url = kUrlA.Resolve(kBiddingUrlPath);
+  interest_group.priority = 2;
+  interest_group.ads.emplace();
+  blink::InterestGroup::Ad ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group);
+
+  blink::AuctionConfig auction_config;
+  auction_config.seller = kOriginA;
+  auction_config.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
+  auction_config.non_shared_params.interest_group_buyers = {kOriginA};
+
+  EXPECT_CALL(
+      browser_client,
+      LogWebFeatureForCurrentPage(
+          main_rfh(), blink::mojom::WebFeature::kPrivateAggregationApiAll));
+  EXPECT_CALL(
+      browser_client,
+      LogWebFeatureForCurrentPage(
+          main_rfh(), blink::mojom::WebFeature::kPrivateAggregationApiFledge));
+  EXPECT_CALL(
+      browser_client,
+      LogWebFeatureForCurrentPage(
+          main_rfh(),
+          blink::mojom::WebFeature::kPrivateAggregationApiFledgeExtensions))
+      .Times(0);
+  EXPECT_CALL(
+      browser_client,
+      LogWebFeatureForCurrentPage(
+          main_rfh(),
+          blink::mojom::WebFeature::kPrivateAggregationApiEnableDebugMode));
 
   absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
   ASSERT_NE(auction_result, absl::nullopt);
@@ -7937,6 +8909,7 @@ TEST_F(AdAuctionServiceImplPrivateAggregationEnabledTest,
 function generateBid(
     interestGroup, auctionSignals, perBuyerSignals, trustedBiddingSignals,
     browserSignals) {
+  privateAggregation.enableDebugMode();
   privateAggregation.contributeToHistogram({});
   return {'ad': 'example', 'bid': 1, 'render': 'https://example.com/render'};
 }
@@ -7985,6 +8958,12 @@ function scoreAd(
       LogWebFeatureForCurrentPage(
           main_rfh(),
           blink::mojom::WebFeature::kPrivateAggregationApiFledgeExtensions))
+      .Times(0);
+  EXPECT_CALL(
+      browser_client,
+      LogWebFeatureForCurrentPage(
+          main_rfh(),
+          blink::mojom::WebFeature::kPrivateAggregationApiEnableDebugMode))
       .Times(0);
   absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
 
@@ -8055,6 +9034,177 @@ function scoreAd(
   absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
   ASSERT_NE(auction_result, absl::nullopt);
   InvokeCallbackForURN(*auction_result);
+}
+
+class AdAuctionServiceImplPrivateAggregationMultiCloudTest
+    : public AdAuctionServiceImplPrivateAggregationEnabledTest {
+ public:
+  AdAuctionServiceImplPrivateAggregationMultiCloudTest() {
+    feature_list_.InitWithFeatures(
+        /*enabled_features=*/
+        {blink::features::kPrivateAggregationApiMultipleCloudProviders,
+         aggregation_service::kAggregationServiceMultipleCloudProviders},
+        /*disabled_features=*/{});
+  }
+
+ protected:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+TEST_F(AdAuctionServiceImplPrivateAggregationMultiCloudTest,
+       PrivateAggregationReportsForwarded) {
+  // Add a mock to intercept calls to the PrivateAggregationHost.
+  class MockPrivateAggregationHost : public PrivateAggregationHost {
+   public:
+    MockPrivateAggregationHost(
+        base::RepeatingCallback<void(const absl::optional<url::Origin>&,
+                                     const url::Origin&)> check_coordinator,
+        base::RepeatingCallback<void(
+            ReportRequestGenerator,
+            std::vector<blink::mojom::AggregatableReportHistogramContribution>,
+            PrivateAggregationBudgetKey,
+            PrivateAggregationBudgeter::BudgetDeniedBehavior)>
+            on_report_request_details_received,
+        content::BrowserContext* browser_context)
+        : PrivateAggregationHost(std::move(on_report_request_details_received),
+                                 browser_context),
+          check_coordinator_(std::move(check_coordinator)) {
+      ON_CALL(*this, BindNewReceiver)
+          .WillByDefault(
+              [this](url::Origin worklet_origin, url::Origin top_frame_origin,
+                     PrivateAggregationBudgetKey::Api api_for_budgeting,
+                     absl::optional<std::string> context_id,
+                     absl::optional<base::TimeDelta> timeout,
+                     absl::optional<url::Origin> aggregation_coordinator_origin,
+                     mojo::PendingReceiver<blink::mojom::PrivateAggregationHost>
+                         pending_receiver) -> bool {
+                check_coordinator_.Run(aggregation_coordinator_origin,
+                                       worklet_origin);
+                return PrivateAggregationHost::BindNewReceiver(
+                    std::move(worklet_origin), std::move(top_frame_origin),
+                    api_for_budgeting, std::move(context_id), timeout,
+                    std::move(aggregation_coordinator_origin),
+                    std::move(pending_receiver));
+              });
+    }
+
+    ~MockPrivateAggregationHost() override = default;
+
+    MOCK_METHOD(bool,
+                BindNewReceiver,
+                (url::Origin,
+                 url::Origin,
+                 PrivateAggregationBudgetKey::Api,
+                 absl::optional<std::string>,
+                 absl::optional<base::TimeDelta>,
+                 absl::optional<url::Origin>,
+                 mojo::PendingReceiver<blink::mojom::PrivateAggregationHost>),
+                (override));
+
+   private:
+    base::RepeatingCallback<void(const absl::optional<url::Origin>&,
+                                 const url::Origin&)>
+        check_coordinator_;
+  };
+
+  class TestPrivateAggregationManagerImpl
+      : public PrivateAggregationManagerImpl {
+   public:
+    TestPrivateAggregationManagerImpl(
+        std::unique_ptr<PrivateAggregationBudgeter> budgeter,
+        std::unique_ptr<PrivateAggregationHost> host)
+        : PrivateAggregationManagerImpl(std::move(budgeter),
+                                        std::move(host),
+                                        /*storage_partition=*/nullptr) {}
+  };
+
+  constexpr char kBiddingScript[] = R"(
+function generateBid(
+    interestGroup, auctionSignals, perBuyerSignals, trustedBiddingSignals,
+    browserSignals) {
+  privateAggregation.contributeToHistogram({bucket: 1n, value: 2});
+  privateAggregation.contributeToHistogram({bucket: 3n, value: 4});
+  return {'ad': 'example', 'bid': 1, 'render': 'https://example.com/render'};
+}
+
+function reportWin() {}
+)";
+
+  constexpr char kDecisionScript[] = R"(
+function scoreAd(
+    adMetadata, bid, auctionConfig, trustedScoringSignals, browserSignals) {
+      privateAggregation.contributeToHistogram({bucket: 3n, value: 4});
+  return bid;
+}
+
+function reportResult() {}
+)";
+
+  const url::Origin kAwsAggCoordinator = url::Origin::Create(
+      GURL(aggregation_service::kDefaultAggregationCoordinatorAwsCloud));
+
+  base::RunLoop run_loop;
+  base::RepeatingCallback<void(const absl::optional<url::Origin>&,
+                               const url::Origin&)>
+      check_coordinator = base::BindLambdaForTesting(
+          [&](const absl::optional<url::Origin>& got_coordinator,
+              const url::Origin& got_worklet) {
+            EXPECT_EQ(kAwsAggCoordinator, got_coordinator);
+            run_loop.Quit();
+          });
+
+  auto* storage_partition_impl = static_cast<StoragePartitionImpl*>(
+      browser_context()->GetDefaultStoragePartition());
+  auto mock_private_aggregation_host = std::make_unique<
+      MockPrivateAggregationHost>(
+      std::move(check_coordinator),
+      /*on_report_request_received=*/
+      base::BindRepeating(
+          [](PrivateAggregationHost::ReportRequestGenerator generator,
+             std::vector<blink::mojom::AggregatableReportHistogramContribution>
+                 contributions,
+             PrivateAggregationBudgetKey budget_key,
+             PrivateAggregationBudgeter::BudgetDeniedBehavior
+                 budget_denied_behavior) {
+            AggregatableReportRequest request =
+                std::move(generator).Run(contributions);
+          }),
+      /*browser_context=*/
+      storage_partition_impl->browser_context());
+  MockPrivateAggregationHost* private_aggregation_host =
+      mock_private_aggregation_host.get();
+  storage_partition_impl->OverridePrivateAggregationManagerForTesting(
+      std::make_unique<TestPrivateAggregationManagerImpl>(
+          std::make_unique<MockPrivateAggregationBudgeter>(),
+          std::move(mock_private_aggregation_host)));
+
+  network_responder_->RegisterScriptResponse(kBiddingUrlPath, kBiddingScript);
+  network_responder_->RegisterScriptResponse(kDecisionUrlPath, kDecisionScript);
+
+  blink::InterestGroup interest_group = CreateInterestGroup();
+  interest_group.bidding_url = kUrlA.Resolve(kBiddingUrlPath);
+  interest_group.priority = 2;
+  interest_group.ads.emplace();
+  blink::InterestGroup::Ad ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group.ads->emplace_back(std::move(ad));
+
+  interest_group.aggregation_coordinator_origin = kAwsAggCoordinator;
+  JoinInterestGroupAndFlush(interest_group);
+
+  blink::AuctionConfig auction_config;
+  auction_config.seller = kOriginA;
+  auction_config.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
+  auction_config.non_shared_params.interest_group_buyers = {kOriginA};
+  auction_config.aggregation_coordinator_origin = kAwsAggCoordinator;
+
+  EXPECT_CALL(*private_aggregation_host, BindNewReceiver);
+
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
+  EXPECT_NE(auction_result, absl::nullopt);
+  InvokeCallbackForURN(*auction_result);
+  run_loop.Run();
 }
 
 class AdAuctionServiceImplPrivateAggregationDisabledTest
@@ -8246,28 +9396,36 @@ function scoreAd(
       // group's bid count, previous win list or trigger k-anon joins, no matter
       // how much time passes.
       task_environment()->RunUntilIdle();
-      auto storage_interest_group =
-          GetInterestGroup(interest_group.owner, interest_group.name);
-      ASSERT_TRUE(storage_interest_group);
-      EXPECT_EQ(0, storage_interest_group->bidding_browser_signals->bid_count);
-      EXPECT_EQ(
-          0u,
-          storage_interest_group->bidding_browser_signals->prev_wins.size());
-      EXPECT_THAT(GetKAnonJoinedIds(), ::testing::UnorderedElementsAre());
+
+      {
+        std::optional<SingleStorageInterestGroup> storage_interest_group(
+            GetInterestGroup(interest_group.owner, interest_group.name));
+        ASSERT_TRUE(storage_interest_group.has_value());
+        EXPECT_EQ(
+            0,
+            storage_interest_group.value()->bidding_browser_signals->bid_count);
+        EXPECT_EQ(0u, storage_interest_group.value()
+                          ->bidding_browser_signals->prev_wins.size());
+        EXPECT_THAT(GetKAnonJoinedIds(), ::testing::UnorderedElementsAre());
+      }
 
       // Invoking the URN callback (which is done when the result is loaded in a
       // frame) updates those fields.
       InvokeCallbackForURN(*auction_result);
-      storage_interest_group =
-          GetInterestGroup(interest_group.owner, interest_group.name);
-      ASSERT_TRUE(storage_interest_group);
-      EXPECT_EQ(1, storage_interest_group->bidding_browser_signals->bid_count);
-      ASSERT_EQ(
-          1u,
-          storage_interest_group->bidding_browser_signals->prev_wins.size());
-      ASSERT_EQ(R"({"renderURL":"https://example.com/render"})",
-                storage_interest_group->bidding_browser_signals->prev_wins[0]
-                    ->ad_json);
+      {
+        std::optional<SingleStorageInterestGroup> storage_interest_group(
+            GetInterestGroup(interest_group.owner, interest_group.name));
+        ASSERT_TRUE(storage_interest_group.has_value());
+        EXPECT_EQ(
+            1,
+            storage_interest_group.value()->bidding_browser_signals->bid_count);
+        ASSERT_EQ(1u, storage_interest_group.value()
+                          ->bidding_browser_signals->prev_wins.size());
+        ASSERT_EQ(R"({"renderURL":"https://example.com/render"})",
+                  storage_interest_group.value()
+                      ->bidding_browser_signals->prev_wins[0]
+                      ->ad_json);
+      }
       EXPECT_THAT(
           GetKAnonJoinedIds(),
           ::testing::UnorderedElementsAre(
@@ -8330,6 +9488,7 @@ class AdAuctionServiceImplBAndATest : public AdAuctionServiceImplTest {
   struct AdAuctionDataAndId {
     std::string request;
     absl::optional<base::Uuid> request_id;
+    std::string error_message;
   };
 
   // Gets auction data in the frame `rfh`. If `rfh` is nullptr, uses the main
@@ -8345,12 +9504,16 @@ class AdAuctionServiceImplBAndATest : public AdAuctionServiceImplTest {
     absl::optional<AdAuctionDataAndId> output;
     interest_service->GetInterestGroupAdAuctionData(
         seller,
+        url::Origin::Create(
+            GURL(kDefaultBiddingAndAuctionGCPCoordinatorOrigin)),
         base::BindLambdaForTesting([&](mojo_base::BigBuffer result,
-                                       const absl::optional<base::Uuid>& id) {
+                                       const absl::optional<base::Uuid>& id,
+                                       const std::string& error_message) {
           AdAuctionDataAndId data;
           data.request = std::string(reinterpret_cast<char*>(result.data()),
                                      result.size());
           data.request_id = id;
+          data.error_message = error_message;
           output = data;
           run_loop.Quit();
         }));
@@ -8382,10 +9545,10 @@ class AdAuctionServiceImplBAndATest : public AdAuctionServiceImplTest {
         auction_config, abortable_ad_auction.BindNewPipeAndPassReceiver(),
         base::BindLambdaForTesting(
             [&run_loop, &maybe_config](
-                bool manually_aborted,
+                bool aborted_by_script,
                 const absl::optional<
                     blink::FencedFrame::RedactedFencedFrameConfig>& config) {
-              EXPECT_FALSE(manually_aborted);
+              EXPECT_FALSE(aborted_by_script);
               maybe_config = config;
               run_loop.Quit();
             }));
@@ -8403,6 +9566,30 @@ class AdAuctionServiceImplBAndATest : public AdAuctionServiceImplTest {
   const GURL kKeyUrl = kUrlA.Resolve(kBAndAKeyPath);
   base::test::ScopedFeatureList feature_list_;
 };
+
+// Expect bad mojo message if we use an invalid coordinator origin. The
+// coordinator origin must be secure.
+TEST_F(AdAuctionServiceImplTest, HandlesInvalidCoordinatorOrigin) {
+  url::Origin test_origin = url::Origin::Create(GURL(kOriginStringA));
+  url::Origin bad_coordinator =
+      url::Origin::Create(GURL("http://insecure.coordinator.test/"));
+
+  mojo::Remote<blink::mojom::AdAuctionService> interest_service;
+  AdAuctionServiceImpl::CreateMojoService(
+      main_rfh(), interest_service.BindNewPipeAndPassReceiver());
+  base::RunLoop run_loop;
+  interest_service.set_disconnect_handler(run_loop.QuitClosure());
+  interest_service->GetInterestGroupAdAuctionData(
+      /*seller=*/test_origin,
+      /*coordinator=*/bad_coordinator,
+      /*callback=*/
+      base::BindLambdaForTesting([&](mojo_base::BigBuffer result,
+                                     const absl::optional<base::Uuid>& id,
+                                     const std::string& error_message) {
+        ADD_FAILURE() << "This callback should not be invoked.";
+      }));
+  run_loop.Run();
+}
 
 // Test that interest_group_manager serialize the blob correctly.
 TEST_F(AdAuctionServiceImplTest, SerializesAuctionBlob) {
@@ -8431,13 +9618,13 @@ TEST_F(AdAuctionServiceImplTest, SerializesAuctionBlob) {
   task_environment()->FastForwardBy(base::Seconds(1));
   manager_->RecordInterestGroupWin(
       {test_origin, "cars"},
-      R"({"renderUrl": "https://c.test/ad.html", "adRenderId": "1234"})");
+      R"({"renderURL": "https://c.test/ad.html", "adRenderId": "1234"})");
   task_environment()->FastForwardBy(base::Seconds(1));
   manager_->RecordInterestGroupWin(
-      {test_origin, "cars"}, R"({"renderUrl": "https://c.test/ad2.html"})");
+      {test_origin, "cars"}, R"({"renderURL": "https://c.test/ad2.html"})");
   task_environment()->FastForwardBy(base::Seconds(1));
   manager_->RecordInterestGroupWin({test_origin, "cars"},
-                                   R"({"renderUrl": "corrupt JSON)");
+                                   R"({"renderURL": "corrupt JSON)");
   task_environment()->FastForwardBy(base::Seconds(1));
 
   std::vector<uint8_t> msg;
@@ -8453,17 +9640,18 @@ TEST_F(AdAuctionServiceImplTest, SerializesAuctionBlob) {
       }));
   run_loop.Run();
   std::string expected =
-      "AgAAASSlZ3ZlcnNpb24AaXB1Ymxpc2hlcm5odHRwczovL2EudGVzdGxnZW5lcmF0aW9uSWR4"
-      "JDAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMG5pbnRlcmVzdEdyb3Vwc6Fu"
-      "aHR0cHM6Ly9hLnRlc3RYlx+"
-      "LCAAAAAAAAABVjTsOwjAQBfldKCH8WlJSUtBir1eOA1lHuwnIQhTxWRDnxEQ0NK+"
-      "Z0bzhDcpINFm+LKBYrQ2pBg0olhp803pC6mSAzXZHmv1dkI/OkrrKyzICEoRFpZ0pfU/"
-      "dpGoZbydHEuPsHOdj1NXe0YinnETjyP4KBwzp+IIh+07OfYrv/"
-      "wz9eH4AfEmO3aAAAAB0ZW5hYmxlRGVidWdSZXBvcnRpbmf0AAAAAAAAAAAAAAAAAAAAAAAAA"
+      "AgAAARqlZ3ZlcnNpb24AaXB1Ymxpc2hlcmZhLnRlc3RsZ2VuZXJhdGlvbklkeCQwMDAwMDAw"
+      "MC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDBuaW50ZXJlc3RHcm91cHOhbmh0dHBzOi8v"
+      "YS50ZXN0WJUfiwgAAAAAAAAAVYy7DoJAEAB9/"
+      "RCIr1ZKSwtb73Y3sCh7ZBc0xFhw32L8TiOxsZlmJjO8waFFTNJlBtlqjeJqQnBqFYS6CULS2"
+      "gCb7U68hruRHrkQd7VXoQQk0C9Kz5iHTtpJ2SjdTiwW4+wc5+OUq8Ay6ql6RmQ"
+      "pfocD9RbxQn3yRaqdke7/"
+      "Cv9"
+      "4fgB8SY7doAAAAHRlbmFibGVEZWJ1Z1JlcG9ydGluZ/QAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
       "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
       "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
       "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
   EXPECT_EQ(1, absl::popcount(msg.size()));  // Should be a power of 2.
   EXPECT_EQ(expected, base::Base64Encode(msg));
   EXPECT_THAT(group_names, testing::ElementsAre(testing::Pair(
@@ -8540,10 +9728,10 @@ TEST_F(AdAuctionServiceImplTest, SerializesMultipleOwnersAuctionBlob) {
       test_origin_a.GetURL().Resolve("/example.html"));
   manager_->RecordInterestGroupWin(
       {test_origin_a, "cars"},
-      R"({"renderUrl": "https://c.test/ad.html", "adRenderId": "1234"})");
+      R"({"renderURL": "https://c.test/ad.html", "adRenderId": "1234"})");
   task_environment()->FastForwardBy(base::Seconds(1));
   manager_->RecordInterestGroupWin(
-      {test_origin_a, "cars"}, R"({"renderUrl": "https://c.test/ad2.html"})");
+      {test_origin_a, "cars"}, R"({"renderURL": "https://c.test/ad2.html"})");
 
   task_environment()->FastForwardBy(base::Seconds(1));
   manager_->JoinInterestGroup(
@@ -8602,18 +9790,20 @@ TEST_F(AdAuctionServiceImplTest, SerializesMultipleOwnersAuctionBlob) {
   run_loop.Run();
 
   std::string expected =
-      "AgAAAaelZ3ZlcnNpb24AaXB1Ymxpc2hlcm5odHRwczovL2EudGVzdGxnZW5lcmF0aW9uSWR4"
-      "JDAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMG5pbnRlcmVzdEdyb3Vwc6Ju"
-      "aHR0cHM6Ly9hLnRlc3RYmB+LCAAAAAAAAAB1zUsOwjAMBFAovVA//"
-      "Lb0CCzY4jhWm4raVRxA7CBn6UFBYYGQYGONPNK8OCFYjbQTCEW6pWUYiMwrao8yjMLEQR+"
-      "prNh4uSr5vWsZTjq1npAYb1lnnG3kzGHWjZ4uB8d6d704Ts/"
-      "5m7FFWdVYL1fJsAj+i8D1ZvsPyH8AMS6OMU+"
-      "jHyp7AmqteTfTAAAAbmh0dHBzOi8vYi50ZXN0WHEfiwgAAAAAAAAAa1ySnJhS3JQWUpSYmWc"
-      "IoYxS8hJzU9NKQOzirOT83IL8vNS8kuJGiLRxXlJRfnlxalFwZnpeYk7xkvSi1OTUvORKxoy"
-      "kzBTn/NK8EoaMgqLUsnCg9obMrPzMPLAgIwAb/"
-      "vMybAAAAHRlbmFibGVEZWJ1Z1JlcG9ydGluZ/"
-      "QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+      "AgAAAZ2"
+      "lZ3ZlcnNpb24AaXB1Ymxpc2hlcmZhLnRlc3RsZ2VuZXJhdGlvbklkeCQwMDAwMDAwMC0wMDA"
+      "wLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDBuaW50ZXJlc3RHcm91cHOibmh0dHBzOi8vYS50ZXN"
+      "0WJcfiwgAAAAAAAAAdc07DsIwEARQCLlQPv"
+      "xaOAIFLev1KnFEdiOvSUQHPk"
+      "sOimQKhATNFDPSvDgjWI10EAhFytIy9ERGIGiH0g/CxEGfaazYeJmU/"
+      "Mk1DFedG09IjPesNc4e5cZh0Q6exrNjfbhOHKdy+WZsUVY11utNMiyC/yJwu9v/A/If"
+      "QIyrS8zT6YfKXmqteTfTAAAAbmh0dHBzOi8vYi50ZXN0WHAfiwgAAAAAAAAAJYnRDYMwDAVh"
+      "JMoIjFCkfofEEEflObJTUP+azsKgFeXrT"
+      "nf18C7Ydx7VMboLtwC30lxOt+RlzQJCsXrtHpPKbqR3XuCedixKnu"
+      "DfbZw4DPJCaWJW2h4M+3ASxj+2Pxv+8z"
+      "JsAAAAdGVuYWJsZURlYnVnUmVwb3J0aW5n9AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      "AAAAAAAAAAAAAAAAA=";
   EXPECT_EQ(1, absl::popcount(msg.size()));  // Should be a power of 2.
   EXPECT_EQ(expected, base::Base64Encode(msg));
   EXPECT_THAT(
@@ -8651,13 +9841,12 @@ TEST_F(AdAuctionServiceImplTest, SerializesAuctionBlobWithDebugReporting) {
       }));
   run_loop.Run();
   std::string expected =
-      "AgAAAOylZ3ZlcnNpb24AaXB1Ymxpc2hlcm5odHRwczovL2EudGVzdGxnZW5lcmF0aW9uSWR4"
-      "JDAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMG5pbnRlcmVzdEdyb3Vwc6Fu"
-      "aHR0cHM6Ly9hLnRlc3RYXx+"
-      "LCAAAAAAAAABrXJycmFLcmGJoZGySkpeYm5qSnFhUnJdUlF9enFoUnJmel5hTvCS9KDU5NS+"
-      "5kjEjKTPFOb80r4Qho6AotSw8M6+"
-      "4ITMrPzMPLMgIAL4Q7YtOAAAAdGVuYWJsZURlYnVnUmVwb3J0aW5n9QAAAAAAAAAAAAAAAAA"
-      "AAA==";
+      "AgAAAOSlZ3ZlcnNpb24AaXB1Ymxpc2hlcmZhLnRlc3RsZ2VuZXJhdGlvbklkeCQwMDAwMDAw"
+      "MC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDBuaW50ZXJlc3RHcm91cHOhbmh0dHBzOi8v"
+      "YS50ZXN0WF8fiwgAAAAAAAAAa1ycnJhS3JhiaGRskpKXmJuakpxYVJyXVJRfXpxaFJyZnpeY"
+      "U7wkvSg1OTUvuZIxIykzxTm/"
+      "NK+EIaOgKLUsPDOvuCEzKz8zDyzICAC+EO2LTgAAAHRlbmFibGVEZWJ1Z1JlcG9ydGluZ/"
+      "UAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
   EXPECT_EQ(1, absl::popcount(msg.size()));  // Should be a power of 2.
   EXPECT_EQ(expected, base::Base64Encode(msg));
   EXPECT_THAT(group_names, testing::ElementsAre(testing::Pair(
@@ -8698,18 +9887,16 @@ TEST_F(AdAuctionServiceImplTest, SerializesAuctionBlobWithDebugToken) {
       }));
   run_loop.Run();
   EXPECT_EQ(
-      "AgAAASGmZ3ZlcnNpb24AaXB1Ymxpc2hlcm5odHRwczovL2EudGVzdGxnZW5lcmF0aW9uSWR4"
-      "JDAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMG5pbnRlcmVzdEdyb3Vwc6Fu"
-      "aHR0cHM6Ly9hLnRlc3RYYx+"
-      "LCAAAAAAAAABrXJycmFLclGJoZGySbGJqlpKXmJuakpxYVJyXVJRfXpxaFJyZnpeYU7wkvSg"
-      "1OTUvuZIxIykzxTm/"
-      "NK+"
-      "EIaOgKLUsPDOvuCEzKz8zDyzICAAFZk0oUgAAAHRjb25zZW50ZWREZWJ1Z0NvbmZpZ6JldG9"
-      "rZW5nbXlUb2tlbmtpc0NvbnNlbnRlZPV0ZW5hYmxlRGVidWdSZXBvcnRpbmf0AAAAAAAAAAA"
+      "AgAAARmmZ3ZlcnNpb24AaXB1Ymxpc2hlcmZhLnRlc3RsZ2VuZXJhdGlvbklkeCQwMDAwMDAw"
+      "MC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDBuaW50ZXJlc3RHcm91cHOhbmh0dHBzOi8v"
+      "YS50ZXN0WGMfiwgAAAAAAAAAa1ycnJhS3JRiaGRskmxiapaSl5ibmpKcWFScl1SUX16cWhSc"
+      "mZ6XmFO8JL0oNTk1L7mSMSMpM8U5vzSvhCGjoCi1LDwzr7ghMys/"
+      "Mw8syAgABWZNKFIAAAB0Y29uc2VudGVkRGVidWdDb25maWeiZXRva2VuZ215VG9rZW5raXND"
+      "b25zZW50ZWT1dGVuYWJsZURlYnVnUmVwb3J0aW5n9AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
       "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
       "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
       "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
       base::Base64Encode(msg));
   EXPECT_THAT(group_names, testing::ElementsAre(testing::Pair(
                                test_origin, testing::ElementsAre("cars"))));
@@ -8733,10 +9920,10 @@ TEST_F(AdAuctionServiceImplTest, SerializesAuctionBlobWithOmitAds) {
   task_environment()->FastForwardBy(base::Seconds(1));
   manager_->RecordInterestGroupWin(
       {test_origin, "cars"},
-      R"({"renderUrl": "https://c.test/ad.html", "adRenderId": "1234"})");
+      R"({"renderURL": "https://c.test/ad.html", "adRenderId": "1234"})");
   task_environment()->FastForwardBy(base::Seconds(1));
   manager_->RecordInterestGroupWin(
-      {test_origin, "cars"}, R"({"renderUrl": "https://c.test/ad2.html"})");
+      {test_origin, "cars"}, R"({"renderURL": "https://c.test/ad2.html"})");
 
   std::vector<uint8_t> msg;
   base::flat_map<url::Origin, std::vector<std::string>> group_names;
@@ -8751,12 +9938,12 @@ TEST_F(AdAuctionServiceImplTest, SerializesAuctionBlobWithOmitAds) {
       }));
   run_loop.Run();
   std::string expected =
-      "AgAAAOylZ3ZlcnNpb24AaXB1Ymxpc2hlcm5odHRwczovL2EudGVzdGxnZW5lcmF0aW9uSWR4"
-      "JDAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMG5pbnRlcmVzdEdyb3Vwc6Fu"
-      "aHR0cHM6Ly9hLnRlc3RYXx+"
-      "LCAAAAAAAAABrXJSSl5ibmpKcWFScl1SUX16cWhScmZ6XmFO8JL0oNTk1L7mSKSMpM8U5vzS"
-      "vhCGjoCi1LDwzr7ipiSGhiTHF0MjYJDMrPzMPLM0IAAqc3RlOAAAAdGVuYWJsZURlYnVnUmV"
-      "wb3J0aW5n9QAAAAAAAAAAAAAAAAAAAA==";
+      "AgAAAOSlZ3ZlcnNpb24AaXB1Ymxpc2hlcmZhLnRlc3RsZ2VuZXJhdGlvbklkeCQwMDAwMDAw"
+      "MC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDBuaW50ZXJlc3RHcm91cHOhbmh0dHBzOi8v"
+      "YS50ZXN0WF8fiwgAAAAAAAAAa1yUkpeYm5qSnFhUnJdUlF9enFoUnJmel5hTvCS9KDU5NS+"
+      "5kikjKTPFOb80r4Qho6AotSw8M6+"
+      "4qYkhoYkxxdDI2CQzKz8zDyzNCAAKnN0ZTgAAAHRlbmFibGVEZWJ1Z1JlcG9ydGluZ/"
+      "UAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
   EXPECT_EQ(1, absl::popcount(msg.size()));  // Should be a power of 2.
   EXPECT_EQ(expected, base::Base64Encode(msg));
   EXPECT_THAT(group_names, testing::ElementsAre(testing::Pair(
@@ -8786,10 +9973,10 @@ TEST_F(AdAuctionServiceImplTest, SerializesAuctionBlobWithFullAds) {
   task_environment()->FastForwardBy(base::Seconds(1));
   manager_->RecordInterestGroupWin(
       {test_origin, "cars"},
-      R"({"renderUrl": "https://c.test/ad.html", "adRenderId": "1234"})");
+      R"({"renderURL": "https://c.test/ad.html", "adRenderId": "1234"})");
   task_environment()->FastForwardBy(base::Seconds(1));
   manager_->RecordInterestGroupWin(
-      {test_origin, "cars"}, R"({"renderUrl": "https://c.test/ad2.html"})");
+      {test_origin, "cars"}, R"({"renderURL": "https://c.test/ad2.html"})");
 
   std::vector<uint8_t> msg;
   base::flat_map<url::Origin, std::vector<std::string>> group_names;
@@ -8804,19 +9991,17 @@ TEST_F(AdAuctionServiceImplTest, SerializesAuctionBlobWithFullAds) {
       }));
   run_loop.Run();
   std::string expected =
-      "AgAAAUOlZ3ZlcnNpb24AaXB1Ymxpc2hlcm5odHRwczovL2EudGVzdGxnZW5lcmF0aW9uSWR4"
-      "JDAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMG5pbnRlcmVzdEdyb3Vwc6Fu"
-      "aHR0cHM6Ly9hLnRlc3RYth+"
-      "LCAAAAAAAAAB1zjEOgkAQBVDxJJ4AIlrZWhgTK4yxHnZGdhF2ycwC0Q5uonJQDYkx0dj86v+"
-      "83z0UoHSDLskDgodzVRAIzYQsGn4F8SHZNdr7SlZRpEJP4iPAUPuyMGKutGFXV+"
-      "rkXA6YjIMt4jxeLNFCSaiAxabsWiHem8xCIUPGpMiqy1SnBteutn6iK6bmaKz0/"
-      "eT2hrlof+B4lPvg/"
-      "in9eff9x+"
-      "TO2FELntrMPCL3AAAAdGVuYWJsZURlYnVnUmVwb3J0aW5n9QAAAAAAAAAAAAAAAAAAAAAAAA"
+      "AgAAATalZ3ZlcnNpb24AaXB1Ymxpc2hlcmZhLnRlc3RsZ2VuZXJhdGlvbklkeCQwMDAwMDAw"
+      "MC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDBuaW50ZXJlc3RHcm91cHOhbmh0dHBzOi8v"
+      "YS50ZXN0WLEfiwgAAAAAAAAAhc4xDoJAEEBR8SSeACJa2VoYEyuMsR52RnYRZjc7C0Q7uInK"
+      "QU1oTLTwAD/v9y8FKP2oawqAEODqKgKhhRCj8cRI/pQ"
+      "dWh2Ck02SqDiQhAQw1qGujJg77bxtnLpYWwJmU7BHXKarNTLUhAq8cO5tJ+SPpmCoZCw8KWJ"
+      "1m+vc4NY2HGbaeWrPhmUYZo8P3P3A6SQP0fPv3f"
+      "ePKa3hSYveY92wlPcAAAB0ZW5hYmxlRGVidWdSZXBvcnRpbmf1AAAAAAAAAAAAAAAAAAAAAA"
       "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
       "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
       "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-      "AAAAA=";
+      "AAAAAAAAAAAAAAAAAAAAAAAAA=";
   EXPECT_EQ(1, absl::popcount(msg.size()));  // Should be a power of 2.
   EXPECT_EQ(expected, base::Base64Encode(msg));
   EXPECT_THAT(group_names, testing::ElementsAre(testing::Pair(
@@ -8849,10 +10034,10 @@ TEST_F(AdAuctionServiceImplBAndATest, EncryptsPayload) {
   task_environment()->FastForwardBy(base::Seconds(1));
   manager_->RecordInterestGroupWin(
       {test_origin, "cars"},
-      R"({"renderUrl": "https://c.test/ad.html", "adRenderId": "1234"})");
+      R"({"renderURL": "https://c.test/ad.html", "adRenderId": "1234"})");
   task_environment()->FastForwardBy(base::Seconds(1));
   manager_->RecordInterestGroupWin(
-      {test_origin, "cars"}, R"({"renderUrl": "https://c.test/ad2.html"})");
+      {test_origin, "cars"}, R"({"renderURL": "https://c.test/ad2.html"})");
   task_environment()->FastForwardBy(base::Seconds(1));
 
   manager_->JoinInterestGroup(
@@ -8878,7 +10063,8 @@ TEST_F(AdAuctionServiceImplBAndATest, EncryptsPayload) {
 
   absl::optional<AdAuctionDataAndId> result =
       GetAdAuctionDataAndFlushForFrame(test_origin);
-  EXPECT_TRUE(result.has_value());
+  ASSERT_TRUE(result.has_value());
+  ASSERT_LT(0u, result.value().request.size());
 
   auto key_config = quiche::ObliviousHttpHeaderKeyConfig::Create(
                         0x12, EVP_HPKE_DHKEM_X25519_HKDF_SHA256,
@@ -8892,7 +10078,7 @@ TEST_F(AdAuctionServiceImplBAndATest, EncryptsPayload) {
           .value();
   auto request =
       ohttp_gateway.DecryptObliviousHttpRequest(result.value().request);
-  EXPECT_TRUE(request.ok()) << request.status();
+  ASSERT_TRUE(request.ok()) << request.status();
   auto plaintext_data = request->GetPlaintextData();
 
   // The message should be a power of 2 in length
@@ -8911,19 +10097,19 @@ TEST_F(AdAuctionServiceImplBAndATest, EncryptsPayload) {
       cbor::Reader::Read(base::as_bytes(base::make_span(
                              plaintext_data.substr(5, request_size))))
           .value());
-  EXPECT_THAT(got_str, testing::StartsWith(
-                           R"({"version": 0, "publisher": "https://a.test", )"
-                           R"("generationId": ")"));
+  EXPECT_THAT(got_str,
+              testing::StartsWith(R"({"version": 0, "publisher": "a.test", )"
+                                  R"("generationId": ")"));
   EXPECT_THAT(
       got_str,
       testing::EndsWith(
           R"(", )"
           R"("interestGroups": {"https://a.test": )"
-          R"(h'1F8B080000000000000075CD4B0EC2300C04500A5CA81F7E5B38020BB6248E)"
-          R"(D5BAA276158756EC2067E941416103126CAC91479A1727304E23EEC5843CDDC2)"
-          R"(B1E910ED2B6A0BD2F5C2C8411FA92CD97A1915FD916A36179D6A8F800CB7ACB1)"
-          R"(E40E72E5306B7A8FC38958EFD40A717A666FC6E5455941B55A27C381F15F046C)"
-          R"(B6BB7FC0F20710E3FC1C1769F4837A02E2EDA5E5D3000000'}, )"
+          R"(h'1F8B080000000000000075CD3B0EC230100450025C281F7E2D3902455AD6EB)"
+          R"(55E288EC465E1344073E4B0E8A641A90A09962469A176704AB918E02214F5958)"
+          R"(8681C80804ED5186519838E8338D251B2F37257F722DC345E7D61312E33DEB8C)"
+          R"(B3B55C392CBAD1D3D438D687EBC5712AB33763F3A2ACB0DA6C936111FC1781BB)"
+          R"(FDE11FB0FE01C4B83CC7553AFDA05EE2EDA5E5D3000000'}, )"
           R"("enableDebugReporting": false})"));
 
   AdAuctionPageData* page_data = PageUserData<AdAuctionPageData>::GetForPage(
@@ -8942,10 +10128,12 @@ TEST_F(AdAuctionServiceImplBAndATest, EncryptsPayload) {
 TEST_F(AdAuctionServiceImplBAndATest, OriginNotAllowed) {
   base::HistogramTester hist;
   ProvideKeys();
-  NavigateAndCommit(GURL("https://not.allowed.test/"));
-  url::Origin test_origin = url::Origin::Create(GURL(kOriginStringA));
+  content_browser_client_.SetAllowList({kOriginA});
+  url::Origin test_origin =
+      url::Origin::Create(GURL("http://not.attested.test/"));
+  NavigateAndCommit(kUrlA);
   manager_->JoinInterestGroup(
-      blink::TestInterestGroupBuilder(test_origin, "cars")
+      blink::TestInterestGroupBuilder(kOriginA, "cars")
           .SetAds(
               {{{GURL("https://c.test/ad.html"), /*metadata=*/absl::nullopt,
                  /*size_group=*/absl::nullopt,
@@ -8967,6 +10155,7 @@ TEST_F(AdAuctionServiceImplBAndATest, OriginNotAllowed) {
       GetAdAuctionDataAndFlushForFrame(test_origin);
   EXPECT_TRUE(result.has_value());
   EXPECT_EQ("", result.value().request);
+  EXPECT_EQ("Attestation Failed", result.value().error_message);
 
   hist.ExpectTotalCount("Ads.InterestGroup.BaDataSize", 0);
   hist.ExpectTotalCount("Ads.InterestGroup.BaDataConstructionTime", 0);
@@ -9089,17 +10278,121 @@ TEST_F(AdAuctionServiceImplBAndATest, RunBAndAAuction) {
               testing::ElementsAre())));
 
   // Request should be padded to 256 bytes with 7 byte encryption header.
-  const size_t expected_ba_data_size = 256 + 7;
-  hist.ExpectUniqueSample("Ads.InterestGroup.BaDataSize", expected_ba_data_size,
+  const size_t kExpectedBaDataSize = 256 + 7;
+  hist.ExpectUniqueSample("Ads.InterestGroup.BaDataSize", kExpectedBaDataSize,
                           1);
   hist.ExpectTotalCount("Ads.InterestGroup.BaDataConstructionTime", 1);
   hist.ExpectTotalCount(
       "Ads.InterestGroup.Auction.ParseBaServerResponseDuration", 1);
+  hist.ExpectTotalCount("Ads.InterestGroup.ServerAuction.EndToEndTime", 1);
+  hist.ExpectTotalCount("Ads.InterestGroup.ServerAuction.EndToEndTimeNoWinner",
+                        0);
+  hist.ExpectUniqueSample("Ads.InterestGroup.ServerAuction.Result",
+                          AuctionResult::kSuccess, 1);
+  hist.ExpectUniqueSample(
+      "Ads.InterestGroup.ServerAuction.NonKAnonWinnerIsKAnon", false, 1);
+  hist.ExpectTotalCount("Ads.InterestGroup.ServerAuction.AuctionWithWinnerTime",
+                        1);
+
+  // There should be no on-device metrics
+  hist.ExpectTotalCount("Ads.InterestGroup.Auction.EndToEndTime", 0);
+  hist.ExpectTotalCount("Ads.InterestGroup.Auction.EndToEndTimeNoWinner", 0);
+  hist.ExpectTotalCount("Ads.InterestGroup.Auction.Result", 0);
+  hist.ExpectTotalCount("Ads.InterestGroup.Auction.NonKAnonWinnerIsKAnon", 0);
+  hist.ExpectTotalCount("Ads.InterestGroup.Auction.AuctionWithWinnerTime", 0);
+}
+
+TEST_F(AdAuctionServiceImplBAndATest, RunBAndAAuctionNoBids) {
+  base::HistogramTester hist;
+  ProvideKeys();
+  NavigateAndCommit(kUrlA);
+  manager_->JoinInterestGroup(
+      blink::TestInterestGroupBuilder(kOriginA, "cars")
+          .SetAds({{{GURL("https://c.test/ad.html"), /*metadata=*/absl::nullopt,
+                     /*size_group=*/absl::nullopt,
+                     /*buyer_reporting_id=*/absl::nullopt,
+                     /*buyer_and_seller_reporting_id=*/absl::nullopt, "1234"}}})
+          .SetBiddingUrl(kBiddingLogicUrlA)
+          .Build(),
+      GURL("https://a.test/example.html"));
+  task_environment()->FastForwardBy(base::Seconds(1));
+
+  absl::optional<AdAuctionDataAndId> auction_data =
+      GetAdAuctionDataAndFlushForFrame(kOriginA);
+  EXPECT_TRUE(auction_data.has_value());
+
+  AdAuctionPageData* page_data = PageUserData<AdAuctionPageData>::GetForPage(
+      static_cast<RenderFrameHostImpl*>(main_rfh())->GetPage());
+  ASSERT_TRUE(page_data);
+  ASSERT_TRUE(auction_data->request_id);
+  AdAuctionRequestContext* request_context =
+      page_data->GetContextForAdAuctionRequest(*auction_data->request_id);
+
+  std::string response;
+  // CBOR response computed using https://cbor.me/
+  /* Response:
+  {
+    "isChaff": true
+  }
+  */
+  // Converted to base64 with `cat | sed 's/#.*//' | xxd -r -p | gzip | xxd -ps
+  // -c 0 | sed 's/^/0200000022/' | xxd -r -p | base64`
+  ASSERT_TRUE(base::Base64Decode(
+      "AgAAAB4fiwgAAAAAAAADW5ieWeyckZiW9hUA2j0IngoAAAA=", &response));
+
+  std::string encrypted_response =
+      quiche::ObliviousHttpResponse::CreateServerObliviousResponse(
+          response, request_context->context)
+          ->EncapsulateAndSerialize();
+
+  page_data->AddAuctionResultWitnessForOrigin(
+      kOriginA, crypto::SHA256HashString(encrypted_response));
+
+  blink::AuctionConfig auction_config;
+  auction_config.seller = kOriginA;
+  auction_config.non_shared_params.interest_group_buyers = {kOriginA};
+  auction_config.server_response.emplace();
+  auction_config.server_response->request_id = *auction_data->request_id;
+  absl::optional<GURL> result = RunAdAuctionWithPromiseAndFlushForFrame(
+      auction_config,
+      base::BindLambdaForTesting(
+          [&](mojo::Remote<blink::mojom::AbortableAdAuction>& runner) {
+            runner->ResolvedAuctionAdResponsePromise(
+                blink::mojom::AuctionAdConfigAuctionId::NewMainAuction(0),
+                mojo_base::BigBuffer(
+                    base::as_bytes(base::make_span(encrypted_response))));
+          }),
+      main_rfh());
+  EXPECT_FALSE(result);
+
+  // Request should be padded to 256 bytes with 7 byte encryption header.
+  const size_t kExpectedBaDataSize = 256 + 7;
+  hist.ExpectUniqueSample("Ads.InterestGroup.BaDataSize", kExpectedBaDataSize,
+                          1);
+  hist.ExpectTotalCount("Ads.InterestGroup.BaDataConstructionTime", 1);
+  hist.ExpectTotalCount(
+      "Ads.InterestGroup.Auction.ParseBaServerResponseDuration", 0);
+  hist.ExpectTotalCount("Ads.InterestGroup.ServerAuction.EndToEndTime", 0);
+  hist.ExpectTotalCount("Ads.InterestGroup.ServerAuction.EndToEndTimeNoWinner",
+                        1);
+  hist.ExpectUniqueSample("Ads.InterestGroup.ServerAuction.Result",
+                          AuctionResult::kNoBids, 1);
+  hist.ExpectTotalCount("Ads.InterestGroup.ServerAuction.NonKAnonWinnerIsKAnon",
+                        0);
+  hist.ExpectTotalCount("Ads.InterestGroup.ServerAuction.AuctionWithWinnerTime",
+                        0);
+
+  // There should be no on-device metrics
+  hist.ExpectTotalCount("Ads.InterestGroup.Auction.EndToEndTime", 0);
+  hist.ExpectTotalCount("Ads.InterestGroup.Auction.EndToEndTimeNoWinner", 0);
+  hist.ExpectTotalCount("Ads.InterestGroup.Auction.Result", 0);
+  hist.ExpectTotalCount("Ads.InterestGroup.Auction.NonKAnonWinnerIsKAnon", 0);
+  hist.ExpectTotalCount("Ads.InterestGroup.Auction.AuctionWithWinnerTime", 0);
 }
 
 TEST_F(AdAuctionServiceImplBAndATest, RunBAndAAuctionWithCustomMediaType) {
-  const std::string kCustomRequestType = "message/ba-request";
-  const std::string kCustomResponseType = "message/ba-response";
+  const std::string kCustomRequestType = "message/ba request";
+  const std::string kCustomResponseType = "message/ba response";
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeatureWithParameters(
       content::kBiddingAndAuctionEncryptionMediaType,
@@ -9142,8 +10435,9 @@ TEST_F(AdAuctionServiceImplBAndATest, RunBAndAAuctionWithCustomMediaType) {
           key_config)
           .value();
 
+  EXPECT_EQ(0x00, auction_data->request[0]);
   auto request = ohttp_gateway.DecryptObliviousHttpRequest(
-      auction_data->request, kCustomRequestType);
+      auction_data->request.substr(1), kCustomRequestType);
   EXPECT_TRUE(request.ok()) << request.status();
   auto plaintext_data = request->GetPlaintextData();
 
@@ -9163,9 +10457,9 @@ TEST_F(AdAuctionServiceImplBAndATest, RunBAndAAuctionWithCustomMediaType) {
       cbor::Reader::Read(base::as_bytes(base::make_span(
                              plaintext_data.substr(5, request_size))))
           .value());
-  EXPECT_THAT(got_str, testing::StartsWith(
-                           R"({"version": 0, "publisher": "https://a.test", )"
-                           R"("generationId": ")"));
+  EXPECT_THAT(got_str,
+              testing::StartsWith(R"({"version": 0, "publisher": "a.test", )"
+                                  R"("generationId": ")"));
   EXPECT_THAT(
       got_str,
       testing::EndsWith(
@@ -9268,8 +10562,8 @@ TEST_F(AdAuctionServiceImplBAndATest, RunBAndAAuctionWithCustomMediaType) {
               testing::ElementsAre())));
 
   // Request should be padded to 256 bytes with 7 byte encryption header.
-  const size_t expected_ba_data_size = 256 + 7;
-  hist.ExpectUniqueSample("Ads.InterestGroup.BaDataSize", expected_ba_data_size,
+  const size_t kExpectedBaDataSize = 256 + 7;
+  hist.ExpectUniqueSample("Ads.InterestGroup.BaDataSize", kExpectedBaDataSize,
                           1);
   hist.ExpectTotalCount("Ads.InterestGroup.BaDataConstructionTime", 1);
   hist.ExpectTotalCount(
@@ -9340,12 +10634,21 @@ TEST_F(AdAuctionServiceImplBAndATest, HandlesBadResponseForBAndAAuction) {
   EXPECT_EQ(network_responder_->ReportCount(), 0u);
 
   // Request should be padded to 256 bytes with 7 byte encryption header.
-  const size_t expected_ba_data_size = 256 + 7;
-  hist.ExpectUniqueSample("Ads.InterestGroup.BaDataSize", expected_ba_data_size,
+  const size_t kExpectedBaDataSize = 256 + 7;
+  hist.ExpectUniqueSample("Ads.InterestGroup.BaDataSize", kExpectedBaDataSize,
                           1);
   hist.ExpectTotalCount("Ads.InterestGroup.BaDataConstructionTime", 1);
   hist.ExpectTotalCount(
       "Ads.InterestGroup.Auction.ParseBaServerResponseDuration", 0);
+  hist.ExpectTotalCount("Ads.InterestGroup.ServerAuction.EndToEndTime", 0);
+  hist.ExpectTotalCount("Ads.InterestGroup.ServerAuction.EndToEndTimeNoWinner",
+                        0);
+  hist.ExpectUniqueSample("Ads.InterestGroup.ServerAuction.Result",
+                          AuctionResult::kInvalidServerResponse, 1);
+  hist.ExpectTotalCount("Ads.InterestGroup.ServerAuction.NonKAnonWinnerIsKAnon",
+                        0);
+  hist.ExpectTotalCount("Ads.InterestGroup.ServerAuction.AuctionWithWinnerTime",
+                        0);
 }
 
 }  // namespace content

@@ -5,18 +5,28 @@
 #import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_recorder.h"
 
 #import "base/apple/foundation_util.h"
+#import "base/json/values_util.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
 #import "base/time/time.h"
+#import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/discover_feed/discover_feed_refresher.h"
+#import "ios/chrome/browser/metrics/constants.h"
 #import "ios/chrome/browser/ntp/features.h"
 #import "ios/chrome/browser/ui/ntp/feed_control_delegate.h"
 #import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_constants.h"
 #import "ios/chrome/browser/ui/ntp/metrics/feed_session_recorder.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_follow_delegate.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_metrics_delegate.h"
+
+namespace {
+
+// The number of days for the Activity Buckets calculations.
+constexpr base::TimeDelta kRangeForActivityBuckets = base::Days(28);
+
+}  // namespace
 
 using feed::FeedEngagementType;
 using feed::FeedUserActionType;
@@ -86,9 +96,21 @@ using feed::FeedUserActionType;
 // YES if the NTP is visible.
 @property(nonatomic, assign) BOOL isNTPVisible;
 
+// The ChromeBrowserState PrefService.
+@property(nonatomic, assign) PrefService* prefService;
+
 @end
 
 @implementation FeedMetricsRecorder
+
+- (instancetype)initWithPrefService:(PrefService*)prefService {
+  DCHECK(prefService);
+  self = [super init];
+  if (self) {
+    _prefService = prefService;
+  }
+  return self;
+}
 
 #pragma mark - Properties
 
@@ -166,83 +188,80 @@ using feed::FeedUserActionType;
                                   asInteraction:NO];
   }
 
-  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
   if (visible) {
-    NSDate* lastInteractionTimeForGoodVisitsDate =
-        base::apple::ObjCCast<NSDate>(
-            [defaults objectForKey:kLastInteractionTimeForGoodVisits]);
-    if (lastInteractionTimeForGoodVisitsDate != nil) {
+    base::Time lastInteractionTimeForGoodVisitsDate =
+        self.prefService->GetTime(kLastInteractionTimeForGoodVisits);
+    if (lastInteractionTimeForGoodVisitsDate != base::Time()) {
       self.lastInteractionTimeForGoodVisits =
-          base::Time::FromNSDate(lastInteractionTimeForGoodVisitsDate);
+          lastInteractionTimeForGoodVisitsDate;
     }
 
-    NSDate* lastInteractionTimeForDiscoverGoodVisitsDate =
-        base::apple::ObjCCast<NSDate>(
-            [defaults objectForKey:kLastInteractionTimeForDiscoverGoodVisits]);
-    if (lastInteractionTimeForDiscoverGoodVisitsDate != nil) {
+    base::Time lastInteractionTimeForDiscoverGoodVisitsDate =
+        self.prefService->GetTime(kLastInteractionTimeForDiscoverGoodVisits);
+    if (lastInteractionTimeForDiscoverGoodVisitsDate != base::Time()) {
       self.lastInteractionTimeForDiscoverGoodVisits =
-          base::Time::FromNSDate(lastInteractionTimeForDiscoverGoodVisitsDate);
+          lastInteractionTimeForDiscoverGoodVisitsDate;
     }
 
-    NSDate* lastInteractionTimeForFollowingGoodVisitsDate =
-        base::apple::ObjCCast<NSDate>(
-            [defaults objectForKey:kLastInteractionTimeForFollowingGoodVisits]);
-    if (lastInteractionTimeForFollowingGoodVisitsDate != nil) {
+    base::Time lastInteractionTimeForFollowingGoodVisitsDate =
+        self.prefService->GetTime(kLastInteractionTimeForFollowingGoodVisits);
+    if (lastInteractionTimeForFollowingGoodVisitsDate != base::Time()) {
       self.lastInteractionTimeForFollowingGoodVisits =
-          base::Time::FromNSDate(lastInteractionTimeForFollowingGoodVisitsDate);
+          lastInteractionTimeForFollowingGoodVisitsDate;
     }
 
     // Total time spent in feed metrics.
-    self.timeSpentInFeed =
-        base::Seconds([defaults doubleForKey:kTimeSpentInFeedAggregateKey]);
+    self.timeSpentInFeed = base::Seconds(
+        self.prefService->GetDouble(kTimeSpentInFeedAggregateKey));
     [self computeActivityBuckets];
     [self recordTimeSpentInFeedIfDayIsDone];
 
     self.previousTimeInFeedForGoodVisitSession =
-        [defaults doubleForKey:kLongFeedVisitTimeAggregateKey];
+        self.prefService->GetDouble(kLongFeedVisitTimeAggregateKey);
     self.discoverPreviousTimeInFeedGV =
-        [defaults doubleForKey:kLongDiscoverFeedVisitTimeAggregateKey];
+        self.prefService->GetDouble(kLongDiscoverFeedVisitTimeAggregateKey);
     self.followingPreviousTimeInFeedGV =
-        [defaults doubleForKey:kLongFollowingFeedVisitTimeAggregateKey];
+        self.prefService->GetDouble(kLongFollowingFeedVisitTimeAggregateKey);
 
-    // Checks if there is a timestamp in defaults for when a user clicked
+    // Checks if there is a timestamp in PrefService for when a user clicked
     // on an article in order to be able to trigger a non-short click
     // interaction.
-    NSDate* articleVisitStart = base::apple::ObjCCast<NSDate>(
-        [defaults objectForKey:kArticleVisitTimestampKey]);
+    base::Time articleVisitStart =
+        self.prefService->GetTime(kArticleVisitTimestampKey);
     self.feedBecameVisibleTime = base::Time::Now();
 
-    if (articleVisitStart) {
+    if (articleVisitStart != base::Time()) {
       // Report Good Visit if user came back to the NTP after spending
       // kNonShortClickSeconds in a feed article.
-      if (base::Time::FromNSDate(articleVisitStart) - base::Time::Now() >
+      if (base::Time::Now() - articleVisitStart >
           base::Seconds(kNonShortClickSeconds)) {
         // Trigger a GV for a specific feed.
-        [self
-            recordEngagedGoodVisits:
-                (FeedType)[defaults integerForKey:kLastUsedFeedForGoodVisitsKey]
-                       allFeedsOnly:NO];
+        FeedType lastUsedFeedType =
+            self.prefService->GetInteger(kLastUsedFeedForGoodVisitsKey) == 1
+                ? FeedTypeFollowing
+                : FeedTypeDiscover;
+        [self recordEngagedGoodVisits:lastUsedFeedType allFeedsOnly:NO];
       }
-      // Clear defaults for new session.
-      [defaults setObject:nil forKey:kArticleVisitTimestampKey];
+      // Clear PrefService for new session.
+      self.prefService->ClearPref(kArticleVisitTimestampKey);
     }
   } else {
     // Once the NTP becomes hidden, check for Good Visit which updates
-    // `self.previousTimeInFeedForGoodVisitSession` and then we save it to
-    // defaults.
+    // `self.previousTimeInFeedForGoodVisitSession` and then we save it in
+    // PrefService.
 
     // Also calculate total aggregate for the time in feed aggregate metric.
     self.timeSpentInFeed = base::Time::Now() - self.feedBecameVisibleTime;
 
     [self checkEngagementGoodVisitWithInteraction:NO];
-    [defaults setDouble:self.timeSpentInFeed.InSecondsF()
-                 forKey:kTimeSpentInFeedAggregateKey];
-    [defaults setDouble:self.previousTimeInFeedForGoodVisitSession
-                 forKey:kLongFeedVisitTimeAggregateKey];
-    [defaults setDouble:self.discoverPreviousTimeInFeedGV
-                 forKey:kLongDiscoverFeedVisitTimeAggregateKey];
-    [defaults setDouble:self.followingPreviousTimeInFeedGV
-                 forKey:kLongFollowingFeedVisitTimeAggregateKey];
+    self.prefService->SetDouble(kTimeSpentInFeedAggregateKey,
+                                self.timeSpentInFeed.InSecondsF());
+    self.prefService->SetDouble(kLongFeedVisitTimeAggregateKey,
+                                self.previousTimeInFeedForGoodVisitSession);
+    self.prefService->SetDouble(kLongDiscoverFeedVisitTimeAggregateKey,
+                                self.discoverPreviousTimeInFeedGV);
+    self.prefService->SetDouble(kLongFollowingFeedVisitTimeAggregateKey,
+                                self.followingPreviousTimeInFeedGV);
   }
 }
 
@@ -891,86 +910,64 @@ using feed::FeedUserActionType;
 
 // Logs engagement daily for the Activity Buckets Calculation.
 - (void)logDailyActivity {
-  NSDate* now = [NSDate date];
-  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+  const base::Time now = base::Time::Now();
 
   // Check if the array is initialized.
-  NSMutableArray<NSDate*>* lastReportedArray = [[defaults
-      arrayForKey:kActivityBucketLastReportedDateArrayKey] mutableCopy];
-  if (!lastReportedArray) {
-    // Initialized before (could be empty).
-    lastReportedArray = [NSMutableArray new];
-  }
+  base::Value::List lastReportedArray =
+      self.prefService->GetList(kActivityBucketLastReportedDateArrayKey)
+          .Clone();
 
   // Adds a daily entry to the `lastReportedArray` array
   // only once when the user engages.
-  if ([now timeIntervalSinceDate:[lastReportedArray lastObject]] >=
-          (24 * 60 * 60) ||
-      lastReportedArray.count == 0) {
-    [lastReportedArray addObject:now];
-    [defaults setObject:lastReportedArray
-                 forKey:kActivityBucketLastReportedDateArrayKey];
+  if ((lastReportedArray.size() > 0 &&
+       (now - ValueToTime(lastReportedArray.back()).value()) >=
+           base::Days(1)) ||
+      lastReportedArray.size() == 0) {
+    lastReportedArray.Append(TimeToValue(now));
+    self.prefService->SetList(kActivityBucketLastReportedDateArrayKey,
+                              std::move(lastReportedArray));
   }
 }
 
 // Calculates the amount of dates the user has been active for the past 28 days.
 - (void)computeActivityBuckets {
-  NSDate* now = [NSDate date];
-  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+  const base::Time now = base::Time::Now();
 
-  NSDate* lastActivityBucketReported = base::apple::ObjCCast<NSDate>(
-      [defaults objectForKey:kActivityBucketLastReportedDateKey]);
-  // If the `lastActivityBucketReported` does not exist, set it to now to
+  base::Time lastActivityBucket =
+      self.prefService->GetTime(kActivityBucketLastReportedDateKey);
+  // If the `lastActivityBucket` is not set, set it to now to
   // prevent the first day from logging a metric.
-  if (!lastActivityBucketReported) {
-    lastActivityBucketReported = now;
-    [defaults setObject:lastActivityBucketReported
-                 forKey:kActivityBucketLastReportedDateKey];
+  if (lastActivityBucket == base::Time()) {
+    lastActivityBucket = now;
+    self.prefService->SetTime(kActivityBucketLastReportedDateKey,
+                              lastActivityBucket);
   }
 
-  // Check if the last time the activity was reported is more than 24 hrs ago,
-  // and return for performance.
-  if ([now timeIntervalSinceDate:lastActivityBucketReported] < (24 * 60 * 60)) {
+  // Nothing to do if the activity was reported recently.
+  if ((now - lastActivityBucket) < base::Days(1)) {
     return;
   }
 
-  // Retrieve activity bucket from storage.
-  FeedActivityBucket activityBucket =
-      (FeedActivityBucket)[defaults integerForKey:kActivityBucketKey];
-
   // Calculate activity buckets.
   // Check if the array is initialized.
-  NSMutableArray<NSDate*>* lastReportedArray = [[defaults
-      arrayForKey:kActivityBucketLastReportedDateArrayKey] mutableCopy];
-  if (!lastReportedArray) {
-    // Initialized before (could be empty).
-    lastReportedArray = [NSMutableArray new];
-  }
+  const base::Value::List& lastReportedArray =
+      self.prefService->GetList(kActivityBucketLastReportedDateArrayKey);
+  base::Value::List newLastReportedArray;
 
-  // Check for dates > 28 days and remove older items.
-  NSMutableIndexSet* toDelete = [[NSMutableIndexSet alloc] init];
-  for (NSUInteger i = 0; i < lastReportedArray.count; i++) {
-    if ([now timeIntervalSinceDate:[lastReportedArray objectAtIndex:i]] /
-            (24 * 60 * 60) >
-        kRangeForActivityBucketsInDays) {
-      [toDelete addIndex:i];
-    } else {
-      break;
+  // Do not save in newLastReportedArray dates > 28 days.
+  for (NSUInteger i = 0; i < lastReportedArray.size(); ++i) {
+    absl::optional<base::Time> date = ValueToTime(lastReportedArray[i]);
+    if (!date.has_value()) {
+      continue;
+    }
+    if ((now - date.value()) <= kRangeForActivityBuckets) {
+      newLastReportedArray.Append(TimeToValue(date.value()));
     }
   }
 
-  // The count should never be < 1 for `lastReportedArray` when toDelete > 0 to
-  // prevent a crash / out of bounds errors.
-  if (toDelete.count > 0) {
-    CHECK(lastReportedArray.count >= 1);
-    [lastReportedArray removeObjectsAtIndexes:toDelete];
-  }
-  [defaults setObject:lastReportedArray
-               forKey:kActivityBucketLastReportedDateArrayKey];
-
+  FeedActivityBucket activityBucket = FeedActivityBucket::kNoActivity;
   // Check how many items in array.
-  NSUInteger datesActive = lastReportedArray.count;
-  switch (datesActive) {
+  switch (newLastReportedArray.size()) {
     case 0:
       activityBucket = FeedActivityBucket::kNoActivity;
       break;
@@ -988,11 +985,15 @@ using feed::FeedUserActionType;
       CHECK(NO);
       break;
   }
-  [defaults setInteger:(int)activityBucket forKey:kActivityBucketKey];
+  self.prefService->SetInteger(kActivityBucketKey,
+                               static_cast<int>(activityBucket));
+  self.prefService->SetList(kActivityBucketLastReportedDateArrayKey,
+                            std::move(newLastReportedArray));
 
   // Activity Buckets Daily Run.
   [self recordActivityBuckets:activityBucket];
-  [defaults setObject:now forKey:kActivityBucketLastReportedDateKey];
+  self.prefService->SetTime(kActivityBucketLastReportedDateKey,
+                            base::Time::Now());
 }
 
 // Records the engagement buckets.
@@ -1296,15 +1297,12 @@ using feed::FeedUserActionType;
 // kMinutesBetweenSessions minutes between sessions.
 - (void)resetGoodVisitSession {
   // Reset defaults for new session.
-  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
-  [defaults setObject:nil forKey:kArticleVisitTimestampKey];
-  [defaults setDouble:0 forKey:kLongFeedVisitTimeAggregateKey];
-
+  self.prefService->ClearPref(kArticleVisitTimestampKey);
+  self.prefService->ClearPref(kLongFeedVisitTimeAggregateKey);
   base::Time now = base::Time::Now();
 
   self.lastInteractionTimeForGoodVisits = now;
-  [defaults setObject:now.ToNSDate() forKey:kLastInteractionTimeForGoodVisits];
-
+  self.prefService->SetTime(kLastInteractionTimeForGoodVisits, now);
   self.feedBecameVisibleTime = now;
 
   self.goodVisitScroll = NO;
@@ -1319,20 +1317,17 @@ using feed::FeedUserActionType;
 // sessions to expire only for specific feeds.
 - (void)resetGoodVisitSessionForFeed:(FeedType)feedType {
   base::Time now = base::Time::Now();
-  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
   if (feedType == FeedTypeDiscover) {
-    [defaults setDouble:0 forKey:kLongDiscoverFeedVisitTimeAggregateKey];
+    self.prefService->ClearPref(kLongDiscoverFeedVisitTimeAggregateKey);
     self.lastInteractionTimeForDiscoverGoodVisits = now;
-    [defaults setObject:now.ToNSDate()
-                 forKey:kLastInteractionTimeForDiscoverGoodVisits];
+    self.prefService->SetTime(kLastInteractionTimeForDiscoverGoodVisits, now);
     self.discoverPreviousTimeInFeedGV = 0;
     self.goodVisitReportedDiscover = NO;
   }
   if (feedType == FeedTypeFollowing) {
-    [defaults setDouble:0 forKey:kLongFollowingFeedVisitTimeAggregateKey];
+    self.prefService->ClearPref(kLongFollowingFeedVisitTimeAggregateKey);
     self.lastInteractionTimeForFollowingGoodVisits = now;
-    [defaults setObject:now.ToNSDate()
-                 forKey:kLastInteractionTimeForFollowingGoodVisits];
+    self.prefService->SetTime(kLastInteractionTimeForFollowingGoodVisits, now);
     self.followingPreviousTimeInFeedGV = 0;
     self.goodVisitReportedFollowing = NO;
   }
@@ -1343,21 +1338,15 @@ using feed::FeedUserActionType;
 - (void)recordTimeSpentInFeedIfDayIsDone {
   // The midnight time for the day in which the
   // `ContentSuggestions.Feed.TimeSpentInFeed` was last recorded.
-  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
-  NSDate* lastInteractionReported = base::apple::ObjCCast<NSDate>(
-      [defaults objectForKey:kLastDayTimeInFeedReportedKey]);
-  base::Time lastInteractionReportedInTime;
-  if (lastInteractionReported != nil) {
-    lastInteractionReportedInTime =
-        base::Time::FromNSDate(lastInteractionReported);
-  }
+  const base::Time lastInteractionReported =
+      self.prefService->GetTime(kLastDayTimeInFeedReportedKey);
 
   DCHECK(self.timeSpentInFeed >= base::Seconds(0));
 
   BOOL shouldResetData = NO;
-  if (lastInteractionReported) {
+  if (lastInteractionReported != base::Time()) {
     base::Time now = base::Time::Now();
-    base::TimeDelta sinceDayStart = (now - lastInteractionReportedInTime);
+    base::TimeDelta sinceDayStart = (now - lastInteractionReported);
     if (sinceDayStart >= base::Days(1)) {
       // Check if the user has spent any time in the feed.
       if (self.timeSpentInFeed > base::Seconds(0)) {
@@ -1371,15 +1360,12 @@ using feed::FeedUserActionType;
   }
 
   if (shouldResetData) {
-    lastInteractionReported =
-        [NSDate dateWithTimeIntervalSince1970:base::Time::Now().ToDoubleT()];
-    // Save to Defaults
-    [defaults setObject:lastInteractionReported
-                 forKey:kLastDayTimeInFeedReportedKey];
+    // Update the last report time in PrefService.
+    self.prefService->SetTime(kLastDayTimeInFeedReportedKey, base::Time::Now());
     // Reset time spent in feed aggregate.
     self.timeSpentInFeed = base::Seconds(0);
-    [defaults setDouble:self.timeSpentInFeed.InSecondsF()
-                 forKey:kTimeSpentInFeedAggregateKey];
+    self.prefService->SetDouble(kTimeSpentInFeedAggregateKey,
+                                self.timeSpentInFeed.InSecondsF());
   }
 }
 
@@ -1394,10 +1380,10 @@ using feed::FeedUserActionType;
 - (void)recordOpenURL {
   // Save the time of the open so we can then calculate how long the user spent
   // in that page.
-  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
-  [defaults setObject:[[NSDate alloc] init] forKey:kArticleVisitTimestampKey];
-  [defaults setInteger:[self.feedControlDelegate selectedFeed]
-                forKey:kLastUsedFeedForGoodVisitsKey];
+  self.prefService->SetTime(kArticleVisitTimestampKey, base::Time::Now());
+
+  self.prefService->SetInteger(kLastUsedFeedForGoodVisitsKey,
+                               [self.feedControlDelegate selectedFeed]);
 
   [self.NTPMetricsDelegate feedArticleOpened];
 

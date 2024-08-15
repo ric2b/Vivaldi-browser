@@ -30,6 +30,7 @@
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-forward.h"
 #include "third_party/blink/public/mojom/navigation/navigation_params.mojom-forward.h"
 #include "third_party/blink/public/mojom/page/widget.mojom.h"
+#include "third_party/blink/public/mojom/speculation_rules/speculation_rules.mojom-forward.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-forward.h"
 
 class GURL;
@@ -79,6 +80,13 @@ class InspectorIssue;
 }  // namespace protocol::Audits
 
 namespace devtools_instrumentation {
+
+// Applies network request overrides to the auction worklet's network
+// request. Will set `network_instrumentation_enabled` to true if there is a
+// network handler listening. Also handles whether cache is disabled or not.
+void ApplyAuctionNetworkRequestOverrides(FrameTreeNode* frame_tree_node,
+                                         network::ResourceRequest* request,
+                                         bool* network_instrumentation_enabled);
 
 // If this function caused the User-Agent header to be overridden,
 // `devtools_user_agent_overridden` will be set to true; otherwise, it will be
@@ -180,6 +188,24 @@ void OnNavigationResponseReceived(
 void OnNavigationRequestFailed(
     const NavigationRequest& nav_request,
     const network::URLLoaderCompletionStatus& status);
+
+void OnAuctionWorkletNetworkRequestWillBeSent(
+    int frame_tree_node_id,
+    const network::ResourceRequest& request,
+    base::TimeTicks timestamp);
+
+void OnAuctionWorkletNetworkResponseReceived(
+    int frame_tree_node_id,
+    const std::string& request_id,
+    const std::string& loader_id,
+    const GURL& request_url,
+    const network::mojom::URLResponseHead& headers);
+
+void OnAuctionWorkletNetworkRequestComplete(
+    int frame_tree_node_id,
+    const std::string& request_id,
+    const network::URLLoaderCompletionStatus& status);
+
 bool ShouldBypassCSP(const NavigationRequest& nav_request);
 
 void ApplyNetworkOverridesForDownload(
@@ -201,17 +227,6 @@ void WillInitiatePrerender(FrameTree& frame_tree);
 void DidActivatePrerender(const NavigationRequest& nav_request,
                           const absl::optional<base::UnguessableToken>&
                               initiator_devtools_navigation_token);
-// This function reports cancellation status to DevTools with the
-// `disallowed_api_method`, which is used to give users more information about
-// the cancellation details if the prerendering uses disallowed API method, and
-// disallowed_api_method will be formatted for display in the DevTools. See the
-// DevTools implementation for the format.
-void DidCancelPrerender(
-    FrameTreeNode* ftn,
-    const GURL& prerendering_url,
-    const base::UnguessableToken& initiator_devtools_navigation_token,
-    PrerenderFinalStatus status,
-    const std::string& disallowed_api_method);
 
 void DidUpdatePrefetchStatus(
     FrameTreeNode* ftn,
@@ -225,6 +240,7 @@ void DidUpdatePrerenderStatus(
     int initiator_frame_tree_node_id,
     const base::UnguessableToken& initiator_devtools_navigation_token,
     const GURL& prerender_url,
+    absl::optional<blink::mojom::SpeculationTargetHint> target_hint,
     PreloadingTriggeringOutcome status,
     absl::optional<PrerenderFinalStatus> prerender_status,
     absl::optional<std::string> disallowed_mojo_interface);

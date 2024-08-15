@@ -141,7 +141,7 @@ public class TabGroupUtils {
      */
     public static Tab getSelectedTabInGroupForTab(TabModelSelector selector, Tab tab) {
         TabGroupModelFilter filter = (TabGroupModelFilter) selector.getTabModelFilterProvider()
-                                             .getCurrentTabModelFilter(true); // Vivaldi
+                                             .getCurrentTabModelFilter();
         return filter.getTabAt(filter.indexOf(tab));
     }
 

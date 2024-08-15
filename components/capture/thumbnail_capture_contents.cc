@@ -22,6 +22,12 @@
 #include "components/capture/capture_page.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
 #include "ui/vivaldi_skia_utils.h"
+#include "extensions/buildflags/buildflags.h"
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "extensions/browser/view_type_utils.h"
+#include "extensions/common/mojom/view_type.mojom.h"
+#endif
 
 using content::WebContents;
 
@@ -89,6 +95,12 @@ void ThumbnailCaptureContents::Start(content::BrowserContext* browser_context,
 
   offscreen_tab_web_contents_ = WebContents::Create(params);
   offscreen_tab_web_contents_->SetDelegate(this);
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  extensions::SetViewType(offscreen_tab_web_contents_.get(),
+      extensions::mojom::ViewType::kOffscreenDocument);
+#endif
+
   WebContentsObserver::Observe(offscreen_tab_web_contents_.get());
 
   // Set initial size, if specified.
@@ -151,7 +163,8 @@ bool ThumbnailCaptureContents::ShouldFocusLocationBarByDefault(
   return true;
 }
 
-bool ThumbnailCaptureContents::ShouldFocusPageAfterCrash() {
+bool ThumbnailCaptureContents::ShouldFocusPageAfterCrash(
+    content::WebContents* source) {
   // Never focus the page.  Not even after a crash.
   return false;
 }

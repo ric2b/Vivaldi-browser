@@ -44,6 +44,12 @@ SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreateVivPageActionOverrideComma
     const std::string& script_path,
     bool is_enabled_override);
 
+std::unique_ptr<SessionCommand> CreateVivCreateThumbnailCommand(
+    SessionID::id_type command_id,
+    int image_format,
+    const char * data,
+    size_t size);
+
 // Creates a SessionCommand that records the removal of an override of a page
 // action script for a specific tab
 SESSIONS_EXPORT std::unique_ptr<SessionCommand>
@@ -89,6 +95,7 @@ using IdToSessionWindow = std::map<SessionID, std::unique_ptr<SessionWindow>>;
 using TokenToSessionTabGroup =
     std::map<tab_groups::TabGroupId, std::unique_ptr<SessionTabGroup>>;
 
+SESSIONS_EXPORT uint8_t GetVivCreateThumbnailCommandId();
 // The following functions create sequentialized change commands which are
 // used to reconstruct the current/previous session state.
 // It is up to the caller to delete the returned SessionCommand* object.
@@ -118,6 +125,10 @@ SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreateVivPageActionOverrideComma
 SESSIONS_EXPORT std::unique_ptr<SessionCommand>
 CreateRemoveVivPageActionOverrideCommand(const SessionID& tab_id,
                                       const std::string& script_path);
+
+SESSIONS_EXPORT std::unique_ptr<SessionCommand>
+CreateVivCreateThumbnailCommand(int image_format, const char * data,
+    size_t size);
 }  // namespace sessions
 
 #endif  // COMPONENTS_SESSIONS_VIVALDI_SESSION_SERVICE_COMMANDS_H_

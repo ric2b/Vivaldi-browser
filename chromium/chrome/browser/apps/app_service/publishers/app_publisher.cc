@@ -7,8 +7,8 @@
 #include "base/logging.h"
 #include "base/notreached.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
-#include "chrome/browser/apps/app_service/package_id.h"
 #include "components/services/app_service/public/cpp/capability_access.h"
+#include "components/services/app_service/public/cpp/package_id.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/apps/app_service/promise_apps/promise_app.h"
@@ -121,6 +121,8 @@ void AppPublisher::GetMenuModel(const std::string& app_id,
                                 base::OnceCallback<void(MenuItems)> callback) {
   NOTIMPLEMENTED();
 }
+
+void AppPublisher::UpdateAppSize(const std::string& app_id) {}
 
 void AppPublisher::ExecuteContextMenuCommand(const std::string& app_id,
                                              int command_id,

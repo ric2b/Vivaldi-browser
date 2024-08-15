@@ -60,6 +60,20 @@
 # Referenced by androidx.preference.PreferenceInflater.
 -keep public class androidx.preference.SwitchPreference {}
 
+# File: ../../third_party/jni_zero/checkdiscard_proguard.flags
+# Copyright 2023 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Chromium only applies this check when ENABLE_DCHECK=false.
+
+-checkdiscard @org.jni_zero.CheckDiscard class ** {
+  *;
+}
+-checkdiscard class ** {
+  @org.jni_zero.CheckDiscard *;
+}
+
 # File: ../../build/android/chromium_annotations.flags
 # Copyright 2022 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
@@ -73,29 +87,10 @@
 -keepattributes RuntimeVisible*Annotations
 -keepattributes AnnotationDefault
 
-# Keep the annotations, because if we don't, the ProGuard rules that use them
-# will not be respected. These classes then show up in our final dex, which we
-# do not want - see crbug.com/628226.
--keep @interface org.chromium.base.annotations.AccessedByNative
--keep @interface org.chromium.base.annotations.CalledByNative
--keep @interface org.chromium.base.annotations.CalledByNativeUnchecked
--keep @interface org.chromium.build.annotations.DoNotInline
--keep @interface org.chromium.build.annotations.UsedByReflection
--keep @interface org.chromium.build.annotations.IdentifierNameString
-
 # Keeps for class level annotations.
 -keep,allowaccessmodification @org.chromium.build.annotations.UsedByReflection class ** {}
 
 # Keeps for method level annotations.
--keepclasseswithmembers,allowaccessmodification class ** {
-  @org.chromium.base.annotations.AccessedByNative <fields>;
-}
--keepclasseswithmembers,includedescriptorclasses,allowaccessmodification class ** {
-  @org.chromium.base.annotations.CalledByNative <methods>;
-}
--keepclasseswithmembers,includedescriptorclasses,allowaccessmodification class ** {
-  @org.chromium.base.annotations.CalledByNativeUnchecked <methods>;
-}
 -keepclasseswithmembers,allowaccessmodification class ** {
   @org.chromium.build.annotations.UsedByReflection <methods>;
 }
@@ -205,6 +200,11 @@
 -assumenosideeffects class android.**, java.** {
   static <fields>;
 }
+
+# Keep the names of exception types, to make it easier to understand stack
+# traces in contexts where it's not trivial to deobfuscate them - for example
+# when reported to app developers who are using WebView.
+-keepnames class ** extends java.lang.Throwable {}
 
 # File: ../../base/android/proguard/chromium_code.flags
 # Copyright 2016 The Chromium Authors
@@ -486,6 +486,22 @@
 -keep class org.chromium.android_webview.AwDataDirLock {
     java.nio.channels.FileLock sExclusiveFileLock;
     java.io.RandomAccessFile sLockFile;
+}
+
+# File: ../../third_party/jni_zero/proguard.flags
+# Copyright 2023 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Keeps for method level annotations.
+-keepclasseswithmembers,allowaccessmodification class ** {
+  @org.jni_zero.AccessedByNative <fields>;
+}
+-keepclasseswithmembers,includedescriptorclasses,allowaccessmodification class ** {
+  @org.jni_zero.CalledByNative <methods>;
+}
+-keepclasseswithmembers,includedescriptorclasses,allowaccessmodification class ** {
+  @org.jni_zero.CalledByNativeUnchecked <methods>;
 }
 
 # File: ../../chrome/android/features/start_surface/proguard.flags

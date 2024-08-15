@@ -5,7 +5,7 @@
 [
   {
     "namespace": "menubar",
-    "description": "Use the <code>vivaldi.menubar</code> API to set up and manage main menu bar.",
+    "description": "Use the <code>vivaldi.menubar</code> API to set up and manage Mac main menu bar.",
     "types": [
       {
         "id": "Mode",
@@ -112,6 +112,22 @@
     ],
     "functions": [
         {
+          "name": "getHasWindows",
+          "type": "function",
+          "description": "Returns true if there is one or more windows present in any profile.",
+          "parameters": [
+          ],
+          "returns_async": {
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "boolean"
+              }
+            ]
+          }
+        },
+        {
         "name": "setup",
         "type": "function",
         "description": "Setup application's main menu.",
@@ -121,11 +137,6 @@
             "type": "array",
             "items": {"$ref": "MenuItem"},
             "description": "Menu items with string label."
-          },
-          {
-            "name": "mode",
-            "$ref": "Mode",
-            "description": "What part of menu to set up."
           }
         ]
       }

@@ -42,8 +42,8 @@ if (is_android) {
 
 if (is_fuchsia) {
   import("//build/config/fuchsia/generate_runner_scripts.gni")
-  import("//third_party/fuchsia-sdk/sdk/build/component.gni")
-  import("//third_party/fuchsia-sdk/sdk/build/package.gni")
+  import("//third_party/fuchsia-gn-sdk/src/component.gni")
+  import("//third_party/fuchsia-gn-sdk/src/package.gni")
 }
 
 if (is_linux) {
@@ -102,6 +102,7 @@ group("gn_all") {
       "//services/service_manager/public/cpp",
       "//skia:skia_unittests",
       "//sql:sql_unittests",
+      "//testing/libfuzzer/tests",
       "//third_party/angle/src/tests:angle_end2end_tests",
       "//third_party/angle/src/tests:angle_unittests",
       "//third_party/angle/src/tests:angle_white_box_tests",
@@ -111,8 +112,8 @@ group("gn_all") {
       "//tools/ipc_fuzzer:ipc_fuzzer_all",
       "//tools/metrics:metrics_metadata",
       "//ui/base:ui_base_unittests",
-      "//ui/color:color_unittests",
       "//ui/gfx:gfx_unittests",
+      "//ui/tests:ui_unittests",
       "//url:url_unittests",
     ]
 
@@ -148,7 +149,6 @@ group("gn_all") {
         "//tools/polymer:polymer_tools_python_unittests",
         "//tools/privacy_budget:privacy_budget_tools",
         "//ui/accessibility/extensions:extensions",
-        "//ui/actions:actions_unittests",
       ]
     }
 
@@ -168,10 +168,7 @@ group("gn_all") {
     }
 
     if (is_chromeos_lacros) {
-      deps += [
-        "//chrome/test:lacros_chrome_browsertests",
-        "//chrome/test:lacros_chrome_unittests",
-      ]
+      deps += [ "//chrome/test:lacros_chrome_unittests" ]
     }
 
     if (!is_ios && !is_castos) {
@@ -366,6 +363,7 @@ group("gn_all") {
         "//chrome/android/webapk/shell_apk/prepare_upload_dir:prepare_webapk_shell_upload_dir",
         "//chrome/test:android_browsertests",
         "//components:components_junit_tests",
+        "//components/ip_protection_auth/javatests:ip_protection_auth_test_apk",
         "//content/public/android:content_junit_tests",
         "//content/shell/android:content_shell_apk",
         "//device:device_junit_tests",
@@ -768,13 +766,6 @@ group("gn_all") {
       if (is_chromeos_ash) {
         deps += [ "//chrome/services/ipp_parser/public/cpp:fuzzers" ]
       }
-
-      # TODO(crbug.com/906751): Get the libFuzzer tests working on Windows.
-      # Disable them for now because they cause the Windows clang ToT builder to
-      # fail.
-      if (!is_win) {
-        deps += [ "//testing/libfuzzer/tests:libfuzzer_tests" ]
-      }
     }
 
     # TODO(https://crbug.com/1299021): Remove the special case for arm64.
@@ -819,8 +810,8 @@ group("gn_all") {
         "//third_party/dawn/src/dawn/fuzzers:fuzzers",
         "//third_party/dawn/src/dawn/tests:dawn_end2end_tests",
         "//third_party/dawn/src/dawn/tests:dawn_unittests",
-        "//third_party/dawn/src/tint:tint_unittests",
-        "//third_party/dawn/src/tint/fuzzers",
+        "//third_party/dawn/src/tint:fuzzers",
+        "//third_party/dawn/src/tint:tests",
       ]
     }
 
@@ -1095,24 +1086,7 @@ if (use_blink && !is_cronet_build) {
   }
 
   if (!is_chromeos_ash && !is_ios && !is_fuchsia && !is_android && !is_castos) {
-    script_test("webdriver_wpt_tests") {
-      script = "//third_party/blink/tools/run_wpt_tests.py"
-      args = [
-        "--product=chrome",
-        "--no-show-results",
-        "--zero-tests-executed-ok",
-        "--test-type=wdspec",
-      ]
-      data_deps = [
-        "//chrome:chrome",
-        "//chrome/test/chromedriver:chromedriver_server",
-        "//third_party/blink/tools:wpt_tests_isolate",
-      ]
-      if (is_win) {
-        data_deps += [ "//build/win:copy_cdb_to_output" ]
-      }
-    }
-    script_test("chrome_wpt") {
+    script_test("chrome_wpt_tests") {
       script = "//third_party/blink/tools/run_wpt_tests.py"
       args = [
         "--product=chrome",
@@ -1364,6 +1338,7 @@ if (use_blink && !is_cronet_build) {
       "//third_party/blink/web_tests/overflow/",
       "//third_party/blink/web_tests/paint/",
       "//third_party/blink/web_tests/payments/",
+      "//third_party/blink/web_tests/performance_timeline/",
       "//third_party/blink/web_tests/permissionclient/",
       "//third_party/blink/web_tests/plugins/",
       "//third_party/blink/web_tests/pointer-lock/",
@@ -1621,6 +1596,10 @@ if (use_blink && !is_cronet_build) {
       "//tools/idl_parser/",
     ]
 
+    if (is_ios) {
+      data += [ "//third_party/blink/web_tests/IOSTestExpectations" ]
+    }
+
     data_deps = [ "//ui/base:goldctl" ]
   }
 }
@@ -1718,7 +1697,7 @@ if (!is_ios && !is_android && !is_castos && !is_cronet_build) {
     }
 
     if (build_dawn_tests) {
-      deps += [ "//third_party/dawn/src/tint/fuzzers:fuzzers" ]
+      deps += [ "//third_party/dawn/src/tint:fuzzers" ]
     }
   }
 }

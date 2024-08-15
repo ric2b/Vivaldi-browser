@@ -159,6 +159,9 @@ Touch to Search is a feature that is only available when Google is set as the de
       <message name="IDS_CONTEXTMENU_OPEN_IN_INCOGNITO_TAB" desc="Context sensitive menu item to open the selected link in a new private tab. [CHAR-LIMIT=30]">
         Open in private tab
       </message>
+      <message name="IDS_CONTEXTMENU_OPEN_IN_CHROME_INCOGNITO_TAB" desc="Context sensitive menu item to open the selected link in a private tab from CCT (Chrome Custom Tab). [CHAR_LIMIT=30]">
+        Open in private tab
+      </message>
       <message name="IDS_ACCESSIBILITY_NEW_INCOGNITO_TAB_PAGE" desc="Accessibility text to read aloud when the user focuses the new private tab view.">
         New private tab
       </message>

@@ -29,7 +29,7 @@ import {Route, routes} from '../router.js';
 import {getTemplate} from './crostini_arc_adb.html.js';
 import {CrostiniBrowserProxy, CrostiniBrowserProxyImpl} from './crostini_browser_proxy.js';
 
-interface SettingsCrostiniArcAdbElement {
+export interface SettingsCrostiniArcAdbElement {
   $: {
     arcAdbEnabledButton: CrToggleElement,
   };
@@ -38,7 +38,8 @@ interface SettingsCrostiniArcAdbElement {
 const SettingsCrostiniArcAdbElementBase = DeepLinkingMixin(
     RouteObserverMixin(WebUiListenerMixin(I18nMixin(PolymerElement))));
 
-class SettingsCrostiniArcAdbElement extends SettingsCrostiniArcAdbElementBase {
+export class SettingsCrostiniArcAdbElement extends
+    SettingsCrostiniArcAdbElementBase {
   static get is() {
     return 'settings-crostini-arc-adb';
   }
@@ -112,7 +113,7 @@ class SettingsCrostiniArcAdbElement extends SettingsCrostiniArcAdbElementBase {
     this.browserProxy_ = CrostiniBrowserProxyImpl.getInstance();
   }
 
-  override connectedCallback() {
+  override connectedCallback(): void {
     super.connectedCallback();
 
     this.addWebUiListener(
@@ -133,7 +134,7 @@ class SettingsCrostiniArcAdbElement extends SettingsCrostiniArcAdbElementBase {
     this.browserProxy_.getCanChangeArcAdbSideloading();
   }
 
-  override currentRouteChanged(route: Route) {
+  override currentRouteChanged(route: Route): void {
     // Does not apply to this page.
     if (route !== routes.CROSTINI_ANDROID_ADB) {
       return;
@@ -177,11 +178,11 @@ class SettingsCrostiniArcAdbElement extends SettingsCrostiniArcAdbElementBase {
     return this.arcAdbEnabled_ ? 'disable' : 'enable';
   }
 
-  private onArcAdbToggleChanged_() {
+  private onArcAdbToggleChanged_(): void {
     this.showConfirmationDialog_ = true;
   }
 
-  private onConfirmationDialogClose_() {
+  private onConfirmationDialogClose_(): void {
     this.showConfirmationDialog_ = false;
     this.$.arcAdbEnabledButton.checked = this.arcAdbEnabled_;
   }

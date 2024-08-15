@@ -16,6 +16,7 @@
 #include "chrome/browser/permissions/permission_manager_factory.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_service.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_service_factory.h"
+#include "chrome/browser/privacy_sandbox/tracking_protection_settings_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/chrome_password_protection_service.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
@@ -66,12 +67,12 @@
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/web_app_ui_utils.h"
-#include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
+#include "components/webapps/common/web_app_id.h"
 #include "ui/events/event.h"
 #else
-#include "chrome/grit/chromium_strings.h"
+#include "chrome/grit/branded_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #endif
 
@@ -192,7 +193,7 @@ content::PermissionResult ChromePageInfoDelegate::GetPermissionResult(
 
 #if !BUILDFLAG(IS_ANDROID)
 void ChromePageInfoDelegate::FocusWebContents() {
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents_);
+  Browser* browser = chrome::FindBrowserWithTab(web_contents_);
   browser->ActivateContents(web_contents_);
 }
 
@@ -229,7 +230,8 @@ ChromePageInfoDelegate::CreateCookieControlsController() {
       profile->IsOffTheRecord()
           ? CookieSettingsFactory::GetForProfile(profile->GetOriginalProfile())
           : nullptr,
-      HostContentSettingsMapFactory::GetForProfile(profile));
+      HostContentSettingsMapFactory::GetForProfile(profile),
+      TrackingProtectionSettingsFactory::GetForProfile(profile));
 }
 
 bool ChromePageInfoDelegate::IsIsolatedWebApp() {
@@ -240,27 +242,28 @@ bool ChromePageInfoDelegate::IsIsolatedWebApp() {
     return false;
   }
 
-  const web_app::AppId* app_id =
+  const webapps::AppId* app_id =
       web_app::WebAppTabHelper::GetAppId(web_contents_);
   return app_id && provider->registrar_unsafe().IsIsolated(*app_id);
 }
 
 void ChromePageInfoDelegate::ShowSiteSettings(const GURL& site_url) {
-  if (web_app::HandleAppManagementLinkClickedInPageInfo(web_contents_))
+  if (web_app::HandleAppManagementLinkClickedInPageInfo(web_contents_)) {
     return;
+  }
 
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents_);
+  Browser* browser = chrome::FindBrowserWithTab(web_contents_);
   chrome::ShowSiteSettings(browser, site_url);
 }
 
 void ChromePageInfoDelegate::ShowCookiesSettings() {
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents_);
+  Browser* browser = chrome::FindBrowserWithTab(web_contents_);
   chrome::ShowSettingsSubPage(browser, chrome::kCookieSettingsSubPage);
 }
 
 void ChromePageInfoDelegate::ShowAllSitesSettingsFilteredByFpsOwner(
     const std::u16string& fps_owner) {
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents_);
+  Browser* browser = chrome::FindBrowserWithTab(web_contents_);
   chrome::ShowAllSitesSettingsFilteredByFpsOwner(browser,
                                                  base::UTF16ToUTF8(fps_owner));
 }
@@ -302,16 +305,18 @@ void ChromePageInfoDelegate::OpenContentSettingsExceptions(
 void ChromePageInfoDelegate::OnPageInfoActionOccurred(
     PageInfo::PageInfoAction action) {
   if (sentiment_service_) {
-    if (action == PageInfo::PAGE_INFO_OPENED)
+    if (action == PageInfo::PAGE_INFO_OPENED) {
       sentiment_service_->PageInfoOpened();
-    else
+    } else {
       sentiment_service_->InteractedWithPageInfo();
+    }
   }
 }
 
 void ChromePageInfoDelegate::OnUIClosing() {
-  if (sentiment_service_)
+  if (sentiment_service_) {
     sentiment_service_->PageInfoClosed();
+  }
 }
 #endif
 
@@ -362,8 +367,9 @@ bool ChromePageInfoDelegate::IsContentDisplayedInVrHeadset() {
 }
 
 security_state::SecurityLevel ChromePageInfoDelegate::GetSecurityLevel() {
-  if (security_state_for_tests_set_)
+  if (security_state_for_tests_set_) {
     return security_level_for_tests_;
+  }
 
   // This is a no-op if a SecurityStateTabHelper already exists for
   // |web_contents|.
@@ -376,8 +382,9 @@ security_state::SecurityLevel ChromePageInfoDelegate::GetSecurityLevel() {
 
 security_state::VisibleSecurityState
 ChromePageInfoDelegate::GetVisibleSecurityState() {
-  if (security_state_for_tests_set_)
+  if (security_state_for_tests_set_) {
     return visible_security_state_for_tests_;
+  }
 
   // This is a no-op if a SecurityStateTabHelper already exists for
   // |web_contents|.

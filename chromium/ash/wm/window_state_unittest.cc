@@ -36,7 +36,6 @@
 #include "chromeos/ui/base/window_state_type.h"
 #include "chromeos/ui/frame/caption_buttons/snap_controller.h"
 #include "chromeos/ui/frame/multitask_menu/multitask_menu_metrics.h"
-#include "chromeos/ui/wm/features.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window.h"
@@ -268,6 +267,25 @@ TEST_F(WindowStateTest, CanTransitionToPipWindow) {
   const WMEvent enter_pip(WM_EVENT_PIP);
   window_state->OnWMEvent(&enter_pip);
   EXPECT_TRUE(window_state->IsPip());
+}
+
+// Test that the PIP window is set to the `PipController` before the
+// widget is deactivated. Regression test for http://b/309362942.
+TEST_F(WindowStateTest, PipWindowIsSetBeforeWidgetDeactivate) {
+  // Make `background_widget` to trigger shelf visibility change after
+  // entering PIP.
+  auto background_widget = CreateTestWidget();
+  auto* window_state = WindowState::Get(background_widget->GetNativeWindow());
+  const WMEvent enter_fullscreen(WM_EVENT_FULLSCREEN);
+  window_state->OnWMEvent(&enter_fullscreen);
+
+  auto pip_widget = CreateTestWidget();
+  auto* pip_window_state = WindowState::Get(pip_widget->GetNativeWindow());
+  const WMEvent enter_pip(WM_EVENT_PIP);
+
+  // Entering PIP results in shelf visibility change, but it shouldn't
+  // cause any crash.
+  pip_window_state->OnWMEvent(&enter_pip);
 }
 
 // Test that a PIP window cannot be snapped.

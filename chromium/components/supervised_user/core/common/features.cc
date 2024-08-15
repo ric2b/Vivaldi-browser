@@ -10,8 +10,16 @@
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "build/branding_buildflags.h"
+#include "build/build_config.h"
 
 namespace supervised_user {
+
+BASE_FEATURE(kKidFriendlyContentFeed,
+             "KidFriendlyContentFeed",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+constexpr base::FeatureParam<std::string> kKidFriendlyContentFeedEndpoint{
+    &kKidFriendlyContentFeed, "supervised_feed_endpoint", ""};
 
 // Enables local parent approvals for the blocked website on the Family Link
 // user's device.
@@ -28,28 +36,12 @@ BASE_FEATURE(kLocalWebApprovals,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
-const char kLocalWebApprovalsPreferredButtonLocal[] = "local";
-const char kLocalWebApprovalsPreferredButtonRemote[] = "remote";
-constexpr base::FeatureParam<std::string> kLocalWebApprovalsPreferredButton{
-    &kLocalWebApprovals, "preferred_button",
-    kLocalWebApprovalsPreferredButtonLocal};
-
 // Proto fetcher experiments.
 BASE_FEATURE(kEnableProtoApiForClassifyUrl,
              "EnableProtoApiForClassifyUrl",
              base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kEnableCreatePermissionRequestFetcher,
-             "EnableCreatePermissionRequestFetcher",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kUseBuiltInRetryingMechanismForListFamilyMembers,
              "UseBuiltInRetryingMechanismForListFamilyMembers",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Enables the new local extension approvals experience, which requests approval
-// through a platform-specific Parent Access Widget. Available on ChromeOS.
-BASE_FEATURE(kLocalExtensionApprovalsV2,
-             "LocalExtensionApprovalsV2",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsGoogleBrandedBuild() {
@@ -73,13 +65,6 @@ bool IsLocalWebApprovalsEnabled() {
 #endif
 }
 
-bool IsLocalWebApprovalThePreferredButton() {
-  std::string preferred_button = kLocalWebApprovalsPreferredButton.Get();
-  DCHECK((preferred_button == kLocalWebApprovalsPreferredButtonLocal) ||
-         (preferred_button == kLocalWebApprovalsPreferredButtonRemote));
-  return (preferred_button == kLocalWebApprovalsPreferredButtonLocal);
-}
-
 bool IsProtoApiForClassifyUrlEnabled() {
   return base::FeatureList::IsEnabled(kEnableProtoApiForClassifyUrl);
 }
@@ -96,9 +81,6 @@ bool IsRetryMechanismForListFamilyMembersEnabled() {
 BASE_FEATURE(kFilterWebsitesForSupervisedUsersOnDesktopAndIOS,
              "FilterWebsitesForSupervisedUsersOnDesktopAndIOS",
              base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kEnableExtensionsPermissionsForSupervisedUsersOnDesktop,
-             "EnableExtensionsPermissionsForSupervisedUsersOnDesktop",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kSupervisedPrefsControlledBySupervisedStore,
              "SupervisedPrefsControlledBySupervisedStore",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -107,6 +89,18 @@ BASE_FEATURE(kSupervisedPrefsControlledBySupervisedStore,
 // users in various UI surfaces.
 BASE_FEATURE(kEnableManagedByParentUi,
              "EnableManagedByParentUi",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
+BASE_FEATURE(kEnableExtensionsPermissionsForSupervisedUsersOnDesktop,
+             "EnableExtensionsPermissionsForSupervisedUsersOnDesktop",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
+
+// Runs a shadow no-op safe-sites call alongside kids-api call, to compare
+// latencies.
+BASE_FEATURE(kShadowKidsApiWithSafeSites,
+             "ShadowKidsApiWithSafeSites",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool CanDisplayFirstTimeInterstitialBanner() {
@@ -120,6 +114,19 @@ BASE_FEATURE(kClearingCookiesKeepsSupervisedUsersSignedIn,
              "ClearingCookiesKeepsSupervisedUsersSignedIn",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kForceGoogleSafeSearchForSupervisedUsers,
+             "ForceGoogleSafeSearchForSupervisedUsers",
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
+             // For Android and ChromeOS, the long-standing behaviour is that
+             // Safe Search is force-enabled by the browser, irrespective of the
+             // parent configuration.
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#else
+             // For other platforms, Safe Search is controlled by the parent
+             // configuration in Family Link.
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
+
 // The URL which the "Managed by your parent" UI links to. This is defined as a
 // FeatureParam (but with the currently correct default) because:
 // * We expect to change this URL in the near-term, this allows us to gradually
@@ -130,9 +137,9 @@ constexpr base::FeatureParam<std::string> kManagedByParentUiMoreInfoUrl{
     &kEnableManagedByParentUi, "more_info_url",
     "https://familylink.google.com/setting/resource/94"};
 
-bool IsLocalExtensionApprovalsV2Enabled() {
-  return base::FeatureList::IsEnabled(kLocalExtensionApprovalsV2);
-}
+BASE_FEATURE(kCustomWebSignInInterceptForSupervisedUsers,
+             "CustomWebSignInInterceptForSupervisedUsers",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsChildAccountSupervisionEnabled() {
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
@@ -142,9 +149,11 @@ bool IsChildAccountSupervisionEnabled() {
   return base::FeatureList::IsEnabled(
              supervised_user::
                  kFilterWebsitesForSupervisedUsersOnDesktopAndIOS) ||
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
          base::FeatureList::IsEnabled(
              supervised_user::
                  kEnableExtensionsPermissionsForSupervisedUsersOnDesktop) ||
+#endif
          base::FeatureList::IsEnabled(
              supervised_user::kSupervisedPrefsControlledBySupervisedStore) ||
          base::FeatureList::IsEnabled(
@@ -152,6 +161,14 @@ bool IsChildAccountSupervisionEnabled() {
          base::FeatureList::IsEnabled(
              supervised_user::kClearingCookiesKeepsSupervisedUsersSignedIn);
 #endif
+}
+
+bool IsKidFriendlyContentFeedAvailable() {
+  return base::FeatureList::IsEnabled(kKidFriendlyContentFeed);
+}
+
+bool IsShadowKidsApiWithSafeSitesEnabled() {
+  return base::FeatureList::IsEnabled(kShadowKidsApiWithSafeSites);
 }
 
 }  // namespace supervised_user

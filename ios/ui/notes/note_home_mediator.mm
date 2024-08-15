@@ -5,6 +5,7 @@
 #import "base/apple/foundation_util.h"
 #import "base/check.h"
 #import "base/strings/sys_string_conversions.h"
+#import "components/notes/notes_model.h"
 #import "components/prefs/ios/pref_observer_bridge.h"
 #import "components/prefs/pref_change_registrar.h"
 #import "components/prefs/pref_service.h"
@@ -14,8 +15,8 @@
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_model.h"
-#import "ios/chrome/browser/sync/sync_observer_bridge.h"
-#import "ios/chrome/browser/sync/sync_service_factory.h"
+#import "ios/chrome/browser/sync/model/sync_observer_bridge.h"
+#import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/browser/ui/authentication/cells/table_view_signin_promo_item.h"
 #import "ios/chrome/browser/ui/authentication/enterprise/enterprise_utils.h"
 #import "ios/chrome/browser/ui/authentication/signin_presenter.h"
@@ -26,7 +27,6 @@
 #import "ios/ui/notes/note_home_consumer.h"
 #import "ios/ui/notes/note_home_shared_state.h"
 #import "ios/ui/notes/note_model_bridge_observer.h"
-#import "notes/notes_model.h"
 #import "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -200,16 +200,10 @@ class NoteModelBridge;
             NoteHomeSectionIdentifierMessages];
 
   std::vector<const NoteNode*> nodes;
-  std::vector<std::pair<int, NoteNode::Type>> results;
   self.sharedState.notesModel->GetNotesMatching(
         base::SysNSStringToUTF16(searchText),
         kMaxNotesSearchResults,
-        &results);
-  for (const std::pair<int, NoteNode::Type>& node : results) {
-      const NoteNode* noteNode = self.sharedState.notesModel->GetNoteNodeByID(
-            static_cast<int64_t>(node.first));
-      nodes.push_back(noteNode);
-  }
+        nodes);
   int count = 0;
   for (const NoteNode* node : nodes) {
     NoteHomeNodeItem* nodeItem =

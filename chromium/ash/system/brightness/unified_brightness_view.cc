@@ -13,6 +13,7 @@
 #include "ash/style/ash_color_id.h"
 #include "ash/system/brightness/unified_brightness_slider_controller.h"
 #include "ash/system/night_light/night_light_controller_impl.h"
+#include "ash/system/tray/tray_popup_utils.h"
 #include "ash/wm/screen_pinning_controller.h"
 #include "ash/wm/window_state.h"
 #include "base/functional/bind.h"
@@ -47,7 +48,7 @@ UnifiedBrightnessView::UnifiedBrightnessView(
       return;
     }
 
-    const bool toggled = night_light_controller_->GetEnabled();
+    const bool toggled = night_light_controller_->IsNightLightEnabled();
     night_light_button_ = AddChildView(std::make_unique<IconButton>(
         base::BindRepeating(&UnifiedBrightnessView::OnNightLightButtonPressed,
                             base::Unretained(this)),
@@ -81,7 +82,7 @@ UnifiedBrightnessView::UnifiedBrightnessView(
     // enabled. In the lock screen and sign-in screen, the `night_light_button_`
     // should be disabled.
     night_light_button_->SetEnabled(
-        Shell::Get()->session_controller()->ShouldEnableSettings());
+        TrayPopupUtils::CanShowNightLightFeatureTile());
     night_light_button_->SetToggled(toggled);
 
     more_button_ = AddChildView(std::make_unique<IconButton>(
@@ -139,8 +140,8 @@ void UnifiedBrightnessView::OnNightLightButtonPressed() {
 
 void UnifiedBrightnessView::UpdateNightLightButton() {
   night_light_button_->SetEnabled(
-      Shell::Get()->session_controller()->ShouldEnableSettings());
-  const bool toggled = night_light_controller_->GetEnabled();
+      TrayPopupUtils::CanShowNightLightFeatureTile());
+  const bool toggled = night_light_controller_->IsNightLightEnabled();
 
   // Sets `night_light_button_` toggle state to update its icon, icon color,
   // and background color.

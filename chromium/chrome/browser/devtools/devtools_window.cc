@@ -38,7 +38,7 @@
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
-#include "chrome/browser/ui/webui/devtools_ui.h"
+#include "chrome/browser/ui/webui/devtools/devtools_ui.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -74,6 +74,9 @@
 #include "content/public/common/input/native_web_keyboard_event.h"
 #include "content/public/common/url_constants.h"
 #include "net/cert/x509_certificate.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "third_party/blink/public/common/input/web_gesture_event.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
@@ -829,8 +832,10 @@ void DevToolsWindow::ToggleDevToolsWindow(
       return;
     window->bindings_->AttachTo(agent.get());
     do_open = true;
-    if (opened_by != DevToolsOpenedByAction::kUnknown)
+    if (opened_by != DevToolsOpenedByAction::kUnknown) {
       LogDevToolsOpenedByAction(opened_by);
+      LogDevToolsOpenedUKM(inspected_web_contents);
+    }
   }
 
   // Update toolbar to reflect DevTools changes.
@@ -860,6 +865,7 @@ void DevToolsWindow::InspectElement(
   // renderer. Otherwise, we still can hit a race condition here.
   OpenDevToolsWindow(web_contents, DevToolsToggleAction::ShowElementsPanel());
   LogDevToolsOpenedByAction(DevToolsOpenedByAction::kContextMenuInspect);
+  LogDevToolsOpenedUKM(web_contents);
   DevToolsWindow* window = FindDevToolsWindow(agent.get());
   if (window && should_measure_time)
     window->inspect_element_start_time_ = start_time;
@@ -869,6 +875,14 @@ void DevToolsWindow::InspectElement(
 void DevToolsWindow::LogDevToolsOpenedByAction(
     DevToolsOpenedByAction opened_by) {
   base::UmaHistogramEnumeration("DevTools.OpenedByAction", opened_by);
+}
+
+// static
+void DevToolsWindow::LogDevToolsOpenedUKM(content::WebContents* web_contents) {
+  ukm::SourceId source_id =
+      web_contents->GetPrimaryMainFrame()->GetPageUkmSourceId();
+  ukm::builders::DevTools_Opened(source_id).SetHasOccurred(true).Record(
+      ukm::UkmRecorder::Get());
 }
 
 // static
@@ -1330,6 +1344,9 @@ GURL DevToolsWindow::GetDevToolsURL(Profile* profile,
       if (base::FeatureList::IsEnabled(::features::kDevToolsTabTarget)) {
         url += "&targetType=tab";
       }
+      if (base::FeatureList::IsEnabled(::features::kDevToolsVeLogging)) {
+        url += "&veLogging=true";
+      }
 #if defined(AIDA_SCOPE)
         url += "&enableAida=true";
 #endif
@@ -1363,6 +1380,11 @@ GURL DevToolsWindow::GetDevToolsURL(Profile* profile,
     url += "&hasOtherClients=true";
   if (browser_connection)
     url += "&browserConnection=true";
+
+#if BUILDFLAG(GOOGLE_CHROME_FOR_TESTING_BRANDING)
+  url += "&isChromeForTesting=true";
+#endif
+
   return DevToolsUIBindings::SanitizeFrontendURL(GURL(url));
 }
 
@@ -1443,6 +1465,7 @@ void DevToolsWindow::AddNewContents(
     bool* was_blocked) {
   if (new_contents.get() == toolbox_web_contents_) {
     owned_toolbox_web_contents_ = std::move(new_contents);
+    owned_toolbox_web_contents_->SetOwnerLocationForDebug(FROM_HERE);
 
     toolbox_web_contents_->SetDelegate(new DevToolsToolboxDelegate(
         toolbox_web_contents_, inspected_web_contents_));

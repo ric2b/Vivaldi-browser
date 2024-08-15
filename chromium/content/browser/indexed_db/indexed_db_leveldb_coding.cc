@@ -236,44 +236,67 @@ void EncodeDouble(double value, std::string* into) {
   into->insert(into->end(), p, p + sizeof(value));
 }
 
-void EncodeIDBKey(const IndexedDBKey& value, std::string* into) {
+// Return value is true iff successful.
+[[nodiscard]] bool EncodeIDBKeyRecursively(const IndexedDBKey& value,
+                                           std::string* into,
+                                           size_t recursion_level) {
+  // The recursion level is enforced in the renderer (in V8). If this check
+  // fails, it suggests a compromised renderer.
+  if (recursion_level > IndexedDBKey::kMaximumDepth) {
+    return false;
+  }
+
   size_t previous_size = into->size();
   switch (value.type()) {
     case blink::mojom::IDBKeyType::Array: {
       EncodeByte(kIndexedDBKeyArrayTypeByte, into);
       size_t length = value.array().size();
       EncodeVarInt(length, into);
-      for (size_t i = 0; i < length; ++i)
-        EncodeIDBKey(value.array()[i], into);
+      for (size_t i = 0; i < length; ++i) {
+        if (!EncodeIDBKeyRecursively(value.array()[i], into,
+                                     1 + recursion_level)) {
+          return false;
+        }
+      }
       DCHECK_GT(into->size(), previous_size);
-      return;
+      return true;
     }
     case blink::mojom::IDBKeyType::Binary:
       EncodeByte(kIndexedDBKeyBinaryTypeByte, into);
       EncodeBinary(value.binary(), into);
       DCHECK_GT(into->size(), previous_size);
-      return;
+      return true;
     case blink::mojom::IDBKeyType::String:
       EncodeByte(kIndexedDBKeyStringTypeByte, into);
       EncodeStringWithLength(value.string(), into);
       DCHECK_GT(into->size(), previous_size);
-      return;
+      return true;
     case blink::mojom::IDBKeyType::Date:
       EncodeByte(kIndexedDBKeyDateTypeByte, into);
       EncodeDouble(value.date(), into);
       DCHECK_EQ(9u, static_cast<size_t>(into->size() - previous_size));
-      return;
+      return true;
     case blink::mojom::IDBKeyType::Number:
       EncodeByte(kIndexedDBKeyNumberTypeByte, into);
       EncodeDouble(value.number(), into);
       DCHECK_EQ(9u, static_cast<size_t>(into->size() - previous_size));
-      return;
+      return true;
     case blink::mojom::IDBKeyType::None:
     case blink::mojom::IDBKeyType::Invalid:
     case blink::mojom::IDBKeyType::Min:
     default:
-      NOTREACHED_NORETURN();
+      return false;
   }
+}
+
+// This function must be a thin wrapper around `MaybeEncodeIDBKey` to ensure
+// comprehensive test coverage.
+void EncodeIDBKey(const IndexedDBKey& value, std::string* into) {
+  CHECK(MaybeEncodeIDBKey(value, into));
+}
+
+bool MaybeEncodeIDBKey(const IndexedDBKey& value, std::string* into) {
+  return EncodeIDBKeyRecursively(value, into, 0);
 }
 
 void EncodeSortableIDBKey(const IndexedDBKey& value, std::string* into) {
@@ -423,7 +446,7 @@ bool DecodeStringWithLength(StringPiece* slice, std::u16string* value) {
   if (slice->size() < bytes)
     return false;
 
-  StringPiece subpiece(slice->begin(), bytes);
+  StringPiece subpiece = slice->substr(0, bytes);
   slice->remove_prefix(bytes);
   if (!DecodeString(&subpiece, value))
     return false;
@@ -1405,19 +1428,19 @@ bool KeyPrefix::Decode(StringPiece* slice, KeyPrefix* result) {
     return false;
 
   {
-    StringPiece tmp(slice->begin(), database_id_bytes);
+    StringPiece tmp = slice->substr(0, database_id_bytes);
     if (!DecodeInt(&tmp, &result->database_id_))
       return false;
   }
   slice->remove_prefix(database_id_bytes);
   {
-    StringPiece tmp(slice->begin(), object_store_id_bytes);
+    StringPiece tmp = slice->substr(0, object_store_id_bytes);
     if (!DecodeInt(&tmp, &result->object_store_id_))
       return false;
   }
   slice->remove_prefix(object_store_id_bytes);
   {
-    StringPiece tmp(slice->begin(), index_id_bytes);
+    StringPiece tmp = slice->substr(0, index_id_bytes);
     if (!DecodeInt(&tmp, &result->index_id_))
       return false;
   }

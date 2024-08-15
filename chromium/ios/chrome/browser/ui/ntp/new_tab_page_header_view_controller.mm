@@ -14,6 +14,8 @@
 #import "components/signin/public/base/signin_switches.h"
 #import "components/strings/grit/components_strings.h"
 #import "components/sync/base/features.h"
+#import "ios/chrome/browser/ntp/features.h"
+#import "ios/chrome/browser/ntp/home/features.h"
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
@@ -27,7 +29,6 @@
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/lens/lens_entrypoint.h"
 #import "ios/chrome/browser/ui/ntp/logo_vendor.h"
@@ -101,7 +102,9 @@ NSString* const kScribbleFakeboxElementId = @"fakebox";
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
   if (self.traitCollection.horizontalSizeClass !=
-      previousTraitCollection.horizontalSizeClass) {
+          previousTraitCollection.horizontalSizeClass ||
+      previousTraitCollection.preferredContentSizeCategory !=
+          self.traitCollection.preferredContentSizeCategory) {
     [self updateFakeboxDisplay];
   }
 }
@@ -167,12 +170,14 @@ NSString* const kScribbleFakeboxElementId = @"fakebox";
   self.headerView.searchHintLabel.alpha = 1;
   self.headerView.voiceSearchButton.alpha = 1;
   if (finalPosition == UIViewAnimatingPositionEnd &&
-      self.delegate.scrolledToMinimumHeight) {
+      (self.delegate.scrolledToMinimumHeight || IsIOSLargeFakeboxEnabled())) {
     // Check to see if the collection are still scrolled to the top --
     // it's possible (and difficult) to unfocus the omnibox and initiate a
     // -shiftTilesDownForOmniboxDefocus before the animation here completes.
     if (IsSplitToolbarMode(self)) {
       [self.dispatcher onFakeboxAnimationComplete];
+    } else {
+      [self.toolbarDelegate setScrollProgressForTabletOmnibox:1];
     }
   }
 }
@@ -217,20 +222,10 @@ NSString* const kScribbleFakeboxElementId = @"fakebox";
   [self.headerView layoutIfNeeded];
 }
 
-- (void)updateConstraints {
-  self.doodleTopMarginConstraint.constant =
-      content_suggestions::DoodleTopMargin(0, self.traitCollection);
-  self.headerViewHeightConstraint.constant =
-      content_suggestions::HeightForLogoHeader(self.logoIsShowing,
-                                               self.logoVendor.isShowingDoodle,
-                                               self.traitCollection);
-}
-
 - (CGFloat)pinnedOffsetY {
   CGFloat offsetY = [self headerHeight];
   if (IsSplitToolbarMode(self)) {
-    offsetY -= ToolbarExpandedHeight(
-        self.traitCollection.preferredContentSizeCategory);
+    offsetY -= content_suggestions::FakeToolbarHeight();
   }
 
   return AlignValueToPixel(offsetY);
@@ -426,6 +421,9 @@ NSString* const kScribbleFakeboxElementId = @"fakebox";
 
 - (void)openLens {
   [self.NTPMetricsRecorder recordLensTapped];
+  if (IsIOSLargeFakeboxEnabled()) {
+    TriggerHapticFeedbackForSelectionChange();
+  }
   OpenLensInputSelectionCommand* command = [[OpenLensInputSelectionCommand
       alloc]
           initWithEntryPoint:LensEntrypoint::NewTabPage
@@ -437,6 +435,9 @@ NSString* const kScribbleFakeboxElementId = @"fakebox";
 - (void)loadVoiceSearch:(id)sender {
   DCHECK(self.voiceSearchIsEnabled);
   [self.NTPMetricsRecorder recordVoiceSearchTapped];
+  if (IsIOSLargeFakeboxEnabled()) {
+    TriggerHapticFeedbackForSelectionChange();
+  }
   UIView* voiceSearchButton = base::apple::ObjCCastStrict<UIView>(sender);
   [self.layoutGuideCenter referenceView:voiceSearchButton
                               underName:kVoiceSearchButtonGuide];
@@ -458,6 +459,9 @@ NSString* const kScribbleFakeboxElementId = @"fakebox";
 
 - (void)fakeboxTapped {
   [self.NTPMetricsRecorder recordFakeOmniboxTapped];
+  if (IsIOSLargeFakeboxEnabled()) {
+    TriggerHapticFeedbackForSelectionChange();
+  }
   [self.commandHandler fakeboxTapped];
 }
 
@@ -482,6 +486,8 @@ NSString* const kScribbleFakeboxElementId = @"fakebox";
 // If display is compact size, shows fakebox. If display is regular size,
 // shows fakebox if the logo is visible and hides otherwise
 - (void)updateFakeboxDisplay {
+  self.doodleTopMarginConstraint.constant =
+      content_suggestions::DoodleTopMargin(0, self.traitCollection);
   [self.doodleHeightConstraint
       setConstant:content_suggestions::DoodleHeight(
                       self.logoVendor.showingLogo,
@@ -606,21 +612,6 @@ NSString* const kScribbleFakeboxElementId = @"fakebox";
   return YES;
 }
 
-#pragma mark - LogoAnimationControllerOwnerOwner
-
-- (id<LogoAnimationControllerOwner>)logoAnimationControllerOwner {
-  // Only return the logo vendor's animation controller owner if the logo view
-  // is fully visible.  This prevents the logo from being used in transition
-  // animations if the logo has been scrolled off screen.
-  UIView* logoView = self.logoVendor.view;
-  UIView* parentView = self.parentViewController.view;
-  CGRect logoFrame = [parentView convertRect:logoView.bounds fromView:logoView];
-  BOOL isLogoFullyVisible = CGRectEqualToRect(
-      CGRectIntersection(logoFrame, parentView.bounds), logoFrame);
-  return isLogoFullyVisible ? [self.logoVendor logoAnimationControllerOwner]
-                            : nil;
-}
-
 #pragma mark - DoodleObserver
 
 - (void)doodleDisplayStateChanged:(BOOL)doodleShowing {
@@ -649,6 +640,7 @@ NSString* const kScribbleFakeboxElementId = @"fakebox";
 - (void)setLogoVendor:(id<LogoVendor>)logoVendor {
   _logoVendor = logoVendor;
   _logoVendor.doodleObserver = self;
+  [self updateLogoAndFakeboxDisplay];
 }
 
 - (void)setVoiceSearchIsEnabled:(BOOL)voiceSearchIsEnabled {
@@ -712,6 +704,11 @@ NSString* const kScribbleFakeboxElementId = @"fakebox";
 
 - (UIPointerStyle*)pointerInteraction:(UIPointerInteraction*)interaction
                        styleForRegion:(UIPointerRegion*)region {
+  // If the view is no longer in a window due to a race condition, no
+  // pointer style is needed.
+  if (!interaction.view.window) {
+    return nil;
+  }
   // Without this, the hover effect looks slightly oversized.
   CGRect rect = CGRectInset(interaction.view.bounds, 1, 1);
   UIBezierPath* path =

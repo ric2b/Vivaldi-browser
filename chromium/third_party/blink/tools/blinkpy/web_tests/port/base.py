@@ -42,7 +42,7 @@ import tempfile
 from collections import defaultdict
 from copy import deepcopy
 from datetime import datetime
-from typing import Optional, Set
+from typing import Optional, Set, Tuple
 
 import six
 from six.moves import zip_longest
@@ -73,6 +73,9 @@ from blinkpy.web_tests.servers import pywebsocket
 from blinkpy.web_tests.servers import wptserve
 
 _log = logging.getLogger(__name__)
+
+FuzzyRange = Tuple[int, int]
+FuzzyParameters = Tuple[Optional[FuzzyRange], Optional[FuzzyRange]]
 
 # Path relative to the build directory.
 CONTENT_SHELL_FONTS_DIR = "test_fonts"
@@ -111,10 +114,11 @@ FONT_FILES = [
 ]
 
 # This is the fingerprint of wpt's certificate found in
-# blinkpy/third_party/wpt/certs.  The following line is updated by
-# update_cert.py.
+# `//third_party/wpt_tools/certs/127.0.0.1.pem`. The following line is updated
+# by `//third_party/wpt_tools/update_certs.py`.
 WPT_FINGERPRINT = 'Nxvaj3+bY3oVrTc+Jp7m3E3sB1n3lXtnMDCyBsqEXiY='
-# One for 127.0.0.1.sxg.pem
+# One for `//third_party/wpt_tools/certs/127.0.0.1.sxg.pem` used by non-WPT
+# tests under `web_tests/http/`.
 SXG_FINGERPRINT = '55qC1nKu2A88ESbFmk5sTPQS/ScG+8DD7P+2bgFA9iM='
 # And one for external/wpt/signed-exchange/resources/127.0.0.1.sxg.pem
 SXG_WPT_FINGERPRINT = '0Rt4mT6SJXojEMHTnKnlJ/hBKMBcI4kteBlhR1eTTdk='
@@ -227,7 +231,7 @@ class Port(object):
     # manifest. However, we reuse this syntax for some non-WPT tests as well.
     WPT_FUZZY_REGEX = re.compile(
         r'<(?:html:)?meta\s+name=(?:fuzzy|"fuzzy")\s+content='
-        r'"(?:(.+):)?(?:maxDifference=)?(?:(\d+)-)?(\d+);(?:totalPixels=)?(?:(\d+)-)?(\d+)"\s*/?>'
+        r'"(?:(.+):)?(?:\s*maxDifference\s*=\s*)?(?:(\d+)-)?(\d+);(?:\s*totalPixels\s*=\s*)?(?:(\d+)-)?(\d+)"\s*/?>'
     )
 
     # Because this is an abstract base class, arguments to functions may be
@@ -270,7 +274,10 @@ class Port(object):
         self.server_process_constructor = server_process.ServerProcess  # This can be overridden for testing.
         self._http_lock = None  # FIXME: Why does this live on the port object?
         self._dump_reader = None
-        self._skip_base_tests = set()
+        # This is a map of the form dir->[all skipped tests in that dir]
+        # It is used to optimize looking up for a test, as it allows a quick look up of the test dir
+        # while still using the "startwith" function to match with a single entry
+        self._skip_base_test_map = defaultdict(list)
 
         # Configuration and target are always set by PortFactory so this is only
         # relevant in cases where a Port is created without it (testing mostly).
@@ -377,15 +384,35 @@ class Port(object):
 
     def additional_driver_flags(self):
         flags = self._specified_additional_driver_flags()
-        if self.driver_name() == self.CONTENT_SHELL_NAME:
-            flags += [
+        driver_name = self.driver_name()
+
+        # Enable "test" and "experimental" features by passing either
+        # `--run-web-tests` or `--enable-blink-test-features`.
+        if driver_name == self.CONTENT_SHELL_NAME:
+            flags.extend([
                 '--run-web-tests',
-                '--ignore-certificate-errors-spki-list=' + WPT_FINGERPRINT +
-                ',' + SXG_FINGERPRINT + ',' + SXG_WPT_FINGERPRINT,
+                # `--ignore-certificate-errors-spki-list` requires
+                # `--user-data-dir` to take effect. `--user-data-dir` is an
+                # embedder-defined switch; it seems that we don't need to pass
+                # this for `chrome`, as `chromedriver` will supply its own
+                # value.
+                '--user-data-dir',
+            ])
+        elif driver_name == self.CHROME_NAME:
+            flags.append('--enable-blink-test-features')
+
+        if driver_name in {self.CONTENT_SHELL_NAME, self.CHROME_NAME}:
+            known_fingerprints = [
+                WPT_FINGERPRINT,
+                SXG_FINGERPRINT,
+                SXG_WPT_FINGERPRINT,
+            ]
+            flags.extend([
+                '--ignore-certificate-errors-spki-list=' +
+                ','.join(known_fingerprints),
                 # Required for WebTransport tests.
                 '--webtransport-developer-mode',
-                '--user-data-dir'
-            ]
+            ])
             if self.get_option('nocheck_sys_deps', False):
                 flags.append('--disable-system-font-check')
 
@@ -946,17 +973,28 @@ class Port(object):
         path_in_wpt = match.group(2)
         for expectation, ref_path_in_wpt in self.wpt_manifest(
                 wpt_path).extract_reference_list(path_in_wpt):
-            if 'external/wpt' in wpt_path:
-                ref_path_in_web_tests = wpt_path + ref_path_in_wpt
+            if ref_path_in_wpt.startswith('about:'):
+                ref_absolute_path = ref_path_in_wpt
             else:
-                # References in this manifest are already generated with
-                # `/wpt_internal` in the URL. Remove the leading '/' for
-                # joining.
-                ref_path_in_web_tests = ref_path_in_wpt[1:]
-            ref_absolute_path = self._filesystem.join(self.web_tests_dir(),
-                                                      ref_path_in_web_tests)
+                if 'external/wpt' in wpt_path:
+                    ref_path_in_web_tests = wpt_path + ref_path_in_wpt
+                else:
+                    # References in this manifest are already generated with
+                    # `/wpt_internal` in the URL. Remove the leading '/' for
+                    # joining.
+                    ref_path_in_web_tests = ref_path_in_wpt[1:]
+                ref_absolute_path = self._filesystem.join(
+                    self.web_tests_dir(), ref_path_in_web_tests)
             reftest_list.append((expectation, ref_absolute_path))
         return reftest_list
+
+    def max_allowed_failures(self, num_tests):
+        return (self._options.exit_after_n_failures
+                or max(5000, num_tests // 2))
+
+    def max_allowed_crash_or_timeouts(self, num_tests):
+        return (self._options.exit_after_n_crashes_or_timeouts
+                or max(100, num_tests // 33))
 
     def tests(self, paths=None):
         """Returns all tests or tests matching supplied paths.
@@ -1111,8 +1149,9 @@ class Port(object):
                 'manifest_update', False):
             _log.debug('Generating MANIFEST.json for %s...', path)
             WPTManifest.ensure_manifest(self, path)
-        return WPTManifest(self.host, manifest_path,
-                           self.get_option('test_types'), exclude_jsshell)
+        return WPTManifest.from_file(self, manifest_path,
+                                     self.get_option('test_types'),
+                                     exclude_jsshell)
 
     def is_wpt_file(self, path):
         """Returns whether a path is a WPT test file."""
@@ -1184,7 +1223,7 @@ class Port(object):
             "http://{}:{}".format(hosts_and_ports[0], hosts_and_ports[1]),
             urljoin(path_in_wpt, pac))
 
-    def get_wpt_fuzzy_metadata(self, test_name):
+    def get_wpt_fuzzy_metadata(self, test_name: str) -> FuzzyParameters:
         """Returns the WPT-style fuzzy metadata for the given test.
 
         The metadata is a pair of lists, (maxDifference, totalPixels), where
@@ -1351,6 +1390,7 @@ class Port(object):
             return ('', test_name)
         return (test_name[0:index], test_name[index:])
 
+    @memoized
     def normalize_test_name(self, test_name):
         """Returns a normalized version of the test name or test directory."""
         if test_name.endswith('/'):
@@ -1504,11 +1544,11 @@ class Port(object):
             # For a virtual test, if the base test is in exclusive_tests of the
             # test's own virtual suite, then we should not skip the test.
             virtual_suite = self._lookup_virtual_suite(test)
-            for entry in virtual_suite.exclusive_tests:
-                normalized_entry = self.normalize_test_name(entry)
-                if base_test.startswith(normalized_entry):
+            for exclusive_test in self._normalized_exclusive_tests(
+                    virtual_suite):
+                if base_test.startswith(exclusive_test):
                     return False
-                if normalized_entry.startswith(base_test):
+                if exclusive_test.startswith(base_test):
                     # This means base_test is a directory containing exclusive
                     # tests, so should not skip the directory.
                     return False
@@ -1518,11 +1558,24 @@ class Port(object):
         # For a non-virtual test or a virtual test not listed in exclusive_tests
         # of the test's own virtual suite, we should skip the test if the base
         # test is in exclusive_tests of any virtual suite.
-        for suite in self.virtual_test_suites():
-            for entry in suite.exclusive_tests:
-                if base_test.startswith(self.normalize_test_name(entry)):
-                    return True
+        for exclusive_test in self._all_normalized_exclusive_tests():
+            if base_test.startswith(exclusive_test):
+                return True
         return False
+
+    @memoized
+    def _all_normalized_exclusive_tests(self):
+        tests = set()
+        for suite in self.virtual_test_suites():
+            tests.update(self._normalized_exclusive_tests(suite))
+        return tests
+
+    @memoized
+    def _normalized_exclusive_tests(self, virtual_suite):
+        tests = set()
+        for exclusive_test in virtual_suite.exclusive_tests:
+            tests.add(self.normalize_test_name(exclusive_test))
+        return tests
 
     @memoized
     def skipped_due_to_skip_base_tests(self, test):
@@ -1540,8 +1593,10 @@ class Port(object):
         # Ensure that this was called at least once, to process all suites
         # information
         vts = self.virtual_test_suites()
-
-        for skipped_base_test in self._skip_base_tests:
+        # Our approach of using a map keyed on paths will only work if the test name is not a directory.
+        assert (not self._filesystem.isdir(test))
+        dirname, _ = self.split_test(test)
+        for skipped_base_test in self._skip_base_test_map.get(dirname, []):
             if test.startswith(skipped_base_test):
                 return True
         return False
@@ -1613,14 +1668,6 @@ class Port(object):
         """
         return self._filesystem.join(self.web_tests_dir(), test_name)
 
-    def _should_run_with_single_threaded_compositing(self, test_name):
-        # Threaded compositing is currently only turned on for web tests
-        # on Linux machines
-        if not self.host.platform.is_linux() or self.is_wpt_test(test_name):
-            return True
-
-        return False
-
     @memoized
     def args_for_test(self, test_name):
         args = self._lookup_virtual_test_args(test_name)
@@ -1628,16 +1675,19 @@ class Port(object):
         if pac_url is not None:
             args.append("--proxy-pac-url=" + pac_url)
 
-        if ENABLE_THREADED_COMPOSITING_FLAG in args:
+        if ENABLE_THREADED_COMPOSITING_FLAG not in args:
+            # We run single-threaded by default.
+            # Note that this logic is mirrored in wptrunner:
+            # third_party/wpt_tools/wpt/tools/wptrunner/wptrunner/browsers/content_shell.py
+            args.append(DISABLE_THREADED_COMPOSITING_FLAG)
+            args.append(DISABLE_THREADED_ANIMATION_FLAG)
+        else:
             # Explicitly enabling threaded compositing takes precedence over
             # explicitly disabling it.
             if DISABLE_THREADED_COMPOSITING_FLAG in args:
                 args.remove(DISABLE_THREADED_COMPOSITING_FLAG)
             if DISABLE_THREADED_ANIMATION_FLAG in args:
                 args.remove(DISABLE_THREADED_ANIMATION_FLAG)
-        elif self._should_run_with_single_threaded_compositing(test_name):
-            args.append(DISABLE_THREADED_COMPOSITING_FLAG)
-            args.append(DISABLE_THREADED_ANIMATION_FLAG)
 
         tracing_categories = self.get_option('enable_tracing')
         if tracing_categories:
@@ -2383,7 +2433,11 @@ class Port(object):
                         if (self.is_wpt_test(normalized_base)
                                 and normalized_base.endswith(".js")):
                             normalized_base = normalized_base[:-2]
-                        self._skip_base_tests.add(normalized_base)
+                        # Update _skip_base_test_map with tests from the current suite's list
+                        test_dir, _ = self.split_test(normalized_base)
+                        self._skip_base_test_map[test_dir].append(
+                            normalized_base)
+
         except ValueError as error:
             raise ValueError('{} is not a valid JSON file: {}'.format(
                 path_to_virtual_test_suites, error))
@@ -2552,12 +2606,6 @@ class Port(object):
                 # Look for all tests in the manifest that are under the relative
                 # |filter_path_from_wpt|.
                 for test_path_from_wpt in wpt_manifest.all_urls():
-                    assert not test_path_from_wpt.startswith('/')
-                    assert not test_path_from_wpt.endswith('/')
-
-                    # Drop empty path components.
-                    test_path_from_wpt = test_path_from_wpt.replace('//', '/')
-
                     if test_path_from_wpt.startswith(filter_path_from_wpt):
                         # The result is a test path from the root web test
                         # directory. If a |virtual_prefix| was given, we prepend
@@ -2585,6 +2633,7 @@ class Port(object):
 
         return '', test_name
 
+    @memoized
     def lookup_virtual_test_base(self, test_name):
         suite = self._lookup_virtual_suite(test_name)
         if not suite:

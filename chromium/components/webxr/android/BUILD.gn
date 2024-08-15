@@ -4,6 +4,7 @@
 
 import("//build/config/android/rules.gni")
 import("//device/vr/buildflags/buildflags.gni")
+import("//third_party/jni_zero/jni_zero.gni")
 
 source_set("android_utils") {
   sources = [
@@ -145,9 +146,9 @@ android_library("xr_java") {
     ]
 
     deps += [
-      "//base:jni_java",
       "//content/public/android:content_java",
       "//third_party/androidx:androidx_annotation_annotation_java",
+      "//third_party/jni_zero:jni_zero_java",
       "//ui/android:ui_no_recycler_view_java",
     ]
   }

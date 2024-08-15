@@ -23,6 +23,7 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.SysUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.base.shared_preferences.SharedPreferencesManager;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.crash.ChromePureJavaExceptionReporter;
@@ -31,10 +32,9 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.metrics.UmaSessionStats;
 import org.chromium.chrome.browser.page_info.SiteSettingsHelper;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.TabUtils.LoadIfNeededCaller;
-import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
 import org.chromium.components.browser_ui.site_settings.SingleCategorySettings;
 import org.chromium.components.browser_ui.site_settings.SingleCategorySettingsConstants;
 import org.chromium.components.browser_ui.site_settings.SiteSettingsCategory;
@@ -60,6 +60,7 @@ import org.chromium.content_public.browser.ContentFeatureMap;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.display.DisplayAndroid;
 import org.chromium.ui.display.DisplayAndroidManager;
+import org.chromium.ui.display.DisplayUtil;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogManager.ModalDialogType;
@@ -260,7 +261,7 @@ public class RequestDesktopUtils {
         RequestDesktopUtils.setRequestDesktopSiteContentSettingsForUrl(
                 profile, url, tabUserAgent == TabUserAgent.DESKTOP);
         // Reset the tab level setting after upgrade.
-        CriticalPersistedTabData.from(tab).setUserAgent(TabUserAgent.DEFAULT);
+        tab.setUserAgent(TabUserAgent.DEFAULT);
     }
 
     /**
@@ -341,7 +342,7 @@ public class RequestDesktopUtils {
 
         // If it is not external display and the screen size in inches is below threshold, avoid
         // default-enabling the setting.
-        SharedPreferencesManager sharedPreferencesManager = SharedPreferencesManager.getInstance();
+        SharedPreferencesManager sharedPreferencesManager = ChromeSharedPreferences.getInstance();
         boolean isOnExternalDisplay =
                 !ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
                         feature, PARAM_GLOBAL_SETTING_DEFAULT_ON_ON_EXTERNAL_DISPLAY, false)
@@ -411,7 +412,7 @@ public class RequestDesktopUtils {
                 displaySizeInInches, display.getDisplayWidth(), display.getDisplayHeight(),
                 display.getXdpi(), display.getYdpi(), config.densityDpi, config.screenWidthDp,
                 config.screenHeightDp, isOnExternalDisplay(context));
-        SharedPreferencesManager sharedPreferencesManager = SharedPreferencesManager.getInstance();
+        SharedPreferencesManager sharedPreferencesManager = ChromeSharedPreferences.getInstance();
         String previousDisplaySpec = sharedPreferencesManager.readString(
                 ChromePreferenceKeys.DESKTOP_SITE_GLOBAL_SETTING_DEFAULT_ON_COHORT_DISPLAY_SPEC,
                 "");
@@ -425,7 +426,7 @@ public class RequestDesktopUtils {
         if (!ChromeFeatureList.isEnabled(ChromeFeatureList.REQUEST_DESKTOP_SITE_DEFAULTS_LOGGING)) {
             return;
         }
-        SharedPreferencesManager sharedPreferencesManager = SharedPreferencesManager.getInstance();
+        SharedPreferencesManager sharedPreferencesManager = ChromeSharedPreferences.getInstance();
         DisplayAndroid display = DisplayAndroid.getNonMultiDisplay(context);
         Configuration config = context.getResources().getConfiguration();
         String displaySpec = String.format(Locale.US,
@@ -441,7 +442,7 @@ public class RequestDesktopUtils {
     }
 
     private static void updateNoLongerInCohort() {
-        SharedPreferencesManager sharedPreferencesManager = SharedPreferencesManager.getInstance();
+        SharedPreferencesManager sharedPreferencesManager = ChromeSharedPreferences.getInstance();
         if (sharedPreferencesManager.contains(
                     ChromePreferenceKeys.DEFAULT_ENABLE_DESKTOP_SITE_GLOBAL_SETTING_COHORT)) {
             // The client was previous qualified for the experiment; but is no longer qualified
@@ -467,9 +468,31 @@ public class RequestDesktopUtils {
 
         WebsitePreferenceBridge.setCategoryEnabled(
                 profile, ContentSettingsType.REQUEST_DESKTOP_SITE, true);
-        SharedPreferencesManager.getInstance().writeBoolean(
+        ChromeSharedPreferences.getInstance().writeBoolean(
                 ChromePreferenceKeys.DEFAULT_ENABLED_DESKTOP_SITE_GLOBAL_SETTING, true);
         return true;
+    }
+
+    /**
+     * Default-enables the desktop site window setting if Chrome is opened on a tablet-sized
+     * internal display.
+     * @param activity The current {@link Activity}.
+     * @param profile The current {@link Profile}.
+     */
+    public static void maybeDefaultEnableWindowSetting(Activity activity, Profile profile) {
+        if (!ContentFeatureMap.isEnabled(ContentFeatureList.REQUEST_DESKTOP_SITE_WINDOW_SETTING)) {
+            return;
+        }
+        int smallestScreenWidthDp = DisplayUtil.getCurrentSmallestScreenWidth(activity);
+        boolean isOnExternalDisplay = isOnExternalDisplay(activity);
+        if (isOnExternalDisplay
+                || smallestScreenWidthDp < DeviceFormFactor.MINIMUM_TABLET_WIDTH_DP) {
+            return;
+        }
+        PrefService prefService = UserPrefs.get(profile);
+        if (prefService.isDefaultValuePreference(DESKTOP_SITE_WINDOW_SETTING_ENABLED)) {
+            prefService.setBoolean(DESKTOP_SITE_WINDOW_SETTING_ENABLED, /*newValue*/ true);
+        }
     }
 
     /**
@@ -487,7 +510,7 @@ public class RequestDesktopUtils {
                     ChromeFeatureList.REQUEST_DESKTOP_SITE_DEFAULTS_DOWNGRADE)) {
             return false;
         }
-        SharedPreferencesManager sharedPreferencesManager = SharedPreferencesManager.getInstance();
+        SharedPreferencesManager sharedPreferencesManager = ChromeSharedPreferences.getInstance();
         if ((ChromeFeatureList.isEnabled(ChromeFeatureList.REQUEST_DESKTOP_SITE_DEFAULTS)
                     || ChromeFeatureList.isEnabled(
                             ChromeFeatureList.REQUEST_DESKTOP_SITE_DEFAULTS_CONTROL))
@@ -533,7 +556,7 @@ public class RequestDesktopUtils {
         if (messageDispatcher == null) return false;
 
         // Present the message only if the global setting has been default-enabled.
-        if (!SharedPreferencesManager.getInstance().contains(
+        if (!ChromeSharedPreferences.getInstance().contains(
                     ChromePreferenceKeys.DEFAULT_ENABLED_DESKTOP_SITE_GLOBAL_SETTING)) {
             return false;
         }
@@ -656,7 +679,7 @@ public class RequestDesktopUtils {
             return false;
         }
 
-        SharedPreferencesManager sharedPreferencesManager = SharedPreferencesManager.getInstance();
+        SharedPreferencesManager sharedPreferencesManager = ChromeSharedPreferences.getInstance();
 
         boolean previouslyUpdatedByUser = sharedPreferencesManager.contains(
                 SingleCategorySettingsConstants

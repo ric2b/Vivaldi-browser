@@ -11,7 +11,7 @@
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details_table_view_constants.h"
 #import "ios/chrome/browser/ui/settings/password/password_manager_egtest_utils.h"
 #import "ios/chrome/browser/ui/settings/password/password_settings_app_interface.h"
-#import "ios/chrome/grit/ios_chromium_strings.h"
+#import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
@@ -891,6 +891,25 @@ NSString* LeakedPasswordDescription() {
       assertWithMatcher:grey_notVisible()];
   [[EarlGrey selectElementWithMatcher:DismissWarningButton()]
       assertWithMatcher:grey_notVisible()];
+}
+
+// Tests that Password Checkup Homepage is dismissed when there are no saved
+// passwords.
+- (void)testPasswordCheckupDismissedAfterAllPasswordsGone {
+  SavePasswordForm();
+
+  OpenPasswordCheckupHomepage(
+      /*number_of_affiliated_groups=*/1,
+      /*result_state=*/PasswordCheckStateSafe,
+      /*result_password_count=*/0);
+
+  [PasswordSettingsAppInterface clearPasswordStore];
+
+  // Verify that the Password Checkup Homepage is dismissed.
+  [[EarlGrey
+      selectElementWithMatcher:
+          grey_accessibilityID(password_manager::kPasswordCheckupTableViewId)]
+      assertWithMatcher:grey_nil()];
 }
 
 @end

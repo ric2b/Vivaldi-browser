@@ -14,7 +14,6 @@
 #include "components/invalidation/impl/invalidation_prefs.h"
 #include "components/invalidation/public/invalidator_state.h"
 #include "components/invalidation/public/topic_data.h"
-#include "components/invalidation/public/topic_invalidation_map.h"
 #include "components/prefs/scoped_user_pref_update.h"
 
 namespace invalidation {
@@ -67,9 +66,6 @@ void FCMInvalidationServiceBase::RegisterInvalidationHandler(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOG(2) << "Registering an invalidation handler";
   invalidator_registrar_.RegisterHandler(handler);
-  // Populate the id for newly registered handlers.
-  handler->OnInvalidatorClientIdChange(client_id_);
-  logger_.OnRegistration(handler->GetOwnerName());
 }
 
 bool FCMInvalidationServiceBase::UpdateInterestedTopics(
@@ -89,17 +85,7 @@ bool FCMInvalidationServiceBase::UpdateInterestedTopics(
     return false;
   }
   DoUpdateSubscribedTopicsIfNeeded();
-  logger_.OnUpdatedTopics(invalidator_registrar_.GetHandlerNameToTopicsMap());
   return true;
-}
-
-void FCMInvalidationServiceBase::UnsubscribeFromUnregisteredTopics(
-    InvalidationHandler* handler) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DVLOG(2) << "Unsubscribing from unregistered topics";
-  invalidator_registrar_.RemoveUnregisteredTopics(handler);
-  DoUpdateSubscribedTopicsIfNeeded();
-  logger_.OnUpdatedTopics(invalidator_registrar_.GetHandlerNameToTopicsMap());
 }
 
 void FCMInvalidationServiceBase::UnregisterInvalidationHandler(
@@ -107,7 +93,6 @@ void FCMInvalidationServiceBase::UnregisterInvalidationHandler(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOG(2) << "Unregistering";
   invalidator_registrar_.UnregisterHandler(handler);
-  logger_.OnUnregistration(handler->GetOwnerName());
 }
 
 InvalidatorState FCMInvalidationServiceBase::GetInvalidatorState() const {
@@ -125,31 +110,14 @@ std::string FCMInvalidationServiceBase::GetInvalidatorClientId() const {
   return client_id_;
 }
 
-InvalidationLogger* FCMInvalidationServiceBase::GetInvalidationLogger() {
-  return &logger_;
-}
-
-void FCMInvalidationServiceBase::RequestDetailedStatus(
-    base::RepeatingCallback<void(base::Value::Dict)> return_callback) const {
-  return_callback.Run(CollectDebugData());
-  invalidator_registrar_.RequestDetailedStatus(return_callback);
-
-  if (IsStarted()) {
-    invalidation_listener_->RequestDetailedStatus(return_callback);
-  }
-}
-
 void FCMInvalidationServiceBase::OnInvalidate(
-    const TopicInvalidationMap& invalidation_map) {
-  invalidator_registrar_.DispatchInvalidationsToHandlers(invalidation_map);
-
-  logger_.OnInvalidation(invalidation_map);
+    const Invalidation& invalidation) {
+  invalidator_registrar_.DispatchInvalidationToHandlers(invalidation);
 }
 
 void FCMInvalidationServiceBase::OnInvalidatorStateChange(
     InvalidatorState state) {
   invalidator_registrar_.UpdateInvalidatorState(state);
-  logger_.OnStateChange(state);
 }
 
 void FCMInvalidationServiceBase::InitForTest(
@@ -164,27 +132,6 @@ void FCMInvalidationServiceBase::InitForTest(
 
   PopulateClientID();
   DoUpdateSubscribedTopicsIfNeeded();
-}
-
-base::Value::Dict FCMInvalidationServiceBase::CollectDebugData() const {
-  base::Value::Dict status;
-
-  status.SetByDottedPath(
-      "InvalidationService.IID-requested",
-      base::TimeFormatShortDateAndTime(diagnostic_info_.instance_id_requested));
-  status.SetByDottedPath(
-      "InvalidationService.IID-received",
-      base::TimeFormatShortDateAndTime(diagnostic_info_.instance_id_received));
-  status.SetByDottedPath(
-      "InvalidationService.IID-cleared",
-      base::TimeFormatShortDateAndTime(diagnostic_info_.instance_id_cleared));
-  status.SetByDottedPath(
-      "InvalidationService.Service-stopped",
-      base::TimeFormatShortDateAndTime(diagnostic_info_.service_was_stopped));
-  status.SetByDottedPath(
-      "InvalidationService.Service-started",
-      base::TimeFormatShortDateAndTime(diagnostic_info_.service_was_started));
-  return status;
 }
 
 bool FCMInvalidationServiceBase::IsStarted() const {
@@ -242,10 +189,6 @@ void FCMInvalidationServiceBase::PopulateClientID() {
           .FindString(sender_id_);
   client_id_ = client_id_pref ? *client_id_pref : "";
 
-  // There might already be clients (handlers) registered, so tell them about
-  // the client ID.
-  invalidator_registrar_.UpdateInvalidatorInstanceId(client_id_);
-
   // Also retrieve a fresh (or validated) client ID. If the |client_id_| just
   // retrieved from prefs is non-empty, then the fresh/validated one will
   // typically be equal to it, but it's not completely guaranteed. OTOH, if
@@ -273,10 +216,6 @@ void FCMInvalidationServiceBase::ResetClientID() {
   ScopedDictPrefUpdate update(pref_service_, prefs::kInvalidationClientIDCache);
   update->Remove(sender_id_);
 
-  // Also let the registrar (and its observers) know that the instance ID is
-  // gone.
-  invalidator_registrar_.UpdateInvalidatorInstanceId(std::string());
-
   // This will also delete all Instance ID *tokens*; we need to let the
   // FCMInvalidationListener know.
   if (invalidation_listener_) {
@@ -292,7 +231,6 @@ void FCMInvalidationServiceBase::OnInstanceIDReceived(
     ScopedDictPrefUpdate update(pref_service_,
                                 prefs::kInvalidationClientIDCache);
     update->Set(sender_id_, instance_id);
-    invalidator_registrar_.UpdateInvalidatorInstanceId(instance_id);
   }
 }
 

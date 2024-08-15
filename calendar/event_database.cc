@@ -94,9 +94,9 @@ EventID EventDatabase::CreateCalendarEvent(calendar::EventRow row) {
       "trash_time, sequence, ical, rrule, organizer, timezone, is_template, "
       "priority, status, percentage_complete, categories, "
       "component_class, attachment, completed, sync_pending, delete_pending, "
-      "created, last_modified) "
+      "end_recurring, created, last_modified) "
       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-      "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )"));
+      "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )"));
 
   int column_index = 0;
   statement.BindInt64(column_index++, row.calendar_id);
@@ -133,6 +133,7 @@ EventID EventDatabase::CreateCalendarEvent(calendar::EventRow row) {
   statement.BindInt64(column_index++, row.completed.ToInternalValue());
   statement.BindInt(column_index++, row.sync_pending ? 1 : 0);
   statement.BindInt(column_index++, row.delete_pending ? 1 : 0);
+  statement.BindInt64(column_index++, row.end_recurring.ToInternalValue());
   statement.BindInt64(column_index++, base::Time().Now().ToInternalValue());
   statement.BindInt64(column_index++, base::Time().Now().ToInternalValue());
 
@@ -182,7 +183,7 @@ bool EventDatabase::UpdateEventRow(const EventRow& event) {
         rrule=?, organizer=?, timezone=?, \
         priority=?, status=?, percentage_complete=?,  \
         categories=?, component_class=?, attachment=?, completed=?, \
-        sync_pending=?, delete_pending=? \
+        sync_pending=?, delete_pending=?, end_recurring=? \
         WHERE id=?"));
   int column_index = 0;
   statement.BindInt64(column_index++, event.calendar_id);
@@ -218,6 +219,7 @@ bool EventDatabase::UpdateEventRow(const EventRow& event) {
   statement.BindInt64(column_index++, event.completed.ToInternalValue());
   statement.BindInt64(column_index++, event.sync_pending ? 1 : 0);
   statement.BindInt64(column_index++, event.delete_pending ? 1 : 0);
+  statement.BindInt64(column_index++, event.end_recurring.ToInternalValue());
 
   statement.BindInt64(column_index++, event.id);
 
@@ -264,6 +266,8 @@ void EventDatabase::FillEventRow(sql::Statement& s, EventRow* event) {
       base::Time::FromInternalValue(s.ColumnInt64(column_index++));
   int sync_pending = s.ColumnInt(column_index++);
   int delete_pending = s.ColumnInt(column_index++);
+  base::Time end_recurring =
+      base::Time::FromInternalValue(s.ColumnInt64(column_index++));
 
   event->id = id;
   event->calendar_id = calendar_id;
@@ -298,6 +302,7 @@ void EventDatabase::FillEventRow(sql::Statement& s, EventRow* event) {
   event->completed = completed;
   event->sync_pending = sync_pending == 1 ? true : false;
   event->delete_pending = delete_pending == 1 ? true : false;
+  event->end_recurring = end_recurring;
 }
 
 bool EventDatabase::DeleteEvent(calendar::EventID event_id) {

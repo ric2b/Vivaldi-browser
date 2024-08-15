@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {addEntries, ENTRIES, EntryType, RootPath, sendTestMessage, TestEntryInfo} from '../test_util.js';
+import {addEntries, ENTRIES, EntryType, getCaller, pending, repeatUntil, RootPath, sendTestMessage, TestEntryInfo} from '../test_util.js';
 import {testcase} from '../testcase.js';
 
 import {remoteCall, setupAndWaitUntilReady} from './background.js';
@@ -160,7 +160,7 @@ testcase.directoryTreeHorizontalScroll = async () => {
       appId, directoryTree.rootSelector, ['scrollLeft']);
   chrome.test.assertTrue(original.scrollLeft === 0);
 
-  // Shrink the tree to 50px. TODO(files-ng): consider using 150px?
+  // Shrink the tree to 50px.
   await remoteCall.callRemoteTestUtil(
       'setElementStyles', appId,
       [directoryTree.containerSelector, {width: '50px'}]);
@@ -170,10 +170,14 @@ testcase.directoryTreeHorizontalScroll = async () => {
       'setScrollLeft', appId, [directoryTree.rootSelector, 100]);
 
   // Check: the directory tree should not be horizontally scrolled.
-  const scrolled = await remoteCall.waitForElementStyles(
-      appId, directoryTree.rootSelector, ['scrollLeft']);
-  const noScrollLeft = scrolled.scrollLeft === 0;
-  chrome.test.assertTrue(noScrollLeft, 'Tree should not scroll left');
+  const caller = getCaller();
+  await repeatUntil(async () => {
+    const scrolled = await remoteCall.waitForElementStyles(
+        appId, directoryTree.rootSelector, ['scrollLeft']);
+    if (scrolled.scrollLeft !== 0) {
+      return pending(caller, 'Tree should not scroll left');
+    }
+  });
 };
 
 /**
@@ -399,7 +403,7 @@ testcase.directoryTreeExpandFolderWithHiddenFileAndShowHiddenFilesOff =
   await directoryTree.recursiveExpand('/My files/Downloads');
 
   // Assert that the expand icon will not show up.
-  await directoryTree.waitForItemToHaveChildren(
+  await directoryTree.waitForItemToHaveChildrenByLabel(
       'normal-folder', /* hasChildren= */ false);
 };
 
@@ -430,7 +434,7 @@ testcase.directoryTreeExpandFolderWithHiddenFileAndShowHiddenFilesOn =
   await directoryTree.recursiveExpand('/My files/Downloads');
 
   // Assert that the expand icon shows up.
-  await directoryTree.waitForItemToHaveChildren(
+  await directoryTree.waitForItemToHaveChildrenByLabel(
       'normal-folder', /* hasChildren= */ true);
 };
 
@@ -460,12 +464,12 @@ testcase.directoryTreeExpandFolderOnNonDelayExpansionVolume = async () => {
 
   // Check that the empty child folder has been checked for children, and was
   // found to have none. This ensures the expand icon is hidden.
-  await directoryTree.waitForItemToHaveChildren(
+  await directoryTree.waitForItemToHaveChildrenByLabel(
       'empty-child-folder', /* hasChildren= */ false);
 
   // Check that the non-empty child folder has been checked for children, and
   // was found to have some. This ensures the expand icon is shown.
-  await directoryTree.waitForItemToHaveChildren(
+  await directoryTree.waitForItemToHaveChildrenByLabel(
       'non-empty-child-folder', /* hasChildren= */ true);
 };
 
@@ -510,7 +514,7 @@ testcase.directoryTreeExpandFolderOnDelayExpansionVolume = async () => {
   // should not have the 'has-children' attribute. In this state, it
   // will display an expansion icon (until it's expanded and Files app
   // *knows* it has no children.
-  await directoryTree.waitForItemToMayHaveChildren('child-folder');
+  await directoryTree.waitForItemToMayHaveChildrenByLabel('child-folder');
 
   // Expand the child folder, which will discover it has no children and
   // remove its expansion icon.
@@ -519,14 +523,15 @@ testcase.directoryTreeExpandFolderOnDelayExpansionVolume = async () => {
 
   // The child folder should now have the 'has-children' attribute and
   // it should be false.
-  await directoryTree.waitForItemToHaveChildren(
+  await directoryTree.waitForItemToHaveChildrenByLabel(
       'child-folder', /* hasChildren= */ false);
 
   // Expand the grandparent that has a middle child with a child.
   await directoryTree.recursiveExpand('/SMB Share/grandparent-folder');
 
   // The middle child should have an (eager) expand icon.
-  await directoryTree.waitForItemToMayHaveChildren('middle-child-folder');
+  await directoryTree.waitForItemToMayHaveChildrenByLabel(
+      'middle-child-folder');
 
   // Expand the middle child, which will discover it does actually have
   // children.
@@ -534,6 +539,6 @@ testcase.directoryTreeExpandFolderOnDelayExpansionVolume = async () => {
 
   // The middle child folder should now have the 'has-children' attribute
   // and it should be true (eg. it will retain its expand icon).
-  await directoryTree.waitForItemToHaveChildren(
+  await directoryTree.waitForItemToHaveChildrenByLabel(
       'middle-child-folder', /* hasChildren= */ true);
 };

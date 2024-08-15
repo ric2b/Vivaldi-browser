@@ -1,4 +1,119 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ko">
+<translation id="1066692930984703744">더 빠르고 안전한 브라우징을 위해서 트래커 및 광고 차단</translation>
+<translation id="1116694919640316211">정보</translation>
+<translation id="1123707809902612118">트래커 및 광고 차단</translation>
+<translation id="1254117744268754948">폴더 선택</translation>
+<translation id="132683371494960526">상위 폴더를 변경하려면 두 번 탭해주세요.</translation>
+<translation id="1410197035576869800">앱 아이콘</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> 항목</translation>
+<translation id="1711184756728070210"><ph name="BEGIN_LINK" />이용약관 ➔<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />개인정보 처리방침 ➔<ph name="END_LINK2" /></translation>
+<translation id="1751280147639351837">광고 및 트래커 차단기</translation>
+<translation id="1771413903824396513">닉네임</translation>
+<translation id="1804522390855853698">중국어 (<ph name="ORIGIN" />)</translation>
+<translation id="1809939268435598390">폴더 삭제</translation>
+<translation id="1929299157575856072">기본 차단 수준</translation>
+<translation id="2034405583989639424">스피드 다이얼 편지</translation>
+<translation id="2048247880942380698">아라비아어 (<ph name="ORIGIN" />)</translation>
+<translation id="2117093051794889870">내용</translation>
+<translation id="2129408066358825297">나이</translation>
+<translation id="2272338747456392228">계정 잠김</translation>
+<translation id="2324160330092901720">인증 코드가 <ph name="EMAIL_ID" />에 전송됨</translation>
+<translation id="2359808026110333948">계속</translation>
+<translation id="2386793615875593361">1 선택됨</translation>
+<translation id="2392369802118427583">활성화</translation>
+<translation id="2536780277491102902">예외</translation>
+<translation id="2558801801411970131">트래커 차단</translation>
+<translation id="2677862276555105603">광고
+차단됨</translation>
+<translation id="2709516037105925701">자동 채우기</translation>
+<translation id="2745324713975967671">암호화 비밀번호</translation>
+<translation id="3039671569659952257">폴더 삭제</translation>
+<translation id="307859903981308731">계속하면 Vivaldi의</translation>
+<translation id="3229182533910980085">아래의 더하기 아이콘을 눌러서 첫번째 북마크를 추가해주세요</translation>
+<translation id="33451081266695216">서버가 연결을 거부했어요.</translation>
+<translation id="3346386541263128307">이메일 주소가 일치하지 않습니다.</translation>
+<translation id="3365991203476235715">영어 (<ph name="ORIGIN" />)</translation>
+<translation id="3435896845095436175">활성화</translation>
+<translation id="3451162533623145500">계정 만들기</translation>
+<translation id="3509379002674019679">비밀번호를 생성, 저장 및 관리해서 사이트나 앱에 손쉽게 로그인하세요.</translation>
+<translation id="3530991200302302959">불가리아어 (<ph name="ORIGIN" />)</translation>
+<translation id="3601414719864711130">날짜</translation>
+<translation id="3845564230651302310">새 차단기 설정 적용 중...</translation>
+<translation id="3866249974567520381">설명</translation>
+<translation id="3894427358181296146">폴더 추가</translation>
+<translation id="4032606071208172574">(기본)</translation>
+<translation id="4176463684765177261">비활성화됨</translation>
+<translation id="4219175188138757774">체코어 및 슬로바키아어 (<ph name="ORIGIN" />)</translation>
+<translation id="4276839458685471670">생성 날짜</translation>
+<translation id="4316955624679873896">다음 위치에 북마크됨</translation>
+<translation id="4394049700291259645">비활성화</translation>
+<translation id="4413780690230851155">방문 기록 삭제</translation>
+<translation id="4563480492836333884">허용되지 않는 이메일이에요. 다른 이메일을 사용해주세요.</translation>
+<translation id="4640946580087069269">노트에 복사</translation>
+<translation id="4654578955713250802">광고 및 트래커 차단</translation>
+<translation id="4852383705713307704">광고 차단됨</translation>
+<translation id="4871370605780490696">북마크 추가</translation>
+<translation id="497942794017668482">트래커 및 광고 차단</translation>
+<translation id="5037761343305489956">노트에 복사됨</translation>
+<translation id="504986598654589766">시크릿 탭에서 브라우징하면 방문한 사이트, 쿠키 및 임시파일이 Vivaldi에 저장되지 않습니다. 암호화되거나 연결을 변경하지는 않습니다.</translation>
+<translation id="5160018607418677056"><ph name="BEGIN_LINK" />다시 보내기<ph name="END_LINK" /></translation>
+<translation id="5238642303473095117">데이터 삭제</translation>
+<translation id="5349678548463426691">설명</translation>
+<translation id="5350737901534958404">파트너 광고 허용 (Vivaldi 지원)</translation>
+<translation id="5398772614898833570">광고 차단됨</translation>
+<translation id="5486261815000869482">비밀번호 확인</translation>
+<translation id="5787420647064736989">기기명</translation>
+<translation id="5822336771053074270">노트 추가</translation>
+<translation id="5859825823508296659">도메인 변경</translation>
+<translation id="5871497086027727873">1 항목 이동됨</translation>
+<translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> 항목 이동됨</translation>
+<translation id="6404511346730675251">북마크 편집</translation>
+<translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> selected선택됨</translation>
+<translation id="6487150267908786236"><ph name="BEGIN_LINK" />불러오기<ph name="END_LINK" /></translation>
+<translation id="6517411226162529295">백업 암호화 키</translation>
+<translation id="659351303388691480">브라우징 데이터 지우기 ...</translation>
+<translation id="6614744450826097546">광고 정보</translation>
+<translation id="6627583120233659107">폴더 편집</translation>
+<translation id="6631760746795162665">컬럼비아어 (<ph name="ORIGIN" />)</translation>
+<translation id="6642196070615520677">서버 동기화 데이터 삭제</translation>
+<translation id="6656103420185847513">폴더 변경</translation>
+<translation id="6757792528048321576">광고 및 트래커 차단기</translation>
+<translation id="6830986331692390764">동기화 데이터를 지우는 중. 잠시만 기다려주세요.</translation>
+<translation id="6875510405870945573">원하는 차단 수준을 선택해주세요.</translation>
+<translation id="7196846668589096106">데스크톱 탭</translation>
+<translation id="7215420652436283416">주소</translation>
+<translation id="7229439505896086266">노트 생성</translation>
+<translation id="7299721129597238157">북마크 삭제</translation>
+<translation id="7311118006561484338">제목</translation>
+<translation id="7362952245780030555">데스크톱 탭과 단순 탭 스위칭 중에 선택해주세요.</translation>
+<translation id="7388525939184421699">새 소스 추가</translation>
+<translation id="750493650310597496">0 선택됨</translation>
+<translation id="7525067979554623046">생성</translation>
+<translation id="7574321014880720413">새 도메인 추가</translation>
+<translation id="7587132259180664054">성공적으로 이메일을 전송함</translation>
+<translation id="7658239707568436148">취소</translation>
+<translation id="7702907602086592255">도메인</translation>
+<translation id="7801204999757211519">계정을 가지고 계신가요? <ph name="BEGIN_LINK" />로그인 ➔<ph name="END_LINK" /></translation>
+<translation id="7914995060146784406">메모 편집</translation>
+<translation id="8008214489230610096">복구 이메일 확인</translation>
+<translation id="804786196054284061">최종 사용자 라이선스 계약 (EULA)</translation>
+<translation id="8165573437634525334">데이터가 암호화 비밀번호로 보호됨</translation>
+<translation id="8257908958623224237">다른 클라이언트의 데이터와 충돌해요.</translation>
+<translation id="8261506727792406068">삭제</translation>
+<translation id="8458397775385147834">1 항목 삭제됨</translation>
+<translation id="8515808232153642813">해독</translation>
+<translation id="8517852590337319813">계정 활성화</translation>
+<translation id="8677007239430848917">아래의 더하기 아이콘을 눌러서 첫번째 노트를 추가해주세요</translation>
+<translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> 항목 삭제됨</translation>
+<translation id="8820817407110198400">북마크</translation>
+<translation id="89390081013973080">준비 완료! 이제 기기 간에 어떤 데이터를 동기화하실건지 선택해주세요.</translation>
+<translation id="9043882097999887291">광고
+차단됨</translation>
+<translation id="9065203028668620118">수정</translation>
+<translation id="9083392325882095631">1 항목</translation>
+<translation id="9097127519290088802">암호화 비밀번호 필요</translation>
+<translation id="9218693288527810093">트래커 차단</translation>
+<translation id="984650419570014454">활성화 코드는 6자리에요.</translation>
 </translationbundle>

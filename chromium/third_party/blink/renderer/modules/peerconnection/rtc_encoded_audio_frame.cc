@@ -82,7 +82,7 @@ DOMArrayBuffer* RTCEncodedAudioFrame::data() const {
   if (!frame_data_) {
     frame_data_ = delegate_->CreateDataBuffer();
   }
-  return frame_data_;
+  return frame_data_.Get();
 }
 
 RTCEncodedAudioFrameMetadata* RTCEncodedAudioFrame::getMetadata() const {
@@ -137,16 +137,6 @@ String RTCEncodedAudioFrame::toString() const {
   sb.AppendNumber(data() ? data()->ByteLength() : 0);
   sb.Append("}");
   return sb.ToString();
-}
-
-RTCEncodedAudioFrame* RTCEncodedAudioFrame::clone(
-    ExceptionState& exception_state) const {
-  std::unique_ptr<webrtc::TransformableAudioFrameInterface> new_webrtc_frame =
-      delegate_->CloneWebRtcFrame();
-  // Clone should never fail.
-  CHECK(new_webrtc_frame);
-  return MakeGarbageCollected<RTCEncodedAudioFrame>(
-      std::move(new_webrtc_frame));
 }
 
 void RTCEncodedAudioFrame::SyncDelegate() const {

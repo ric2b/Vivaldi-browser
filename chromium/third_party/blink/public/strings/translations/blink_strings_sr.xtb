@@ -16,6 +16,7 @@
 <translation id="1729654308190250600">Унесите имејл адресу која није празна.</translation>
 <translation id="1758486001363313524">Друго...</translation>
 <translation id="1787192514241997742">укупно време: <ph name="REMAINING_TIME" /></translation>
+<translation id="1800494066469288780">Дозволи камеру</translation>
 <translation id="1822429046913737220">пре подне/по подне</translation>
 <translation id="1832974991323546415">пуштајте на удаљеном уређају</translation>
 <translation id="1921819250265091946">дд</translation>
@@ -45,11 +46,13 @@
 <translation id="2761667185364618470">Потврдите избор у овом пољу за потврду уколико желите да наставите.</translation>
 <translation id="2908441821576996758">Унесите листу имејл адреса раздвојених зарезима.</translation>
 <translation id="3049748772180311791"><ph name="QUANTITY" /> MB</translation>
+<translation id="3053226512517284904">омогућите приказ менија са звучним описима</translation>
 <translation id="3075154866155599887">Унесите важећу вредност. Поље није попуњено или садржи неважећи датум.</translation>
 <translation id="310520048233152454">Унесите URL адресу.</translation>
 <translation id="3220661731597678625">актуелни корак</translation>
 <translation id="3321030238473337787">Брзина репродукције</translation>
 <translation id="3329013043687509092">Засићеност боја</translation>
+<translation id="3377518164566272702">Дозволи микрофон и камеру</translation>
 <translation id="3450233048674729344">Вредност сме да буде највише <ph name="MAXIMUM" />.</translation>
 <translation id="3732799496749320381">мм</translation>
 <translation id="3754210790023674521">Изађи из режима слике у слици</translation>
@@ -65,6 +68,7 @@
 <translation id="4718048029184481307">Репродукује се у режиму слике у слици</translation>
 <translation id="4748357248530471599">укључи/искључи цео екран без области изрезаног приказа</translation>
 <translation id="4763480195061959176">видео</translation>
+<translation id="4792862212177489858">Дели локацију</translation>
 <translation id="4812940957355064477">Унесите број.</translation>
 <translation id="4912200001568447310">актуелна ставка</translation>
 <translation id="4915360478455618802">Приказуј бирач времена</translation>
@@ -74,6 +78,7 @@
 <translation id="4975562563186953947">Изабрано: <ph name="SELECTED_COUNT" /></translation>
 <translation id="4992066212339426712">Укључи звук</translation>
 <translation id="49969490063480558">Унесите неки део после „<ph name="ATSIGN" />“. Адреса „<ph name="INVALIDADDRESS" />“ је непотпуна.</translation>
+<translation id="5037575921016181960">Јака лозинка</translation>
 <translation id="5090250355906949916">клизач за трајање видео снимка</translation>
 <translation id="509897012892853729">Плави канал</translation>
 <translation id="5117590920725113268">Прикажи следећи месец</translation>
@@ -178,6 +183,7 @@
 <translation id="9132465097189459683">Друго...</translation>
 <translation id="9155987714137265666"><ph name="WEEK" />, од <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">Слика у слици</translation>
+<translation id="918430632320614861">Дозволи микрофон</translation>
 <translation id="945780513535800434">Делимично означено</translation>
 <translation id="954003015749068518">уђи у режим слике у слици</translation>
 </translationbundle>

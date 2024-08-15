@@ -16,6 +16,7 @@
 <translation id="1729654308190250600">ଦୟାକରି ଏକ ଖାଲି ନଥିବା ଇମେଲ୍ ଠିକଣା ଲେଖନ୍ତୁ।</translation>
 <translation id="1758486001363313524">ଅନ୍ୟ...</translation>
 <translation id="1787192514241997742">ମୋଟ ସମୟ: <ph name="REMAINING_TIME" /></translation>
+<translation id="1800494066469288780">କେମେରା ପାଇଁ ଅନୁମତି ଦିଅନ୍ତୁ</translation>
 <translation id="1822429046913737220">AM/PM</translation>
 <translation id="1832974991323546415">ରିମୋଟ୍‍ ଡିଭାଇସ୍‌ ଚଲାନ୍ତୁ</translation>
 <translation id="1921819250265091946">ଦିନ</translation>
@@ -45,11 +46,13 @@
 <translation id="2761667185364618470">ଯଦି ଆପଣ ଆଗକୁ ବଢ଼ିବାକୁ ଚାହାନ୍ତି, ତେବେ ଦୟାକରି ଏହି ବକ୍ସରେ ଠିକ୍ ଚିହ୍ନ ଦିଅନ୍ତୁ।</translation>
 <translation id="2908441821576996758">ଦୟାକରି ଇମେଲ୍ ଠିକଣାଗୁଡ଼ିକର ଏକ କମା ଦ୍ୱାରା ଅଲଗା କରାଯାଇଥିବା ତାଲିକା ଲେଖନ୍ତୁ।</translation>
 <translation id="3049748772180311791"><ph name="QUANTITY" /> MB</translation>
+<translation id="3053226512517284904">ଅଡିଓ ବର୍ଣ୍ଣନା ମେନୁ ଦେଖାନ୍ତୁ</translation>
 <translation id="3075154866155599887">ଦୟାକରି ଏକ ବୈଧ ମୂଲ୍ୟ ଲେଖନ୍ତୁ। ଫିଲ୍ଡ ଅସମ୍ପୂର୍ଣ୍ଣ ଅଟେ କିମ୍ବା ଏହାର ଏକ ଅବୈଧ ତାରିଖ ଅଟେ।</translation>
 <translation id="310520048233152454">ଦୟାକରି ଏକ URL ଲେଖନ୍ତୁ।</translation>
 <translation id="3220661731597678625">ବର୍ତ୍ତମାନର ଷ୍ଟେପ୍</translation>
 <translation id="3321030238473337787">ପ୍ଲେବ୍ୟାକର ସ୍ପିଡ୍</translation>
 <translation id="3329013043687509092">ସମ୍ପୃକ୍ତି</translation>
+<translation id="3377518164566272702">ମାଇକ୍ରୋଫୋନ ଏବଂ କେମେରା ପାଇଁ ଅନୁମତି ଦିଅନ୍ତୁ</translation>
 <translation id="3450233048674729344">ମୂଲ୍ୟ <ph name="MAXIMUM" />ଠାରୁ ନିଶ୍ଚିତରୂପେ ସାନ କିମ୍ବା ସମାନ ହେବା ଉଚିତ୍‍।</translation>
 <translation id="3732799496749320381">mm</translation>
 <translation id="3754210790023674521">ପିକଚର୍-ଇନ୍-ପିକଚର୍‌ରୁ ବାହାରି ଯାଆନ୍ତୁ</translation>
@@ -65,6 +68,7 @@
 <translation id="4718048029184481307">ପିକଚର୍-ଇନ୍-ପିକଚର୍‌ରେ ଚାଲୁଛି</translation>
 <translation id="4748357248530471599">ପ୍ରଦର୍ଶନ ଫଳକ ପୂର୍ଣ୍ଣସ୍କ୍ରିନ୍‌କୁ ଟୋଗଲ୍ କରନ୍ତୁ</translation>
 <translation id="4763480195061959176">ଭିଡିଓ</translation>
+<translation id="4792862212177489858">ଲୋକେସନ୍ ସେୟାର୍ କରନ୍ତୁ</translation>
 <translation id="4812940957355064477">ଦୟାକରି ଗୋଟିଏ ନମ୍ବର ଲେଖନ୍ତୁ।</translation>
 <translation id="4912200001568447310">ବର୍ତ୍ତମାନର ଆଇଟମ୍</translation>
 <translation id="4915360478455618802">ସମୟ ପିକର୍ ଦେଖାନ୍ତୁ</translation>
@@ -74,6 +78,7 @@
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" />ଟି ଚୟନ କରାଯାଇଛି</translation>
 <translation id="4992066212339426712">ଅନମ୍ୟୁଟ୍ କରନ୍ତୁ</translation>
 <translation id="49969490063480558">ଦୟାକରି '<ph name="ATSIGN" />'କୁ ଅନୁସରଣ କରୁଥିବା ଏକ ଅଂଶ ଲେଖନ୍ତୁ। '<ph name="INVALIDADDRESS" />' ଅସମ୍ପୂର୍ଣ୍ଣ ଅଛି।</translation>
+<translation id="5037575921016181960">କଠିନ ପାସୱାର୍ଡ</translation>
 <translation id="5090250355906949916">ଭିଡିଓ ସମୟ ସ୍କ୍ରବର</translation>
 <translation id="509897012892853729">ନୀଳ ଚ୍ୟାନେଲ୍</translation>
 <translation id="5117590920725113268">ପରବର୍ତ୍ତୀ ମାସ ଦେଖାନ୍ତୁ</translation>
@@ -178,6 +183,7 @@
 <translation id="9132465097189459683">ଅନ୍ୟ...</translation>
 <translation id="9155987714137265666"><ph name="WEEK" />, <ph name="WEEK_START_DATE" />ରେ ପ୍ରାରମ୍ଭ ହେଉଛି</translation>
 <translation id="916607977885256133">ପିକଚର୍ ଇନ୍ ପିକଚର୍</translation>
+<translation id="918430632320614861">ମାଇକ୍ରୋଫୋନ ପାଇଁ ଅନୁମତି ଦିଅନ୍ତୁ</translation>
 <translation id="945780513535800434">ଆଶିଂକ ଭାବେ ଯାଞ୍ଚ କରାଯାଇଛି</translation>
 <translation id="954003015749068518">ଛବି-ଭିତରେ-ଛବିକୁ ରଖନ୍ତୁ</translation>
 </translationbundle>

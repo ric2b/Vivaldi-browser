@@ -49,37 +49,6 @@ const base::FeatureParam<base::TimeDelta>
         &kPerformanceControlsBatteryPerformanceSurvey, "battery_lookback",
         base::Days(8)};
 
-BASE_FEATURE(kHeuristicMemorySaver,
-             "HeuristicMemorySaver",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// If 0, uses a default value from heuristic_memory_saver_policy.cc.
-const base::FeatureParam<base::TimeDelta>
-    kHeuristicMemorySaverThresholdReachedHeartbeatInterval{
-        &kHeuristicMemorySaver, "threshold_reached_heartbeat_interval",
-        base::TimeDelta()};
-const base::FeatureParam<base::TimeDelta>
-    kHeuristicMemorySaverThresholdNotReachedHeartbeatInterval{
-        &kHeuristicMemorySaver, "threshold_not_reached_heartbeat_interval",
-        base::TimeDelta()};
-const base::FeatureParam<base::TimeDelta>
-    kHeuristicMemorySaverMinimumTimeInBackground{&kHeuristicMemorySaver,
-                                                 "minimum_time_in_background",
-                                                 base::TimeDelta()};
-
-// If < 0, uses a default value from heuristic_memory_saver_policy.cc.
-const base::FeatureParam<int>
-    kHeuristicMemorySaverAvailableMemoryThresholdPercent{
-        &kHeuristicMemorySaver, "threshold_percent", -1};
-const base::FeatureParam<int> kHeuristicMemorySaverAvailableMemoryThresholdMb{
-    &kHeuristicMemorySaver, "threshold_mb", -1};
-const base::FeatureParam<int> kHeuristicMemorySaverPageCacheDiscountMac{
-    &kHeuristicMemorySaver, "mac_page_cache_available_percent", -1};
-
-BASE_FEATURE(kForceHeuristicMemorySaver,
-             "ForceHeuristicMemorySaver",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kHighEfficiencyMultistateMode,
              "HighEfficiencyMultistateMode",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -149,6 +118,16 @@ const base::FeatureParam<MemoryUsageInHovercardsUpdateTrigger>
         MemoryUsageInHovercardsUpdateTrigger::kBackground,
         &kMemoryUsageInHovercardsUpdateTriggerOptions};
 
+BASE_FEATURE(kPerformanceControlsSidePanel,
+             "PerformanceControlsSidePanel",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+BASE_FEATURE(kAshUrgentDiscardingFromPerformanceManager,
+             "AshUrgentDiscardingFromPerformanceManager",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
 #endif
 
 BASE_FEATURE(kBFCachePerformanceManagerPolicy,
@@ -165,5 +144,19 @@ BASE_FEATURE(kPageTimelineMonitor,
 
 const base::FeatureParam<base::TimeDelta> kPageTimelineStateIntervalTime{
     &kPageTimelineMonitor, "time_between_collect_slice", base::Minutes(5)};
+
+const base::FeatureParam<bool> kUseResourceAttributionCPUMonitor{
+    &kPageTimelineMonitor, "use_resource_attribution_cpu_monitor", false};
+
+BASE_FEATURE(kCPUInterventionEvaluationLogging,
+             "CPUInterventionEvaluationLogging",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+const base::FeatureParam<base::TimeDelta> kDelayBeforeLogging{
+    &kCPUInterventionEvaluationLogging, "delay_before_logging",
+    base::Seconds(60)};
+
+const base::FeatureParam<int> kThresholdChromeCPUPercent{
+    &kCPUInterventionEvaluationLogging, "threshold_chrome_cpu_percent", 25};
 
 }  // namespace performance_manager::features

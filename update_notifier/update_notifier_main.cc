@@ -75,8 +75,8 @@ absl::optional<Subaction> FindIfSubaction(
 std::wstring TimeToSchedulerString(base::Time t) {
   base::Time::Exploded e;
   t.LocalExplode(&e);
-  return base::StringPrintf(L"%04d-%02d-%02dT%02d:%02d:%02d", e.year, e.month,
-                            e.day_of_month, e.hour, e.minute, e.second);
+  return base::UTF8ToWide(base::StringPrintf("%04d-%02d-%02dT%02d:%02d:%02d", e.year, e.month,
+                            e.day_of_month, e.hour, e.minute, e.second));
 }
 
 bool GetSchedulerServiceAndRoot(

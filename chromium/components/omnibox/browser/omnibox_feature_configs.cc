@@ -11,10 +11,12 @@
 
 namespace omnibox_feature_configs {
 
+// TODO(manukh): Enabled by default in m120. Clean up 12/5 when after m121
+//   branch cut.
 // static
 BASE_FEATURE(CalcProvider::kCalcProvider,
              "OmniboxCalcProvider",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 CalcProvider::CalcProvider() {
   enabled = base::FeatureList::IsEnabled(kCalcProvider);
   score =
@@ -39,14 +41,14 @@ DocumentProvider::DocumentProvider() {
 // static
 BASE_FEATURE(ShortcutBoosting::kShortcutBoost,
              "OmniboxShortcutBoost",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 ShortcutBoosting::ShortcutBoosting() {
   enabled = base::FeatureList::IsEnabled(kShortcutBoost);
   search_score =
       base::FeatureParam<int>(&kShortcutBoost, "ShortcutBoostSearchScore", 0)
           .Get();
   url_score =
-      base::FeatureParam<int>(&kShortcutBoost, "ShortcutBoostUrlScore", 0)
+      base::FeatureParam<int>(&kShortcutBoost, "ShortcutBoostUrlScore", 1414)
           .Get();
   counterfactual = base::FeatureParam<bool>(
                        &kShortcutBoost, "ShortcutBoostCounterfactual", false)

@@ -12,10 +12,11 @@
 #import "ios/chrome/browser/favicon/favicon_loader.h"
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/photos/photos_availability.h"
+#import "ios/chrome/browser/photos/photos_metrics.h"
 #import "ios/chrome/browser/policy/policy_util.h"
-#import "ios/chrome/browser/reading_list/reading_list_browser_agent.h"
-#import "ios/chrome/browser/search_engines/search_engines_util.h"
-#import "ios/chrome/browser/search_engines/template_url_service_factory.h"
+#import "ios/chrome/browser/reading_list/model/reading_list_browser_agent.h"
+#import "ios/chrome/browser/search_engines/model/search_engines_util.h"
+#import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
@@ -28,6 +29,7 @@
 #import "ios/chrome/browser/shared/public/commands/mini_map_commands.h"
 #import "ios/chrome/browser/shared/public/commands/reading_list_add_command.h"
 #import "ios/chrome/browser/shared/public/commands/search_image_with_lens_command.h"
+#import "ios/chrome/browser/shared/public/commands/unit_conversion_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/image/image_copier.h"
 #import "ios/chrome/browser/shared/ui/util/image/image_saver.h"
@@ -41,9 +43,9 @@
 #import "ios/chrome/browser/ui/lens/lens_entrypoint.h"
 #import "ios/chrome/browser/ui/menu/browser_action_factory.h"
 #import "ios/chrome/browser/ui/menu/menu_histograms.h"
-#import "ios/chrome/browser/url_loading/image_search_param_generator.h"
-#import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
-#import "ios/chrome/browser/url_loading/url_loading_params.h"
+#import "ios/chrome/browser/url_loading/model/image_search_param_generator.h"
+#import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
+#import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "ios/chrome/browser/web/image_fetch/image_fetch_tab_helper.h"
 #import "ios/chrome/browser/web/web_navigation_util.h"
 #import "ios/chrome/common/ui/favicon/favicon_constants.h"
@@ -156,6 +158,8 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
   const bool isLink = linkURL.is_valid();
   const GURL imageURL = params.src_url;
   const bool isImage = imageURL.is_valid();
+  const bool saveToPhotosAvailable =
+      IsSaveToPhotosAvailable(self.browser->GetBrowserState());
 
   DCHECK(self.browser->GetBrowserState());
   const bool isOffTheRecord = self.browser->GetBrowserState()->IsOffTheRecord();
@@ -259,17 +263,29 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
                                  referrer:referrer
                                  webState:weakSelf.currentWebState
                        baseViewController:weakBaseViewController];
+      base::UmaHistogramEnumeration(
+          kSaveToPhotosContextMenuActionsHistogram,
+          saveToPhotosAvailable
+              ? SaveToPhotosContextMenuActions::kAvailableDidSaveImageLocally
+              : SaveToPhotosContextMenuActions::
+                    kUnavailableDidSaveImageLocally);
     }];
     [menuElements addObject:saveImage];
 
     // Save Image to Photos.
-    const BOOL saveToPhotosAvailable =
-        IsSaveToPhotosAvailable(self.browser->GetBrowserState());
     if (saveToPhotosAvailable) {
-      UIAction* saveImageToPhotosAction =
-          [actionFactory actionToSaveToPhotosWithImageURL:imageURL
-                                                 referrer:referrer
-                                                 webState:webState];
+      base::RecordAction(base::UserMetricsAction(
+          "MobileWebContextMenuImageWithSaveToPhotosImpression"));
+      UIAction* saveImageToPhotosAction = [actionFactory
+          actionToSaveToPhotosWithImageURL:imageURL
+                                  referrer:referrer
+                                  webState:webState
+                                     block:^{
+                                       base::UmaHistogramEnumeration(
+                                           kSaveToPhotosContextMenuActionsHistogram,
+                                           SaveToPhotosContextMenuActions::
+                                               kAvailableDidSaveImageToGooglePhotos);
+                                     }];
       [menuElements addObject:saveImageToPhotosAction];
     }
 
@@ -347,10 +363,11 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
   // inserting at beginning or adding to end.
   ElementsToAddToContextMenu* result =
       ios::provider::GetContextMenuElementsToAdd(
-          self.browser->GetBrowserState(), webState, params,
-          self.baseViewController,
+          webState, params, self.baseViewController,
           HandlerForProtocol(self.browser->GetCommandDispatcher(),
-                             MiniMapCommands));
+                             MiniMapCommands),
+          HandlerForProtocol(self.browser->GetCommandDispatcher(),
+                             UnitConversionCommands));
   if (result && result.elements) {
     [menuElements addObjectsFromArray:result.elements];
     menuTitle = result.title;

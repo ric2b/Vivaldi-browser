@@ -126,9 +126,6 @@ BASE_DECLARE_FEATURE(kEnableLensInKeyboard);
 // Feature flag to enable the Lens entrypoint in the new tab page.
 BASE_DECLARE_FEATURE(kEnableLensInNTP);
 
-// Feature flag to enable the Lens context menu alternate text string.
-BASE_DECLARE_FEATURE(kEnableLensContextMenuAltText);
-
 // Feature flag to enable the Lens "Search copied image" omnibox entrypoint.
 BASE_DECLARE_FEATURE(kEnableLensInOmniboxCopiedImage);
 
@@ -152,14 +149,14 @@ BASE_DECLARE_FEATURE(kEnableShortenedPasswordAutoFillInstruction);
 // Feature flag to enable Apple Calendar event in experience kit.
 BASE_DECLARE_FEATURE(kEnableExpKitAppleCalendar);
 
+// Feature flag / Kill Switch for TCRex.
+BASE_DECLARE_FEATURE(kTCRexKillSwitch);
+
 // When enabled uses new transitions in the TabGrid.
 BASE_DECLARE_FEATURE(kTabGridNewTransitions);
 
 // Whether the new tab grid tabs transitions should be enabled.
 bool IsNewTabGridTransitionsEnabled();
-
-// Feature to enable multiline gradient support in fade truncating label.
-BASE_DECLARE_FEATURE(kMultilineFadeTruncatingLabel);
 
 // Feature flag to control the maximum amount of non-modal DB promo impressions
 // server-side. Enabled by default to always have a default impression limit
@@ -180,6 +177,9 @@ BASE_DECLARE_FEATURE(kSpotlightOpenTabsSource);
 
 // Enables indexing Reading List items in Spotlight.
 BASE_DECLARE_FEATURE(kSpotlightReadingListSource);
+
+// Enables intent donation for new intent types.
+BASE_DECLARE_FEATURE(kSpotlightDonateNewIntents);
 
 // Feature to enable sign-in only flow without device level account.
 BASE_DECLARE_FEATURE(kConsistencyNewAccountInterface);
@@ -202,18 +202,25 @@ extern const char kBottomOmniboxDefaultSettingParamSafariSwitcher[];
 // Feature flag to change the default position of the omnibox.
 BASE_DECLARE_FEATURE(kBottomOmniboxDefaultSetting);
 
+// Feature flag to retrieve device switcher results for omnibox default
+// position. Enabled by default.
+BASE_DECLARE_FEATURE(kBottomOmniboxDeviceSwitcherResults);
+
 // Returns true if `kBottomOmniboxSteadyState` feature flag is enabled and the
 // current device is a phone. This checks that the flag is enabled, not that the
 // omnibox is currently at the bottom.
 bool IsBottomOmniboxSteadyStateEnabled();
 
+// Returns true if `kBottomOmniboxDeviceSwitcherResults` feature flag is
+// enabled.
+bool IsBottomOmniboxDeviceSwitcherResultsEnabled();
+
 // Feature flag to put all clipboard access onto a background thread. Any
 // synchronous clipboard access will always return nil/false.
 BASE_DECLARE_FEATURE(kOnlyAccessClipboardAsync);
 
-// Feature flag to hide the sync promo card in the main settings screen. The
-// "Turn On Sync" row will still be shown when this is enabled.
-BASE_DECLARE_FEATURE(kHideSettingsSyncPromo);
+// Feature flag that enables default browser video in settings experiment.
+BASE_DECLARE_FEATURE(kDefaultBrowserVideoInSettings);
 
 // Feature flag that enables default browser promo to be displayed without
 // matching all the criteria and in depth metrics collection for the displayed
@@ -224,8 +231,16 @@ BASE_DECLARE_FEATURE(kDefaultBrowserTriggerCriteriaExperiment);
 // event.
 BASE_DECLARE_FEATURE(kFullScreenPromoOnOmniboxCopyPaste);
 
-// Feature flag to try using the page theme color in the toolbar
-BASE_DECLARE_FEATURE(kThemeColorInToolbar);
+// Feature flag to try using the page theme color in the top toolbar
+BASE_DECLARE_FEATURE(kThemeColorInTopToolbar);
+
+// Feature flag to try using the page theme color as dynamic color for the
+// toolbars.
+BASE_DECLARE_FEATURE(kDynamicThemeColor);
+
+// Feature flag to try using the page background color as dynamic color for the
+// toolbars.
+BASE_DECLARE_FEATURE(kDynamicBackgroundColor);
 
 // Feature flag enabling tab grid refactoring.
 BASE_DECLARE_FEATURE(kTabGridRefactoring);
@@ -237,11 +252,25 @@ bool IsSafetyCheckMagicStackEnabled();
 // ChromeTableViewController.
 BASE_DECLARE_FEATURE(kBlockSimultaneousCellSelectionKillSwitch);
 
+// Feature flag enabling Save to Drive.
+BASE_DECLARE_FEATURE(kIOSSaveToDrive);
+
 // Feature flag enabling Save to Photos.
 BASE_DECLARE_FEATURE(kIOSSaveToPhotos);
 
 // Kill switch to control the `settingsWillBeDismissed` bug fix (see
 // crbug.com/1482284).
 BASE_DECLARE_FEATURE(kSettingsWillBeDismissedBugFixKillSwitch);
+
+// Enables the new UIEditMenuInteraction system to be used in place of
+// UIMenuController which was deprecated in iOS 16.
+// TODO(crbug.com/1489734) Remove Flag once the minimum iOS deployment version
+// has been increased to iOS 16.
+BASE_DECLARE_FEATURE(kEnableUIEditMenuInteraction);
+
+// Causes the restore shorty and re-signin flows to offer a history opt-in
+// screen. This only has any effect if kReplaceSyncPromosWithSignInPromos is
+// also enabled.
+BASE_DECLARE_FEATURE(kHistoryOptInForRestoreShortyAndReSignin);
 
 #endif  // IOS_CHROME_BROWSER_SHARED_PUBLIC_FEATURES_FEATURES_H_

@@ -32,6 +32,12 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+#include "extensions/api/tabs/tabs_private_api.h"
+#include "browser/vivaldi_browser_finder.h"
+#include "ui/vivaldi_ui_utils.h"
+
 using base::Value;
 using content::WebContents;
 using zoom::ZoomController;
@@ -146,6 +152,95 @@ void TabsEventRouter::TabEntry::NavigationEntryCommitted(
   if (web_contents()->GetLastCommittedURL() != url_) {
     url_ = web_contents()->GetLastCommittedURL();
     changed_property_names.insert(tabs_constants::kUrlKey);
+  }
+
+  // VB-97964 Link routing
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+  auto ignoreLinkRouting = web_contents()->GetIgnoreLinkRouting();
+
+  if (::vivaldi::IsVivaldiRunning() &&
+    !ignoreLinkRouting &&
+    !profile->IsIncognitoProfile() &&
+    !profile->IsGuestSession() &&
+    changed_property_names.find("url") != changed_property_names.end() &&
+    changed_property_names.find("status") != changed_property_names.end()) {
+
+    double target_workspace_id = -1;
+    for (base::Value& elm : extensions::getLinkRoutes(web_contents())) {
+      base::Value::Dict* dict = elm.GetIfDict();
+
+      if (!dict) {
+        continue;
+      }
+
+      std::string* type = dict->FindString("type");
+      std::string* expression = dict->FindString("expression");
+      absl::optional<double> workspace_id = dict->FindDouble("workspaceId");
+
+      if (!type || !expression || type->empty() || expression->empty() ||
+          !workspace_id.has_value()) {
+        continue;
+      }
+
+      if (*type == "CONTAINS") {
+          auto n = url_.spec().find(*expression);
+          if (n != std::string::npos) {
+            target_workspace_id = workspace_id.value();
+            break;
+          }
+      } else if (*type == "EQUALS") {
+          if (url_ == *expression) {
+            target_workspace_id = workspace_id.value();
+            break;
+          }
+      } else if (*type == "STARTSWITH") {
+          if (url_.spec().starts_with(*expression)){
+            target_workspace_id = workspace_id.value();
+            break;
+          }
+      }
+    }
+
+    if (target_workspace_id > -1) {
+      // Check if workspace is in another window and move the tab if needed.
+      Browser *current_browser = ::vivaldi::FindBrowserWithTab(web_contents());
+      Browser *workspace_browser =
+        extensions::GetWorkspaceBrowser(target_workspace_id);
+      auto current_workspace_id_ =
+        extensions::GetActiveWorkspaceId(current_browser);
+      double current_workspace_id = current_workspace_id_.has_value()
+        ? current_workspace_id_.value()
+        : -1;
+
+      if (current_workspace_id != target_workspace_id) {
+        if (
+          current_browser &&
+          workspace_browser &&
+          workspace_browser != current_browser
+        ) {
+          int index = current_browser->tab_strip_model()->
+            GetIndexOfWebContents(web_contents());
+          int new_index = extensions::CountTabsInWorkspace(
+            workspace_browser->tab_strip_model(),
+            target_workspace_id);
+          if (!::vivaldi::ui_tools::MoveTabToWindow(current_browser,
+                                                    workspace_browser,
+                                                    index, &new_index, 0,
+                                                    AddTabTypes::ADD_NONE)) {
+            NOTREACHED();
+          }
+        }
+
+        // Set the workspace ID and notify that it's been updated.
+        bool workspace_updated =
+          extensions::SetTabWorkspaceId(web_contents(), target_workspace_id);
+        if (workspace_updated) {
+          changed_property_names.insert("vivExtData");
+        }
+
+      }
+    }
   }
 
   router_->TabUpdated(this, std::move(changed_property_names));
@@ -602,6 +697,7 @@ void TabsEventRouter::DispatchTabUpdatedEvent(
       // The event arguments depend on the extension's permission. They are set
       // in WillDispatchTabUpdatedEvent().
       base::Value::List(), profile);
+
   event->user_gesture = EventRouter::USER_GESTURE_NOT_ENABLED;
   event->will_dispatch_callback =
       base::BindRepeating(&WillDispatchTabUpdatedEvent, contents,

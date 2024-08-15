@@ -241,6 +241,12 @@ constexpr char kCopySwitchValue[] =
     "copy";  // Corresponds to kCopy. No longer in use.
 constexpr char kMoveSwitchValue[] = "move";  // Corresponds to KMove.
 
+// Preference that indicates that sync setup has been completed at least once.
+// Doesn't exist in Ash and need to be set explicitly during the migration.
+// Exposed for testing.
+constexpr char kSyncInitialSyncFeatureSetupCompletePrefName[] =
+    "sync.has_setup_completed";
+
 // The type of LevelDB schema.
 enum class LevelDBType {
   kLocalStorage = 0,
@@ -290,7 +296,7 @@ constexpr const char* kLacrosOnlyPreferencesKeys[] = {
 };
 
 // List of data types in Sync Data that have to stay in Ash and Ash only.
-static_assert(49 == syncer::GetNumModelTypes(),
+static_assert(47 == syncer::GetNumModelTypes(),
               "If adding a new sync data type, update the lists below if"
               " you want to keep the new data type in Ash only.");
 constexpr syncer::ModelType kAshOnlySyncDataTypes[] = {

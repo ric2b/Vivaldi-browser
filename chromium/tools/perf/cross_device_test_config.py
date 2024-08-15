@@ -57,6 +57,20 @@ TARGET_DEVICES = {
             'Speedometer2': 10,
         },
     },
+    'android-go-wembley-perf': {
+        'jetstream2': {
+            'JetStream2': 5,
+        },
+        'system_health.common_mobile': {
+            # timeToFirstContentfulPaint
+            'background:social:facebook:2019': 10,
+            # cputimeToFirstContentfulPaint
+            'load:search:google:2018': 10
+        },
+        'speedometer2': {
+            'Speedometer2': 10,
+        },
+    },
     'android-pixel4-perf': {
         'jetstream2': {
             'JetStream2': 5,
@@ -77,7 +91,7 @@ TARGET_DEVICES = {
         'jetstream2': {
             'JetStream2': 5,
         },
-        'jetstream2-minormc': {
+        'jetstream2-nominorms': {
             'JetStream2': 5,
         },
         'system_health.common_desktop': {
@@ -89,7 +103,7 @@ TARGET_DEVICES = {
         'speedometer2': {
             'Speedometer2': 20,
         },
-        'speedometer2-minormc': {
+        'speedometer2-nominorms': {
             'Speedometer2': 20,
         },
     },
@@ -136,19 +150,19 @@ TARGET_DEVICES = {
         'jetstream2': {
             'JetStream2': 5,
         },
-        'jetstream2-minormc': {
+        'jetstream2-nominorms': {
             'JetStream2': 5,
         },
         'speedometer2': {
             'Speedometer2': 20,
         },
-        'speedometer2-minormc': {
+        'speedometer2-nominorms': {
             'Speedometer2': 20,
         },
         'speedometer3': {
             'Speedometer3': 20,
         },
-        'speedometer3-minormc': {
+        'speedometer3-nominorms': {
             'Speedometer3': 20,
         },
     },

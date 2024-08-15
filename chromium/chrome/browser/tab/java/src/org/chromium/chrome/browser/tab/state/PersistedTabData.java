@@ -7,13 +7,14 @@ package org.chromium.chrome.browser.tab.state;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import org.jni_zero.NativeMethods;
+
 import org.chromium.base.Callback;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.UserData;
 import org.chromium.base.UserDataHost;
-import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.Supplier;
@@ -29,6 +30,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+
 /**
  * PersistedTabData is Tab data persisted across restarts
  * A constructor of taking a Tab, a PersistedTabDataStorage and
@@ -250,7 +252,7 @@ public abstract class PersistedTabData implements UserData {
      * Save {@link PersistedTabData} to storage
      */
     @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
-    protected void save() {
+    public void save() {
         if (mIsTabSaveEnabledSupplier != null && mIsTabSaveEnabledSupplier.get()) {
             mPersistedTabDataStorage.save(
                     mTab.getId(), mPersistedTabDataId, getOomAndMetricsWrapper());
@@ -406,7 +408,6 @@ public abstract class PersistedTabData implements UserData {
      * Delete all {@link PersistedTabData} when a {@link Tab} is closed.
      */
     public static void onTabClose(Tab tab) {
-        tab.setIsTabSaveEnabled(false);
         // TODO(crbug.com/1223965) ensure we cleanup ShoppingPersistedTabData on startup
         ShoppingPersistedTabData shoppingPersistedTabData =
                 tab.getUserDataHost().getUserData(ShoppingPersistedTabData.class);
@@ -455,14 +456,10 @@ public abstract class PersistedTabData implements UserData {
         PersistedTabDataJni.get().onDeferredStartup();
     }
 
-    /**
-     * Signal to {@link PersistedTabData} that the system is shutting down and to finish
-     * any pending saves.
-     * TODO(b/298057345) deprecate PersistedTabData.onShutdown()
-     */
-    public static void onShutdown() {
-        PersistedTabDataConfiguration.getFilePersistedTabDataStorage().onShutdown();
-        PersistedTabDataConfiguration.getEncryptedFilePersistedTabDataStorage().onShutdown();
+    @VisibleForTesting
+    public void existsInStorage(Callback<Boolean> callback) {
+        mPersistedTabDataStorage.restore(mTab.getId(), mPersistedTabDataId,
+                (res) -> { callback.onResult(res != null && res.limit() > 0); });
     }
 
     @VisibleForTesting

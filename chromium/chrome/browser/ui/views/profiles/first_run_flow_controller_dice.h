@@ -17,6 +17,7 @@
 #include "chrome/browser/ui/views/profiles/profile_management_types.h"
 #include "chrome/browser/ui/views/profiles/profile_picker_web_contents_host.h"
 
+struct CoreAccountInfo;
 enum class IntroChoice;
 class Profile;
 
@@ -47,11 +48,11 @@ class FirstRunFlowControllerDice : public ProfileManagementFlowControllerImpl {
   std::unique_ptr<ProfilePickerDiceSignInProvider> CreateDiceSignInProvider()
       override;
 
-  // `account_id` may not be set as the primary account yet.
+  // `account_info` may not be set as the primary account yet.
   std::unique_ptr<ProfilePickerSignedInFlowController>
   CreateSignedInFlowController(
       Profile* signed_in_profile,
-      const CoreAccountId& account_id,
+      const CoreAccountInfo& account_info,
       std::unique_ptr<content::WebContents> contents) override;
 
  private:
@@ -66,6 +67,9 @@ class FirstRunFlowControllerDice : public ProfileManagementFlowControllerImpl {
   void HandleIdentityStepsCompleted(
       PostHostClearedCallback post_host_cleared_callback,
       bool is_continue_callback = false);
+
+  // Checks the conditions and timeouts to display the default browser step.
+  void HandleSwitchToDefaultBrowserStep(bool is_continue_callback);
 
   void MaybeShowDefaultBrowserStep(bool should_show_default_browser_step);
 

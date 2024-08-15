@@ -46,7 +46,8 @@ class Visit {
         GURL url,
         std::u16string title,
         ui::PageTransition transition,
-        int visit_count);
+        int visit_count,
+        int source);
   ~Visit();
 
   Visit(const Visit& other);
@@ -60,6 +61,7 @@ class Visit {
   std::u16string title;
   ui::PageTransition transition;
   int visit_count;
+  int source;
 };
 
 class DetailedHistory {
@@ -95,6 +97,7 @@ class DetailedHistory {
   // The transition type for this visit from its referrer.
   ui::PageTransition transition_type;
 
+  int source;
 };
 }  //  namespace history
 

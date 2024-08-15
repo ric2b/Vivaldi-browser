@@ -110,12 +110,11 @@ void RemovedPartnersTracker::BookmarkNodeChanged(
   TrackRemovals(node, false);
 }
 
-void RemovedPartnersTracker::BookmarkNodeRemoved(
+void RemovedPartnersTracker::OnWillRemoveBookmarks(
     bookmarks::BookmarkModel* model,
     const bookmarks::BookmarkNode* parent,
     size_t old_index,
-    const bookmarks::BookmarkNode* node,
-    const std::set<GURL>& removed_urls) {
+    const bookmarks::BookmarkNode* node) {
   TrackRemovals(node, true);
 }
 
@@ -123,7 +122,7 @@ void RemovedPartnersTracker::OnWillChangeBookmarkMetaInfo(
     bookmarks::BookmarkModel* model,
     const bookmarks::BookmarkNode* node) {
   // No need to filter on upgrade
-  if (!vivaldi_default_bookmarks::g_bookmark_update_actve) {
+  if (!vivaldi_default_bookmarks::g_bookmark_update_active) {
     change_filter_ = std::make_unique<MetaInfoChangeFilter>(node);
   }
 }
@@ -166,8 +165,9 @@ void RemovedPartnersTracker::SaveRemovedPartners() {
 
 void RemovedPartnersTracker::TrackRemovals(const bookmarks::BookmarkNode* node,
                                            bool recursive) {
-  if (vivaldi_default_bookmarks::g_bookmark_update_actve)
+  if (vivaldi_default_bookmarks::g_bookmark_update_active) {
     return;
+  }
   DoTrackRemovals(node, recursive);
   SaveRemovedPartners();
 }

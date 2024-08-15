@@ -8,15 +8,13 @@ import {SourcesTestRunner} from 'sources_test_runner';
 import {ConsoleTestRunner} from 'console_test_runner';
 import {ApplicationTestRunner} from 'application_test_runner';
 
-import * as SDK from 'devtools/core/sdk/sdk.js';
 import * as Common from 'devtools/core/common/common.js';
+import * as UI from 'devtools/ui/legacy/legacy.js';
+import * as SDK from 'devtools/core/sdk/sdk.js';
+import * as BrowserDebugger from 'devtools/panels/browser_debugger/browser_debugger.js';
 
 (async function() {
   TestRunner.addResult(`Tests framework event listeners output in Sources panel when service worker is present.\n`);
-  await TestRunner.loadLegacyModule('elements');
-  await TestRunner.loadLegacyModule('sources');
-  await TestRunner.loadLegacyModule('console');
-  await TestRunner.loadLegacyModule('console');
   await TestRunner.showPanel('elements');
 
   await TestRunner.evaluateInPage(`
@@ -37,10 +35,10 @@ import * as Common from 'devtools/core/common/common.js';
   ApplicationTestRunner.registerServiceWorker(scriptURL, scope);
 
   var objectEventListenersPane =
-      BrowserDebugger.ObjectEventListenersSidebarPane.instance();
+      BrowserDebugger.ObjectEventListenersSidebarPane.ObjectEventListenersSidebarPane.instance();
 
   function isServiceWorker() {
-    var target = UI.context.flavor(SDK.RuntimeModel.ExecutionContext).target();
+    var target = UI.Context.Context.instance().flavor(SDK.RuntimeModel.ExecutionContext).target();
     return target.type() === SDK.Target.Type.ServiceWorker;
   }
 
@@ -53,7 +51,7 @@ import * as Common from 'devtools/core/common/common.js';
     SourcesTestRunner.selectThread(executionContext.target());
     TestRunner.addResult('Context is service worker: ' + isServiceWorker());
     TestRunner.addResult('Dumping listeners');
-    await UI.viewManager.showView('sources.globalListeners').then(() => {
+    await UI.ViewManager.ViewManager.instance().showView('sources.globalListeners').then(() => {
       objectEventListenersPane.update();
       ElementsTestRunner.expandAndDumpEventListeners(objectEventListenersPane.eventListenersView, step3);
     });

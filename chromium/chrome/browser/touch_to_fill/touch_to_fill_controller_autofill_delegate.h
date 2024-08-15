@@ -8,12 +8,10 @@
 #include "base/containers/span.h"
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/types/pass_key.h"
 #include "base/types/strong_alias.h"
 #include "chrome/browser/touch_to_fill/touch_to_fill_controller_delegate.h"
-#include "components/autofill/core/common/mojom/autofill_types.mojom.h"
 #include "components/device_reauth/device_authenticator.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
@@ -82,7 +80,7 @@ class TouchToFillControllerAutofillDelegate
       base::PassKey<class TouchToFillControllerAutofillTest>,
       password_manager::PasswordManagerClient* password_client,
       content::WebContents* web_contents,
-      scoped_refptr<device_reauth::DeviceAuthenticator> authenticator,
+      std::unique_ptr<device_reauth::DeviceAuthenticator> authenticator,
       base::WeakPtr<password_manager::WebAuthnCredentialsDelegate>
           webauthn_delegate,
       std::unique_ptr<password_manager::PasswordCredentialFiller> filler,
@@ -91,7 +89,7 @@ class TouchToFillControllerAutofillDelegate
 
   TouchToFillControllerAutofillDelegate(
       ChromePasswordManagerClient* password_client,
-      scoped_refptr<device_reauth::DeviceAuthenticator> authenticator,
+      std::unique_ptr<device_reauth::DeviceAuthenticator> authenticator,
       base::WeakPtr<password_manager::WebAuthnCredentialsDelegate>
           webauthn_delegate,
       std::unique_ptr<password_manager::PasswordCredentialFiller> filler,
@@ -118,6 +116,7 @@ class TouchToFillControllerAutofillDelegate
   const GURL& GetFrameUrl() override;
   bool ShouldTriggerSubmission() override;
   bool ShouldShowHybridOption() override;
+  bool ShouldShowNoPasskeysSheetIfRequired() override;
   gfx::NativeView GetNativeView() override;
 
  private:
@@ -146,7 +145,7 @@ class TouchToFillControllerAutofillDelegate
   raw_ptr<content::WebContents> web_contents_;
 
   // Authenticator used to trigger a biometric auth before filling.
-  scoped_refptr<device_reauth::DeviceAuthenticator> authenticator_;
+  std::unique_ptr<device_reauth::DeviceAuthenticator> authenticator_;
 
   // Weak pointer to WebAuthnCredentialsDelegate to select passkeys or start
   // hybrid sign in.

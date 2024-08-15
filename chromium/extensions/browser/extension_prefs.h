@@ -942,7 +942,7 @@ class ExtensionPrefs : public KeyedService {
 
   // The pref service specific to this set of extension prefs. Owned by the
   // BrowserContext.
-  raw_ptr<PrefService, DanglingUntriaged> prefs_;
+  raw_ptr<PrefService> prefs_;
 
   // Base extensions install directory.
   base::FilePath install_directory_;

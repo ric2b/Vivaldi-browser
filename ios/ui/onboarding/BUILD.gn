@@ -3,7 +3,12 @@
 import("//build/config/ios/swift_source_set.gni")
 
 source_set("vivaldi_onboarding") {
-  sources = []
+  sources = [
+    "vivaldi_onboarding_promo_view.h",
+    "vivaldi_onboarding_promo_view.mm",
+    "vivaldi_onboarding_background_view.h",
+    "vivaldi_onboarding_background_view.mm",
+  ]
 
   deps = [
     "resources",
@@ -13,29 +18,29 @@ source_set("vivaldi_onboarding") {
   ]
 
   frameworks = [
+    "AVFoundation.framework",
     "Foundation.framework",
     "UIKit.framework",
-    "AVFoundation.framework",
-    "CoreAudio.framework"
+    "CoreMedia.framework"
   ]
 }
 
 swift_source_set("vivaldi_onboarding_swift") {
   bridge_header = "vivaldi_onboarding_swift_bridge.h"
   sources = [
-    "vivaldi_onboarding_view_provider.swift",
-    "vivaldi_onboarding_view.swift",
-    "vivaldi_onboarding_promo_view.swift",
-    "vivaldi_onboarding_start_view.swift",
+    "vivaldi_onboarding_actions_bridge.swift",
+    "vivaldi_onboarding_adblocker_option_view.swift",
+    "vivaldi_onboarding_background_view_pure.swift",
+    "vivaldi_onboarding_constants.swift",
+    "vivaldi_onboarding_data_model.swift",
     "vivaldi_onboarding_default_browser_view.swift",
     "vivaldi_onboarding_features_view.swift",
-    "vivaldi_onboarding_adblocker_option_view.swift",
-    "vivaldi_onboarding_tab_style_view.swift",
-    "vivaldi_onboarding_data_model.swift",
-    "vivaldi_onboarding_actions_bridge.swift",
-    "vivaldi_onboarding_constants.swift",
-    "vivaldi_onboarding_background_view.swift",
+    "vivaldi_onboarding_promo_view_pure.swift",
     "vivaldi_onboarding_shadow_modifier.swift",
+    "vivaldi_onboarding_start_view.swift",
+    "vivaldi_onboarding_tab_style_view.swift",
+    "vivaldi_onboarding_view_provider.swift",
+    "vivaldi_onboarding_view.swift",
   ]
 
   deps = [
@@ -54,5 +59,6 @@ swift_source_set("vivaldi_onboarding_swift") {
     "Foundation.framework",
     "UIKit.framework",
     "SwiftUI.framework",
+    "Combine.framework",
   ]
 }

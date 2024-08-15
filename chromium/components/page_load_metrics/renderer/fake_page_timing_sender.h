@@ -8,6 +8,7 @@
 #include <set>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "components/page_load_metrics/common/page_load_metrics.mojom.h"
 #include "components/page_load_metrics/common/page_load_timing.h"
 #include "components/page_load_metrics/renderer/page_timing_sender.h"
@@ -64,7 +65,7 @@ class FakePageTimingSender : public PageTimingSender {
     // expected timings provided via ExpectCpuTiming.
     void VerifyExpectedCpuTimings() const;
 
-    void VerifyExpectedInputTiming() const;
+    void VerifyExpectedInteractionTiming() const;
 
     void VerifyExpectedSubresourceLoadMetrics() const;
 
@@ -77,7 +78,9 @@ class FakePageTimingSender : public PageTimingSender {
       expected_render_data_ = render_data.Clone();
     }
 
-    void UpdateExpectedInputTiming(const base::TimeDelta input_delay);
+    void UpdateExpectedInteractionTiming(
+        const base::TimeDelta interaction_duration,
+        mojom::UserInteractionType interaction_type);
 
     void UpdateExpectedSubresourceLoadMetrics(
         const blink::SubresourceLoadMetrics& subresource_load_metrics);
@@ -135,8 +138,8 @@ class FakePageTimingSender : public PageTimingSender {
     absl::optional<gfx::Rect> actual_main_frame_intersection_rect_;
     absl::optional<gfx::Rect> expected_main_frame_viewport_rect_;
     absl::optional<gfx::Rect> actual_main_frame_viewport_rect_;
-    mojom::InputTimingPtr expected_input_timing;
-    mojom::InputTimingPtr actual_input_timing;
+    mojom::InputTiming expected_input_timing;
+    mojom::InputTiming actual_input_timing;
     absl::optional<blink::SubresourceLoadMetrics>
         expected_subresource_load_metrics_;
     absl::optional<blink::SubresourceLoadMetrics>
@@ -166,7 +169,7 @@ class FakePageTimingSender : public PageTimingSender {
       base::ReadOnlySharedMemoryRegion shared_memory) override;
 
  private:
-  PageTimingValidator* const validator_;
+  const raw_ptr<PageTimingValidator, ExperimentalRenderer> validator_;
 };
 
 }  // namespace page_load_metrics

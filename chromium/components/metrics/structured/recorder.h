@@ -13,6 +13,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "components/metrics/structured/event.h"
 #include "components/metrics/structured/structured_metrics_client.h"
+#include "components/metrics/structured/structured_metrics_validator.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace base {
@@ -58,8 +59,6 @@ class Recorder {
     virtual void OnReportingStateChanged(bool enabled) = 0;
     // Called when SystemProfile has finished loading
     virtual void OnSystemProfileInitialized() {}
-    // Called on a call to LastKeyRotation.
-    virtual absl::optional<int> LastKeyRotation(uint64_t project_name_hash) = 0;
   };
 
   Recorder(const Recorder&) = delete;
@@ -80,10 +79,6 @@ class Recorder {
   // investigate whether initialization can be simplified for Chrome.
   void ProfileAdded(const base::FilePath& profile_path);
 
-  // Returns when the key for |event| was last rotated, in days since epoch.
-  // Returns nullopt if the information is not available.
-  absl::optional<int> LastKeyRotation(const Event& event);
-
   // Notifies observers that metrics reporting has been enabled or disabled.
   void OnReportingStateChanged(bool enabled);
 
@@ -103,6 +98,9 @@ class Recorder {
 
   // Modifies |uma_proto| before the log is sent.
   void OnProvideIndependentMetrics(ChromeUserMetricsExtension* uma_proto);
+
+  // Modifies |event| once after the proto has been built.
+  void OnEventRecorded(StructuredEventProto* event);
 
  private:
   friend class base::NoDestructor<Recorder>;

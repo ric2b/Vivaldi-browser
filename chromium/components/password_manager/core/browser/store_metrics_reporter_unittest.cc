@@ -15,10 +15,10 @@
 #include "build/build_config.h"
 #include "components/os_crypt/sync/os_crypt_mocker.h"
 #include "components/password_manager/core/browser/features/password_features.h"
+#include "components/password_manager/core/browser/features/password_manager_features_util.h"
 #include "components/password_manager/core/browser/mock_password_reuse_manager.h"
 #include "components/password_manager/core/browser/mock_password_store_interface.h"
 #include "components/password_manager/core/browser/password_form.h"
-#include "components/password_manager/core/browser/password_manager_features_util.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/stub_password_manager_client.h"
@@ -164,6 +164,10 @@ class StoreMetricsReporterTest : public SyncUsernameTestBase {
         prefs::kLastTimePasswordStoreMetricsReported, 0.0);
     prefs_.registry()->RegisterBooleanPref(::prefs::kSafeBrowsingEnabled,
                                            false);
+#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
+    prefs_.registry()->RegisterDictionaryPref(
+        prefs::kAccountStoragePerAccountSettings);
+#endif
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
     prefs_.registry()->RegisterBooleanPref(
         prefs::kBiometricAuthenticationBeforeFilling, false);
@@ -1108,10 +1112,6 @@ TEST_F(StoreMetricsReporterTest, MultiStoreMetrics) {
   // This test is only relevant when the passwords accounts store is enabled.
   if (!base::FeatureList::IsEnabled(features::kEnablePasswordsAccountStorage))
     return;
-#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
-  prefs_.registry()->RegisterDictionaryPref(
-      prefs::kAccountStoragePerAccountSettings);
-#endif  // !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
   auto profile_store =
       base::MakeRefCounted<TestPasswordStore>(IsAccountStore(false));
   auto account_store =

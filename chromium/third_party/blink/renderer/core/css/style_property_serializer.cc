@@ -35,6 +35,7 @@
 #include "third_party/blink/renderer/core/css/css_pending_system_font_value.h"
 #include "third_party/blink/renderer/core/css/css_value_pair.h"
 #include "third_party/blink/renderer/core/css/css_value_pool.h"
+#include "third_party/blink/renderer/core/css/cssom_utils.h"
 #include "third_party/blink/renderer/core/css/properties/css_property.h"
 #include "third_party/blink/renderer/core/css/properties/css_property_instances.h"
 #include "third_party/blink/renderer/core/css/properties/longhand.h"
@@ -399,6 +400,7 @@ static bool AllowInitialInShorthand(CSSPropertyID property_id) {
     case CSSPropertyID::kTextDecoration:
     case CSSPropertyID::kTextEmphasis:
     case CSSPropertyID::kWebkitMask:
+    case CSSPropertyID::kAlternativeMask:
     case CSSPropertyID::kWebkitTextStroke:
     case CSSPropertyID::kWhiteSpace:
       return true;
@@ -504,8 +506,6 @@ String StylePropertySerializer::SerializeShorthand(
       return Get2Values(borderSpacingShorthand());
     case CSSPropertyID::kBackgroundPosition:
       return GetLayeredShorthandValue(backgroundPositionShorthand());
-    case CSSPropertyID::kBackgroundRepeat:
-      return BackgroundRepeatPropertyValue();
     case CSSPropertyID::kBackground:
       return GetLayeredShorthandValue(backgroundShorthand());
     case CSSPropertyID::kBorder:
@@ -574,11 +574,11 @@ String StylePropertySerializer::SerializeShorthand(
     case CSSPropertyID::kGridTemplate:
       return GetShorthandValueForGridTemplate(gridTemplateShorthand());
     case CSSPropertyID::kGridColumn:
-      return GetShorthandValue(gridColumnShorthand(), " / ");
+      return GetShorthandValueForGridLine(gridColumnShorthand());
     case CSSPropertyID::kGridRow:
-      return GetShorthandValue(gridRowShorthand(), " / ");
+      return GetShorthandValueForGridLine(gridRowShorthand());
     case CSSPropertyID::kGridArea:
-      return GetShorthandValue(gridAreaShorthand(), " / ");
+      return GetShorthandValueForGridArea(gridAreaShorthand());
     case CSSPropertyID::kGap:
       return Get2Values(gapShorthand());
     case CSSPropertyID::kInset:
@@ -623,14 +623,18 @@ String StylePropertySerializer::SerializeShorthand(
       return GetLayeredShorthandValue(transitionShorthand());
     case CSSPropertyID::kListStyle:
       return GetShorthandValue(listStyleShorthand());
+    case CSSPropertyID::kMaskPosition:
+      return GetLayeredShorthandValue(maskPositionShorthand());
     case CSSPropertyID::kWebkitMaskPosition:
       return GetLayeredShorthandValue(webkitMaskPositionShorthand());
-    case CSSPropertyID::kWebkitMaskRepeat:
-      return GetLayeredShorthandValue(webkitMaskRepeatShorthand());
     case CSSPropertyID::kWebkitMask:
       return GetLayeredShorthandValue(webkitMaskShorthand());
+    case CSSPropertyID::kAlternativeMask:
+      return GetLayeredShorthandValue(alternativeMaskShorthand());
     case CSSPropertyID::kTextEmphasis:
       return GetShorthandValue(textEmphasisShorthand());
+    case CSSPropertyID::kTextSpacing:
+      return TextSpacingValue();
     case CSSPropertyID::kWebkitTextStroke:
       return GetShorthandValue(webkitTextStrokeShorthand());
     case CSSPropertyID::kMarker: {
@@ -668,18 +672,6 @@ String StylePropertySerializer::SerializeShorthand(
       return PageBreakPropertyValue(pageBreakBeforeShorthand());
     case CSSPropertyID::kPageBreakInside:
       return PageBreakPropertyValue(pageBreakInsideShorthand());
-    case CSSPropertyID::kToggle: {
-      const CSSValue* toggle_root =
-          property_set_.GetPropertyCSSValue(GetCSSPropertyToggleRoot());
-      DCHECK(toggle_root);
-      const CSSValue* toggle_trigger =
-          property_set_.GetPropertyCSSValue(GetCSSPropertyToggleTrigger());
-      DCHECK(toggle_trigger);
-      if (!IsValidToggleShorthand(toggle_root, toggle_trigger)) {
-        return g_empty_string;
-      }
-      return toggle_root->CssText();
-    }
     case CSSPropertyID::kViewTimeline:
       return ViewTimelineValue();
     case CSSPropertyID::kAlternativeViewTimelineWithInset:
@@ -771,6 +763,23 @@ bool StylePropertySerializer::AppendFontLonghandValueIfNotNormal(
     return true;
   }
 
+  String value;
+  if (property.IDEquals(CSSPropertyID::kFontVariantLigatures) &&
+      identifier_value && identifier_value->GetValueID() == CSSValueID::kNone) {
+    // A shorter representation is preferred in general. Thus, 'none' returns
+    // instead of the spelling-out form.
+    // https://www.w3.org/Bugs/Public/show_bug.cgi?id=29594#c1
+    value = "none";
+  } else {
+    value = val->CssText();
+  }
+
+  // The font longhand property values can be empty where the font shorthand
+  // properties (e.g., font, font-variant, etc.) initialize them.
+  if (value.empty()) {
+    return true;
+  }
+
   if (!result.empty()) {
     switch (property.PropertyID()) {
       case CSSPropertyID::kFontStyle:
@@ -793,19 +802,6 @@ bool StylePropertySerializer::AppendFontLonghandValueIfNotNormal(
         NOTREACHED();
     }
   }
-
-  String value;
-  // In the font-variant shorthand a "none" ligatures value needs to be
-  // expanded.
-  if (property.IDEquals(CSSPropertyID::kFontVariantLigatures) &&
-      identifier_value && identifier_value->GetValueID() == CSSValueID::kNone) {
-    value =
-        "no-common-ligatures no-discretionary-ligatures "
-        "no-historical-ligatures no-contextual";
-  } else {
-    value = val->CssText();
-  }
-
   result.Append(value);
   return true;
 }
@@ -1268,12 +1264,15 @@ String StylePropertySerializer::FontValue() const {
 
 String StylePropertySerializer::FontVariantValue() const {
   StringBuilder result;
+  bool is_variant_ligatures_none = false;
 
-  // TODO(drott): Decide how we want to return ligature values in shorthands,
-  // reduced to "none" or spelled out, filed as W3C bug:
-  // https://www.w3.org/Bugs/Public/show_bug.cgi?id=29594
   AppendFontLonghandValueIfNotNormal(GetCSSPropertyFontVariantLigatures(),
                                      result);
+  if (result.ToString() == "none") {
+    is_variant_ligatures_none = true;
+  }
+  const unsigned variant_ligatures_result_length = result.length();
+
   AppendFontLonghandValueIfNotNormal(GetCSSPropertyFontVariantCaps(), result);
   AppendFontLonghandValueIfNotNormal(GetCSSPropertyFontVariantAlternates(),
                                      result);
@@ -1284,6 +1283,15 @@ String StylePropertySerializer::FontVariantValue() const {
   if (RuntimeEnabledFeatures::FontVariantPositionEnabled()) {
     AppendFontLonghandValueIfNotNormal(GetCSSPropertyFontVariantPosition(),
                                        result);
+  }
+
+  // The font-variant shorthand should return an empty string where
+  // it cannot represent "font-variant-ligatures: none" along
+  // with any other non-normal longhands.
+  // https://drafts.csswg.org/cssom-1/#serializing-css-values
+  if (is_variant_ligatures_none &&
+      result.length() != variant_ligatures_result_length) {
+    return g_empty_string;
   }
 
   if (result.empty()) {
@@ -1402,8 +1410,8 @@ String StylePropertySerializer::OffsetValue() const {
       path && (use_rotate || use_distance ||
                !is_initial_identifier_value(path, CSSValueID::kNone));
   bool use_position =
-      position &&
-      (!use_path || !is_initial_identifier_value(position, CSSValueID::kAuto));
+      position && (!use_path ||
+                   !is_initial_identifier_value(position, CSSValueID::kNormal));
   bool use_anchor =
       anchor && (!is_initial_identifier_value(anchor, CSSValueID::kAuto));
 
@@ -1544,6 +1552,48 @@ String StylePropertySerializer::Get4Values(
   return result.ReleaseString();
 }
 
+namespace {
+
+// Serialize clip and origin (https://drafts.fxtf.org/css-masking/#the-mask):
+// * If one <geometry-box> value and the no-clip keyword are present then
+//   <geometry-box> sets mask-origin and no-clip sets mask-clip to that value.
+// * If one <geometry-box> value and no no-clip keyword are present then
+//   <geometry-box> sets both mask-origin and mask-clip to that value.
+// * If two <geometry-box> values are present, then the first sets mask-origin
+//   and the second mask-clip.
+// Additionally, omits components when possible (see:
+// https://drafts.csswg.org/cssom/#serialize-a-css-value).
+void SerializeMaskOriginAndClip(StringBuilder& result,
+                                const CSSValueID& origin_id,
+                                const CSSValueID& clip_id) {
+  // If both values are border-box, omit everything as it is the default.
+  if (origin_id == CSSValueID::kBorderBox &&
+      clip_id == CSSValueID::kBorderBox) {
+    return;
+  }
+
+  if (!result.empty()) {
+    result.Append(' ');
+  }
+  if (origin_id == clip_id) {
+    // If the values are the same, only emit one value. Note that mask-origin
+    // does not support no-clip, so there is no need to consider no-clip
+    // special cases.
+    result.Append(getValueName(origin_id));
+  } else if (origin_id == CSSValueID::kBorderBox &&
+             clip_id == CSSValueID::kNoClip) {
+    // Mask-origin does not support no-clip, so mask-origin can be omitted if it
+    // is the default.
+    result.Append(getValueName(clip_id));
+  } else {
+    result.Append(getValueName(origin_id));
+    result.Append(' ');
+    result.Append(getValueName(clip_id));
+  }
+}
+
+}  // namespace
+
 String StylePropertySerializer::GetLayeredShorthandValue(
     const StylePropertyShorthand& shorthand) const {
   const unsigned size = shorthand.length();
@@ -1568,11 +1618,9 @@ String StylePropertySerializer::GetLayeredShorthandValue(
   // Now stitch the properties together.
   for (wtf_size_t layer = 0; layer < num_layers; layer++) {
     StringBuilder layer_result;
-    bool use_repeat_x_shorthand = false;
-    bool use_repeat_y_shorthand = false;
-    bool use_single_word_shorthand = false;
     bool found_position_x_css_property = false;
     bool found_position_y_css_property = false;
+    CSSValueID mask_origin_value = CSSValueID::kBorderBox;
 
     for (unsigned property_index = 0; property_index < size; property_index++) {
       const CSSValue* value = nullptr;
@@ -1599,45 +1647,7 @@ String StylePropertySerializer::GetLayeredShorthandValue(
         continue;
       }
 
-      // Special case for background-repeat.
-      if (property->IDEquals(CSSPropertyID::kBackgroundRepeatX) ||
-          property->IDEquals(CSSPropertyID::kWebkitMaskRepeatX)) {
-        DCHECK(shorthand.properties()[property_index + 1]->IDEquals(
-                   CSSPropertyID::kBackgroundRepeatY) ||
-               shorthand.properties()[property_index + 1]->IDEquals(
-                   CSSPropertyID::kWebkitMaskRepeatY));
-        auto* value_list =
-            DynamicTo<CSSValueList>(values[property_index + 1].Get());
-        const CSSValue& y_value =
-            value_list ? value_list->Item(layer) : *values[property_index + 1];
-
-        // FIXME: At some point we need to fix this code to avoid returning an
-        // invalid shorthand, since some longhand combinations are not
-        // serializable into a single shorthand.
-        if (!IsA<CSSIdentifierValue>(value) ||
-            !IsA<CSSIdentifierValue>(y_value)) {
-          continue;
-        }
-
-        CSSValueID x_id = To<CSSIdentifierValue>(value)->GetValueID();
-        CSSValueID y_id = To<CSSIdentifierValue>(y_value).GetValueID();
-        // Maybe advance propertyIndex to look at the next CSSValue in the list
-        // for the checks below.
-        if (x_id == y_id) {
-          use_single_word_shorthand = true;
-          property = shorthand.properties()[++property_index];
-        } else if (x_id == CSSValueID::kRepeat &&
-                   y_id == CSSValueID::kNoRepeat) {
-          use_repeat_x_shorthand = true;
-          property = shorthand.properties()[++property_index];
-        } else if (x_id == CSSValueID::kNoRepeat &&
-                   y_id == CSSValueID::kRepeat) {
-          use_repeat_y_shorthand = true;
-          property = shorthand.properties()[++property_index];
-        }
-      }
-
-      bool is_initial_value = value->IsInitialValue();
+      bool omit_value = value->IsInitialValue();
 
       // The shorthand can not represent the following properties if they have
       // non-initial values. This is because they are always reset to their
@@ -1654,7 +1664,7 @@ String StylePropertySerializer::GetLayeredShorthandValue(
           DCHECK(RuntimeEnabledFeatures::ScrollTimelineEnabled());
           return g_empty_string;
         }
-        is_initial_value = true;
+        omit_value = true;
       }
       if (property->IDEquals(CSSPropertyID::kAnimationDelayEnd)) {
         if (CSSToStyleMap::MapAnimationDelayEnd(*value) !=
@@ -1662,7 +1672,7 @@ String StylePropertySerializer::GetLayeredShorthandValue(
             layer > 0) {
           return g_empty_string;
         }
-        is_initial_value = true;
+        omit_value = true;
       }
       if (property->IDEquals(CSSPropertyID::kAnimationRangeStart)) {
         auto* ident = DynamicTo<CSSIdentifierValue>(value);
@@ -1671,7 +1681,7 @@ String StylePropertySerializer::GetLayeredShorthandValue(
           DCHECK(RuntimeEnabledFeatures::ScrollTimelineEnabled());
           return g_empty_string;
         }
-        is_initial_value = true;
+        omit_value = true;
       }
       if (property->IDEquals(CSSPropertyID::kAnimationRangeEnd)) {
         auto* ident = DynamicTo<CSSIdentifierValue>(value);
@@ -1680,7 +1690,7 @@ String StylePropertySerializer::GetLayeredShorthandValue(
           DCHECK(RuntimeEnabledFeatures::ScrollTimelineEnabled());
           return g_empty_string;
         }
-        is_initial_value = true;
+        omit_value = true;
       }
       if (property->IDEquals(CSSPropertyID::kTransitionBehavior)) {
         auto* ident = DynamicTo<CSSIdentifierValue>(value);
@@ -1693,13 +1703,46 @@ String StylePropertySerializer::GetLayeredShorthandValue(
           // shorthand serialization, so this special case is needed.
           // TODO(http://crbug.com/501673): We should have a better solution
           // before fixing all CSS properties to fix the above bug.
-          is_initial_value = true;
+          omit_value = true;
         }
       }
+      if (shorthand.id() == CSSPropertyID::kAlternativeMask) {
+        if (property->IDEquals(CSSPropertyID::kMaskOrigin)) {
+          if (auto* ident = DynamicTo<CSSIdentifierValue>(value)) {
+            mask_origin_value = ident->GetValueID();
+          }
+          // Omit this value as it is serialized alongside mask-clip.
+          omit_value = true;
+        } else if (property->IDEquals(CSSPropertyID::kMaskClip)) {
+          CSSValueID mask_clip_id = CSSValueID::kBorderBox;
+          if (auto* ident = DynamicTo<CSSIdentifierValue>(value)) {
+            mask_clip_id = To<CSSIdentifierValue>(ident)->GetValueID();
+          }
+          SerializeMaskOriginAndClip(layer_result, mask_origin_value,
+                                     mask_clip_id);
+          omit_value = true;
+        } else if (property->IDEquals(CSSPropertyID::kMaskComposite)) {
+          if (auto* ident = DynamicTo<CSSIdentifierValue>(value)) {
+            if (To<CSSIdentifierValue>(ident)->GetValueID() ==
+                CSSValueID::kAdd) {
+              omit_value = true;
+            }
+          }
+        } else if (property->IDEquals(CSSPropertyID::kMaskMode)) {
+          if (auto* ident = DynamicTo<CSSIdentifierValue>(value)) {
+            if (To<CSSIdentifierValue>(ident)->GetValueID() ==
+                CSSValueID::kMatchSource) {
+              omit_value = true;
+            }
+          }
+        }
+        // TODO(pdr): Omit default values for mask properties.
+      }
 
-      if (!is_initial_value) {
+      if (!omit_value) {
         if (property->IDEquals(CSSPropertyID::kBackgroundSize) ||
-            property->IDEquals(CSSPropertyID::kWebkitMaskSize)) {
+            property->IDEquals(CSSPropertyID::kWebkitMaskSize) ||
+            property->IDEquals(CSSPropertyID::kMaskSize)) {
           if (found_position_y_css_property || found_position_x_css_property) {
             layer_result.Append(" / ");
           } else {
@@ -1711,18 +1754,8 @@ String StylePropertySerializer::GetLayeredShorthandValue(
           layer_result.Append(' ');
         }
 
-        if (use_repeat_x_shorthand) {
-          use_repeat_x_shorthand = false;
-          layer_result.Append(getValueName(CSSValueID::kRepeatX));
-        } else if (use_repeat_y_shorthand) {
-          use_repeat_y_shorthand = false;
-          layer_result.Append(getValueName(CSSValueID::kRepeatY));
-        } else {
-          if (use_single_word_shorthand) {
-            use_single_word_shorthand = false;
-          }
-          layer_result.Append(value->CssText());
-        }
+        layer_result.Append(value->CssText());
+
         if (property->IDEquals(CSSPropertyID::kBackgroundPositionX) ||
             property->IDEquals(CSSPropertyID::kWebkitMaskPositionX)) {
           found_position_x_css_property = true;
@@ -1734,6 +1767,10 @@ String StylePropertySerializer::GetLayeredShorthandValue(
           // specified, the second one defaults to "center", not the same value.
         }
       }
+    }
+    if (shorthand.id() == CSSPropertyID::kAlternativeMask &&
+        layer_result.empty()) {
+      result.Append(getValueName(CSSValueID::kNone));
     }
     if (!layer_result.empty()) {
       if (!result.empty()) {
@@ -1867,23 +1904,6 @@ String StylePropertySerializer::GetShorthandValueForDoubleBarCombinator(
 
   return result.ReleaseString();
 }
-
-namespace {
-
-String NamedGridAreaTextForPosition(const NamedGridAreaMap& grid_area_map,
-                                    wtf_size_t row,
-                                    wtf_size_t column) {
-  for (const auto& item : grid_area_map) {
-    const GridArea& area = item.value;
-    if (row >= area.rows.StartLine() && row < area.rows.EndLine() &&
-        column >= area.columns.StartLine() && column < area.columns.EndLine()) {
-      return item.key;
-    }
-  }
-  return ".";
-}
-
-}  // namespace
 
 String StylePropertySerializer::GetShorthandValueForGrid(
     const StylePropertyShorthand& shorthand) const {
@@ -2024,6 +2044,77 @@ String StylePropertySerializer::GetShorthandValueForGrid(
   return result.ReleaseString();
 }
 
+String StylePropertySerializer::GetShorthandValueForGridArea(
+    const StylePropertyShorthand& shorthand) const {
+  const String separator = " / ";
+
+  DCHECK_EQ(shorthand.length(), 4u);
+  const CSSValue* grid_row_start =
+      property_set_.GetPropertyCSSValue(*shorthand.properties()[0]);
+  const CSSValue* grid_column_start =
+      property_set_.GetPropertyCSSValue(*shorthand.properties()[1]);
+  const CSSValue* grid_row_end =
+      property_set_.GetPropertyCSSValue(*shorthand.properties()[2]);
+  const CSSValue* grid_column_end =
+      property_set_.GetPropertyCSSValue(*shorthand.properties()[3]);
+
+  // `grid-row-end` depends on `grid-row-start`, and `grid-column-end` depends
+  // on on `grid-column-start`, but what's not consistent is that
+  // `grid-column-start` has a dependency on `grid-row-start`. For more details,
+  // see https://www.w3.org/TR/css-grid-2/#placement-shorthands
+  const bool include_column_start =
+      CSSOMUtils::IncludeDependentGridLineEndValue(grid_row_start,
+                                                   grid_column_start);
+  const bool include_row_end = CSSOMUtils::IncludeDependentGridLineEndValue(
+      grid_row_start, grid_row_end);
+  const bool include_column_end = CSSOMUtils::IncludeDependentGridLineEndValue(
+      grid_column_start, grid_column_end);
+
+  StringBuilder result;
+
+  // `grid-row-start` is always included.
+  result.Append(grid_row_start->CssText());
+
+  // If `IncludeDependentGridLineEndValue` returns true for a property,
+  // all preceding values must be included.
+  if (include_column_start || include_row_end || include_column_end) {
+    result.Append(separator);
+    result.Append(grid_column_start->CssText());
+  }
+  if (include_row_end || include_column_end) {
+    result.Append(separator);
+    result.Append(grid_row_end->CssText());
+  }
+  if (include_column_end) {
+    result.Append(separator);
+    result.Append(grid_column_end->CssText());
+  }
+
+  return result.ReleaseString();
+}
+
+String StylePropertySerializer::GetShorthandValueForGridLine(
+    const StylePropertyShorthand& shorthand) const {
+  const String separator = " / ";
+
+  DCHECK_EQ(shorthand.length(), 2u);
+  const CSSValue* line_start =
+      property_set_.GetPropertyCSSValue(*shorthand.properties()[0]);
+  const CSSValue* line_end =
+      property_set_.GetPropertyCSSValue(*shorthand.properties()[1]);
+
+  StringBuilder result;
+
+  // `grid-line-start` is always included.
+  result.Append(line_start->CssText());
+  if (CSSOMUtils::IncludeDependentGridLineEndValue(line_start, line_end)) {
+    result.Append(separator);
+    result.Append(line_end->CssText());
+  }
+
+  return result.ReleaseString();
+}
+
 String StylePropertySerializer::GetShorthandValueForGridTemplate(
     const StylePropertyShorthand& shorthand) const {
   const CSSValue* template_row_values =
@@ -2033,86 +2124,10 @@ String StylePropertySerializer::GetShorthandValueForGridTemplate(
   const CSSValue* template_area_values =
       property_set_.GetPropertyCSSValue(*shorthand.properties()[2]);
 
-  // 1- 'none' case.
-  if (IsA<CSSIdentifierValue>(template_row_values) &&
-      To<CSSIdentifierValue>(template_row_values)->GetValueID() ==
-          CSSValueID::kNone &&
-      IsA<CSSIdentifierValue>(template_column_values) &&
-      To<CSSIdentifierValue>(template_column_values)->GetValueID() ==
-          CSSValueID::kNone) {
-    return "none";
-  }
-
-  const auto* template_row_value_list =
-      DynamicTo<CSSValueList>(template_row_values);
-  StringBuilder result;
-
-  // 2- <grid-template-rows> / <grid-template-columns>
-  if (!template_row_value_list ||
-      (IsA<CSSIdentifierValue>(template_area_values) &&
-       To<CSSIdentifierValue>(template_area_values)->GetValueID() ==
-           CSSValueID::kNone)) {
-    result.Append(template_row_values->CssText());
-    result.Append(" / ");
-    result.Append(template_column_values->CssText());
-    return result.ReleaseString();
-  }
-
-  // 3- [ <line-names>? <string> <track-size>? <line-names>? ]+
-  // [ / <track-list> ]?
-  if (template_row_value_list->length() == 1 &&
-      IsA<CSSIdentifierValue>(template_row_value_list->Item(0)) &&
-      To<CSSIdentifierValue>(template_row_value_list->Item(0)).GetValueID() ==
-          CSSValueID::kAuto) {
-    // If the |template_row_value_list| has only one value and it is 'auto',
-    // then we append the 'grid-template-area' values.
-    result.Append(template_area_values->CssText());
-  } else {
-    const auto* template_areas =
-        DynamicTo<cssvalue::CSSGridTemplateAreasValue>(template_area_values);
-    DCHECK(template_areas);
-    const NamedGridAreaMap& grid_area_map = template_areas->GridAreaMap();
-    wtf_size_t grid_area_column_count = template_areas->ColumnCount();
-    wtf_size_t grid_area_index = 0;
-    for (const auto& row_value : *template_row_value_list) {
-      const String row_value_text = row_value->CssText();
-      if (row_value->IsGridLineNamesValue()) {
-        if (!result.empty()) {
-          result.Append(' ');
-        }
-        result.Append(row_value_text);
-        continue;
-      }
-      StringBuilder grid_area_text;
-      for (wtf_size_t column = 0; column < grid_area_column_count; ++column) {
-        grid_area_text.Append(NamedGridAreaTextForPosition(
-            grid_area_map, grid_area_index, column));
-        if (column != grid_area_column_count - 1) {
-          grid_area_text.Append(' ');
-        }
-      }
-      if (!grid_area_text.empty()) {
-        if (!result.empty()) {
-          result.Append(' ');
-        }
-        result.Append('"');
-        result.Append(grid_area_text);
-        result.Append('"');
-        ++grid_area_index;
-      }
-      if (!result.empty()) {
-        result.Append(' ');
-      }
-      result.Append(row_value_text);
-    }
-  }
-  if (const auto* ident_value =
-          DynamicTo<CSSIdentifierValue>(template_column_values);
-      !ident_value || ident_value->GetValueID() != CSSValueID::kNone) {
-    result.Append(" / ");
-    result.Append(template_column_values->CssText());
-  }
-  return result.ReleaseString();
+  const CSSValueList* grid_template_list =
+      CSSOMUtils::ComputedValueForGridTemplateShorthand(
+          template_row_values, template_column_values, template_area_values);
+  return grid_template_list->CssText();
 }
 
 // only returns a non-null value if all properties have the same, non-null value
@@ -2246,79 +2261,6 @@ String StylePropertySerializer::BorderRadiusValue() const {
   return builder.ReleaseString();
 }
 
-static void AppendBackgroundRepeatValue(StringBuilder& builder,
-                                        const CSSValue& repeat_xcss_value,
-                                        const CSSValue& repeat_ycss_value) {
-  // FIXME: Ensure initial values do not appear in CSS_VALUE_LISTS.
-  DEFINE_STATIC_LOCAL(const Persistent<CSSIdentifierValue>,
-                      initial_repeat_value,
-                      (CSSIdentifierValue::Create(CSSValueID::kRepeat)));
-  const CSSIdentifierValue& repeat_x =
-      repeat_xcss_value.IsInitialValue()
-          ? *initial_repeat_value
-          : To<CSSIdentifierValue>(repeat_xcss_value);
-  const CSSIdentifierValue& repeat_y =
-      repeat_ycss_value.IsInitialValue()
-          ? *initial_repeat_value
-          : To<CSSIdentifierValue>(repeat_ycss_value);
-  CSSValueID repeat_x_value_id = repeat_x.GetValueID();
-  CSSValueID repeat_y_value_id = repeat_y.GetValueID();
-  if (repeat_x_value_id == repeat_y_value_id) {
-    builder.Append(repeat_x.CssText());
-  } else if (repeat_x_value_id == CSSValueID::kNoRepeat &&
-             repeat_y_value_id == CSSValueID::kRepeat) {
-    builder.Append("repeat-y");
-  } else if (repeat_x_value_id == CSSValueID::kRepeat &&
-             repeat_y_value_id == CSSValueID::kNoRepeat) {
-    builder.Append("repeat-x");
-  } else {
-    builder.Append(repeat_x.CssText());
-    builder.Append(' ');
-    builder.Append(repeat_y.CssText());
-  }
-}
-
-String StylePropertySerializer::BackgroundRepeatPropertyValue() const {
-  const CSSValue& repeat_x =
-      *property_set_.GetPropertyCSSValue(GetCSSPropertyBackgroundRepeatX());
-  const CSSValue& repeat_y =
-      *property_set_.GetPropertyCSSValue(GetCSSPropertyBackgroundRepeatY());
-
-  const auto* repeat_x_list = DynamicTo<CSSValueList>(repeat_x);
-  int repeat_x_length = 1;
-  if (repeat_x_list) {
-    repeat_x_length = repeat_x_list->length();
-  } else if (!repeat_x.IsIdentifierValue()) {
-    return String();
-  }
-
-  const auto* repeat_y_list = DynamicTo<CSSValueList>(repeat_y);
-  int repeat_y_length = 1;
-  if (repeat_y_list) {
-    repeat_y_length = repeat_y_list->length();
-  } else if (!repeat_y.IsIdentifierValue()) {
-    return String();
-  }
-
-  size_t shorthand_length =
-      LowestCommonMultiple(repeat_x_length, repeat_y_length);
-  StringBuilder builder;
-  for (size_t i = 0; i < shorthand_length; ++i) {
-    if (i) {
-      builder.Append(", ");
-    }
-
-    const CSSValue& x_value =
-        repeat_x_list ? repeat_x_list->Item(i % repeat_x_list->length())
-                      : repeat_x;
-    const CSSValue& y_value =
-        repeat_y_list ? repeat_y_list->Item(i % repeat_y_list->length())
-                      : repeat_y;
-    AppendBackgroundRepeatValue(builder, x_value, y_value);
-  }
-  return builder.ReleaseString();
-}
-
 String StylePropertySerializer::PageBreakPropertyValue(
     const StylePropertyShorthand& shorthand) const {
   const CSSValue* value =
@@ -2345,43 +2287,40 @@ String StylePropertySerializer::ContainIntrinsicSizeValue() const {
   return GetShorthandValue(containIntrinsicSizeShorthand());
 }
 
-bool StylePropertySerializer::IsValidToggleShorthand(
-    const CSSValue* toggle_root,
-    const CSSValue* toggle_trigger) {
-  if (const auto* toggle_root_ident =
-          DynamicTo<CSSIdentifierValue>(toggle_root)) {
-    DCHECK_EQ(toggle_root_ident->GetValueID(), CSSValueID::kNone);
-    if (const auto* toggle_trigger_ident =
-            DynamicTo<CSSIdentifierValue>(toggle_trigger)) {
-      DCHECK_EQ(toggle_trigger_ident->GetValueID(), CSSValueID::kNone);
-      return true;
-    }
-    return false;
+String StylePropertySerializer::TextSpacingValue() const {
+  const auto* autospace_value = DynamicTo<CSSIdentifierValue>(
+      property_set_.GetPropertyCSSValue(GetCSSPropertyTextAutospace()));
+  DCHECK(autospace_value);
+  const auto* spacing_trim_value = DynamicTo<CSSIdentifierValue>(
+      property_set_.GetPropertyCSSValue(GetCSSPropertyTextSpacingTrim()));
+  DCHECK(spacing_trim_value);
+
+  // Check if longhands are one of pre-defined keywords.
+  const CSSValueID autospace_id = autospace_value->GetValueID();
+  const CSSValueID spacing_trim_id = spacing_trim_value->GetValueID();
+  if (autospace_id == CSSValueID::kNormal &&
+      spacing_trim_id == CSSValueID::kSpaceFirst) {
+    return getValueName(CSSValueID::kNormal);
+  }
+  if (autospace_id == CSSValueID::kNoAutospace &&
+      spacing_trim_id == CSSValueID::kSpaceAll) {
+    return getValueName(CSSValueID::kNone);
   }
 
-  const auto* toggle_trigger_list = DynamicTo<CSSValueList>(toggle_trigger);
-  if (!toggle_trigger_list) {
-    return false;
+  // Otherwise build a multi-value list.
+  StringBuilder result;
+  if (autospace_id != CSSValueID::kNormal) {
+    result.Append(getValueName(autospace_id));
   }
-  const auto* toggle_root_list = To<CSSValueList>(toggle_root);
-  wtf_size_t length = toggle_trigger_list->length();
-  if (length != toggle_root_list->length()) {
-    return false;
-  }
-  for (wtf_size_t i = 0; i < length; ++i) {
-    const auto& toggle_root_item = To<CSSValueList>(toggle_root_list->Item(i));
-    const auto& toggle_trigger_item =
-        To<CSSValueList>(toggle_trigger_list->Item(i));
-    if (toggle_trigger_item.length() > 1u) {
-      DCHECK_EQ(toggle_trigger_item.length(), 2u);
-      return false;
+  if (spacing_trim_id != CSSValueID::kSpaceFirst) {
+    if (!result.empty()) {
+      result.Append(kSpaceCharacter);
     }
-    if (!base::ValuesEquivalent(&toggle_root_item.Item(0),
-                                &toggle_trigger_item.Item(0))) {
-      return false;
-    }
+    result.Append(getValueName(spacing_trim_id));
   }
-  return true;
+  // When all longhands are initial values, it should be `normal`.
+  DCHECK(!result.empty());
+  return result.ToString();
 }
 
 String StylePropertySerializer::WhiteSpaceValue() const {

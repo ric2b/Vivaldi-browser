@@ -4,570 +4,571 @@
 // private default search engines in first and second position and they
 // must be repeated in the remainder of the list. Search engines will be ordered
 // based on the order of these lists, excluding the first two entries.
-const PrepopulatedEngine* const engines_default[] = {
-    &duckduckgo,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia,
-    &google,
+
+constexpr EngineAndTier engines_default[] = {
+    {SearchEngineTier::kTopEngines, &duckduckgo},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia},
+    {SearchEngineTier::kTopEngines, &google},
 };
 
-const PrepopulatedEngine* const engines_be_BY[] = {
-    &yandex_by,  // default
-    &startpage_com,  // defaultPrivate
-    &yandex_by,
-    &google,
-    &ozon,
-    &wikipedia_be,
-    &ebay,
-    &duckduckgo,
-    &ecosia_by,
-    &startpage_com,
-    &wolfram,
+constexpr EngineAndTier engines_be_BY[] = {
+    {SearchEngineTier::kTopEngines, &yandex_by},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &yandex_by},
+    {SearchEngineTier::kTopEngines, &google},
+    {SearchEngineTier::kTopEngines, &ozon},
+    {SearchEngineTier::kTopEngines, &wikipedia_be},
+    {SearchEngineTier::kTopEngines, &ebay},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia_by},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wolfram},
 };
-const PrepopulatedEngine* const engines_bg_BG[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_bg,
-    &google,
+constexpr EngineAndTier engines_bg_BG[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_bg},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_cs_CZ[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_cs,
-    &google,
+constexpr EngineAndTier engines_cs_CZ[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_cs},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_da_DK[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo_dk,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_da,
-    &google,
+constexpr EngineAndTier engines_da_DK[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo_dk},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_da},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_de_DE[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo_de,
-    &duckduckgo,
-    &ecosia_de,
-    &qwant_de,
-    &you,
-    &startpage_com,
-    &wikipedia_de,
-    &google,
+constexpr EngineAndTier engines_de_DE[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo_de},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia_de},
+    {SearchEngineTier::kTopEngines, &qwant_de},
+    {SearchEngineTier::kTopEngines, &you},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_de},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_de_AT[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo_at,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &google,
-    &wikipedia_de,
+constexpr EngineAndTier engines_de_AT[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo_at},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &google},
+    {SearchEngineTier::kTopEngines, &wikipedia_de},
 };
-const PrepopulatedEngine* const engines_de_CH[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo_ch,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_de,
-    &google,
+constexpr EngineAndTier engines_de_CH[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo_ch},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_de},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_el_GR[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_el,
-    &google,
+constexpr EngineAndTier engines_el_GR[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_el},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_en_CA[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo_ca,
-    &duckduckgo,
-    &ecosia_ca,
-    &qwant_ca,
-    &you,
-    &startpage_com,
-    &google,
-    &wikipedia,
+constexpr EngineAndTier engines_en_CA[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo_ca},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia_ca},
+    {SearchEngineTier::kTopEngines, &qwant_ca},
+    {SearchEngineTier::kTopEngines, &you},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &google},
+    {SearchEngineTier::kTopEngines, &wikipedia},
 };
-const PrepopulatedEngine* const engines_en_GB[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo_uk,
-    &duckduckgo,
-    &ecosia_gb,
-    &qwant_gb,
-    &you,
-    &startpage_com,
-    &wikipedia,
-    &google,
+constexpr EngineAndTier engines_en_GB[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo_uk},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia_gb},
+    {SearchEngineTier::kTopEngines, &qwant_gb},
+    {SearchEngineTier::kTopEngines, &you},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_en_IE[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo_ie,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &google,
-    &wikipedia,
+constexpr EngineAndTier engines_en_IE[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo_ie},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &google},
+    {SearchEngineTier::kTopEngines, &wikipedia},
 };
-const PrepopulatedEngine* const engines_en_IN[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo_in,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &google,
-    &wikipedia,
+constexpr EngineAndTier engines_en_IN[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo_in},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &google},
+    {SearchEngineTier::kTopEngines, &wikipedia},
 };
-const PrepopulatedEngine* const engines_en_PH[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &yahoo_ph,
-    &bing,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &google,
-    &wikipedia,
+constexpr EngineAndTier engines_en_PH[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &yahoo_ph},
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &google},
+    {SearchEngineTier::kTopEngines, &wikipedia},
 };
-const PrepopulatedEngine* const engines_en_SG[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &yahoo_sg,
-    &bing,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &google,
-    &wikipedia,
+constexpr EngineAndTier engines_en_SG[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &yahoo_sg},
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &google},
+    {SearchEngineTier::kTopEngines, &wikipedia},
 };
-const PrepopulatedEngine* const engines_en_US[] = {
-    &bing,  // default
-    &duckduckgo,  // defaultPrivate
-    &bing,
-    &yahoo_us,
-    &duckduckgo,
-    &yelp,
-    &ecosia_us,
-    &qwant_us,
-    &you,
-    &startpage_com,
-    &wikipedia,
-    &google,
+constexpr EngineAndTier engines_en_US[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &duckduckgo},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo_us},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &yelp},
+    {SearchEngineTier::kTopEngines, &ecosia_us},
+    {SearchEngineTier::kTopEngines, &qwant_us},
+    {SearchEngineTier::kTopEngines, &you},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_es_ES[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo_es,
-    &duckduckgo,
-    &ecosia,
-    &qwant_es,
-    &startpage_com,
-    &wikipedia_es,
-    &google,
+constexpr EngineAndTier engines_es_ES[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo_es},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &qwant_es},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_es},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_es_AR[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &yahoo_ar,
-    &bing,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &google,
-    &wikipedia_es,
+constexpr EngineAndTier engines_es_AR[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &yahoo_ar},
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &google},
+    {SearchEngineTier::kTopEngines, &wikipedia_es},
 };
-const PrepopulatedEngine* const engines_es_CL[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &yahoo_cl,
-    &bing,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &google,
-    &wikipedia_es,
+constexpr EngineAndTier engines_es_CL[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &yahoo_cl},
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &google},
+    {SearchEngineTier::kTopEngines, &wikipedia_es},
 };
-const PrepopulatedEngine* const engines_es_CO[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &yahoo_co,
-    &bing,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &google,
-    &wikipedia_es,
+constexpr EngineAndTier engines_es_CO[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &yahoo_co},
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &google},
+    {SearchEngineTier::kTopEngines, &wikipedia_es},
 };
-const PrepopulatedEngine* const engines_es_PE[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &yahoo_pe,
-    &bing,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &google,
-    &wikipedia_es,
+constexpr EngineAndTier engines_es_PE[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &yahoo_pe},
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &google},
+    {SearchEngineTier::kTopEngines, &wikipedia_es},
 };
-const PrepopulatedEngine* const engines_es_MX[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &yahoo_mx,
-    &bing,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &google,
-    &wikipedia_es,
+constexpr EngineAndTier engines_es_MX[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &yahoo_mx},
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &google},
+    {SearchEngineTier::kTopEngines, &wikipedia_es},
 };
-const PrepopulatedEngine* const engines_es_VE[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &yahoo_ve,
-    &bing,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &google,
-    &wikipedia_es,
+constexpr EngineAndTier engines_es_VE[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &yahoo_ve},
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &google},
+    {SearchEngineTier::kTopEngines, &wikipedia_es},
 };
-const PrepopulatedEngine* const engines_fi_FI[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo_fi,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_fi,
-    &google,
+constexpr EngineAndTier engines_fi_FI[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo_fi},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_fi},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_fr_FR[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo_fr,
-    &duckduckgo,
-    &ecosia_fr,
-    &qwant_fr,
-    &startpage_com,
-    &wikipedia_fr,
-    &google,
+constexpr EngineAndTier engines_fr_FR[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo_fr},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia_fr},
+    {SearchEngineTier::kTopEngines, &qwant_fr},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_fr},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_hr_HR[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_hr,
-    &google,
+constexpr EngineAndTier engines_hr_HR[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_hr},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_hu_HU[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_hu,
-    &google,
+constexpr EngineAndTier engines_hu_HU[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_hu},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_id_ID[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo_id,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_id,
-    &google,
+constexpr EngineAndTier engines_id_ID[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo_id},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_id},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_it_IT[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo_it,
-    &duckduckgo,
-    &ecosia,
-    &qwant_it,
-    &startpage_com,
-    &wikipedia_it,
-    &google,
+constexpr EngineAndTier engines_it_IT[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo_it},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &qwant_it},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_it},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_ja_JP[] = {
-    &bing,  // default
-    &duckduckgo,  // defaultPrivate
-    &bing,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_jp,
-    &google,
+constexpr EngineAndTier engines_ja_JP[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &duckduckgo},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_jp},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_ko_KR[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_ko,
-    &google,
+constexpr EngineAndTier engines_ko_KR[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_ko},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_lt_LT[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_lt,
-    &google,
+constexpr EngineAndTier engines_lt_LT[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_lt},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_nb_NO[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo_no,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_no,
-    &google,
+constexpr EngineAndTier engines_nb_NO[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo_no},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_no},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_nn_NO[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo_no,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_nn,
-    &google,
+constexpr EngineAndTier engines_nn_NO[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo_no},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_nn},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_pl_PL[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_pl,
-    &google,
+constexpr EngineAndTier engines_pl_PL[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_pl},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_pt_BR[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo_br,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_pt,
-    &google,
+constexpr EngineAndTier engines_pt_BR[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo_br},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_pt},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_pt_PT[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_pt,
-    &google,
+constexpr EngineAndTier engines_pt_PT[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_pt},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_ro_RO[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_ro,
-    &google,
+constexpr EngineAndTier engines_ro_RO[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_ro},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_ru_RU[] = {
-    &yandex_ru,  // default
-    &duckduckgo,  // defaultPrivate
-    &yandex_ru,
-    &google,
-    &wikipedia_ru,
-    &duckduckgo,
-    &mail_ru,
-    &ecosia,
-    &startpage_com,
-    &wolfram,
+constexpr EngineAndTier engines_ru_RU[] = {
+    {SearchEngineTier::kTopEngines, &yandex_ru},  // default
+    {SearchEngineTier::kTopEngines, &duckduckgo},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &yandex_ru},
+    {SearchEngineTier::kTopEngines, &google},
+    {SearchEngineTier::kTopEngines, &wikipedia_ru},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &mail_ru},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wolfram},
 };
-const PrepopulatedEngine* const engines_sv_SE[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo_se,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_se,
-    &google,
+constexpr EngineAndTier engines_sv_SE[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo_se},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_se},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_sk_SK[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_sk,
-    &google,
+constexpr EngineAndTier engines_sk_SK[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_sk},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_sr_RS[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_sr,
-    &google,
+constexpr EngineAndTier engines_sr_RS[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_sr},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_th_TH[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &yahoo_th,
-    &bing,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &google,
-    &wikipedia_th,
+constexpr EngineAndTier engines_th_TH[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &yahoo_th},
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &google},
+    {SearchEngineTier::kTopEngines, &wikipedia_th},
 };
-const PrepopulatedEngine* const engines_tr_TR[] = {
-    &duckduckgo,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yandex_tr,
-    &google,
-    &amazon,
-    &wikipedia_tr,
-    &ebay,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wolfram,
+constexpr EngineAndTier engines_tr_TR[] = {
+    {SearchEngineTier::kTopEngines, &duckduckgo},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yandex_tr},
+    {SearchEngineTier::kTopEngines, &google},
+    {SearchEngineTier::kTopEngines, &amazon},
+    {SearchEngineTier::kTopEngines, &wikipedia_tr},
+    {SearchEngineTier::kTopEngines, &ebay},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wolfram},
 };
-const PrepopulatedEngine* const engines_uk_UA[] = {
-    &duckduckgo,  // default
-    &startpage_com,  // defaultPrivate
-    &google,
-    &wikipedia_uk,
-    &ebay,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wolfram,
+constexpr EngineAndTier engines_uk_UA[] = {
+    {SearchEngineTier::kTopEngines, &duckduckgo},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &google},
+    {SearchEngineTier::kTopEngines, &wikipedia_uk},
+    {SearchEngineTier::kTopEngines, &ebay},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wolfram},
 };
-const PrepopulatedEngine* const engines_vi_VN[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo_vn,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_vi,
-    &google,
+constexpr EngineAndTier engines_vi_VN[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo_vn},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_vi},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_zh_CN[] = {
-    &bing,  // default
-    &yahoo,  // defaultPrivate
-    &bing,
-    &yahoo,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_zh,
-    &google,
+constexpr EngineAndTier engines_zh_CN[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &yahoo},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_zh},
+    {SearchEngineTier::kTopEngines, &google},
 };
-const PrepopulatedEngine* const engines_zn_HK[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &yahoo_hk,
-    &bing,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &google,
-    &wikipedia_zh,
+constexpr EngineAndTier engines_zn_HK[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &yahoo_hk},
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &google},
+    {SearchEngineTier::kTopEngines, &wikipedia_zh},
 };
-const PrepopulatedEngine* const engines_zh_TW[] = {
-    &bing,  // default
-    &startpage_com,  // defaultPrivate
-    &bing,
-    &yahoo_tw,
-    &duckduckgo,
-    &ecosia,
-    &startpage_com,
-    &wikipedia_zh,
-    &google,
+constexpr EngineAndTier engines_zh_TW[] = {
+    {SearchEngineTier::kTopEngines, &bing},  // default
+    {SearchEngineTier::kTopEngines, &startpage_com},  // defaultPrivate
+    {SearchEngineTier::kTopEngines, &bing},
+    {SearchEngineTier::kTopEngines, &yahoo_tw},
+    {SearchEngineTier::kTopEngines, &duckduckgo},
+    {SearchEngineTier::kTopEngines, &ecosia},
+    {SearchEngineTier::kTopEngines, &startpage_com},
+    {SearchEngineTier::kTopEngines, &wikipedia_zh},
+    {SearchEngineTier::kTopEngines, &google},
 };
 
-const PrepopulatedEngine* const engines_unittests[] = {
-    &google_unittests,
-    &google_unittests,
-    &google_unittests,
-    &bing_unittests,
-    &yahoo_unittests,
+constexpr EngineAndTier engines_unittests[] = {
+    {SearchEngineTier::kTopEngines, &google_unittests},
+    {SearchEngineTier::kTopEngines, &google_unittests},
+    {SearchEngineTier::kTopEngines, &google_unittests},
+    {SearchEngineTier::kTopEngines, &bing_unittests},
+    {SearchEngineTier::kTopEngines, &yahoo_unittests},
 };
 
 // Search engines by country

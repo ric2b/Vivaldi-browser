@@ -5,7 +5,7 @@
 
 #import <UIKit/UIKit.h>
 
-#import "notes/note_node.h"
+#import "components/notes/note_node.h"
 
 @protocol NoteParentFolderViewDelegate
 - (void) didTapParentFolder;

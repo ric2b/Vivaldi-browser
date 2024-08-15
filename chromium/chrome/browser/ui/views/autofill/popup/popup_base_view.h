@@ -17,6 +17,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/ui/autofill/autofill_popup_view_delegate.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/views/autofill/popup/custom_cursor_suppressor.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_base_view.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_row_view.h"
 #include "content/public/browser/web_contents.h"
@@ -82,7 +83,7 @@ class PopupBaseView : public PopupRowView::AccessibilitySelectionDelegate,
   void DoHide();
 
   // Ensure the child views are not rendered beyond the popup border
-  // boundaries. Should be overridden together with CreateBorder.
+  // boundaries.
   void UpdateClipPath();
 
   // Returns the bounds of the containing browser window in screen space.
@@ -95,9 +96,6 @@ class PopupBaseView : public PopupRowView::AccessibilitySelectionDelegate,
   // popup, it hides and thus deletes |this| and returns false. (virtual for
   // testing).
   virtual bool DoUpdateBoundsAndRedrawPopup();
-
-  // Returns the border to be applied to the popup.
-  virtual std::unique_ptr<views::Border> CreateBorder();
 
   // Returns the optimal bounds to place the popup with |preferred_size| and
   // places an arrow on the popup border to point towards |element_bounds|
@@ -157,8 +155,16 @@ class PopupBaseView : public PopupRowView::AccessibilitySelectionDelegate,
   // Ensures that the menu start event is not fired redundantly.
   bool is_ax_menu_start_event_fired_ = false;
 
-  // Responsible for re-enabling custom cursors on popup destruction.
+  // Responsible for re-enabling custom cursors in the triggered tab on popup
+  // destruction.
+  // TODO(crbug.com/1478613): Remove once
+  // `kAutofillPopupMultiWindowCursorSuppression` is removed, since it is
+  // superseded by `custom_cursor_suppressor_`.
   base::ScopedClosureRunner custom_cursor_blocker_;
+
+  // Responsible for blocking (and re-enabling) custom cursors across all
+  // browser windows.
+  CustomCursorSuppressor custom_cursor_suppressor_;
 };
 
 }  // namespace autofill

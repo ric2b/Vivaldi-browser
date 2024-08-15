@@ -215,6 +215,12 @@ bool MenubarAPI::HandleActionById(content::BrowserContext* browser_context,
   return true;
 }
 
+ExtensionFunction::ResponseAction MenubarGetHasWindowsFunction::Run() {
+  return RespondNow(
+    ArgumentList(vivaldi::menubar::GetHasWindows::Results::Create(
+        BrowserList::GetInstance()->size() > 0)));
+}
+
 ExtensionFunction::ResponseAction MenubarSetupFunction::Run() {
   auto params = menubar::Setup::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -231,7 +237,7 @@ ExtensionFunction::ResponseAction MenubarSetupFunction::Run() {
 #if BUILDFLAG(IS_MAC)
   // There may be no windows. Allow a nullptr profile.
   Profile* profile = Profile::FromBrowserContext(browser_context());
-  ::vivaldi::CreateVivaldiMainMenu(profile, &params->items, params->mode,
+  ::vivaldi::CreateVivaldiMainMenu(profile, &params->items,
                                    IDC_VIV_DYNAMIC_MENU_ID_START, tag_counter);
   return RespondNow(NoArguments());
 #else

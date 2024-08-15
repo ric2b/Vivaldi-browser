@@ -37,14 +37,23 @@ namespace {
 class MediaButton;
 }
 
-// Indicates this media notification view will be displayed on which page.
+// Indicates this media notification view will be displayed on which page. These
+// values are persisted to logs. Entries should not be renumbered and numeric
+// values should never be reused. Keep them in sync with
+// tools/metrics/histograms/enums.xml.
 enum class MediaDisplayPage {
+  // Default value.
+  kUnknown = 0,
   // Media will be displayed on the Quick Settings media view page.
-  kQuickSettingsMediaView = 0,
+  kQuickSettingsMediaView = 1,
   // Media will be displayed on the Quick Settings media detailed view page.
-  kQuickSettingsMediaDetailedView = 1,
-  // Media will be displayed on the lock screen view.
-  kLockScreenMediaView = 2,
+  kQuickSettingsMediaDetailedView = 2,
+  // Media will be displayed on the system shelf media detailed view page.
+  kSystemShelfMediaDetailedView = 3,
+  // Media will be displayed on the lock screen media view page.
+  kLockScreenMediaView = 4,
+  // Special enumerator that must share the highest enumerator value.
+  kMaxValue = kLockScreenMediaView,
 };
 
 // CrOS implementation of media notification view.
@@ -82,9 +91,10 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaNotificationViewAshImpl
   void UpdateWithMediaArtwork(const gfx::ImageSkia& image) override;
   void UpdateWithFavicon(const gfx::ImageSkia& icon) override {}
   void UpdateWithVectorIcon(const gfx::VectorIcon* vector_icon) override {}
-  void UpdateDeviceSelectorAvailability(bool availability) override {}
   void UpdateWithMuteStatus(bool mute) override {}
   void UpdateWithVolume(float volume) override {}
+  void UpdateDeviceSelectorVisibility(bool visible) override {}
+  void UpdateDeviceSelectorAvailability(bool has_devices) override;
 
   // views::View:
   void AddedToWidget() override;
@@ -159,8 +169,6 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaNotificationViewAshImpl
   raw_ptr<views::ImageView> artwork_view_ = nullptr;
   raw_ptr<views::Label> source_label_ = nullptr;
   raw_ptr<views::Label> artist_label_ = nullptr;
-
-  raw_ptr<views::BoxLayoutView> title_row_ = nullptr;
   raw_ptr<views::Label> title_label_ = nullptr;
   raw_ptr<views::ImageView> chevron_icon_ = nullptr;
 

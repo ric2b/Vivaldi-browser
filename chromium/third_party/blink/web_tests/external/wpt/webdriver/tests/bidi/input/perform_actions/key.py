@@ -1,5 +1,6 @@
 import pytest
 
+from webdriver.bidi.error import NoSuchFrameException
 from webdriver.bidi.modules.input import Actions
 from webdriver.bidi.modules.script import ContextTarget
 
@@ -8,6 +9,14 @@ from .. import get_keys_value
 from . import get_shadow_root_from_test_page
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_invalid_browsing_context(bidi_session):
+    actions = Actions()
+    actions.add_key()
+
+    with pytest.raises(NoSuchFrameException):
+        await bidi_session.input.perform_actions(actions=actions, context="foo")
 
 
 async def test_key_backspace(bidi_session, top_context, setup_key_test):
@@ -62,7 +71,7 @@ async def test_key_shadow_tree(bidi_session, top_context, get_test_page, mode, n
 
     shadow_root = await get_shadow_root_from_test_page(bidi_session, top_context, nested)
     input_el = await bidi_session.script.call_function(
-        function_declaration=f"""shadowRoot => {{
+        function_declaration="""shadowRoot => {{
             const input = shadowRoot.querySelector('input');
             input.focus();
             return input;

@@ -8,6 +8,7 @@
 #include "chrome/browser/apps/app_service/app_registry_cache_waiter.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/ash/crosapi/ash_requires_lacros_browsertestbase.h"
 #include "chrome/browser/ash/crosapi/browser_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
@@ -27,19 +28,18 @@
 
 namespace apps {
 
-class WebAppPreloadInstallerLacrosBrowserTest : public InProcessBrowserTest {
+class WebAppPreloadInstallerLacrosBrowserTest
+    : public crosapi::AshRequiresLacrosBrowserTestBase {
  public:
-  void SetUpInProcessBrowserTestFixture() override {
-    if (ash_starter_.HasLacrosArgument()) {
-      ASSERT_TRUE(ash_starter_.PrepareEnvironmentForLacros());
+  void SetUp() override {
+    if (!HasLacrosArgument()) {
+      GTEST_SKIP() << "Skipping test class because Lacros is not enabled";
     }
+    AshRequiresLacrosBrowserTestBase::SetUp();
   }
 
   void SetUpOnMainThread() override {
-    InProcessBrowserTest::SetUpOnMainThread();
-    if (ash_starter_.HasLacrosArgument()) {
-      ash_starter_.StartLacros(this);
-    }
+    AshRequiresLacrosBrowserTestBase::SetUpOnMainThread();
 
     https_server_.RegisterRequestHandler(base::BindRepeating(
         &WebAppPreloadInstallerLacrosBrowserTest::HandleRequest,
@@ -77,17 +77,12 @@ class WebAppPreloadInstallerLacrosBrowserTest : public InProcessBrowserTest {
 
   void SetManifestResponse(std::string manifest) { manifest_ = manifest; }
 
-  Profile* profile() { return browser()->profile(); }
-
   net::EmbeddedTestServer* https_server() { return &https_server_; }
 
   AppRegistryCache& app_registry_cache() {
-    auto* proxy = AppServiceProxyFactory::GetForProfile(browser()->profile());
+    auto* proxy = AppServiceProxyFactory::GetForProfile(GetAshProfile());
     return proxy->AppRegistryCache();
   }
-
- protected:
-  test::AshBrowserTestStarter ash_starter_;
 
  private:
   net::EmbeddedTestServer https_server_;
@@ -95,9 +90,6 @@ class WebAppPreloadInstallerLacrosBrowserTest : public InProcessBrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(WebAppPreloadInstallerLacrosBrowserTest, InstallOemApp) {
-  if (!ash_starter_.HasLacrosArgument()) {
-    return;
-  }
   // Assert Lacros is running.
   ASSERT_TRUE(crosapi::BrowserManager::Get()->IsRunning());
 
@@ -124,7 +116,7 @@ IN_PROC_BROWSER_TEST_F(WebAppPreloadInstallerLacrosBrowserTest, InstallOemApp) {
   base::test::TestFuture<bool> result;
 
   // Install the app.
-  WebAppPreloadInstaller installer(profile());
+  WebAppPreloadInstaller installer(GetAshProfile());
   installer.InstallAllApps({PreloadAppDefinition(app)}, result.GetCallback());
   ASSERT_TRUE(result.Get());
 
@@ -133,7 +125,7 @@ IN_PROC_BROWSER_TEST_F(WebAppPreloadInstallerLacrosBrowserTest, InstallOemApp) {
       absl::nullopt, GURL("https://www.example.com/index.html"));
 
   // Wait for update to be registered with the app registry cache.
-  AppReadinessWaiter(profile(), app_id).Await();
+  AppReadinessWaiter(GetAshProfile(), app_id).Await();
   bool found =
       app_registry_cache().ForOneApp(app_id, [](const AppUpdate& update) {
         EXPECT_EQ(update.Name(), "Example App");
@@ -146,6 +138,47 @@ IN_PROC_BROWSER_TEST_F(WebAppPreloadInstallerLacrosBrowserTest, InstallOemApp) {
   histograms.ExpectBucketCount(
       "AppPreloadService.WebAppInstall.CommandResultCode",
       webapps::InstallResultCode::kSuccessNewInstall, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(WebAppPreloadInstallerLacrosBrowserTest,
+                       InstallDefaultApp) {
+  ASSERT_TRUE(crosapi::BrowserManager::Get()->IsRunning());
+
+  proto::AppPreloadListResponse_App app;
+  app.set_name("Example App");
+  app.set_package_id("web:https://www.example.com/index.html");
+  app.set_install_reason(proto::AppPreloadListResponse::INSTALL_REASON_DEFAULT);
+
+  auto* web_extras = app.mutable_web_extras();
+  web_extras->set_original_manifest_url(
+      "https://www.example.com/manifest.json");
+  web_extras->set_manifest_url(https_server()->GetURL("/manifest.json").spec());
+
+  constexpr char kManifestTemplate[] = R"({
+    "name": "Example App",
+    "start_url": "/index.html",
+    "scope": "/",
+    "icons": $1
+  })";
+
+  SetManifestResponse(AddIconToManifest(kManifestTemplate));
+
+  // Install the app.
+  base::test::TestFuture<bool> result;
+  WebAppPreloadInstaller installer(GetAshProfile());
+  installer.InstallAllApps({PreloadAppDefinition(app)}, result.GetCallback());
+  ASSERT_TRUE(result.Get());
+
+  // Wait for update to be registered with the app registry cache.
+  auto app_id = web_app::GenerateAppId(
+      absl::nullopt, GURL("https://www.example.com/index.html"));
+  AppReadinessWaiter(GetAshProfile(), app_id).Await();
+  bool found =
+      app_registry_cache().ForOneApp(app_id, [](const AppUpdate& update) {
+        EXPECT_EQ(update.Name(), "Example App");
+        EXPECT_EQ(update.InstallReason(), InstallReason::kDefault);
+      });
+  ASSERT_TRUE(found);
 }
 
 }  // namespace apps

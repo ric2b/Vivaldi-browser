@@ -21,6 +21,7 @@ gfx::Rect CORE_EXPORT FindImageElementRect(blink::WebElement element);
 std::string CORE_EXPORT ElementPath(blink::WebElement& element);
 
 bool CORE_EXPORT IsVisible(blink::WebElement element);
+bool CORE_EXPORT IsRadioButton(blink::Element* element);
 
 blink::ScrollableArea CORE_EXPORT *ScrollableAreaFor(const blink::Node* node);
 

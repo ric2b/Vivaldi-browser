@@ -17,11 +17,12 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import org.jni_zero.CalledByNative;
+import org.jni_zero.NativeMethods;
+
 import org.chromium.base.Callback;
 import org.chromium.base.ObserverList;
 import org.chromium.base.SysUtils;
-import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.blink_public.input.SelectionGranularity;
 import org.chromium.cc.input.BrowserControlsState;
@@ -1593,12 +1594,13 @@ public class ContextualSearchManager
             @Override
             public void gatherSurroundingText() {
                 if (mContext != null) mContext.destroy();
-                mContext = new ContextualSearchContext() {
-                    @Override
-                    void onSelectionChanged() {
-                        notifyObserversOfContextSelectionChanged();
-                    }
-                };
+                mContext =
+                        new ContextualSearchContext() {
+                            @Override
+                            void onSelectionChanged() {
+                                notifyObserversOfContextSelectionChanged();
+                            }
+                        };
 
                 boolean isResolvingGesture = mPolicy.isResolvingGesture();
                 if (isResolvingGesture && mPolicy.shouldPreviousGestureResolve()) {
@@ -1608,9 +1610,12 @@ public class ContextualSearchManager
                 if (webContents != null) {
                     mInternalStateController.notifyStartingWorkOn(
                             InternalState.GATHERING_SURROUNDINGS);
-                    ContextualSearchManagerJni.get().gatherSurroundingText(
-                            mNativeContextualSearchManagerPtr, ContextualSearchManager.this,
-                            mContext, webContents);
+                    ContextualSearchManagerJni.get()
+                            .gatherSurroundingText(
+                                    mNativeContextualSearchManagerPtr,
+                                    ContextualSearchManager.this,
+                                    mContext,
+                                    webContents);
                 } else {
                     mInternalStateController.reset(StateChangeReason.UNKNOWN);
                 }
@@ -1645,9 +1650,13 @@ public class ContextualSearchManager
                     mInternalStateController.notifyStartingWorkOn(
                             InternalState.START_SHOWING_TAP_UI);
                     mSelectAroundCaretCounter++;
-                    baseWebContents.selectAroundCaret(SelectionGranularity.WORD,
-                            /*shouldShowHandle=*/false,
-                            /*shouldShowContextMenu=*/false);
+                    baseWebContents.selectAroundCaret(
+                            SelectionGranularity.WORD,
+                            /* shouldShowHandle= */ false,
+                            /* shouldShowContextMenu= */ false,
+                            mContext.getSelectionStartOffset(),
+                            mContext.getSelectionEndOffset(),
+                            mContext.getSurroundingText().length());
                     // Let the policy know that a valid tap gesture has been received.
                     mPolicy.registerTap();
                 } else {
@@ -1658,43 +1667,51 @@ public class ContextualSearchManager
             /**
              * Waits for possible Tap gesture that's near enough to the previous tap to be
              * considered a "re-tap". We've done some work on the previous Tap and we just saw the
-             * selection get cleared (probably due to a Tap that may or may not be valid).
-             * If it's invalid we'll want to hide the UI.  If it's valid we'll want to just update
-             * the UI rather than having the Bar hide and re-show.
+             * selection get cleared (probably due to a Tap that may or may not be valid). If it's
+             * invalid we'll want to hide the UI. If it's valid we'll want to just update the UI
+             * rather than having the Bar hide and re-show.
              */
             @Override
             public void waitForPossibleTapNearPrevious() {
                 mInternalStateController.notifyStartingWorkOn(
                         InternalState.WAITING_FOR_POSSIBLE_TAP_NEAR_PREVIOUS);
-                new Handler().postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        // We may have been destroyed.
-                        if (mSearchPanel != null) mSearchPanel.hideCaption();
-                        mInternalStateController.notifyFinishedWorkOn(
-                                InternalState.WAITING_FOR_POSSIBLE_TAP_NEAR_PREVIOUS);
-                    }
-                }, TAP_NEAR_PREVIOUS_DETECTION_DELAY_MS);
+                new Handler()
+                        .postDelayed(
+                                new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        // We may have been destroyed.
+                                        if (mSearchPanel != null) mSearchPanel.hideCaption();
+                                        mInternalStateController.notifyFinishedWorkOn(
+                                                InternalState
+                                                        .WAITING_FOR_POSSIBLE_TAP_NEAR_PREVIOUS);
+                                    }
+                                },
+                                TAP_NEAR_PREVIOUS_DETECTION_DELAY_MS);
             }
 
             /**
-             * Waits for possible Tap gesture that's on a previously established tap-selection.
-             * If the current Tap was on the previous tap-selection then this selection will become
-             * a Long-press selection and we'll recognize that gesture and start processing it.
-             * If that doesn't happen within our time window (which is the common case) then we'll
+             * Waits for possible Tap gesture that's on a previously established tap-selection. If
+             * the current Tap was on the previous tap-selection then this selection will become a
+             * Long-press selection and we'll recognize that gesture and start processing it. If
+             * that doesn't happen within our time window (which is the common case) then we'll
              * advance to the next state in normal Tap processing.
              */
             @Override
             public void waitForPossibleTapOnTapSelection() {
                 mInternalStateController.notifyStartingWorkOn(
                         InternalState.WAITING_FOR_POSSIBLE_TAP_ON_TAP_SELECTION);
-                new Handler().postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        mInternalStateController.notifyFinishedWorkOn(
-                                InternalState.WAITING_FOR_POSSIBLE_TAP_ON_TAP_SELECTION);
-                    }
-                }, TAP_ON_TAP_SELECTION_DELAY_MS);
+                new Handler()
+                        .postDelayed(
+                                new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        mInternalStateController.notifyFinishedWorkOn(
+                                                InternalState
+                                                        .WAITING_FOR_POSSIBLE_TAP_ON_TAP_SELECTION);
+                                    }
+                                },
+                                TAP_ON_TAP_SELECTION_DELAY_MS);
             }
 
             /** Starts a Resolve request to our server for the best Search Term. */
@@ -1731,8 +1748,10 @@ public class ContextualSearchManager
                 } else {
                     mInternalStateController.notifyStartingWorkOn(InternalState.SHOW_RESOLVING_UI);
                     boolean isTap = mSelectionController.getSelectionType() == SelectionType.TAP;
-                    showContextualSearch(isTap ? StateChangeReason.TEXT_SELECT_TAP
-                                               : StateChangeReason.TEXT_SELECT_LONG_PRESS);
+                    showContextualSearch(
+                            isTap
+                                    ? StateChangeReason.TEXT_SELECT_TAP
+                                    : StateChangeReason.TEXT_SELECT_LONG_PRESS);
                     mInternalStateController.notifyFinishedWorkOn(InternalState.SHOW_RESOLVING_UI);
                 }
             }

@@ -32,6 +32,7 @@
 #include "chrome/browser/ip_protection/ip_protection_config_provider.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_settings_factory.h"
+#include "chrome/browser/privacy_sandbox/tracking_protection_settings_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/sct_reporting_service.h"
 #include "chrome/browser/ssl/sct_reporting_service_factory.h"
@@ -41,9 +42,11 @@
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/pref_names.h"
 #include "components/certificate_transparency/pref_names.h"
+#include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/content_settings/core/common/content_settings_utils.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/embedder_support/pref_names.h"
 #include "components/embedder_support/switches.h"
@@ -108,10 +111,6 @@
 #if BUILDFLAG(IS_MAC)
 #include "net/ssl/client_cert_store_mac.h"
 #endif  // BUILDFLAG(IS_MAC)
-
-#if BUILDFLAG(TRIAL_COMPARISON_CERT_VERIFIER_SUPPORTED)
-#include "chrome/browser/net/trial_comparison_cert_verifier_controller.h"
-#endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/common/constants.h"
@@ -183,11 +182,11 @@ bool IsAmbientAuthAllowedForProfile(Profile* profile) {
           prefs::kAmbientAuthenticationInPrivateModesEnabled));
 
   if (profile->IsGuestSession()) {
-    return type == net::AmbientAuthAllowedProfileTypes::GUEST_AND_REGULAR ||
-           type == net::AmbientAuthAllowedProfileTypes::ALL;
+    return type == net::AmbientAuthAllowedProfileTypes::kGuestAndRegular ||
+           type == net::AmbientAuthAllowedProfileTypes::kAll;
   } else if (profile->IsIncognitoProfile()) {
-    return type == net::AmbientAuthAllowedProfileTypes::INCOGNITO_AND_REGULAR ||
-           type == net::AmbientAuthAllowedProfileTypes::ALL;
+    return type == net::AmbientAuthAllowedProfileTypes::kIncognitoAndRegular ||
+           type == net::AmbientAuthAllowedProfileTypes::kAll;
   }
 
   // Profile type not yet supported.
@@ -209,58 +208,6 @@ void UpdateAntiAbuseSettings(Profile* profile) {
       content_setting));
 }
 
-void UpdateCookieSettings(Profile* profile) {
-  ContentSettingsForOneType settings =
-      HostContentSettingsMapFactory::GetForProfile(profile)
-          ->GetSettingsForOneType(ContentSettingsType::COOKIES);
-  profile->ForEachLoadedStoragePartition(base::BindRepeating(
-      [](ContentSettingsForOneType settings,
-         content::StoragePartition* storage_partition) {
-        storage_partition->GetCookieManagerForBrowserProcess()
-            ->SetContentSettings(settings);
-      },
-      settings));
-}
-
-void UpdateLegacyCookieSettings(Profile* profile) {
-  ContentSettingsForOneType settings =
-      HostContentSettingsMapFactory::GetForProfile(profile)
-          ->GetSettingsForOneType(ContentSettingsType::LEGACY_COOKIE_ACCESS);
-  profile->ForEachLoadedStoragePartition(base::BindRepeating(
-      [](ContentSettingsForOneType settings,
-         content::StoragePartition* storage_partition) {
-        storage_partition->GetCookieManagerForBrowserProcess()
-            ->SetContentSettingsForLegacyCookieAccess(settings);
-      },
-      settings));
-}
-
-void Update3pcdSettings(Profile* profile) {
-  ContentSettingsForOneType settings =
-      HostContentSettingsMapFactory::GetForProfile(profile)
-          ->GetSettingsForOneType(ContentSettingsType::TPCD_SUPPORT);
-  profile->ForEachLoadedStoragePartition(base::BindRepeating(
-      [](ContentSettingsForOneType settings,
-         content::StoragePartition* storage_partition) {
-        storage_partition->GetCookieManagerForBrowserProcess()
-            ->SetContentSettingsFor3pcd(settings);
-      },
-      settings));
-}
-
-void Update3pcdMetadataGrantsSettings(Profile* profile) {
-  ContentSettingsForOneType settings =
-      HostContentSettingsMapFactory::GetForProfile(profile)
-          ->GetSettingsForOneType(ContentSettingsType::TPCD_METADATA_GRANTS);
-  profile->ForEachLoadedStoragePartition(base::BindRepeating(
-      [](ContentSettingsForOneType settings,
-         content::StoragePartition* storage_partition) {
-        storage_partition->GetCookieManagerForBrowserProcess()
-            ->SetContentSettingsFor3pcdMetadataGrants(settings);
-      },
-      settings));
-}
-
 // `kPermissionStorageAccessAPI` enables feature: Storage Access API with
 // Prompts (https://chromestatus.com/feature/5085655327047680). StorageAccessAPI
 // is considered enabled when either feature is enabled (by different field
@@ -278,43 +225,32 @@ bool TopLevelStorageAccessAPIEnabled() {
              blink::features::kStorageAccessAPIForOriginExtension);
 }
 
-void UpdateStorageAccessSettings(Profile* profile) {
-  if (StorageAccessAPIEnabled()) {
-    ContentSettingsForOneType settings =
-        HostContentSettingsMapFactory::GetForProfile(profile)
-            ->GetSettingsForOneType(ContentSettingsType::STORAGE_ACCESS);
-
-    profile->ForEachLoadedStoragePartition(base::BindRepeating(
-        [](ContentSettingsForOneType settings,
-           content::StoragePartition* storage_partition) {
-          storage_partition->GetCookieManagerForBrowserProcess()
-              ->SetStorageAccessGrantSettings(settings, base::DoNothing());
-        },
-        settings));
+bool IsContentSettingsTypeEnabled(ContentSettingsType type) {
+  switch (type) {
+    case ContentSettingsType::STORAGE_ACCESS:
+      return StorageAccessAPIEnabled();
+    case ContentSettingsType::TOP_LEVEL_STORAGE_ACCESS:
+      return TopLevelStorageAccessAPIEnabled();
+    default:
+      return content_settings::CookieSettings::GetContentSettingsTypes()
+          .contains(type);
   }
 }
 
-void UpdateAllStorageAccessSettings(Profile* profile) {
-  if (TopLevelStorageAccessAPIEnabled()) {
-    ContentSettingsForOneType top_level_settings =
-        HostContentSettingsMapFactory::GetForProfile(profile)
-            ->GetSettingsForOneType(
-                ContentSettingsType::TOP_LEVEL_STORAGE_ACCESS);
-    ContentSettingsForOneType storage_access_settings =
-        HostContentSettingsMapFactory::GetForProfile(profile)
-            ->GetSettingsForOneType(ContentSettingsType::STORAGE_ACCESS);
-
-    profile->ForEachLoadedStoragePartition(base::BindRepeating(
-        [](ContentSettingsForOneType storage_access_settings,
-           ContentSettingsForOneType top_level_settings,
-           content::StoragePartition* storage_partition) {
-          storage_partition->GetCookieManagerForBrowserProcess()
-              ->SetAllStorageAccessSettings(storage_access_settings,
-                                            top_level_settings,
-                                            base::DoNothing());
-        },
-        storage_access_settings, top_level_settings));
+void UpdateCookieSettings(Profile* profile, ContentSettingsType type) {
+  if (!IsContentSettingsTypeEnabled(type)) {
+    return;
   }
+  ContentSettingsForOneType settings =
+      HostContentSettingsMapFactory::GetForProfile(profile)
+          ->GetSettingsForOneType(type);
+  profile->ForEachLoadedStoragePartition(base::BindRepeating(
+      [](ContentSettingsType type, const ContentSettingsForOneType& settings,
+         content::StoragePartition* storage_partition) {
+        storage_partition->GetCookieManagerForBrowserProcess()
+            ->SetContentSettings(type, settings, base::NullCallback());
+      },
+      type, std::move(settings)));
 }
 
 }  // namespace
@@ -349,10 +285,6 @@ ProfileNetworkContextService::ProfileNetworkContextService(Profile* profile)
 
   // When any of the following CT preferences change, we schedule an update
   // to aggregate the actual update using a |ct_policy_update_timer_|.
-  pref_change_registrar_.Add(
-      certificate_transparency::prefs::kCTRequiredHosts,
-      base::BindRepeating(&ProfileNetworkContextService::ScheduleUpdateCTPolicy,
-                          base::Unretained(this)));
   pref_change_registrar_.Add(
       certificate_transparency::prefs::kCTExcludedHosts,
       base::BindRepeating(&ProfileNetworkContextService::ScheduleUpdateCTPolicy,
@@ -431,9 +363,8 @@ void ProfileNetworkContextService::UpdateAdditionalCertificates() {
 
 void ProfileNetworkContextService::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
-  registry->RegisterBooleanPref(
-      embedder_support::kAlternateErrorPagesEnabled, true,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterBooleanPref(embedder_support::kAlternateErrorPagesEnabled,
+                                true);
   registry->RegisterBooleanPref(prefs::kQuicAllowed, true);
   registry->RegisterBooleanPref(prefs::kGloballyScopeHTTPAuthCacheEnabled,
                                 false);
@@ -445,7 +376,7 @@ void ProfileNetworkContextService::RegisterLocalStatePrefs(
     PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(
       prefs::kAmbientAuthenticationInPrivateModesEnabled,
-      static_cast<int>(net::AmbientAuthAllowedProfileTypes::REGULAR_ONLY));
+      static_cast<int>(net::AmbientAuthAllowedProfileTypes::kRegularOnly));
 
   // For information about whether to reset the HTTP Cache or not, defaults
   // to the empty string, which does not prompt a reset.
@@ -482,6 +413,28 @@ void ProfileNetworkContextService::OnThirdPartyCookieBlockingChanged(
             ->BlockThirdPartyCookies(block_third_party_cookies);
       },
       block_third_party_cookies));
+}
+
+void ProfileNetworkContextService::OnMitigationsEnabledFor3pcdChanged(
+    bool enable) {
+  profile_->ForEachLoadedStoragePartition(base::BindRepeating(
+      [](bool enable, content::StoragePartition* storage_partition) {
+        storage_partition->GetCookieManagerForBrowserProcess()
+            ->SetMitigationsEnabledFor3pcd(enable);
+      },
+      enable));
+}
+
+void ProfileNetworkContextService::OnTrackingProtectionEnabledFor3pcdChanged(
+    bool enable) {
+  profile_->ForEachLoadedStoragePartition(base::BindRepeating(
+      [](bool tracking_protection_3pcb_enabled,
+         content::StoragePartition* storage_partition) {
+        storage_partition->GetCookieManagerForBrowserProcess()
+            ->SetTrackingProtectionEnabledFor3pcd(
+                tracking_protection_3pcb_enabled);
+      },
+      enable));
 }
 
 void ProfileNetworkContextService::OnTruncatedCookieBlockingChanged() {
@@ -534,8 +487,6 @@ void ProfileNetworkContextService::UpdateReferrersEnabled() {
 
 network::mojom::CTPolicyPtr ProfileNetworkContextService::GetCTPolicy() {
   auto* prefs = profile_->GetPrefs();
-  const base::Value::List& ct_required =
-      prefs->GetList(certificate_transparency::prefs::kCTRequiredHosts);
   const base::Value::List& ct_excluded =
       prefs->GetList(certificate_transparency::prefs::kCTExcludedHosts);
   const base::Value::List& ct_excluded_spkis =
@@ -543,14 +494,13 @@ network::mojom::CTPolicyPtr ProfileNetworkContextService::GetCTPolicy() {
   const base::Value::List& ct_excluded_legacy_spkis =
       prefs->GetList(certificate_transparency::prefs::kCTExcludedLegacySPKIs);
 
-  std::vector<std::string> required(TranslateStringArray(ct_required));
   std::vector<std::string> excluded(TranslateStringArray(ct_excluded));
   std::vector<std::string> excluded_spkis(
       TranslateStringArray(ct_excluded_spkis));
   std::vector<std::string> excluded_legacy_spkis(
       TranslateStringArray(ct_excluded_legacy_spkis));
 
-  return network::mojom::CTPolicy::New(std::move(required), std::move(excluded),
+  return network::mojom::CTPolicy::New(std::move(excluded),
                                        std::move(excluded_spkis),
                                        std::move(excluded_legacy_spkis));
 }
@@ -640,31 +590,13 @@ ProfileNetworkContextService::CreateCookieManagerParams(
 
   HostContentSettingsMap* host_content_settings_map =
       HostContentSettingsMapFactory::GetForProfile(profile);
-  out->settings = host_content_settings_map->GetSettingsForOneType(
-      ContentSettingsType::COOKIES);
-
-  out->settings_for_legacy_cookie_access =
-      host_content_settings_map->GetSettingsForOneType(
-          ContentSettingsType::LEGACY_COOKIE_ACCESS);
-
-  out->settings_for_3pcd = host_content_settings_map->GetSettingsForOneType(
-      ContentSettingsType::TPCD_SUPPORT);
-
-  out->settings_for_3pcd_metadata_grants =
-      host_content_settings_map->GetSettingsForOneType(
-          ContentSettingsType::TPCD_METADATA_GRANTS);
-
-  if (StorageAccessAPIEnabled()) {
-    out->settings_for_storage_access =
-        host_content_settings_map->GetSettingsForOneType(
-            ContentSettingsType::STORAGE_ACCESS);
-  }
-
-  // TODO(crbug.com/1385156): Separate the two flags entirely.
-  if (TopLevelStorageAccessAPIEnabled()) {
-    out->settings_for_top_level_storage_access =
-        host_content_settings_map->GetSettingsForOneType(
-            ContentSettingsType::TOP_LEVEL_STORAGE_ACCESS);
+  for (auto type :
+       content_settings::CookieSettings::GetContentSettingsTypes()) {
+    if (!IsContentSettingsTypeEnabled(type)) {
+      continue;
+    }
+    out->content_settings[type] =
+        host_content_settings_map->GetSettingsForOneType(type);
   }
 
   out->cookie_access_delegate_type =
@@ -672,6 +604,12 @@ ProfileNetworkContextService::CreateCookieManagerParams(
 
   out->block_truncated_cookies =
       profile->GetPrefs()->GetBoolean(prefs::kBlockTruncatedCookies);
+
+  out->mitigations_enabled_for_3pcd =
+      cookie_settings.MitigationsEnabledFor3pcd();
+
+  out->tracking_protection_enabled_for_3pcd =
+      cookie_settings.TrackingProtectionEnabledFor3pcd();
 
   return out;
 }
@@ -864,7 +802,9 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
       ->ConfigureDefaultNetworkContextParams(network_context_params);
 
   network_context_params->enable_zstd =
-      base::FeatureList::IsEnabled(net::features::kZstdContentEncoding);
+      base::FeatureList::IsEnabled(net::features::kZstdContentEncoding) &&
+      g_browser_process->local_state()->GetBoolean(
+          prefs::kZstdContentEncodingEnabled);
   network_context_params->accept_language = ComputeAcceptLanguage();
   network_context_params->enable_referrers = enable_referrers_.GetValue();
 
@@ -982,35 +922,6 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
 
   network_context_params->ct_policy = GetCTPolicy();
 
-#if BUILDFLAG(TRIAL_COMPARISON_CERT_VERIFIER_SUPPORTED)
-  DCHECK(cert_verifier_creation_params);
-  if (!in_memory &&
-      TrialComparisonCertVerifierController::MaybeAllowedForProfile(profile_)) {
-    mojo::PendingRemote<
-        cert_verifier::mojom::TrialComparisonCertVerifierConfigClient>
-        config_client;
-    auto config_client_receiver =
-        config_client.InitWithNewPipeAndPassReceiver();
-
-    cert_verifier_creation_params->trial_comparison_cert_verifier_params =
-        cert_verifier::mojom::TrialComparisonCertVerifierParams::New();
-
-    if (!trial_comparison_cert_verifier_controller_) {
-      trial_comparison_cert_verifier_controller_ =
-          std::make_unique<TrialComparisonCertVerifierController>(profile_);
-    }
-    trial_comparison_cert_verifier_controller_->AddClient(
-        std::move(config_client),
-        cert_verifier_creation_params->trial_comparison_cert_verifier_params
-            ->report_client.InitWithNewPipeAndPassReceiver());
-    cert_verifier_creation_params->trial_comparison_cert_verifier_params
-        ->initial_allowed =
-        trial_comparison_cert_verifier_controller_->IsAllowed();
-    cert_verifier_creation_params->trial_comparison_cert_verifier_params
-        ->config_client_receiver = std::move(config_client_receiver);
-  }
-#endif
-
   if (domain_reliability::ShouldCreateService()) {
     network_context_params->enable_domain_reliability = true;
     network_context_params->domain_reliability_upload_reporter =
@@ -1097,8 +1008,8 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
   network_context_params->first_party_sets_access_delegate_params =
       network::mojom::FirstPartySetsAccessDelegateParams::New();
   network_context_params->first_party_sets_access_delegate_params->enabled =
-      profile_->GetPrefs()->GetBoolean(
-          prefs::kPrivacySandboxFirstPartySetsEnabled);
+      PrivacySandboxSettingsFactory::GetForProfile(profile_)
+          ->AreRelatedWebsiteSetsEnabled();
 
   mojo::Remote<network::mojom::FirstPartySetsAccessDelegate>
       fps_access_delegate_remote;
@@ -1122,6 +1033,18 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
         network_context_params->ip_protection_config_getter
             .InitWithNewPipeAndPassReceiver());
   }
+
+  network_context_params->afp_block_list_experiment_enabled =
+      (base::FeatureList::IsEnabled(
+           features::
+               kEnableNetworkServiceResourceBlockListIfThirdPartyCookiesBlocked) &&
+       cookie_settings_->ShouldBlockThirdPartyCookies()) ||
+      (!profile_->IsOffTheRecord() &&
+       base::FeatureList::IsEnabled(
+           features::kEnableNetworkServiceResourceBlockList)) ||
+      (profile_->IsOffTheRecord() &&
+       base::FeatureList::IsEnabled(
+           features::kEnableNetworkServiceResourceBlockListInOtrSessions));
 }
 
 base::FilePath ProfileNetworkContextService::GetPartitionPath(
@@ -1140,33 +1063,19 @@ void ProfileNetworkContextService::OnContentSettingChanged(
     case ContentSettingsType::ANTI_ABUSE:
       UpdateAntiAbuseSettings(profile_);
       break;
-    case ContentSettingsType::COOKIES:
-      UpdateCookieSettings(profile_);
-      break;
-    case ContentSettingsType::LEGACY_COOKIE_ACCESS:
-      UpdateLegacyCookieSettings(profile_);
-      break;
-    case ContentSettingsType::TPCD_SUPPORT:
-      Update3pcdSettings(profile_);
-      break;
-    case ContentSettingsType::TPCD_METADATA_GRANTS:
-      Update3pcdMetadataGrantsSettings(profile_);
-      break;
-    case ContentSettingsType::STORAGE_ACCESS:
-      UpdateStorageAccessSettings(profile_);
-      break;
-    case ContentSettingsType::TOP_LEVEL_STORAGE_ACCESS:
-      UpdateAllStorageAccessSettings(profile_);
-      break;
     case ContentSettingsType::DEFAULT:
       UpdateAntiAbuseSettings(profile_);
-      UpdateCookieSettings(profile_);
-      UpdateLegacyCookieSettings(profile_);
-      Update3pcdSettings(profile_);
-      Update3pcdMetadataGrantsSettings(profile_);
-      UpdateAllStorageAccessSettings(profile_);
+      for (auto type :
+           content_settings::CookieSettings::GetContentSettingsTypes()) {
+        UpdateCookieSettings(profile_, type);
+      }
       break;
     default:
+      if (content_settings::CookieSettings::GetContentSettingsTypes().contains(
+              content_type)) {
+        UpdateCookieSettings(profile_, content_type);
+        return;
+      }
       return;
   }
 }

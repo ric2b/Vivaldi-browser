@@ -6,17 +6,18 @@
 
 #include <math.h>
 
+#include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/layout/anchor_position_scroll_data.h"
 #include "third_party/blink/renderer/core/layout/geometry/writing_mode_converter.h"
+#include "third_party/blink/renderer/core/layout/grid/grid_layout_algorithm.h"
+#include "third_party/blink/renderer/core/layout/grid/grid_placement.h"
+#include "third_party/blink/renderer/core/layout/inline/physical_line_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/layout_block.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_inline.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
-#include "third_party/blink/renderer/core/layout/ng/grid/ng_grid_layout_algorithm.h"
-#include "third_party/blink/renderer/core/layout/ng/grid/ng_grid_placement.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_physical_line_box_fragment.h"
+#include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_box_utils.h"
-#include "third_party/blink/renderer/core/layout/ng/layout_ng_view.h"
 #include "third_party/blink/renderer/core/layout/ng/legacy_layout_tree_walking.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_absolute_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_anchor_query_map.h"
@@ -157,6 +158,10 @@ class OOFCandidateStyleIterator {
     Initialize();
   }
 
+  bool UsesFallbackStyle() const {
+    return position_fallback_index_ || HasAutoFallbacks();
+  }
+
   const ComputedStyle& GetStyle() const {
     return auto_anchor_style_ ? *auto_anchor_style_ : *style_;
   }
@@ -203,6 +208,9 @@ class OOFCandidateStyleIterator {
   }
 
  private:
+  bool HasAutoFallbacks() const {
+    return auto_anchor_flippable_in_block_ || auto_anchor_flippable_in_inline_;
+  }
   bool HasNextAutoAnchorFallback() const {
     return auto_anchor_flip_block_ != auto_anchor_flippable_in_block_ ||
            auto_anchor_flip_inline_ != auto_anchor_flippable_in_inline_;
@@ -311,23 +319,9 @@ NGOutOfFlowLayoutPart::NGOutOfFlowLayoutPart(
     const NGBlockNode& container_node,
     const NGConstraintSpace& container_space,
     NGBoxFragmentBuilder* container_builder)
-    : NGOutOfFlowLayoutPart(container_node.IsAbsoluteContainer(),
-                            container_node.IsFixedContainer(),
-                            container_node.IsGrid(),
-                            container_space,
-                            container_builder,
-                            InitialContainingBlockFixedSize(container_node)) {}
-
-NGOutOfFlowLayoutPart::NGOutOfFlowLayoutPart(
-    bool is_absolute_container,
-    bool is_fixed_container,
-    bool is_grid_container,
-    const NGConstraintSpace& container_space,
-    NGBoxFragmentBuilder* container_builder,
-    absl::optional<LogicalSize> initial_containing_block_fixed_size)
     : container_builder_(container_builder),
-      is_absolute_container_(is_absolute_container),
-      is_fixed_container_(is_fixed_container),
+      is_absolute_container_(container_node.IsAbsoluteContainer()),
+      is_fixed_container_(container_node.IsFixedContainer()),
       has_block_fragmentation_(
           InvolvedInBlockFragmentation(*container_builder)) {
   // TODO(almaher): Should we early return here in the case of block
@@ -341,10 +335,11 @@ NGOutOfFlowLayoutPart::NGOutOfFlowLayoutPart(
 
   // Disable first tier cache for grid layouts, as grid allows for out-of-flow
   // items to be placed in grid areas, which is complex to maintain a cache for.
-  const NGBoxStrut border_scrollbar =
+  const BoxStrut border_scrollbar =
       container_builder->Borders() + container_builder->Scrollbar();
   allow_first_tier_oof_cache_ = border_scrollbar.IsEmpty() &&
-                                !is_grid_container && !has_block_fragmentation_;
+                                !container_node.IsGrid() &&
+                                !has_block_fragmentation_;
   default_containing_block_info_for_absolute_.writing_direction =
       ConstraintSpace().GetWritingDirection();
   default_containing_block_info_for_fixed_.writing_direction =
@@ -353,9 +348,8 @@ NGOutOfFlowLayoutPart::NGOutOfFlowLayoutPart(
     default_containing_block_info_for_absolute_.rect.size =
         ShrinkLogicalSize(container_builder_->Size(), border_scrollbar);
     default_containing_block_info_for_fixed_.rect.size =
-        initial_containing_block_fixed_size
-            ? *initial_containing_block_fixed_size
-            : default_containing_block_info_for_absolute_.rect.size;
+        InitialContainingBlockFixedSize(container_node)
+            .value_or(default_containing_block_info_for_absolute_.rect.size);
   }
   LogicalOffset container_offset = {border_scrollbar.inline_start,
                                     border_scrollbar.block_start};
@@ -482,8 +476,9 @@ NGOutOfFlowLayoutPart::GetContainingBlockInfo(
   const auto& node_style = candidate.Node().Style();
 
   auto IsPlacedWithinGridArea = [&](const auto* containing_block) {
-    if (!containing_block->IsLayoutNGGrid())
+    if (!containing_block->IsLayoutGrid()) {
       return false;
+    }
 
     return !node_style.GridColumnStart().IsAuto() ||
            !node_style.GridColumnEnd().IsAuto() ||
@@ -491,17 +486,16 @@ NGOutOfFlowLayoutPart::GetContainingBlockInfo(
            !node_style.GridRowEnd().IsAuto();
   };
 
-  auto GridAreaContainingBlockInfo = [&](const LayoutNGGrid& containing_grid,
-                                         const NGGridLayoutData& layout_data,
-                                         const NGBoxStrut& borders,
-                                         const LogicalSize& size)
+  auto GridAreaContainingBlockInfo =
+      [&](const LayoutGrid& containing_grid, const GridLayoutData& layout_data,
+          const BoxStrut& borders, const LogicalSize& size)
       -> NGOutOfFlowLayoutPart::ContainingBlockInfo {
     const auto& grid_style = containing_grid.StyleRef();
     GridItemData grid_item(candidate.Node(), grid_style,
                            grid_style.GetFontBaseline());
 
     return {grid_style.GetWritingDirection(),
-            NGGridLayoutAlgorithm::ComputeOutOfFlowItemContainingRect(
+            GridLayoutAlgorithm::ComputeOutOfFlowItemContainingRect(
                 containing_grid.CachedPlacementData(), layout_data, grid_style,
                 borders, size, &grid_item)};
   };
@@ -539,15 +533,14 @@ NGOutOfFlowLayoutPart::GetContainingBlockInfo(
           LayoutBoxUtils::TotalBlockSize(*To<LayoutBox>(containing_block));
 
       // TODO(1079031): This should eventually include scrollbar and border.
-      NGBoxStrut border = To<NGPhysicalBoxFragment>(containing_block_fragment)
-                              ->Borders()
-                              .ConvertToLogical(writing_direction);
+      BoxStrut border = To<NGPhysicalBoxFragment>(containing_block_fragment)
+                            ->Borders()
+                            .ConvertToLogical(writing_direction);
 
       if (is_placed_within_grid_area) {
         return GridAreaContainingBlockInfo(
-            *To<LayoutNGGrid>(containing_block),
-            *To<LayoutNGGrid>(containing_block)->GridLayoutData(), border,
-            size);
+            *To<LayoutGrid>(containing_block),
+            *To<LayoutGrid>(containing_block)->LayoutData(), border, size);
       }
 
       LogicalSize content_size = ShrinkLogicalSize(size, border);
@@ -568,8 +561,8 @@ NGOutOfFlowLayoutPart::GetContainingBlockInfo(
 
   if (IsPlacedWithinGridArea(container_object)) {
     return GridAreaContainingBlockInfo(
-        *To<LayoutNGGrid>(container_object),
-        container_builder_->GridLayoutData(), container_builder_->Borders(),
+        *To<LayoutGrid>(container_object),
+        container_builder_->GetGridLayoutData(), container_builder_->Borders(),
         {container_builder_->InlineSize(),
          container_builder_->FragmentBlockSize()});
   }
@@ -742,7 +735,7 @@ void NGOutOfFlowLayoutPart::AddInlineContainingBlockInfo(
 
     const auto inline_writing_direction =
         inline_cb_style->GetWritingDirection();
-    NGBoxStrut inline_cb_borders = ComputeBordersForInline(*inline_cb_style);
+    BoxStrut inline_cb_borders = ComputeBordersForInline(*inline_cb_style);
     DCHECK_EQ(container_writing_direction.GetWritingMode(),
               inline_writing_direction.GetWritingMode());
 
@@ -843,7 +836,7 @@ void NGOutOfFlowLayoutPart::LayoutCandidates(
     HeapVector<NGLogicalOutOfFlowPositionedNode>* candidates) {
   const WritingModeConverter conainer_converter(
       container_builder_->GetWritingDirection(), container_builder_->Size());
-  const NGFragmentItemsBuilder::ItemWithOffsetList* items = nullptr;
+  const FragmentItemsBuilder::ItemWithOffsetList* items = nullptr;
   absl::optional<NGLogicalAnchorQueryMap> anchor_queries;
   while (candidates->size() > 0) {
     if (!has_block_fragmentation_ ||
@@ -875,7 +868,7 @@ void NGOutOfFlowLayoutPart::LayoutCandidates(
             candidate.inline_container.container &&
             container_builder_->AnchorQuery();
         if (needs_anchor_queries && !anchor_queries) {
-          if (NGFragmentItemsBuilder* items_builder =
+          if (FragmentItemsBuilder* items_builder =
                   container_builder_->ItemsBuilder()) {
             items = &items_builder->Items(conainer_converter.OuterSize());
           }
@@ -890,11 +883,11 @@ void NGOutOfFlowLayoutPart::LayoutCandidates(
             CalculateOffset(node_info, /* is_first_run */ false,
                             needs_anchor_queries ? &*anchor_queries : nullptr)};
         const NGLayoutResult* result = LayoutOOFNode(node_to_layout);
-        NGPhysicalBoxStrut physical_margins =
+        PhysicalBoxStrut physical_margins =
             node_to_layout.offset_info.node_dimensions.margins
                 .ConvertToPhysical(
                     node_info.node.Style().GetWritingDirection());
-        NGBoxStrut margins = physical_margins.ConvertToLogical(
+        BoxStrut margins = physical_margins.ConvertToLogical(
             container_builder_->GetWritingDirection());
         container_builder_->AddResult(
             *result, result->OutOfFlowPositionedOffset(), margins,
@@ -959,9 +952,8 @@ void NGOutOfFlowLayoutPart::LayoutOOFsInMulticol(
   // suitable for holding child fragmentainers while we're cloning them.
   NGConstraintSpace limited_multicol_constraint_space =
       CreateConstraintSpaceForMulticol(multicol);
-  NGFragmentGeometry limited_fragment_geometry =
-      CalculateInitialFragmentGeometry(limited_multicol_constraint_space,
-                                       multicol, /* break_token */ nullptr);
+  FragmentGeometry limited_fragment_geometry = CalculateInitialFragmentGeometry(
+      limited_multicol_constraint_space, multicol, /* break_token */ nullptr);
   NGBoxFragmentBuilder limited_multicol_container_builder =
       CreateContainerBuilderForMulticol(multicol,
                                         limited_multicol_constraint_space,
@@ -990,7 +982,7 @@ void NGOutOfFlowLayoutPart::LayoutOOFsInMulticol(
 
     if (column_inline_progression == kIndefiniteSize) {
       // TODO(almaher): This should eventually include scrollbar, as well.
-      NGBoxStrut border_padding =
+      BoxStrut border_padding =
           multicol_box_fragment->Borders().ConvertToLogical(writing_direction) +
           multicol_box_fragment->Padding().ConvertToLogical(writing_direction);
       LayoutUnit available_inline_size =
@@ -1096,7 +1088,7 @@ void NGOutOfFlowLayoutPart::LayoutOOFsInMulticol(
       // fragment.
       const WritingModeConverter containing_block_converter(
           writing_direction, containing_block_fragment->Size());
-      NGLogicalStaticPosition static_position =
+      LogicalStaticPosition static_position =
           descendant.StaticPosition().ConvertToLogical(
               containing_block_converter);
 
@@ -1185,7 +1177,7 @@ void NGOutOfFlowLayoutPart::LayoutOOFsInMulticol(
     // fragment.
     const NGConstraintSpace& constraint_space =
         old_result->GetConstraintSpaceForCaching();
-    NGFragmentGeometry fragment_geometry = CalculateInitialFragmentGeometry(
+    FragmentGeometry fragment_geometry = CalculateInitialFragmentGeometry(
         constraint_space, multicol, /* break_token */ nullptr);
     NGLayoutAlgorithmParams params(multicol, fragment_geometry,
                                    constraint_space);
@@ -1562,7 +1554,7 @@ NGOutOfFlowLayoutPart::NodeInfo NGOutOfFlowLayoutPart::SetupNodeInfo(
   // be relative to the container's padding-box. Since
   // |container_info.rect.offset| is relative to its fragmentainer in this
   // case, we also need to adjust the offset to account for this.
-  NGLogicalStaticPosition static_position = oof_node.static_position;
+  LogicalStaticPosition static_position = oof_node.static_position;
   static_position.offset -= container_info.rect.offset;
   if (containing_block_fragment) {
     const auto& containing_block_for_fragmentation =
@@ -1572,7 +1564,7 @@ NGOutOfFlowLayoutPart::NodeInfo NGOutOfFlowLayoutPart::SetupNodeInfo(
         containing_block_for_fragmentation.RequiresContentBeforeBreaking();
   }
 
-  NGLogicalStaticPosition oof_static_position =
+  LogicalStaticPosition oof_static_position =
       static_position
           .ConvertToPhysical({ConstraintSpace().GetWritingDirection(),
                               container_physical_content_size})
@@ -1627,8 +1619,7 @@ const NGLayoutResult* NGOutOfFlowLayoutPart::LayoutOOFNode(
     return offset_info.initial_layout_result;
   }
 
-  NGBoxStrut scrollbars_before =
-      ComputeScrollbarsForNonAnonymous(node_info.node);
+  BoxStrut scrollbars_before = ComputeScrollbarsForNonAnonymous(node_info.node);
   const NGLayoutResult* layout_result =
       Layout(oof_node_to_layout, fragmentainer_constraint_space,
              is_last_fragmentainer_so_far);
@@ -1644,7 +1635,7 @@ const NGLayoutResult* NGOutOfFlowLayoutPart::LayoutOOFNode(
     WritingDirectionMode writing_mode_direction =
         node_info.node.Style().GetWritingDirection();
     bool freeze_horizontal = false, freeze_vertical = false;
-    NGBoxStrut scrollbars_after =
+    BoxStrut scrollbars_after =
         ComputeScrollbarsForNonAnonymous(node_info.node);
     bool ignore_first_inline_freeze =
         scrollbars_after.InlineSum() && scrollbars_after.BlockSum();
@@ -1752,7 +1743,8 @@ NGOutOfFlowLayoutPart::OffsetInfo NGOutOfFlowLayoutPart::CalculateOffset(
     }
   }
 
-  if (iter.PositionFallbackIndex()) {
+  if (iter.UsesFallbackStyle()) {
+    offset_info->uses_fallback_style = true;
     offset_info->fallback_index = iter.PositionFallbackIndex();
     offset_info->non_overflowing_ranges = std::move(non_overflowing_ranges);
   } else {
@@ -1834,32 +1826,56 @@ NGOutOfFlowLayoutPart::TryCalculateOffset(
       candidate_style, node_info.constraint_space.AvailableSize(),
       anchor_evaluator);
 
-  const LogicalRect unclamped_available_rect =
-      ComputeOutOfFlowAvailableRect(node_info.node, node_info.constraint_space,
-                                    insets, node_info.static_position);
+  {
+    auto& document = node_info.node.GetDocument();
+    if (candidate_style.ResolvedJustifySelf(ItemPosition::kNormal)
+            .GetPosition() != ItemPosition::kNormal) {
+      if (insets.inline_start && insets.inline_end) {
+        UseCounter::Count(document,
+                          WebFeature::kOutOfFlowJustifySelfBothInsets);
+      } else if (insets.inline_start || insets.inline_end) {
+        UseCounter::Count(document,
+                          WebFeature::kOutOfFlowJustifySelfSingleInset);
+      } else {
+        UseCounter::Count(document, WebFeature::kOutOfFlowJustifySelfNoInsets);
+      }
+    }
 
-  const LogicalSize computed_available_size =
-      unclamped_available_rect.size.ClampNegativeToZero();
+    if (candidate_style.ResolvedAlignSelf(ItemPosition::kNormal)
+            .GetPosition() != ItemPosition::kNormal) {
+      if (insets.block_start && insets.block_end) {
+        UseCounter::Count(document, WebFeature::kOutOfFlowAlignSelfBothInsets);
+      } else if (insets.block_start || insets.block_end) {
+        UseCounter::Count(document, WebFeature::kOutOfFlowAlignSelfSingleInset);
+      } else {
+        UseCounter::Count(document, WebFeature::kOutOfFlowAlignSelfNoInsets);
+      }
+    }
+  }
 
-  const NGBoxStrut border_padding =
+  const InsetModifiedContainingBlock imcb = ComputeInsetModifiedContainingBlock(
+      node_info.node, node_info.constraint_space.AvailableSize(), insets,
+      node_info.static_position, container_writing_direction,
+      candidate_writing_direction);
+
+  const BoxStrut border_padding =
       ComputeBorders(node_info.constraint_space, node_info.node) +
       ComputePadding(node_info.constraint_space, candidate_style);
 
   absl::optional<LogicalSize> replaced_size;
   if (node_info.node.IsReplaced()) {
     replaced_size = ComputeReplacedSize(
-        node_info.node, node_info.constraint_space, border_padding,
-        computed_available_size, ReplacedSizeMode::kNormal, anchor_evaluator);
+        node_info.node, node_info.constraint_space, border_padding, imcb.Size(),
+        ReplacedSizeMode::kNormal, anchor_evaluator);
   }
 
   OffsetInfo offset_info;
   NGLogicalOutOfFlowDimensions& node_dimensions = offset_info.node_dimensions;
   offset_info.inline_size_depends_on_min_max_sizes =
       ComputeOutOfFlowInlineDimensions(
-          node_info.node, candidate_style, node_info.constraint_space, insets,
-          border_padding, node_info.static_position, computed_available_size,
-          replaced_size, container_writing_direction, anchor_evaluator,
-          &node_dimensions);
+          node_info.node, candidate_style, node_info.constraint_space, imcb,
+          border_padding, replaced_size, container_writing_direction,
+          anchor_evaluator, &node_dimensions);
 
   const absl::optional<LogicalRect> additional_fallback_bounds =
       try_fit_available_space
@@ -1867,15 +1883,20 @@ NGOutOfFlowLayoutPart::TryCalculateOffset(
           : absl::nullopt;
 
   // Calculate the inline scroll offset range where the inline dimension fits.
+  absl::optional<InsetModifiedContainingBlock> imcb_for_position_fallback;
   absl::optional<LayoutUnit> inline_scroll_min;
   absl::optional<LayoutUnit> inline_scroll_max;
   absl::optional<LayoutUnit> additional_inline_scroll_min;
   absl::optional<LayoutUnit> additional_inline_scroll_max;
   if (try_fit_available_space) {
+    imcb_for_position_fallback = ComputeIMCBForPositionFallback(
+        node_info.constraint_space.AvailableSize(), insets,
+        node_info.static_position, container_writing_direction,
+        candidate_writing_direction);
     if (!CalculateNonOverflowingRangeInOneAxis(
             insets.inline_start, insets.inline_end,
-            unclamped_available_rect.offset.inline_offset,
-            unclamped_available_rect.InlineEndOffset(),
+            imcb_for_position_fallback->inline_start,
+            imcb_for_position_fallback->InlineEndOffset(),
             node_dimensions.MarginBoxInlineStart(),
             node_dimensions.MarginBoxInlineEnd(),
             additional_fallback_bounds.has_value()
@@ -1896,10 +1917,9 @@ NGOutOfFlowLayoutPart::TryCalculateOffset(
   // our min/max sizes, only run if needed.
   if (node_dimensions.size.block_size == kIndefiniteSize) {
     offset_info.initial_layout_result = ComputeOutOfFlowBlockDimensions(
-        node_info.node, candidate_style, node_info.constraint_space, insets,
-        border_padding, node_info.static_position, computed_available_size,
-        replaced_size, container_writing_direction, anchor_evaluator,
-        &node_dimensions);
+        node_info.node, candidate_style, node_info.constraint_space, imcb,
+        border_padding, replaced_size, container_writing_direction,
+        anchor_evaluator, &node_dimensions);
   }
 
   // Calculate the block scroll offset range where the block dimension fits.
@@ -1910,8 +1930,8 @@ NGOutOfFlowLayoutPart::TryCalculateOffset(
   if (try_fit_available_space) {
     if (!CalculateNonOverflowingRangeInOneAxis(
             insets.block_start, insets.block_end,
-            unclamped_available_rect.offset.block_offset,
-            unclamped_available_rect.BlockEndOffset(),
+            imcb_for_position_fallback->block_start,
+            imcb_for_position_fallback->BlockEndOffset(),
             node_dimensions.MarginBoxBlockStart(),
             node_dimensions.MarginBoxBlockEnd(),
             additional_fallback_bounds.has_value()
@@ -1933,7 +1953,7 @@ NGOutOfFlowLayoutPart::TryCalculateOffset(
   offset_info.block_estimate = node_dimensions.size.block_size;
 
   // Calculate the offsets.
-  const NGBoxStrut inset =
+  const BoxStrut inset =
       node_dimensions.inset.ConvertToPhysical(candidate_writing_direction)
           .ConvertToLogical(node_info.default_writing_direction);
 
@@ -1948,9 +1968,8 @@ NGOutOfFlowLayoutPart::TryCalculateOffset(
   // |node_dimensions.inset| doesn't include margins, but |insets| do. We add
   // margins into |used_insets| for the calculation, and then remove them at the
   // end.
-  const NGBoxStrut used_insets =
-      node_dimensions.inset - node_dimensions.margins;
-  NGBoxStrut insets_to_store;
+  const BoxStrut used_insets = node_dimensions.inset - node_dimensions.margins;
+  BoxStrut insets_to_store;
   insets_to_store.inline_start =
       insets.inline_start.value_or(used_insets.inline_start);
   insets_to_store.inline_end =
@@ -1987,6 +2006,11 @@ NGOutOfFlowLayoutPart::TryCalculateOffset(
     }
   }
 
+  offset_info.needs_scroll_adjustment_in_x =
+      anchor_evaluator->NeedsScrollAdjustmentInX();
+  offset_info.needs_scroll_adjustment_in_y =
+      anchor_evaluator->NeedsScrollAdjustmentInY();
+
   return offset_info;
 }
 
@@ -2013,11 +2037,7 @@ const NGLayoutResult* NGOutOfFlowLayoutPart::Layout(
                          is_last_fragmentainer_so_far);
   }
 
-  if (layout_result->Status() != NGLayoutResult::kSuccess) {
-    DCHECK_EQ(layout_result->Status(),
-              NGLayoutResult::kOutOfFragmentainerSpace);
-    return layout_result;
-  }
+  DCHECK_EQ(layout_result->Status(), NGLayoutResult::kSuccess);
 
   layout_result->GetMutableForOutOfFlow().SetOutOfFlowInsetsForGetComputedStyle(
       offset_info.insets_for_get_computed_style,
@@ -2026,9 +2046,13 @@ const NGLayoutResult* NGOutOfFlowLayoutPart::Layout(
   layout_result->GetMutableForOutOfFlow().SetOutOfFlowPositionedOffset(
       offset_info.offset);
 
-  if (offset_info.fallback_index) {
+  layout_result->GetMutableForOutOfFlow().SetNeedsScrollAdjustment(
+      offset_info.needs_scroll_adjustment_in_x,
+      offset_info.needs_scroll_adjustment_in_y);
+
+  if (offset_info.uses_fallback_style) {
     layout_result->GetMutableForOutOfFlow().SetPositionFallbackResult(
-        *offset_info.fallback_index, offset_info.non_overflowing_ranges);
+        offset_info.fallback_index, offset_info.non_overflowing_ranges);
   }
 
   return layout_result;
@@ -2191,7 +2215,7 @@ void NGOutOfFlowLayoutPart::LayoutOOFsInFragmentainer(
   const NGBlockNode& node = container_builder_->Node();
   const auto* fragment =
       To<NGPhysicalBoxFragment>(fragmentainer.fragment.Get());
-  NGFragmentGeometry fragment_geometry =
+  FragmentGeometry fragment_geometry =
       CalculateInitialFragmentGeometry(space, node, /* break_token */ nullptr);
   LogicalOffset fragmentainer_offset = UpdatedFragmentainerOffset(
       fragmentainer.offset, index, fragmentainer_progression, is_new_fragment);
@@ -2245,16 +2269,7 @@ void NGOutOfFlowLayoutPart::AddOOFToFragmentainer(
     HeapVector<NodeToLayout>* fragmented_descendants) {
   const NGLayoutResult* result = LayoutOOFNode(descendant, fragmentainer_space,
                                                is_last_fragmentainer_so_far);
-
-  if (result->Status() != NGLayoutResult::kSuccess) {
-    DCHECK_EQ(result->Status(), NGLayoutResult::kOutOfFragmentainerSpace);
-    // If we're out of space, continue layout in the next fragmentainer.
-    NodeToLayout fragmented_descendant = descendant;
-    fragmented_descendant.offset_info.offset.block_offset = LayoutUnit();
-    fragmented_descendants->emplace_back(fragmented_descendant);
-    *has_actual_break_inside = true;
-    return;
-  }
+  DCHECK_EQ(result->Status(), NGLayoutResult::kSuccess);
 
   // Apply the relative positioned offset now that fragmentation is complete.
   LogicalOffset oof_offset = result->OutOfFlowPositionedOffset();
@@ -2352,6 +2367,7 @@ void NGOutOfFlowLayoutPart::AddOOFToFragmentainer(
   // in |AddChild|.
   container_builder_->PropagateChildAnchors(
       physical_fragment, oof_offset + relative_offset + offset_adjustment);
+  container_builder_->PropagateStickyDescendants(physical_fragment);
   LayoutUnit containing_block_adjustment =
       container_builder_->BlockOffsetAdjustmentForFragmentainer(
           fragmentainer_consumed_block_size_);
@@ -2606,6 +2622,7 @@ void NGOutOfFlowLayoutPart::ReplaceFragment(
     // above all OOFs in the containing block chain, to find the right
     // fragmentation context root.
     containing_block = &box;
+    bool is_inside_spanner = false;
     do {
       // Keep searching up the tree until we have found a containing block
       // that's in-flow and the containing block of that containing block is a
@@ -2614,8 +2631,16 @@ void NGOutOfFlowLayoutPart::ReplaceFragment(
       bool is_out_of_flow = containing_block->IsOutOfFlowPositioned();
       containing_block = containing_block->ContainingNGBox();
       if (containing_block->IsFragmentationContextRoot() && !is_out_of_flow) {
-        break;
+        // If the OOF element we are searching for has a CB that is nested
+        // within a spanner, that OOF will *not* be laid out in the nearest
+        // multicol container. Instead, it will propagate up to the context in
+        // which the spanner is laid out. Thus, continue searching past the
+        // nearest multicol container for the OOF in question.
+        if (!is_inside_spanner) {
+          break;
+        }
       }
+      is_inside_spanner = containing_block->IsColumnSpanAll();
     } while (containing_block->MightBeInsideFragmentationContext());
 
     DCHECK(containing_block->IsFragmentationContextRoot());
@@ -2658,11 +2683,12 @@ void NGOutOfFlowLayoutPart::ReplaceFragment(
         // fragment generated for the nested multicol container. This happens
         // when we have a floated "inline-level" nested multicol container with
         // an OOF inside.
-        if (NGFragmentItems::ReplaceBoxFragment(
+        if (FragmentItems::ReplaceBoxFragment(
                 old_fragment,
                 To<NGPhysicalBoxFragment>(new_result->PhysicalFragment()),
-                parent_fragment))
+                parent_fragment)) {
           return;
+        }
       }
       // Search inside child fragments of the containing block.
       if (ReplaceChild(parent_fragment))
@@ -2699,7 +2725,7 @@ void NGOutOfFlowLayoutPart::ReplaceFragment(
 
 void NGOutOfFlowLayoutPart::SaveStaticPositionOnPaintLayer(
     LayoutBox* layout_box,
-    const NGLogicalStaticPosition& position) const {
+    const LogicalStaticPosition& position) const {
   const LayoutObject* parent =
       GetLayoutObjectForParentNode<const LayoutObject*>(layout_box);
   const LayoutObject* container = container_builder_->GetLayoutObject();
@@ -2711,8 +2737,8 @@ void NGOutOfFlowLayoutPart::SaveStaticPositionOnPaintLayer(
   }
 }
 
-NGLogicalStaticPosition NGOutOfFlowLayoutPart::ToStaticPositionForLegacy(
-    NGLogicalStaticPosition position) const {
+LogicalStaticPosition NGOutOfFlowLayoutPart::ToStaticPositionForLegacy(
+    LogicalStaticPosition position) const {
   // Legacy expects the static position to include the block contribution from
   // previous columns.
   if (const auto* break_token = container_builder_->PreviousBreakToken())

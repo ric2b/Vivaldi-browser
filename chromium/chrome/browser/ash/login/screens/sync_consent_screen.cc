@@ -28,7 +28,7 @@
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/webui/ash/login/sync_consent_screen_handler.h"
-#include "chrome/browser/ui/webui/settings/ash/pref_names.h"
+#include "chrome/browser/ui/webui/ash/settings/pref_names.h"
 #include "chrome/browser/unified_consent/unified_consent_service_factory.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/webui_url_constants.h"
@@ -198,7 +198,7 @@ void SyncConsentScreen::Finish(Result result) {
   base::UmaHistogramEnumeration("OOBE.SyncConsentScreen.Behavior", behavior_);
   // Record the final state of the sync service.
   syncer::SyncService* service = GetSyncService(profile_);
-  bool sync_enabled = service && service->CanSyncFeatureStart() &&
+  bool sync_enabled = service && service->IsSyncFeatureEnabled() &&
                       service->GetUserSettings()->IsSyncEverythingEnabled();
   base::UmaHistogramBoolean("OOBE.SyncConsentScreen.SyncEnabled", sync_enabled);
   if (test_exit_delegate_) {

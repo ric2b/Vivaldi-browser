@@ -127,7 +127,6 @@ optional<syncer::ModelError> AutofillProfileSyncBridge::MergeFullSyncData(
       FlushSyncTracker(std::move(metadata_change_list), &initial_sync_tracker));
 
   web_data_backend_->CommitChanges();
-  web_data_backend_->NotifyThatSyncHasStarted(syncer::AUTOFILL_PROFILE);
   return absl::nullopt;
 }
 
@@ -227,10 +226,6 @@ void AutofillProfileSyncBridge::ActOnLocalChange(
     case AutofillProfileChange::REMOVE:
       change_processor()->Delete(change.key(), metadata_change_list.get());
       break;
-    case AutofillProfileChange::EXPIRE:
-      // EXPIRE changes are not being issued for profiles.
-      NOTREACHED();
-      break;
   }
 
   // We do not need to commit any local changes (written by the processor via
@@ -244,9 +239,9 @@ absl::optional<syncer::ModelError> AutofillProfileSyncBridge::FlushSyncTracker(
     AutofillProfileSyncDifferenceTracker* tracker) {
   DCHECK(tracker);
 
-  RETURN_IF_ERROR(tracker->FlushToLocal(
-      base::BindOnce(&AutofillWebDataBackend::NotifyOfMultipleAutofillChanges,
-                     base::Unretained(web_data_backend_))));
+  RETURN_IF_ERROR(tracker->FlushToLocal(base::BindOnce(
+      &AutofillWebDataBackend::NotifyOnAutofillChangedBySync,
+      base::Unretained(web_data_backend_), syncer::AUTOFILL_PROFILE)));
 
   std::vector<std::unique_ptr<AutofillProfile>> profiles_to_upload_to_sync;
   std::vector<std::string> profiles_to_delete_from_sync;

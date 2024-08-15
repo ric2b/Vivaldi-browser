@@ -101,6 +101,11 @@
             "optional": true,
             "description": "Controls if a shortcut shall be shown. Needed for elements where shortcut is set up in C++ code"
           },
+          "persistent": {
+            "type": "boolean",
+            "optional": true,
+            "description": "If true the menu item will remain open after menu item is clicked with mouse."
+          },
           "icons": {
             "$ref": "Icons",
             "optional": true,
@@ -313,11 +318,12 @@
             "type": "object",
             "properties": {
               "children": {"type": "array", "items": {"$ref": "Element"}},
-              "rect": {"$ref": "Rect"},
-              "origin": {"$ref": "Origin"},
               "documentId": {"type": "integer"},
-              "windowId": {"type": "integer"},
-              "icons": {"$ref": "Icons", "description": "Default and folder icons."}
+              "icons": {"$ref": "Icons", "description": "Default and folder icons."},
+              "forceViews": {"type": "boolean"},
+              "origin": {"$ref": "Origin"},
+              "rect": {"$ref": "Rect"},
+              "windowId": {"type": "integer"}
             }
           }
         ],

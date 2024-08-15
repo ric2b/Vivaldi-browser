@@ -130,6 +130,17 @@
   WebNavigationBrowserAgent::FromBrowser(self.browser)->Reload();
 }
 
+// Vivaldi
+- (void)vivaldiReportAnIssue:(const GURL&)URL {
+  OpenNewTabCommand* command = [OpenNewTabCommand
+      commandWithURLFromChrome:URL
+                   inIncognito:self.browser->GetBrowserState()
+                                   ->IsOffTheRecord()];
+  [static_cast<id<ApplicationCommands>>(self.browser->GetCommandDispatcher())
+      openURLInNewTab:command];
+}
+// End Vivaldi
+
 #pragma mark - SadTabTabHelperDelegate
 
 - (void)sadTabTabHelper:(SadTabTabHelper*)tabHelper

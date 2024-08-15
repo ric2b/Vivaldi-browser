@@ -13,6 +13,13 @@
 
 namespace chromeos::features {
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+// Enables triggering app installs from a specific URI.
+BASE_FEATURE(kAppInstallServiceUri,
+             "AppInstallServiceUri",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
 // Enables or disables more filtering out of phones from the Bluetooth UI.
 BASE_FEATURE(kBluetoothPhoneFilter,
              "BluetoothPhoneFilter",
@@ -32,11 +39,18 @@ BASE_FEATURE(kCloudGamingDevice,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables ChromeOS Apps APIs.
-BASE_FEATURE(kCrosAppsApis, "CrosAppsApis", base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kBlinkExtension,
+             "BlinkExtension",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables the ChromeOS Diagnostics API.
-BASE_FEATURE(kCrosDiagnosticsApi,
-             "CrosDiagnosticsApi",
+BASE_FEATURE(kBlinkExtensionDiagnostics,
+             "BlinkExtensionDiagnostics",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables handling of key press event in background.
+BASE_FEATURE(kCrosAppsBackgroundEventHandling,
+             "CrosAppsBackgroundEventHandling",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables the use of cros-component UI elements. Contact:
@@ -44,6 +58,28 @@ BASE_FEATURE(kCrosDiagnosticsApi,
 BASE_FEATURE(kCrosComponents,
              "CrosComponents",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables the more detailed, OS-level dialog for web app installs.
+BASE_FEATURE(kCrosWebAppInstallDialog,
+             "CrosWebAppInstallDialog",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+// With this feature enabled, the shortcut app badge is painted in the UI
+// instead of being part of the shortcut app icon.
+BASE_FEATURE(kSeparateWebAppShortcutBadgeIcon,
+             "SeparateWebAppShortcutBadgeIcon",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables the new UI for browser created shortcut backed by web app system
+// on Chrome OS.
+BASE_FEATURE(kCrosWebAppShortcutUiUpdate,
+             "CrosWebAppShortcutUiUpdate",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+// Enables the desk profiles feature.
+BASE_FEATURE(kDeskProfiles, "DeskProfiles", base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Disable idle sockets closing on memory pressure for NetworkContexts that
 // belong to Profiles. It only applies to Profiles because the goal is to
@@ -66,11 +102,6 @@ BASE_FEATURE(kDisableQuickAnswersV2Translation,
              "DisableQuickAnswersV2Translation",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enable experimental goldfish web app profile isolation.
-BASE_FEATURE(kExperimentalWebAppProfileIsolation,
-             "ExperimentalWebAppProfileIsolation",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Enable experimental goldfish web app isolation.
 BASE_FEATURE(kExperimentalWebAppStoragePartitionIsolation,
              "ExperimentalWebAppStoragePartitionIsolation",
@@ -79,7 +110,7 @@ BASE_FEATURE(kExperimentalWebAppStoragePartitionIsolation,
 // Enable IWA support for Telemetry Extension API.
 BASE_FEATURE(kIWAForTelemetryExtensionAPI,
              "IWAForTelemetryExtensionAPI",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables Jelly features. go/jelly-flags
 BASE_FEATURE(kJelly, "Jelly", base::FEATURE_ENABLED_BY_DEFAULT);
@@ -90,6 +121,9 @@ BASE_FEATURE(kJellyroll, "Jellyroll", base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Controls enabling / disabling the orca feature.
 BASE_FEATURE(kOrca, "Orca", base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Controls enabling / disabling the orca feature for dogfood population.
+BASE_FEATURE(kOrcaDogfood, "OrcaDogfood", base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Controls whether to enable quick answers V2 settings sub-toggles.
 BASE_FEATURE(kQuickAnswersV2SettingsSubToggle,
@@ -112,6 +146,20 @@ BASE_FEATURE(kUploadOfficeToCloudForEnterprise,
              "UploadOfficeToCloudForEnterprise",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kRoundedWindows,
+             "RoundedWindows",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+const char kRoundedWindowsRadius[] = "window_radius";
+
+bool IsAppInstallServiceUriEnabled() {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  return chromeos::BrowserParamsProxy::Get()->IsAppInstallServiceUriEnabled();
+#else
+  return base::FeatureList::IsEnabled(kAppInstallServiceUri);
+#endif
+}
+
 bool IsClipboardHistoryRefreshEnabled() {
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   return chromeos::BrowserParamsProxy::Get()->EnableClipboardHistoryRefresh();
@@ -121,12 +169,6 @@ bool IsClipboardHistoryRefreshEnabled() {
 #endif
 }
 
-BASE_FEATURE(kRoundedWindows,
-             "RoundedWindows",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-const char kRoundedWindowsRadius[] = "window_radius";
-
 bool IsCloudGamingDeviceEnabled() {
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   return chromeos::BrowserParamsProxy::Get()->IsCloudGamingDevice();
@@ -135,17 +177,43 @@ bool IsCloudGamingDeviceEnabled() {
 #endif
 }
 
-bool IsCrosAppsApisEnabled() {
-  return base::FeatureList::IsEnabled(kCrosAppsApis);
+bool IsBlinkExtensionEnabled() {
+  return base::FeatureList::IsEnabled(kBlinkExtension);
 }
 
-bool IsCrosDiagnosticsApiEnabled() {
-  return base::FeatureList::IsEnabled(kCrosDiagnosticsApi) &&
-         IsCrosAppsApisEnabled();
+bool IsBlinkExtensionDiagnosticsEnabled() {
+  return IsBlinkExtensionEnabled() &&
+         base::FeatureList::IsEnabled(kBlinkExtensionDiagnostics);
 }
 
 bool IsCrosComponentsEnabled() {
   return base::FeatureList::IsEnabled(kCrosComponents) && IsJellyEnabled();
+}
+
+bool IsSeparateWebAppShortcutBadgeIconEnabled() {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  // TODO(b/304661502): Pass the value to lacros.
+  return false;
+#else
+  return base::FeatureList::IsEnabled(kSeparateWebAppShortcutBadgeIcon);
+#endif
+}
+
+bool IsCrosWebAppShortcutUiUpdateEnabled() {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  return chromeos::BrowserParamsProxy::Get()
+      ->IsCrosWebAppShortcutUiUpdateEnabled();
+#else
+  return base::FeatureList::IsEnabled(kCrosWebAppShortcutUiUpdate);
+#endif
+}
+
+bool IsDeskProfilesEnabled() {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  return chromeos::BrowserParamsProxy::Get()->IsDeskProfilesEnabled();
+#else
+  return base::FeatureList::IsEnabled(kDeskProfiles);
+#endif
 }
 
 bool IsIWAForTelemetryExtensionAPIEnabled() {
@@ -163,7 +231,8 @@ bool IsJellyrollEnabled() {
 }
 
 bool IsOrcaEnabled() {
-  return base::FeatureList::IsEnabled(kOrca);
+  return base::FeatureList::IsEnabled(kOrca) ||
+         base::FeatureList::IsEnabled(kOrcaDogfood);
 }
 
 bool IsQuickAnswersV2TranslationDisabled() {

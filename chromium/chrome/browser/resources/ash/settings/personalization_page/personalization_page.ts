@@ -24,7 +24,7 @@ import {getTemplate} from './personalization_page.html.js';
 
 const SettingsPersonalizationPageElementBase = I18nMixin(PolymerElement);
 
-class SettingsPersonalizationPageElement extends
+export class SettingsPersonalizationPageElement extends
     SettingsPersonalizationPageElementBase {
   static get is() {
     return 'settings-personalization-page';
@@ -68,7 +68,7 @@ class SettingsPersonalizationPageElement extends
         this.i18n('personalizationHubSubtitle');
   }
 
-  private openPersonalizationHub_() {
+  private openPersonalizationHub_(): void {
     this.personalizationHubBrowserProxy_.openPersonalizationHub();
   }
 }

@@ -94,8 +94,6 @@ class FakeSyncEngine : public SyncEngine,
                        std::unique_ptr<DataTypeActivationResponse>) override;
   void DisconnectDataType(ModelType type) override;
 
-  void SetProxyTabsDatatypeEnabled(bool enabled) override;
-
   const SyncStatus& GetDetailedStatus() const override;
 
   void GetTypesWithUnsyncedData(
@@ -113,6 +111,7 @@ class FakeSyncEngine : public SyncEngine,
                           base::OnceClosure callback) override;
   bool IsNextPollTimeInThePast() const override;
   void GetNigoriNodeForDebugging(AllNodesCallback callback) override;
+  void RecordNigoriMemoryUsageAndCountsHistograms() override;
 
  private:
   const bool allow_init_completion_;

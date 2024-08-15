@@ -91,7 +91,8 @@ absl::optional<ResourceRequestBlockedReason> BaseFetchContext::CanRequest(
     const KURL& url,
     const ResourceLoaderOptions& options,
     ReportingDisposition reporting_disposition,
-    const absl::optional<ResourceRequest::RedirectInfo>& redirect_info) const {
+    base::optional_ref<const ResourceRequest::RedirectInfo> redirect_info)
+    const {
   absl::optional<ResourceRequestBlockedReason> blocked_reason =
       CanRequestInternal(type, resource_request, url, options,
                          reporting_disposition, redirect_info);
@@ -110,7 +111,8 @@ BaseFetchContext::CanRequestBasedOnSubresourceFilterOnly(
     const KURL& url,
     const ResourceLoaderOptions& options,
     ReportingDisposition reporting_disposition,
-    const absl::optional<ResourceRequest::RedirectInfo>& redirect_info) const {
+    base::optional_ref<const ResourceRequest::RedirectInfo> redirect_info)
+    const {
   auto* subresource_filter = GetSubresourceFilter();
   if (subresource_filter &&
       !subresource_filter->AllowLoad(url, resource_request.GetRequestContext(),
@@ -128,13 +130,13 @@ BaseFetchContext::CanRequestBasedOnSubresourceFilterOnly(
 
 bool BaseFetchContext::CalculateIfAdSubresource(
     const ResourceRequestHead& request,
-    const absl::optional<KURL>& alias_url,
+    base::optional_ref<const KURL> alias_url,
     ResourceType type,
     const FetchInitiatorInfo& initiator_info) {
   // A derived class should override this if they have more signals than just
   // the SubresourceFilter.
   SubresourceFilter* filter = GetSubresourceFilter();
-  const KURL& url = alias_url ? alias_url.value() : request.Url();
+  const KURL& url = alias_url.has_value() ? alias_url.value() : request.Url();
 
   return request.IsAdResource() ||
          (filter && filter->IsAdResource(url, request.GetRequestContext()));
@@ -148,10 +150,10 @@ void BaseFetchContext::AddClientHintsIfNecessary(
     bool is_1p_origin,
     absl::optional<UserAgentMetadata> ua,
     const PermissionsPolicy* policy,
-    const absl::optional<ClientHintImageInfo>& image_info,
-    const absl::optional<WTF::AtomicString>& prefers_color_scheme,
-    const absl::optional<WTF::AtomicString>& prefers_reduced_motion,
-    const absl::optional<WTF::AtomicString>& prefers_reduced_transparency,
+    base::optional_ref<const ClientHintImageInfo> image_info,
+    base::optional_ref<const WTF::AtomicString> prefers_color_scheme,
+    base::optional_ref<const WTF::AtomicString> prefers_reduced_motion,
+    base::optional_ref<const WTF::AtomicString> prefers_reduced_transparency,
     ResourceRequest& request) {
   // If the feature is enabled, then client hints are allowed only on secure
   // URLs.
@@ -214,7 +216,7 @@ void BaseFetchContext::AddClientHintsIfNecessary(
   }
 
   // These hints only make sense if the image info is available
-  if (image_info) {
+  if (image_info.has_value()) {
     if (ShouldSendClientHint(policy, resource_origin, is_1p_origin,
                              WebClientHintsType::kDpr_DEPRECATED,
                              hints_preferences)) {
@@ -396,7 +398,7 @@ void BaseFetchContext::AddClientHintsIfNecessary(
   if (ShouldSendClientHint(policy, resource_origin, is_1p_origin,
                            WebClientHintsType::kPrefersColorScheme,
                            hints_preferences) &&
-      prefers_color_scheme) {
+      prefers_color_scheme.has_value()) {
     SetHttpHeader(WebClientHintsType::kPrefersColorScheme,
                   prefers_color_scheme.value(), request);
   }
@@ -411,7 +413,7 @@ void BaseFetchContext::AddClientHintsIfNecessary(
   if (ShouldSendClientHint(policy, resource_origin, is_1p_origin,
                            WebClientHintsType::kPrefersReducedMotion,
                            hints_preferences) &&
-      prefers_reduced_motion) {
+      prefers_reduced_motion.has_value()) {
     SetHttpHeader(WebClientHintsType::kPrefersReducedMotion,
                   prefers_reduced_motion.value(), request);
   }
@@ -419,7 +421,7 @@ void BaseFetchContext::AddClientHintsIfNecessary(
   if (ShouldSendClientHint(policy, resource_origin, is_1p_origin,
                            WebClientHintsType::kPrefersReducedTransparency,
                            hints_preferences) &&
-      prefers_reduced_transparency) {
+      prefers_reduced_transparency.has_value()) {
     SetHttpHeader(WebClientHintsType::kPrefersReducedTransparency,
                   prefers_reduced_transparency.value(), request);
   }
@@ -497,9 +499,10 @@ BaseFetchContext::CanRequestInternal(
     const KURL& url,
     const ResourceLoaderOptions& options,
     ReportingDisposition reporting_disposition,
-    const absl::optional<ResourceRequest::RedirectInfo>& redirect_info) const {
+    base::optional_ref<const ResourceRequest::RedirectInfo> redirect_info)
+    const {
   if (GetResourceFetcherProperties().IsDetached()) {
-    if (!resource_request.GetKeepalive() || !redirect_info) {
+    if (!resource_request.GetKeepalive() || !redirect_info.has_value()) {
       return ResourceRequestBlockedReason::kOther;
     }
   }
@@ -555,10 +558,11 @@ BaseFetchContext::CanRequestInternal(
       resource_request.GetRequestDestination();
 
   const KURL& url_before_redirects =
-      redirect_info ? redirect_info->original_url : url;
+      redirect_info.has_value() ? redirect_info->original_url : url;
   const ResourceRequestHead::RedirectStatus redirect_status =
-      redirect_info ? ResourceRequestHead::RedirectStatus::kFollowedRedirect
-                    : ResourceRequestHead::RedirectStatus::kNoRedirect;
+      redirect_info.has_value()
+          ? ResourceRequestHead::RedirectStatus::kFollowedRedirect
+          : ResourceRequestHead::RedirectStatus::kNoRedirect;
   // We check the 'report-only' headers before upgrading the request (in
   // populateResourceRequest). We check the enforced headers here to ensure we
   // block things we ought to block.

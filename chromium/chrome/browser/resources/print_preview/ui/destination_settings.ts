@@ -24,7 +24,7 @@ import './settings_section.js';
 import '../strings.m.js';
 
 import {CrLazyRenderElement} from 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
-import {assert} from 'chrome://resources/js/assert_ts.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
@@ -221,6 +221,10 @@ export class PrintPreviewDestinationSettingsElement extends
         this.destinationStore_,
         DestinationStoreEventType.DESTINATION_EULA_READY,
         this.updateDestinationEulaUrl_.bind(this));
+    this.tracker_.add(
+        this.destinationStore_,
+        DestinationStoreEventType.DESTINATION_PRINTER_STATUS_UPDATE,
+        this.onPrinterStatusUpdate_.bind(this));
     // </if>
   }
 
@@ -500,6 +504,27 @@ export class PrintPreviewDestinationSettingsElement extends
   printerExistsInDisplayedDestinations(): boolean {
     return this.displayedDestinations_.some(
         destination => destination.type !== PrinterType.PDF_PRINTER);
+  }
+
+  // Trigger updates to the printer status icons and text for the selected
+  // destination and corresponding dropdown.
+  private onPrinterStatusUpdate_(e: CustomEvent<string>): void {
+    const destinationKey = e.detail;
+
+    // If `destinationKey` matches the currently selected destination, use
+    // notifyPath to trigger the destination to recalculate its status icon and
+    // error status text.
+    if (this.destination && this.destination.key === destinationKey) {
+      this.notifyPath(`destination.printerStatusReason`);
+    }
+
+    // If this destination is in the dropdown, notify it to recalculate its
+    // status icon.
+    const index = this.displayedDestinations_.findIndex(
+        destination => destination.key === destinationKey);
+    if (index !== -1) {
+      this.notifyPath(`displayedDestinations_.${index}.printerStatusReason`);
+    }
   }
   // </if>
 }

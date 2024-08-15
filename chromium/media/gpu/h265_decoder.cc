@@ -7,6 +7,7 @@
 #include "base/logging.h"
 #include "base/notreached.h"
 #include "media/base/limits.h"
+#include "media/base/media_switches.h"
 #include "media/gpu/h265_decoder.h"
 
 namespace media {
@@ -96,6 +97,10 @@ H265Decoder::H265Accelerator::Status H265Decoder::H265Accelerator::SetStream(
   return H265Decoder::H265Accelerator::Status::kNotSupported;
 }
 
+bool H265Decoder::H265Accelerator::IsAlphaLayerSupported() {
+  return false;
+}
+
 H265Decoder::H265Decoder(std::unique_ptr<H265Accelerator> accelerator,
                          VideoCodecProfile profile,
                          const VideoColorSpace& container_color_space)
@@ -154,6 +159,9 @@ void H265Decoder::SetStream(int32_t id, const DecoderBuffer& decoder_buffer) {
 }
 
 void H265Decoder::Reset() {
+  first_picture_ = true;
+  no_rasl_output_flag_ = true;
+
   curr_pic_ = nullptr;
   curr_nalu_ = nullptr;
   curr_slice_hdr_ = nullptr;
@@ -226,11 +234,89 @@ H265Decoder::DecodeResult H265Decoder::Decode() {
       DVLOG(4) << "New NALU: " << static_cast<int>(curr_nalu_->nal_unit_type);
     }
 
-    // 8.1.2 We only want nuh_layer_id of zero.
-    // TODO(crbug.com/1331597): Support alpha on macOS.
+    // 8.1.2 We only handle nuh_layer_id of zero.
+    // As a workaround for accelerators that support alpha layers, the data is
+    // simply passed through.
+    // TODO(crbug.com/1331597): Only pass through vps->aux_alpha_layer_id.
     if (curr_nalu_->nuh_layer_id) {
-      DVLOG(4) << "Skipping NALU with nuh_layer_id="
-               << curr_nalu_->nuh_layer_id;
+      if (accelerator_->IsAlphaLayerSupported()) {
+        switch (curr_nalu_->nal_unit_type) {
+          case H265NALU::BLA_W_LP:
+          case H265NALU::BLA_W_RADL:
+          case H265NALU::BLA_N_LP:
+          case H265NALU::IDR_W_RADL:
+          case H265NALU::IDR_N_LP:
+          case H265NALU::TRAIL_N:
+          case H265NALU::TRAIL_R:
+          case H265NALU::TSA_N:
+          case H265NALU::TSA_R:
+          case H265NALU::STSA_N:
+          case H265NALU::STSA_R:
+          case H265NALU::RADL_N:
+          case H265NALU::RADL_R:
+          case H265NALU::RASL_N:
+          case H265NALU::RASL_R:
+          case H265NALU::CRA_NUT: {
+            if (!curr_slice_hdr_) {
+              curr_slice_hdr_ = std::make_unique<H265SliceHeader>();
+              par_res = parser_.ParseSliceHeader(
+                  *curr_nalu_, curr_slice_hdr_.get(), last_slice_hdr_.get());
+              if (par_res == H265Parser::kMissingParameterSet) {
+                // As with the base layer, we could be trying to start decoding
+                // from a bad frame, and may be able to recover later.
+                curr_slice_hdr_.reset();
+                last_slice_hdr_.reset();
+                break;
+              }
+              if (par_res != H265Parser::kOk) {
+                SET_ERROR_AND_RETURN();
+              }
+            }
+            const H265PPS* pps =
+                parser_.GetPPS(curr_slice_hdr_->slice_pic_parameter_set_id);
+            const H265SPS* sps = parser_.GetSPS(pps->pps_seq_parameter_set_id);
+            H265Picture::Vector empty;
+            CHECK_ACCELERATOR_RESULT(accelerator_->SubmitSlice(
+                sps, pps, curr_slice_hdr_.get(), empty, empty, empty, empty,
+                empty, curr_pic_.get(), curr_slice_hdr_->nalu_data,
+                curr_slice_hdr_->nalu_size, parser_.GetCurrentSubsamples()));
+            last_slice_hdr_.swap(curr_slice_hdr_);
+            curr_slice_hdr_.reset();
+            break;
+          }
+          case H265NALU::SPS_NUT: {
+            int sps_id;
+            par_res = parser_.ParseSPS(&sps_id);
+            if (par_res != H265Parser::kOk) {
+              SET_ERROR_AND_RETURN();
+            }
+            accelerator_->ProcessSPS(
+                parser_.GetSPS(sps_id),
+                base::span<const uint8_t>(
+                    curr_nalu_->data,
+                    base::checked_cast<size_t>(curr_nalu_->size)));
+            break;
+          }
+          case H265NALU::PPS_NUT: {
+            int pps_id;
+            par_res = parser_.ParsePPS(*curr_nalu_, &pps_id);
+            if (par_res != H265Parser::kOk) {
+              SET_ERROR_AND_RETURN();
+            }
+            accelerator_->ProcessPPS(
+                parser_.GetPPS(pps_id),
+                base::span<const uint8_t>(
+                    curr_nalu_->data,
+                    base::checked_cast<size_t>(curr_nalu_->size)));
+            break;
+          }
+          default:
+            break;
+        }
+      } else {
+        DVLOG(4) << "Skipping NALU with nuh_layer_id="
+                 << curr_nalu_->nuh_layer_id;
+      }
       curr_nalu_.reset();
       continue;
     }
@@ -275,19 +361,14 @@ H265Decoder::DecodeResult H265Decoder::Decode() {
           state_ = kTryPreprocessCurrentSlice;
           if (curr_slice_hdr_->irap_pic) {
             bool need_new_buffers = false;
-            bool color_space_changed = false;
             if (!ProcessPPS(curr_slice_hdr_->slice_pic_parameter_set_id,
-                            &need_new_buffers, &color_space_changed)) {
+                            &need_new_buffers)) {
               SET_ERROR_AND_RETURN();
             }
 
             if (need_new_buffers) {
               curr_pic_ = nullptr;
               return kConfigChange;
-            }
-            if (color_space_changed) {
-              curr_pic_ = nullptr;
-              return kColorSpaceChange;
             }
           }
         }
@@ -373,18 +454,13 @@ H265Decoder::DecodeResult H265Decoder::Decode() {
         // active stream.
         if (curr_pps_id_ == -1) {
           bool need_new_buffers = false;
-          bool color_space_changed = false;
-          if (!ProcessPPS(pps_id, &need_new_buffers, &color_space_changed)) {
+          if (!ProcessPPS(pps_id, &need_new_buffers)) {
             SET_ERROR_AND_RETURN();
           }
 
           if (need_new_buffers) {
             curr_nalu_.reset();
             return kConfigChange;
-          }
-          if (color_space_changed) {
-            curr_nalu_.reset();
-            return kColorSpaceChange;
           }
         }
 
@@ -487,9 +563,7 @@ size_t H265Decoder::GetNumReferenceFrames() const {
   return dpb_.max_num_pics();
 }
 
-bool H265Decoder::ProcessPPS(int pps_id,
-                             bool* need_new_buffers,
-                             bool* color_space_changed) {
+bool H265Decoder::ProcessPPS(int pps_id, bool* need_new_buffers) {
   DVLOG(4) << "Processing PPS id:" << pps_id;
 
   const H265PPS* pps = parser_.GetPPS(pps_id);
@@ -502,10 +576,6 @@ bool H265Decoder::ProcessPPS(int pps_id,
 
   if (need_new_buffers)
     *need_new_buffers = false;
-
-  if (color_space_changed) {
-    *color_space_changed = false;
-  }
 
   gfx::Size new_pic_size = sps->GetCodedSize();
   gfx::Rect new_visible_rect = sps->GetVisibleRect();
@@ -548,9 +618,15 @@ bool H265Decoder::ProcessPPS(int pps_id,
     new_color_space = container_color_space_;
   }
 
+  bool is_color_space_change = false;
+  if (base::FeatureList::IsEnabled(kAVDColorSpaceChanges)) {
+    is_color_space_change = new_color_space.IsSpecified() &&
+                            new_color_space != picture_color_space_;
+  }
+
   if (pic_size_ != new_pic_size || dpb_.max_num_pics() != sps->max_dpb_size ||
       profile_ != new_profile || bit_depth_ != new_bit_depth ||
-      chroma_sampling_ != new_chroma_sampling) {
+      chroma_sampling_ != new_chroma_sampling || is_color_space_change) {
     if (!Flush())
       return false;
     DVLOG(1) << "Codec profile: " << GetProfileName(new_profile)
@@ -568,16 +644,6 @@ bool H265Decoder::ProcessPPS(int pps_id,
     dpb_.set_max_num_pics(sps->max_dpb_size);
     if (need_new_buffers)
       *need_new_buffers = true;
-  }
-
-  if (new_color_space.IsSpecified() &&
-      new_color_space != picture_color_space_) {
-    if (!Flush()) {
-      return false;
-    }
-    DVLOG(1) << "Picture color space: " << new_color_space.ToString();
-    picture_color_space_ = new_color_space;
-    *color_space_changed = true;
   }
 
   return true;
@@ -624,8 +690,9 @@ void H265Decoder::CalcPicOutputFlags(const H265SliceHeader* slice_hdr) {
         (curr_nalu_->nal_unit_type >= H265NALU::BLA_W_LP &&
          curr_nalu_->nal_unit_type <= H265NALU::IDR_N_LP) ||
         curr_pic_->first_picture_;
+    no_rasl_output_flag_ = curr_pic_->no_rasl_output_flag_;
   } else {
-    curr_pic_->no_rasl_output_flag_ = false;
+    curr_pic_->no_rasl_output_flag_ = no_rasl_output_flag_;
   }
 
   // C.5.2.2
@@ -974,6 +1041,7 @@ H265Decoder::H265Accelerator::Status H265Decoder::StartNewFrame(
     if (!PerformDpbOperations(sps)) {
       return H265Accelerator::Status::kFail;
     }
+
     curr_pic_->processed_ = true;
   }
 

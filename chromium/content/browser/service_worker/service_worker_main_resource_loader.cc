@@ -20,6 +20,7 @@
 #include "base/time/time.h"
 #include "base/trace_event/common/trace_event_common.h"
 #include "base/trace_event/trace_event.h"
+#include "content/browser/loader/navigation_url_loader.h"
 #include "content/browser/service_worker/service_worker_container_host.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
@@ -164,16 +165,16 @@ ServiceWorkerMainResourceLoader::ServiceWorkerMainResourceLoader(
       container_host_->controller();
   if (active_worker) {
     switch (active_worker->running_status()) {
-      case blink::EmbeddedWorkerStatus::RUNNING:
+      case blink::EmbeddedWorkerStatus::kRunning:
         initial_service_worker_status_ = InitialServiceWorkerStatus::kRunning;
         break;
-      case blink::EmbeddedWorkerStatus::STARTING:
+      case blink::EmbeddedWorkerStatus::kStarting:
         initial_service_worker_status_ = InitialServiceWorkerStatus::kStarting;
         break;
-      case blink::EmbeddedWorkerStatus::STOPPING:
+      case blink::EmbeddedWorkerStatus::kStopping:
         initial_service_worker_status_ = InitialServiceWorkerStatus::kStopping;
         break;
-      case blink::EmbeddedWorkerStatus::STOPPED:
+      case blink::EmbeddedWorkerStatus::kStopped:
         initial_service_worker_status_ = InitialServiceWorkerStatus::kStopped;
         break;
     }
@@ -275,7 +276,7 @@ void ServiceWorkerMainResourceLoader::StartRequest(
       // TODO(crbug.com/1371756): support other sources in the full form.
       // https://github.com/yoshisatoyanagisawa/service-worker-static-routing-api/blob/main/final-form.md
       switch (sources[0].type) {
-        case blink::ServiceWorkerRouterSource::SourceType::kNetwork:
+        case blink::ServiceWorkerRouterSource::Type::kNetwork:
           // Network fallback is requested.
           // URLLoader in |fallback_callback_|, in other words |url_loader_|
           // which is referred in
@@ -299,9 +300,10 @@ void ServiceWorkerMainResourceLoader::StartRequest(
                         .Run(false /* reset_subresource_loader_params */,
                              net::LoadTimingInfo());
                     if (active_worker->running_status() !=
-                            EmbeddedWorkerStatus::RUNNING &&
+                            blink::EmbeddedWorkerStatus::kRunning &&
                         base::FeatureList::IsEnabled(
-                            kServiceWorkerStaticRouterStartServiceWorker)) {
+                            features::
+                                kServiceWorkerStaticRouterStartServiceWorker)) {
                       active_worker->StartWorker(
                           ServiceWorkerMetrics::EventType::STATIC_ROUTER,
                           base::DoNothing());
@@ -309,13 +311,13 @@ void ServiceWorkerMainResourceLoader::StartRequest(
                   },
                   std::move(fallback_callback_), active_worker));
           return;
-        case blink::ServiceWorkerRouterSource::SourceType::kRace:
+        case blink::ServiceWorkerRouterSource::Type::kRace:
           race_network_request_mode = RaceNetworkRequestMode::kForced;
           break;
-        case blink::ServiceWorkerRouterSource::SourceType::kFetchEvent:
+        case blink::ServiceWorkerRouterSource::Type::kFetchEvent:
           race_network_request_mode = RaceNetworkRequestMode::kSkipped;
           break;
-        case blink::ServiceWorkerRouterSource::SourceType::kCache:
+        case blink::ServiceWorkerRouterSource::Type::kCache:
           cache_matcher_ = std::make_unique<ServiceWorkerCacheStorageMatcher>(
               sources[0].cache_source->cache_name,
               blink::mojom::FetchAPIRequest::From(resource_request_),
@@ -324,6 +326,25 @@ void ServiceWorkerMainResourceLoader::StartRequest(
                   &ServiceWorkerMainResourceLoader::DidDispatchFetchEvent,
                   weak_factory_.GetWeakPtr()));
           cache_matcher_->Run();
+          // If the kServiceWorkerStaticRouterStartServiceWorker feature is
+          // enabled, it starts the ServiceWorker manually since we don't
+          // instantiate ServiceWorkerFetchDispatcher, which involves the
+          // ServiceWorker startup.
+          base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+              FROM_HERE,
+              base::BindOnce(
+                  [](scoped_refptr<ServiceWorkerVersion> active_worker) {
+                    if (active_worker->running_status() !=
+                            blink::EmbeddedWorkerStatus::kRunning &&
+                        base::FeatureList::IsEnabled(
+                            features::
+                                kServiceWorkerStaticRouterStartServiceWorker)) {
+                      active_worker->StartWorker(
+                          ServiceWorkerMetrics::EventType::STATIC_ROUTER,
+                          base::DoNothing());
+                    }
+                  },
+                  active_worker));
           return;
       }
     }
@@ -372,7 +393,7 @@ void ServiceWorkerMainResourceLoader::MaybeDispatchPreload(
   }
 
   bool respect_navigation_preload = base::GetFieldTrialParamByFeatureAsBool(
-      kServiceWorkerAutoPreload, "respect_navigation_preload",
+      features::kServiceWorkerAutoPreload, "respect_navigation_preload",
       /*default_value=*/true);
 
   if (respect_navigation_preload) {
@@ -397,12 +418,12 @@ void ServiceWorkerMainResourceLoader::MaybeDispatchPreload(
 bool ServiceWorkerMainResourceLoader::MaybeStartAutoPreload(
     scoped_refptr<ServiceWorkerContextWrapper> context,
     scoped_refptr<ServiceWorkerVersion> version) {
-  if (!base::FeatureList::IsEnabled(kServiceWorkerAutoPreload)) {
+  if (!base::FeatureList::IsEnabled(features::kServiceWorkerAutoPreload)) {
     return false;
   }
 
   bool use_allowlist = base::GetFieldTrialParamByFeatureAsBool(
-      kServiceWorkerAutoPreload, "use_allowlist",
+      features::kServiceWorkerAutoPreload, "use_allowlist",
       /*default_value=*/false);
   if (use_allowlist && !HasRaceNetworkRequestEligibleScript(version)) {
     return false;
@@ -412,9 +433,10 @@ bool ServiceWorkerMainResourceLoader::MaybeStartAutoPreload(
   // the case when the AutoPreload behavior is problematic for some websites and
   // those should be opted out from the feature.
   const static base::NoDestructor<base::flat_set<std::string>> blocked_hosts(
-      base::SplitString(base::GetFieldTrialParamValueByFeature(
-                            kServiceWorkerAutoPreload, "blocked_hosts"),
-                        ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY));
+      base::SplitString(
+          base::GetFieldTrialParamValueByFeature(
+              features::kServiceWorkerAutoPreload, "blocked_hosts"),
+          ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY));
   if (blocked_hosts->contains(resource_request_.url.host())) {
     return false;
   }
@@ -501,12 +523,11 @@ bool ServiceWorkerMainResourceLoader::StartRaceNetworkRequest(
   mojo::PendingRemote<network::mojom::URLLoaderClient> forwarding_client;
   forwarded_race_network_request_url_loader_factory_.emplace(
       forwarding_client.InitWithNewPipeAndPassReceiver(),
-      resource_request_.url);
+      ServiceWorkerFetchDispatcher::CreateNetworkURLLoaderFactory(
+          context, frame_tree_node_id_));
   CHECK(!race_network_request_url_loader_client_);
   race_network_request_url_loader_client_.emplace(
-      resource_request_, AsWeakPtr(), std::move(forwarding_client),
-      network::features::GetDataPipeDefaultAllocationSize(
-          network::features::DataPipeAllocationSize::kLargerSizeIfPossible));
+      resource_request_, AsWeakPtr(), std::move(forwarding_client));
 
   // If the initial state is not kWaitForBody, that means creating data pipes
   // failed. Do not start RaceNetworkRequest this case.
@@ -536,8 +557,12 @@ bool ServiceWorkerMainResourceLoader::StartRaceNetworkRequest(
       forwarded_race_network_request_url_loader_factory_
           ->InitURLLoaderNewPipeAndPassReceiver(),
       GlobalRequestID::MakeBrowserInitiated().request_id,
-      network::mojom::kURLLoadOptionNone, resource_request_,
-      std::move(client_to_pass),
+      // Since RaceNetworkRequest may not involve the fetch handler for the
+      // navigation, requests SSLInfo here to be attached with the response.
+      // This is required to show the HTTPS padlock by the browser.
+      NavigationURLLoader::GetURLLoaderOptions(
+          resource_request_.is_outermost_main_frame),
+      resource_request_, std::move(client_to_pass),
       net::MutableNetworkTrafficAnnotationTag(
           ServiceWorkerRaceNetworkRequestURLLoaderClient::
               NetworkTrafficAnnotationTag()));
@@ -626,7 +651,7 @@ void ServiceWorkerMainResourceLoader::CommitCompleted(int error_code,
 
 void ServiceWorkerMainResourceLoader::DidPrepareFetchEvent(
     scoped_refptr<ServiceWorkerVersion> version,
-    EmbeddedWorkerStatus initial_worker_status) {
+    blink::EmbeddedWorkerStatus initial_worker_status) {
   TRACE_EVENT_WITH_FLOW1(
       "ServiceWorker", "ServiceWorkerMainResourceLoader::DidPrepareFetchEvent",
       this, TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT,
@@ -735,6 +760,13 @@ void ServiceWorkerMainResourceLoader::DidDispatchFetchEvent(
       return;
     case FetchResponseFrom::kSubresourceLoaderIsHandlingRedirect:
       NOTREACHED_NORETURN();
+  }
+
+  // Cancel the in-flight request processing for the fallback.
+  if (commit_responsibility() == FetchResponseFrom::kServiceWorker &&
+      race_network_request_url_loader_client_) {
+    race_network_request_url_loader_client_->CancelWriteData(
+        commit_responsibility());
   }
   RecordFetchResponseFrom();
 

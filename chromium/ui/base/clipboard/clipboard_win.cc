@@ -320,6 +320,12 @@ void ClipboardWin::ReadAvailableTypes(
   types->clear();
   *types = GetStandardFormats(buffer, data_dst);
 
+  // Read the custom type only if it's present on the clipboard.
+  // See crbug.com/1477344 for details.
+  if (!IsFormatAvailable(ClipboardFormatType::WebCustomDataType(), buffer,
+                         data_dst)) {
+    return;
+  }
   // Acquire the clipboard to read WebCustomDataType types.
   ScopedClipboard clipboard;
   if (!clipboard.Acquire(GetClipboardWindow()))
@@ -330,8 +336,8 @@ void ClipboardWin::ReadAvailableTypes(
   if (!hdata)
     return;
 
-  ReadCustomDataTypes(::GlobalLock(hdata), ::GlobalSize(hdata), types);
-  ::GlobalUnlock(hdata);
+  base::win::ScopedHGlobal<const uint8_t*> locked_data(hdata);
+  ReadCustomDataTypes(locked_data, types);
 }
 
 // |data_dst| is not used. It's only passed to be consistent with other
@@ -520,8 +526,12 @@ void ClipboardWin::ReadCustomData(ClipboardBuffer buffer,
   if (!hdata)
     return;
 
-  ReadCustomDataForType(::GlobalLock(hdata), ::GlobalSize(hdata), type, result);
-  ::GlobalUnlock(hdata);
+  base::win::ScopedHGlobal<const uint8_t*> locked_data(hdata);
+  if (absl::optional<std::u16string> maybe_result =
+          ReadCustomDataForType(locked_data, type);
+      maybe_result) {
+    *result = std::move(*maybe_result);
+  }
 }
 
 // |data_dst| is not used. It's only passed to be consistent with other
@@ -549,15 +559,17 @@ void ClipboardWin::ReadFilenames(ClipboardBuffer buffer,
   if (data) {
     {
       base::win::ScopedHGlobal<HDROP> hdrop(data);
-      if (!hdrop.get())
+      if (!hdrop.data()) {
         return;
+      }
 
       const int kMaxFilenameLen = 4096;
-      const unsigned num_files = DragQueryFileW(hdrop.get(), 0xffffffff, 0, 0);
+      const unsigned num_files = DragQueryFileW(hdrop.data(), 0xffffffff, 0, 0);
       for (unsigned int i = 0; i < num_files; ++i) {
         wchar_t filename[kMaxFilenameLen];
-        if (!DragQueryFileW(hdrop.get(), i, filename, kMaxFilenameLen))
+        if (!DragQueryFileW(hdrop.data(), i, filename, kMaxFilenameLen)) {
           continue;
+        }
         base::FilePath path(filename);
         result->push_back(ui::FileInfo(path, base::FilePath()));
       }
@@ -571,8 +583,8 @@ void ClipboardWin::ReadFilenames(ClipboardBuffer buffer,
     {
       // filename using Unicode
       base::win::ScopedHGlobal<wchar_t*> filename(data);
-      if (filename.get() && filename.get()[0]) {
-        base::FilePath path(filename.get());
+      if (filename.data() && filename.data()[0]) {
+        base::FilePath path(filename.data());
         result->push_back(ui::FileInfo(path, base::FilePath()));
       }
     }
@@ -585,8 +597,8 @@ void ClipboardWin::ReadFilenames(ClipboardBuffer buffer,
     {
       // filename using ASCII
       base::win::ScopedHGlobal<char*> filename(data);
-      if (filename.get() && filename.get()[0]) {
-        base::FilePath path(base::SysNativeMBToWide(filename.get()));
+      if (filename.data() && filename.data()[0]) {
+        base::FilePath path(base::SysNativeMBToWide(filename.data()));
         result->push_back(ui::FileInfo(path, base::FilePath()));
       }
     }

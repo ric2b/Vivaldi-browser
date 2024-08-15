@@ -91,8 +91,6 @@ bool ObjectPermissionContextBase::CanRequestObjectPermission(
   ContentSetting content_setting =
       host_content_settings_map_->GetContentSetting(
           origin.GetURL(), GURL(), *guard_content_settings_type_);
-  DCHECK(content_setting == CONTENT_SETTING_ASK ||
-         content_setting == CONTENT_SETTING_BLOCK);
   return content_setting == CONTENT_SETTING_ASK;
 }
 
@@ -224,6 +222,19 @@ void ObjectPermissionContextBase::RevokeObjectPermission(
 
   ScheduleSaveWebsiteSetting(origin);
   NotifyPermissionRevoked(origin);
+}
+
+bool ObjectPermissionContextBase::RevokeObjectPermissions(
+    const url::Origin& origin) {
+  auto origin_objects_it = objects().find(origin);
+  if (origin_objects_it == objects().end()) {
+    return false;
+  }
+
+  origin_objects_it->second.clear();
+  ScheduleSaveWebsiteSetting(origin);
+  NotifyPermissionRevoked(origin);
+  return true;
 }
 
 void ObjectPermissionContextBase::FlushScheduledSaveSettingsCalls() {

@@ -845,6 +845,18 @@ FOO_TEST_SUITE_WITH_NAME = """\
 }
 """
 
+FOO_TEST_SUITE_WITH_ISOLATE_NAME = """\
+{
+  'basic_suites': {
+    'foo_tests': {
+      'foo_test': {
+        'isolate_name': 'bar_test',
+      },
+    },
+  },
+}
+"""
+
 FOO_TEST_SUITE_WITH_SWARMING_NAMED_CACHES = """\
 {
   'basic_suites': {
@@ -1107,6 +1119,7 @@ COMPOSITION_SUITE_WITH_TELEMETRY_TEST = """\
           'dimensions': {
             'os': 'Linux',
           },
+          'shards': 2,
         },
       },
     },
@@ -1741,7 +1754,16 @@ class UnitTest(TestCase):
                     FOO_TEST_SUITE_WITH_NAME, LUCI_MILO_CFG)
     fbb.check_input_file_consistency(verbose=True)
     with self.assertRaisesRegex(generate_buildbot_json.BBGenErr,
-                                r'.*name field is set*'):
+                                r'.*\bname field is set\b.*'):
+      fbb.check_output_file_consistency(verbose=True)
+    self.assertFalse(fbb.printed_lines)
+
+  def test_isolate_name_causes_error(self):
+    fbb = FakeBBGen(self.args, FOO_GTESTS_BUILDER_MIXIN_WATERFALL,
+                    FOO_TEST_SUITE_WITH_ISOLATE_NAME, LUCI_MILO_CFG)
+    fbb.check_input_file_consistency(verbose=True)
+    with self.assertRaisesRegex(generate_buildbot_json.BBGenErr,
+                                r'.*\bisolate_name field is set\b.*'):
       fbb.check_output_file_consistency(verbose=True)
     self.assertFalse(fbb.printed_lines)
 
@@ -4028,6 +4050,27 @@ MATRIX_COMPOUND_CONFLICTING_TEST_SUITES = """\
 }
 """
 
+MATRIX_COMPOUND_EMPTY_VARIANTS = """\
+{
+  'basic_suites': {
+    'foo_tests': {
+      'baz_tests': {
+        'args': [
+          '--foo',
+        ],
+      }
+    },
+  },
+  'matrix_compound_suites': {
+    'matrix_tests': {
+      'foo_tests': {
+        'variants': [],
+      }
+    },
+  },
+}
+"""
+
 MATRIX_COMPOUND_TARGETS_ARGS = """\
 {
   'basic_suites': {
@@ -4297,13 +4340,21 @@ MATRIX_SKYLAB_WATERFALL = """\
 MATRIX_COMPOUND_SKYLAB_REF = """\
 {
   'basic_suites': {
+    'autotest_suites': {
+      'autotest_suite': {
+      },
+    },
     'cros_skylab_basic': {
-      'tast.basic': {
-        'suite': 'tast.basic',
+      'benchmark_suite': {
+        'benchmark': 'something',
+      },
+      'chrome_all_tast_tests': {
+        'tast_expr': 'dummy expr',
         'timeout': 3600,
       },
-      'tast.foo': {
-        'suite': 'tast.foo',
+      'gtest_suite': { },
+      'lacros_all_tast_tests': {
+        'tast_expr': 'lacros expr',
         'timeout': 3600,
       },
     },
@@ -4311,7 +4362,13 @@ MATRIX_COMPOUND_SKYLAB_REF = """\
   'compound_suites': {},
   'matrix_compound_suites': {
     'cros_skylab_basic_x86': {
+      'autotest_suites': {
+        'variants': [
+          'octopus-89-with-autotest-name',
+        ],
+      },
       'cros_skylab_basic': {
+        'tast_expr': 'dummy expr',
         'variants': [
           'octopus-89',
           'octopus-88',
@@ -4333,6 +4390,16 @@ SKYLAB_VARIANTS = """\
     'enabled': True,
     'identifier': 'OCTOPUS_TOT',
   },
+  'octopus-89-with-autotest-name': {
+    'skylab': {
+      'cros_board': 'octopus',
+      'cros_chrome_version': '89.0.3234.0',
+      'cros_img': 'octopus-release/R89-13655.0.0',
+      'autotest_name': 'unique_autotest_name',
+    },
+    'enabled': True,
+    'identifier': 'OCTOPUS_TOT',
+  },
   'octopus-88': {
     'skylab': {
       'cros_board': 'octopus',
@@ -4350,10 +4417,12 @@ ENABLED_AND_DISABLED_MATRIX_COMPOUND_SKYLAB_REF = """\
   'basic_suites': {
     'cros_skylab_basic': {
       'tast.basic': {
+        'tast_expr': 'dummy expr',
         'suite': 'tast.basic',
         'timeout': 3600,
       },
       'tast.foo': {
+        'tast_expr': 'dummy expr',
         'suite': 'tast.foo',
         'timeout': 3600,
       },
@@ -4502,6 +4571,15 @@ class MatrixCompositionTests(TestCase):
     with self.assertRaisesRegex(generate_buildbot_json.BBGenErr,
                                 'Conflicting test definitions.*'):
       fbb.check_input_file_consistency(verbose=True)
+    self.assertFalse(fbb.printed_lines)
+
+  def test_empty_variants(self):
+    fbb = FakeBBGen(self.args,
+                    MATRIX_GTEST_SUITE_WATERFALL,
+                    MATRIX_COMPOUND_EMPTY_VARIANTS,
+                    LUCI_MILO_CFG,
+                    mixins=SWARMING_MIXINS)
+    fbb.check_output_file_consistency(verbose=True)
     self.assertFalse(fbb.printed_lines)
 
   def test_variants_swarming_dict_merge_args(self):

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "components/services/screen_ai/proto/main_content_extractor_proto_convertor.h"
+#include "build/build_config.h"
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -29,8 +30,9 @@ namespace {
 // testing? Which site is it? etc.
 // Test definitions for ProtoConvertorViewHierarchyTest.
 constexpr int kProtoConversionTestCasesCount = 5;
-const char* kProtoConversionSampleInputFileNameFormat = "sample%i_ax_tree.json";
-const char* kProtoConversionSampleExpectedFileNameFormat =
+constexpr char kProtoConversionSampleInputFileNameFormat[] =
+    "sample%i_ax_tree.json";
+constexpr char kProtoConversionSampleExpectedFileNameFormat[] =
     "sample%i_expected_proto.pbtxt";
 
 // A dummy tree node definition for PreOrderTreeGeneration.
@@ -321,7 +323,12 @@ INSTANTIATE_TEST_SUITE_P(MainContentExtractorProtoConvertorTest,
                          ProtoConvertorViewHierarchyTest,
                          testing::Range(0, kProtoConversionTestCasesCount));
 
-TEST_P(ProtoConvertorViewHierarchyTest, AxTreeJsonToProtoTest) {
+#if BUILDFLAG(IS_MAC) && defined(ADDRESS_SANITIZER)
+#define MAYBE_AxTreeJsonToProtoTest DISABLED_AxTreeJsonToProtoTest
+#else
+#define MAYBE_AxTreeJsonToProtoTest AxTreeJsonToProtoTest
+#endif
+TEST_P(ProtoConvertorViewHierarchyTest, MAYBE_AxTreeJsonToProtoTest) {
   const base::FilePath kInputJsonPath = GetInputFilePath();
   const base::FilePath kExpectedProtoPath = GetExpectedFilePath();
 
@@ -333,9 +340,11 @@ TEST_P(ProtoConvertorViewHierarchyTest, AxTreeJsonToProtoTest) {
   ASSERT_TRUE(json.has_value());
 
   // Convert JSON file to AX tree update.
+  const std::map<std::string, ax::mojom::Role>
+      content_extraction_to_chrome_roles =
+          GetMainContentExtractorToChromeRoleConversionMapForTesting();
   ui::AXTreeUpdate tree_update = ui::AXTreeUpdateFromJSON(
-      json.value(),
-      &GetMainContentExtractorToChromeRoleConversionMapForTesting());
+      json.value(), &content_extraction_to_chrome_roles);
   ASSERT_GT(tree_update.nodes.size(), 0u);
 
   // Convert AX Tree to Screen2x proto.

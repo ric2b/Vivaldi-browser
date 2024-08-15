@@ -192,9 +192,9 @@ class ShoppingServiceTestBase : public testing::Test {
   static void MergeProductInfoData(ProductInfo* info,
                                    const base::Value::Dict& on_page_data_map);
 
-  // Skip the delay for running the on-page javascript for product info and
-  // wait until the task completes.
-  void SimulateProductInfoJsTaskFinished();
+  // Skip the delay for running the on-page local extraction for product info
+  // and wait until the task completes.
+  void SimulateProductInfoLocalExtractionTaskFinished();
 
   // Get the count of the number of tabs a particular URL is open in from the
   // product info cache.
@@ -210,7 +210,9 @@ class ShoppingServiceTestBase : public testing::Test {
   // Used primarily for decoding JSON for the mock javascript execution.
   data_decoder::test::InProcessDataDecoder in_process_data_decoder_;
 
-  std::unique_ptr<bookmarks::BookmarkModel> bookmark_model_;
+  std::unique_ptr<bookmarks::BookmarkModel> local_or_syncable_bookmark_model_;
+
+  std::unique_ptr<bookmarks::BookmarkModel> account_bookmark_model_;
 
   std::unique_ptr<MockOptGuideDecider> opt_guide_;
 

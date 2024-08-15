@@ -25,6 +25,7 @@ import './buttons/oobe_text_button.js';
 import './common_styles/oobe_common_styles.css.js';
 import './common_styles/oobe_dialog_host_styles.css.js';
 import './dialogs/oobe_content_dialog.js';
+import './quick_start_entry_point.js';
 
 import {sendWithPromise} from '//resources/ash/common/cr.m.js';
 import {html, mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -492,12 +493,13 @@ class GaiaDialog extends GaiaDialogBase {
 
   /**
    * Whether the back button is hidden.
+   * @param {boolean} navigationHidden - whether navigation in general is hidden
    * @param {boolean} hideBackButtonIfCantGoBack - whether it should be hidden.
    * @param {boolean} canGoBack - whether the form can go back.
    * @private
    */
-  isBackButtonHidden(hideBackButtonIfCantGoBack, canGoBack) {
-    return hideBackButtonIfCantGoBack && !canGoBack;
+  isBackButtonHidden(navigationHidden, hideBackButtonIfCantGoBack, canGoBack) {
+    return navigationHidden || (hideBackButtonIfCantGoBack && !canGoBack);
   }
 
   /**

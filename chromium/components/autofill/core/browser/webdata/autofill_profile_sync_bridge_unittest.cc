@@ -77,7 +77,7 @@ const char kGuidD[] = "EDC609ED-7EEE-4F27-B00C-423242A9C44D";
 const char kGuidInvalid[] = "EDC609ED-7EEE-4F27-B00C";
 const int kValidityStateBitfield = 1984;
 const char kLocaleString[] = "en-US";
-const base::Time kJune2017 = base::Time::FromDoubleT(1497552271);
+const base::Time kJune2017 = base::Time::FromSecondsSinceUnixEpoch(1497552271);
 
 AutofillProfile CreateAutofillProfile(
     const AutofillProfileSpecifics& specifics) {
@@ -312,6 +312,8 @@ class AutofillProfileSyncBridgeTest : public testing::Test {
   }
 
   void ApplyIncrementalSyncChanges(EntityChangeList changes) {
+    EXPECT_CALL(*backend(),
+                NotifyOnAutofillChangedBySync(syncer::AUTOFILL_PROFILE));
     const absl::optional<syncer::ModelError> error =
         bridge()->ApplyIncrementalSyncChanges(
             bridge()->CreateMetadataChangeList(), std::move(changes));

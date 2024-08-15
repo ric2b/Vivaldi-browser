@@ -26,7 +26,6 @@
 #include "ui/base/clipboard/file_info.h"
 #include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
 #include "ui/shell_dialogs/selected_file_info.h"
-#include "url/gurl.h"
 
 namespace storage {
 class FileSystemURL;
@@ -111,7 +110,7 @@ class DlpFilesControllerAsh : public DlpFilesController,
   using IsFilesTransferRestrictedCallback = base::OnceCallback<void(
       const std::vector<std::pair<FileDaemonInfo, ::dlp::RestrictionLevel>>&)>;
 
-  explicit DlpFilesControllerAsh(const DlpRulesManager& rules_manager);
+  DlpFilesControllerAsh(const DlpRulesManager& rules_manager, Profile* profile);
   DlpFilesControllerAsh(const DlpFilesControllerAsh& other) = delete;
   DlpFilesControllerAsh& operator=(const DlpFilesControllerAsh& other) = delete;
 
@@ -223,6 +222,7 @@ class DlpFilesControllerAsh : public DlpFilesController,
       const absl::optional<std::string>& dst_pattern,
       dlp::FileAction files_action,
       IsFilesTransferRestrictedCallback callback,
+      absl::optional<std::u16string> user_justification,
       bool should_proceed);
 
   void ReturnDisallowedFiles(
@@ -282,6 +282,10 @@ class DlpFilesControllerAsh : public DlpFilesController,
       const DlpFileDestination& destination,
       CheckIfDlpAllowedCallback result_callback,
       std::vector<storage::FileSystemURL> dropped_files);
+
+  // The profile with which we are associated. Not owned. It's currently always
+  // the main/primary profile.
+  const raw_ptr<Profile> profile_;
 
   // Keeps track of events and detects duplicate ones using time based
   // approach.

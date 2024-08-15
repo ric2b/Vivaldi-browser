@@ -43,6 +43,17 @@ BorealisInstallerUI::BorealisInstallerUI(content::WebUI* web_ui)
       {"finishedTitle", IDS_BOREALIS_INSTALLER_FINISHED_TITLE},
       {"finishedMessage", IDS_BOREALIS_INSTALLER_FINISHED_MESSAGE},
       {"launch", IDS_BOREALIS_INSTALLER_LAUNCH_BUTTON},
+      {"beta", IDS_BOREALIS_BETA_BADGE},
+      {"errorTitle", IDS_BOREALIS_INSTALLER_ERROR_TITLE},
+      {"errorDuplicate", IDS_BOREALIS_INSTALLER_ERROR_DUPLICATE},
+      {"errorUpdate", IDS_BOREALIS_INSTALLER_ERROR_UPDATE},
+      {"errorBusy", IDS_BOREALIS_INSTALLER_ERROR_BUSY},
+      {"errorSpace", IDS_BOREALIS_INSTALLER_ERROR_SPACE},
+      {"errorOffline", IDS_BOREALIS_INSTALLER_ERROR_OFFLINE},
+      {"errorStartup", IDS_BOREALIS_INSTALLER_ERROR_STARTUP},
+      {"retry", IDS_BOREALIS_INSTALLER_ERROR_BUTTON_RETRY},
+      {"storage", IDS_BOREALIS_INSTALLER_ERROR_BUTTON_STORAGE},
+      {"learnMore", IDS_BOREALIS_INSTALLER_ERROR_LEARN_MORE},
   };
   html_source->AddLocalizedStrings(kStrings);
 
@@ -94,6 +105,15 @@ void BorealisInstallerUI::OnPageClosed() {
   ui::MojoWebDialogUI::CloseDialog(base::Value::List());
 }
 
-WEB_UI_CONTROLLER_TYPE_IMPL(BorealisInstallerUI);
+bool BorealisInstallerUI::RequestClosePage() {
+  if (page_closed_ || !page_handler_) {
+    return true;
+  }
+
+  page_handler_->RequestClosePage();
+  return false;
+}
+
+WEB_UI_CONTROLLER_TYPE_IMPL(BorealisInstallerUI)
 
 }  // namespace ash

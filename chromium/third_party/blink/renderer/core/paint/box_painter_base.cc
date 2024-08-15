@@ -21,18 +21,21 @@
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/rounded_border_geometry.h"
 #include "third_party/blink/renderer/core/paint/rounded_inner_rect_clipper.h"
+#include "third_party/blink/renderer/core/paint/svg_mask_painter.h"
 #include "third_party/blink/renderer/core/paint/timing/image_element_timing.h"
 #include "third_party/blink/renderer/core/paint/timing/paint_timing_detector.h"
 #include "third_party/blink/renderer/core/style/border_edge.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/shadow_list.h"
 #include "third_party/blink/renderer/core/style/style_fetched_image.h"
+#include "third_party/blink/renderer/core/style/style_svg_mask_reference_image.h"
 #include "third_party/blink/renderer/platform/geometry/layout_rect.h"
 #include "third_party/blink/renderer/platform/graphics/bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context_state_saver.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_controller.h"
-#include "third_party/blink/renderer/platform/graphics/scoped_interpolation_quality.h"
+#include "third_party/blink/renderer/platform/graphics/paint_generated_image.h"
+#include "third_party/blink/renderer/platform/graphics/scoped_image_rendering_settings.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 
@@ -133,6 +136,80 @@ CompositedPaintStatus CompositedBackgroundColorStatus(Node* node) {
   return element_animations->CompositedBackgroundColorStatus();
 }
 
+void ClipToBorderEdge(GraphicsContext& context,
+                      const FloatRoundedRect& border,
+                      bool has_border_radius,
+                      bool has_opaque_background) {
+  FloatRoundedRect rect_to_clip_out = border;
+
+  // If the box is opaque, it is unnecessary to clip it out. However,
+  // doing so saves time when painting the shadow. On the other hand, it
+  // introduces subpixel gaps along the corners / edges. Those are avoided
+  // by insetting the clipping path by one CSS pixel.
+  if (has_opaque_background) {
+    rect_to_clip_out.Inset(1);
+  }
+
+  if (has_border_radius) {
+    if (!rect_to_clip_out.IsEmpty()) {
+      context.ClipOutRoundedRect(rect_to_clip_out);
+    }
+  } else {
+    if (!rect_to_clip_out.IsEmpty()) {
+      context.ClipOut(rect_to_clip_out.Rect());
+    }
+  }
+}
+
+void ClipToSides(GraphicsContext& context,
+                 const FloatRoundedRect& border,
+                 const ShadowData& shadow,
+                 PhysicalBoxSides sides_to_include) {
+  // Create a "pseudo-infinite" clip rectangle that should be large enough to
+  // contain shadows on all four sides, including blur. Clip to the original
+  // box for the sides that are excluded in this fragment.
+  gfx::OutsetsF shadow_outsets = shadow.RectOutsets();
+  // If an edge is not included, then reset the outset on that edge.
+  if (!sides_to_include.left) {
+    shadow_outsets.set_left(0);
+  }
+  if (!sides_to_include.top) {
+    shadow_outsets.set_top(0);
+  }
+  if (!sides_to_include.right) {
+    shadow_outsets.set_right(0);
+  }
+  if (!sides_to_include.bottom) {
+    shadow_outsets.set_bottom(0);
+  }
+  gfx::RectF keep = border.Rect();
+  keep.Outset(shadow_outsets);
+  context.Clip(keep);
+}
+
+void AdjustRectForSideClipping(gfx::RectF& rect,
+                               const ShadowData& shadow,
+                               PhysicalBoxSides sides_to_include) {
+  if (!sides_to_include.left) {
+    float extend_by = std::max(shadow.X(), 0.0f) + shadow.Blur();
+    rect.Offset(-extend_by, 0);
+    rect.set_width(rect.width() + extend_by);
+  }
+  if (!sides_to_include.top) {
+    float extend_by = std::max(shadow.Y(), 0.0f) + shadow.Blur();
+    rect.Offset(0, -extend_by);
+    rect.set_height(rect.height() + extend_by);
+  }
+  if (!sides_to_include.right) {
+    float shrink_by = std::min(shadow.X(), 0.0f) - shadow.Blur();
+    rect.set_width(rect.width() - shrink_by);
+  }
+  if (!sides_to_include.bottom) {
+    float shrink_by = std::min(shadow.Y(), 0.0f) - shadow.Blur();
+    rect.set_height(rect.height() - shrink_by);
+  }
+}
+
 }  // namespace
 
 void BoxPainterBase::PaintNormalBoxShadow(const PaintInfo& info,
@@ -189,38 +266,19 @@ void BoxPainterBase::PaintNormalBoxShadow(const PaintInfo& info,
     // The clip does not depend on any shadow-specific properties.
     if (!state_saver.Saved()) {
       state_saver.Save();
+      ClipToBorderEdge(context, border, has_border_radius,
+                       has_opaque_background);
+    }
 
-      FloatRoundedRect rect_to_clip_out = border;
+    // Recompute the shadow shape so that spread isn't applied twice in the
+    // border-radius case.
+    fill_rect = border.Rect();
 
-      // If the box is opaque, it is unnecessary to clip it out. However,
-      // doing so saves time when painting the shadow. On the other hand, it
-      // introduces subpixel gaps along the corners / edges. Those are avoided
-      // by insetting the clipping path by one CSS pixel.
-      if (has_opaque_background)
-        rect_to_clip_out.Inset(1);
-
-      if (has_border_radius) {
-        if (!rect_to_clip_out.IsEmpty())
-          context.ClipOutRoundedRect(rect_to_clip_out);
-      } else {
-        if (!rect_to_clip_out.IsEmpty())
-          context.ClipOut(rect_to_clip_out.Rect());
-      }
-
-      if (!sides_to_include.HasAllSides()) {
-        // Create a "pseudo-infinite" clip rectangle that should be large enough
-        // to contain shadows on all four sides, including blur. Clip to the
-        // border box for the sides that are excluded in this fragment.
-        gfx::RectF keep = fill_rect + shadow_offset;
-        keep.Outset(shadow_blur * 3);
-        const gfx::RectF& clip = border.Rect();
-
-        float left = sides_to_include.left ? keep.x() : clip.x();
-        float top = sides_to_include.top ? keep.y() : clip.y();
-        float right = sides_to_include.right ? keep.right() : clip.right();
-        float bottom = sides_to_include.bottom ? keep.bottom() : clip.bottom();
-        context.Clip(gfx::RectF(left, top, right - left, bottom - top));
-      }
+    GraphicsContextStateSaver sides_clip_saver(context, false);
+    if (!sides_to_include.HasAllSides()) {
+      sides_clip_saver.Save();
+      ClipToSides(context, border, shadow, sides_to_include);
+      AdjustRectForSideClipping(fill_rect, shadow, sides_to_include);
     }
 
     // Draw only the shadow. If the color of the shadow is transparent we will
@@ -232,12 +290,13 @@ void BoxPainterBase::PaintNormalBoxShadow(const PaintInfo& info,
     context.SetDrawLooper(draw_looper_builder.DetachDrawLooper());
 
     if (has_border_radius) {
-      FloatRoundedRect rounded_fill_rect = border;
+      FloatRoundedRect rounded_fill_rect(fill_rect, border.GetRadii());
       ApplySpreadToShadowShape(rounded_fill_rect, shadow_spread);
       context.FillRoundedRect(
           rounded_fill_rect, Color::kBlack,
           PaintAutoDarkMode(style, DarkModeFilter::ElementRole::kBackground));
     } else {
+      fill_rect.Outset(shadow_spread);
       context.FillRect(
           fill_rect, Color::kBlack,
           PaintAutoDarkMode(style, DarkModeFilter::ElementRole::kBackground));
@@ -264,7 +323,7 @@ void BoxPainterBase::PaintInsetBoxShadowWithInnerRect(
   if (!style.BoxShadow())
     return;
   auto bounds = RoundedBorderGeometry::PixelSnappedRoundedBorderWithOutsets(
-      style, inner_rect, NGPhysicalBoxStrut());
+      style, inner_rect, PhysicalBoxStrut());
   PaintInsetBoxShadow(info, bounds, style);
 }
 
@@ -281,29 +340,6 @@ inline gfx::RectF AreaCastingShadowInHole(const gfx::RectF& hole_rect,
   gfx::RectF offset_bounds = bounds;
   offset_bounds.Offset(-shadow.Offset());
   return gfx::UnionRects(bounds, offset_bounds);
-}
-
-void AdjustInnerRectForSideClipping(gfx::RectF& inner_rect,
-                                    const ShadowData& shadow,
-                                    PhysicalBoxSides sides_to_include) {
-  if (!sides_to_include.left) {
-    float extend_by = std::max(shadow.X(), 0.0f) + shadow.Blur();
-    inner_rect.Offset(-extend_by, 0);
-    inner_rect.set_width(inner_rect.width() + extend_by);
-  }
-  if (!sides_to_include.top) {
-    float extend_by = std::max(shadow.Y(), 0.0f) + shadow.Blur();
-    inner_rect.Offset(0, -extend_by);
-    inner_rect.set_height(inner_rect.height() + extend_by);
-  }
-  if (!sides_to_include.right) {
-    float shrink_by = std::min(shadow.X(), 0.0f) - shadow.Blur();
-    inner_rect.set_width(inner_rect.width() - shrink_by);
-  }
-  if (!sides_to_include.bottom) {
-    float shrink_by = std::min(shadow.Y(), 0.0f) - shadow.Blur();
-    inner_rect.set_height(inner_rect.height() - shrink_by);
-  }
 }
 
 }  // namespace
@@ -336,7 +372,7 @@ void BoxPainterBase::PaintInsetBoxShadow(const PaintInfo& info,
             : resolved_shadow_color;
 
     gfx::RectF inner_rect = bounds.Rect();
-    AdjustInnerRectForSideClipping(inner_rect, shadow, sides_to_include);
+    AdjustRectForSideClipping(inner_rect, shadow, sides_to_include);
     FloatRoundedRect inner_rounded_rect(inner_rect, bounds.GetRadii());
     ApplySpreadToShadowShape(inner_rounded_rect, -shadow.Spread());
     if (inner_rounded_rect.IsEmpty()) {
@@ -425,7 +461,9 @@ BoxPainterBase::FillLayerInfo::FillLayerInfo(
       respect_image_orientation(respect_image_orientation),
       sides_to_include(sides_to_include),
       is_bottom_layer(!layer.Next()),
-      is_border_fill(layer.Clip() == EFillBox::kBorder),
+      is_border_fill(layer.Clip() == EFillBox::kStrokeBox ||
+                     layer.Clip() == EFillBox::kViewBox ||
+                     layer.Clip() == EFillBox::kBorder),
       is_clipped_with_local_scrolling(is_scroll_container &&
                                       layer.Attachment() ==
                                           EFillAttachment::kLocal) {
@@ -461,6 +499,7 @@ BoxPainterBase::FillLayerInfo::FillLayerInfo(
   // BackgroundBleedClip{Only,Layer}.
   is_rounded_fill =
       has_rounded_border && !is_painting_background_in_contents_space &&
+      (layer.Clip() != EFillBox::kNoClip) &&
       (is_clipped_with_local_scrolling ||
        !(is_border_fill && BleedAvoidanceIsClipping(bleed_avoidance)));
 
@@ -512,22 +551,22 @@ absl::optional<gfx::RectF> OptimizeToSingleTileDraw(
     const PhysicalRect& dest_rect,
     Image& image,
     RespectImageOrientationEnum respect_orientation) {
-  const PhysicalOffset dest_phase = geometry.ComputeDestPhase();
+  const PhysicalRect& snapped_dest = geometry.SnappedDestRect();
 
   // Phase calculation uses the actual painted location, given by the
   // border-snapped destination rect.
-  const PhysicalRect one_tile_rect(dest_phase, geometry.TileSize());
+  const PhysicalRect one_tile_rect(
+      snapped_dest.offset + geometry.ComputePhase(), geometry.TileSize());
 
   // We cannot optimize if the tile is misaligned.
   if (!one_tile_rect.Contains(dest_rect))
     return absl::nullopt;
 
-  const PhysicalOffset offset_in_tile = dest_rect.offset - dest_phase;
+  const PhysicalOffset offset_in_tile = dest_rect.offset - one_tile_rect.offset;
   if (!image.HasIntrinsicSize()) {
     // This is a generated image sized according to the tile size so we can use
     // the snapped dest rect directly.
-    const PhysicalRect offset_tile(offset_in_tile,
-                                   geometry.SnappedDestRect().size);
+    const PhysicalRect offset_tile(offset_in_tile, snapped_dest.size);
     return gfx::RectF(offset_tile);
   }
 
@@ -601,13 +640,14 @@ void DrawTiledBackground(LocalFrame* frame,
                          ImagePaintTimingInfo paint_timing_info) {
   DCHECK(!geometry.TileSize().IsEmpty());
 
-  const gfx::RectF dest_rect(geometry.SnappedDestRect());
+  const PhysicalRect& snapped_dest = geometry.SnappedDestRect();
+  const gfx::RectF dest_rect(snapped_dest);
   // Check and see if a single draw of the image can cover the entire area
   // we are supposed to tile. The dest_rect_for_subset must use the same
   // location that was used in ComputePhaseForBackground and the unsnapped
   // destination rect in order to correctly evaluate the subset size and
   // location in the presence of border snapping and zoom.
-  const PhysicalRect dest_rect_for_subset(geometry.SnappedDestRect().offset,
+  const PhysicalRect dest_rect_for_subset(snapped_dest.offset,
                                           geometry.UnsnappedDestRect().size);
   if (absl::optional<gfx::RectF> single_tile_src = OptimizeToSingleTileDraw(
           geometry, dest_rect_for_subset, image, respect_orientation)) {
@@ -633,7 +673,8 @@ void DrawTiledBackground(LocalFrame* frame,
   // Note that this tile rect uses the image's pre-scaled size.
   ImageTilingInfo tiling_info;
   tiling_info.image_rect.set_size(intrinsic_tile_size);
-  tiling_info.phase = gfx::PointF(geometry.ComputeDestPhase());
+  tiling_info.phase =
+      gfx::PointF(snapped_dest.offset + geometry.ComputePhase());
   tiling_info.spacing = gfx::SizeF(geometry.SpaceSize());
 
   // Farther down the pipeline we will use the scaled tile size to determine
@@ -644,13 +685,12 @@ void DrawTiledBackground(LocalFrame* frame,
   //
   // So detect when we do not want to repeat and set the scale to round the
   // values in that dimension.
-  const PhysicalSize tile_dest_diff =
-      geometry.TileSize() - geometry.SnappedDestRect().size;
+  const PhysicalSize tile_dest_diff = geometry.TileSize() - snapped_dest.size;
   const LayoutUnit ref_tile_width = tile_dest_diff.width.Abs() <= 0.5f
-                                        ? geometry.SnappedDestRect().Width()
+                                        ? snapped_dest.Width()
                                         : geometry.TileSize().width;
   const LayoutUnit ref_tile_height = tile_dest_diff.height.Abs() <= 0.5f
-                                         ? geometry.SnappedDestRect().Height()
+                                         ? snapped_dest.Height()
                                          : geometry.TileSize().height;
   tiling_info.scale = {ref_tile_width / tiling_info.image_rect.width(),
                        ref_tile_height / tiling_info.image_rect.height()};
@@ -935,7 +975,7 @@ FloatRoundedRect RoundedBorderRectForClip(
     bool object_has_multiple_boxes,
     const PhysicalSize& flow_box_size,
     BackgroundBleedAvoidance bleed_avoidance,
-    const NGPhysicalBoxStrut& border_padding_insets) {
+    const PhysicalBoxStrut& border_padding_insets) {
   if (!info.is_rounded_fill)
     return FloatRoundedRect();
 
@@ -961,7 +1001,8 @@ FloatRoundedRect RoundedBorderRectForClip(
   // Clip to the padding or content boxes as necessary.
   // Use FastAndLossyFromRectF because we know it has been pixel snapped.
   PhysicalRect border_rect = PhysicalRect::FastAndLossyFromRectF(border.Rect());
-  if (bg_layer.Clip() == EFillBox::kContent) {
+  if (bg_layer.Clip() == EFillBox::kFillBox ||
+      bg_layer.Clip() == EFillBox::kContent) {
     border = RoundedBorderGeometry::PixelSnappedRoundedBorderWithOutsets(
         style, border_rect, border_padding_insets, info.sides_to_include);
     // Background of 'background-attachment: local' without visible/clip
@@ -1018,10 +1059,10 @@ void PaintFillLayerBackground(const Document* document,
   }
 }
 
-NGPhysicalBoxStrut AdjustOutsetsForEdgeInclusion(
-    const NGPhysicalBoxStrut& outsets,
+PhysicalBoxStrut AdjustOutsetsForEdgeInclusion(
+    const PhysicalBoxStrut& outsets,
     const BoxPainterBase::FillLayerInfo& info) {
-  NGPhysicalBoxStrut adjusted = outsets;
+  PhysicalBoxStrut adjusted = outsets;
   if (!info.sides_to_include.top)
     adjusted.top = LayoutUnit();
   if (!info.sides_to_include.right)
@@ -1039,16 +1080,83 @@ bool ShouldApplyBlendOperation(const BoxPainterBase::FillLayerInfo& info,
   return !info.is_bottom_layer || layer.GetType() != EFillLayerType::kMask;
 }
 
+bool NeedsMaskLuminanceLayer(const FillLayer& layer, StyleImage* image) {
+  if (layer.GetType() != EFillLayerType::kMask) {
+    return false;
+  }
+  if (layer.MaskMode() == EFillMaskMode::kLuminance) {
+    return true;
+  }
+  if (layer.MaskMode() == EFillMaskMode::kMatchSource) {
+    if (image->IsSVGMaskReference()) {
+      const auto& svg_reference = To<StyleSVGMaskReferenceImage>(*image);
+      EMaskType type = SVGMaskPainter::MaskType(
+          svg_reference.GetSVGResource(), svg_reference.GetSVGResourceClient());
+      return type == EMaskType::kLuminance;
+    }
+  }
+  return false;
+}
+
+class ScopedMaskLuminanceLayer {
+  STACK_ALLOCATED();
+
+ public:
+  ScopedMaskLuminanceLayer(GraphicsContext& context, SkBlendMode composite_op)
+      : context_(context) {
+    context.BeginLayer(cc::ColorFilter::MakeLuma(), &composite_op);
+  }
+  ~ScopedMaskLuminanceLayer() { context_.EndLayer(); }
+
+ private:
+  GraphicsContext& context_;
+};
+
+scoped_refptr<Image> UpdateGeometryAndGetImageForLayer(
+    const PaintInfo& paint_info,
+    const ComputedStyle& style,
+    const FillLayer& layer,
+    StyleImage* image,
+    const PhysicalRect& paint_rect,
+    BackgroundImageGeometry& geometry) {
+  const ComputedStyle& image_style = geometry.ImageStyle(style);
+
+  // If the "image" referenced by the FillLayer is an SVG <mask> reference (and
+  // this is a layer for a mask), then repeat, position, clip, origin and size
+  // should have no effect.
+  if (layer.GetType() == EFillLayerType::kMask && image->IsSVGMaskReference()) {
+    const auto& svg_reference = To<StyleSVGMaskReferenceImage>(*image);
+
+    const PhysicalRect positioning_area =
+        geometry.ComputePositioningArea(paint_info, layer, paint_rect);
+    const gfx::RectF reference_box(gfx::SizeF(positioning_area.size));
+    const float zoom = image_style.EffectiveZoom();
+
+    const gfx::RectF mask_area = SVGMaskPainter::ResourceBounds(
+        svg_reference.GetSVGResource(), svg_reference.GetSVGResourceClient(),
+        reference_box, zoom);
+    geometry.SetGeometryForSVGMask(mask_area, positioning_area.offset);
+
+    PaintRecord record = SVGMaskPainter::PaintResource(
+        svg_reference.GetSVGResource(), svg_reference.GetSVGResourceClient(),
+        reference_box, zoom);
+    return PaintGeneratedImage::Create(std::move(record), mask_area.size());
+  }
+  geometry.Calculate(paint_info, layer, paint_rect);
+  return image->GetImage(geometry.ImageClient(), geometry.ImageDocument(),
+                         image_style, gfx::SizeF(geometry.TileSize()));
+}
+
 }  // anonymous namespace
 
-NGPhysicalBoxStrut BoxPainterBase::ComputeSnappedBorders() const {
-  const NGPhysicalBoxStrut border_widths = ComputeBorders();
-  return NGPhysicalBoxStrut(
+PhysicalBoxStrut BoxPainterBase::ComputeSnappedBorders() const {
+  const PhysicalBoxStrut border_widths = ComputeBorders();
+  return PhysicalBoxStrut(
       border_widths.top.ToInt(), border_widths.right.ToInt(),
       border_widths.bottom.ToInt(), border_widths.left.ToInt());
 }
 
-NGPhysicalBoxStrut BoxPainterBase::AdjustedBorderOutsets(
+PhysicalBoxStrut BoxPainterBase::AdjustedBorderOutsets(
     const FillLayerInfo& info) const {
   return AdjustOutsetsForEdgeInclusion(ComputeSnappedBorders(), info);
 }
@@ -1081,24 +1189,32 @@ void BoxPainterBase::PaintFillLayer(const PaintInfo& paint_info,
 
   scoped_refptr<Image> image;
   SkBlendMode composite_op = SkBlendMode::kSrcOver;
-  absl::optional<ScopedInterpolationQuality> interpolation_quality_context;
+  absl::optional<ScopedImageRenderingSettings> image_rendering_settings_context;
+  absl::optional<ScopedMaskLuminanceLayer> mask_luminance_scope;
   if (fill_layer_info.should_paint_image) {
-    geometry.Calculate(paint_info, bg_layer, scrolled_paint_rect);
-    image = fill_layer_info.image->GetImage(
-        geometry.ImageClient(), geometry.ImageDocument(),
-        geometry.ImageStyle(style_), gfx::SizeF(geometry.TileSize()));
-    interpolation_quality_context.emplace(context,
-                                          geometry.ImageInterpolationQuality());
+    image = UpdateGeometryAndGetImageForLayer(paint_info, style_, bg_layer,
+                                              fill_layer_info.image,
+                                              scrolled_paint_rect, geometry);
+    image_rendering_settings_context.emplace(
+        context, geometry.ImageInterpolationQuality(),
+        geometry.DynamicRangeLimit());
 
     if (ShouldApplyBlendOperation(fill_layer_info, bg_layer)) {
       composite_op = WebCoreCompositeToSkiaComposite(bg_layer.Composite(),
                                                      bg_layer.GetBlendMode());
     }
+
+    if (NeedsMaskLuminanceLayer(bg_layer, fill_layer_info.image)) {
+      mask_luminance_scope.emplace(context, composite_op);
+      // The mask luminance layer will apply `composite_op`, so reset it to
+      // avoid applying it twice.
+      composite_op = SkBlendMode::kSrcOver;
+    }
   }
 
-  NGPhysicalBoxStrut border = ComputeSnappedBorders();
-  NGPhysicalBoxStrut padding = ComputePadding();
-  NGPhysicalBoxStrut border_padding_insets = -(border + padding);
+  PhysicalBoxStrut border = ComputeSnappedBorders();
+  PhysicalBoxStrut padding = ComputePadding();
+  PhysicalBoxStrut border_padding_insets = -(border + padding);
   FloatRoundedRect border_rect = RoundedBorderRectForClip(
       style_, fill_layer_info, bg_layer, rect, object_has_multiple_boxes,
       flow_box_size, bleed_avoidance, border_padding_insets);
@@ -1138,6 +1254,10 @@ void BoxPainterBase::PaintFillLayer(const PaintInfo& paint_info,
   absl::optional<GraphicsContextStateSaver> background_clip_state_saver;
   if (!geometry.CanCompositeBackgroundAttachmentFixed()) {
     switch (bg_layer.Clip()) {
+      case EFillBox::kFillBox:
+      // Spec: For elements with associated CSS layout box, the used values for
+      // fill-box compute to content-box.
+      // https://drafts.fxtf.org/css-masking/#the-mask-clip
       case EFillBox::kPadding:
       case EFillBox::kContent: {
         if (fill_layer_info.is_rounded_fill) {
@@ -1148,7 +1268,8 @@ void BoxPainterBase::PaintFillLayer(const PaintInfo& paint_info,
         PhysicalRect clip_rect = scrolled_paint_rect;
         clip_rect.Contract(
             AdjustOutsetsForEdgeInclusion(border, fill_layer_info));
-        if (bg_layer.Clip() == EFillBox::kContent) {
+        if (bg_layer.Clip() == EFillBox::kFillBox ||
+            bg_layer.Clip() == EFillBox::kContent) {
           clip_rect.Contract(
               AdjustOutsetsForEdgeInclusion(padding, fill_layer_info));
         }
@@ -1156,6 +1277,12 @@ void BoxPainterBase::PaintFillLayer(const PaintInfo& paint_info,
         context.Clip(ToPixelSnappedRect(clip_rect));
         break;
       }
+      case EFillBox::kStrokeBox:
+      case EFillBox::kViewBox:
+      // Spec: For elements with associated CSS layout box, ... stroke-box and
+      // view-box compute to border-box.
+      // https://drafts.fxtf.org/css-masking/#the-mask-clip
+      case EFillBox::kNoClip:
       case EFillBox::kBorder:
         break;
       case EFillBox::kText:  // fall through

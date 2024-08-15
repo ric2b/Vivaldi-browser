@@ -22,6 +22,7 @@
 #include "base/scoped_observation.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/tabs/tab_group_controller.h"
+#include "chrome/browser/ui/tabs/tab_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_scrubbing_metrics.h"
 #include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
 #include "components/sessions/core/session_id.h"
@@ -53,6 +54,47 @@ class TabGroupModelFactory {
 
   static TabGroupModelFactory* GetInstance();
   std::unique_ptr<TabGroupModel> Create(TabGroupController* controller);
+};
+
+// Holds state for a WebContents that has been detached from the tab strip.
+// Will also handle WebContents deletion if |remove_reason| is kDeleted, or
+// WebContents caching if |remove_reason| is kCached.
+struct DetachedWebContents {
+  DetachedWebContents(int index_before_any_removals,
+                      int index_at_time_of_removal,
+                      std::unique_ptr<content::WebContents> owned_contents,
+                      content::WebContents* contents,
+                      TabStripModelChange::RemoveReason remove_reason,
+                      absl::optional<SessionID> id);
+  DetachedWebContents(const DetachedWebContents&) = delete;
+  DetachedWebContents& operator=(const DetachedWebContents&) = delete;
+  ~DetachedWebContents();
+  DetachedWebContents(DetachedWebContents&&);
+
+  // When a WebContents is removed the delegate is given a chance to
+  // take ownership of it (generally for caching). If the delegate takes
+  // ownership, `owned_contents` will be null, and `contents` will be
+  // non-null. In other words, all observers should use `contents`, it is
+  // guaranteed to be valid for the life time of the notification (and
+  // possibly longer).
+  std::unique_ptr<content::WebContents> owned_contents;
+  raw_ptr<content::WebContents, AcrossTasksDanglingUntriaged> contents;
+
+  // The index of the WebContents in the original selection model of the tab
+  // strip [prior to any tabs being removed, if multiple tabs are being
+  // simultaneously removed].
+  const int index_before_any_removals;
+
+  // The index of the WebContents at the time it is being removed. If multiple
+  // tabs are being simultaneously removed, the index reflects previously
+  // removed tabs in this batch.
+  const int index_at_time_of_removal;
+
+  TabStripModelChange::RemoveReason remove_reason;
+
+  // The |contents| associated optional SessionID, used as key for
+  // ClosedTabCache. We only cache |contents| if |remove_reason| is kCached.
+  absl::optional<SessionID> id;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -88,49 +130,6 @@ class TabGroupModelFactory {
 ////////////////////////////////////////////////////////////////////////////////
 class TabStripModel : public TabGroupController {
  public:
-  // Holds state for a WebContents that has been detached from the tab strip.
-  // Will also handle WebContents deletion if |remove_reason| is kDeleted, or
-  // WebContents caching if |remove_reason| is kCached.
-  // TODO(https://crbug.com/1234327): Don't make DetachedWebContents an inner
-  // class, so it can be forward declared in TabStripModelDelegate.
-  struct DetachedWebContents {
-    DetachedWebContents(int index_before_any_removals,
-                        int index_at_time_of_removal,
-                        std::unique_ptr<content::WebContents> owned_contents,
-                        content::WebContents* contents,
-                        TabStripModelChange::RemoveReason remove_reason,
-                        absl::optional<SessionID> id);
-    DetachedWebContents(const DetachedWebContents&) = delete;
-    DetachedWebContents& operator=(const DetachedWebContents&) = delete;
-    ~DetachedWebContents();
-    DetachedWebContents(DetachedWebContents&&);
-
-    // When a WebContents is removed the delegate is given a chance to
-    // take ownership of it (generally for caching). If the delegate takes
-    // ownership, `owned_contents` will be null, and `contents` will be
-    // non-null. In other words, all observers should use `contents`, it is
-    // guaranteed to be valid for the life time of the notification (and
-    // possibly longer).
-    std::unique_ptr<content::WebContents> owned_contents;
-    raw_ptr<content::WebContents, AcrossTasksDanglingUntriaged> contents;
-
-    // The index of the WebContents in the original selection model of the tab
-    // strip [prior to any tabs being removed, if multiple tabs are being
-    // simultaneously removed].
-    const int index_before_any_removals;
-
-    // The index of the WebContents at the time it is being removed. If multiple
-    // tabs are being simultaneously removed, the index reflects previously
-    // removed tabs in this batch.
-    const int index_at_time_of_removal;
-
-    TabStripModelChange::RemoveReason remove_reason;
-
-    // The |contents| associated optional SessionID, used as key for
-    // ClosedTabCache. We only cache |contents| if |remove_reason| is kCached.
-    absl::optional<SessionID> id;
-  };
-
   // TODO(1394210): Remove this, and use absl::optional<size_t> (or at least
   // absl::optional<int>) in its place.
   static constexpr int kNoTab = -1;
@@ -165,6 +164,9 @@ class TabStripModel : public TabGroupController {
   // Retrieve the number of WebContentses/emptiness of the TabStripModel.
   int count() const { return static_cast<int>(contents_data_.size()); }
   bool empty() const { return contents_data_.empty(); }
+
+  int GetIndexOfTab(TabHandle tab) const;
+  TabHandle GetTabHandleAt(int index) const;
 
   // Retrieve the Profile associated with this TabStripModel.
   Profile* profile() const { return profile_; }
@@ -509,6 +511,7 @@ class TabStripModel : public TabGroupController {
     CommandRemoveFromGroup,
     CommandMoveToExistingWindow,
     CommandMoveTabsToNewWindow,
+    CommandOrganizeTabs,
     CommandFollowSite,
     CommandUnfollowSite,
     CommandCopyURL,
@@ -585,7 +588,6 @@ class TabStripModel : public TabGroupController {
  private:
   FRIEND_TEST_ALL_PREFIXES(TabStripModelTest, GetIndicesClosedByCommand);
 
-  class Tab;
   struct DetachNotifications;
 
   // Perform tasks associated with changes to the model. Change the Active Index
@@ -597,9 +599,9 @@ class TabStripModel : public TabGroupController {
   // is used to indicate to observers what is going to happen to the WebContents
   // (i.e. deleted or reinserted into another tab strip). Returns the detached
   // WebContents.
-  std::unique_ptr<TabStripModel::DetachedWebContents>
-  DetachWebContentsWithReasonAt(int index,
-                                TabStripModelChange::RemoveReason reason);
+  std::unique_ptr<DetachedWebContents> DetachWebContentsWithReasonAt(
+      int index,
+      TabStripModelChange::RemoveReason reason);
 
   // Performs all the work to detach a WebContents instance but avoids sending
   // most notifications. TabClosingAt() and TabDetachedAt() are sent because
@@ -807,7 +809,7 @@ class TabStripModel : public TabGroupController {
 
   // The WebContents data currently hosted within this TabStripModel. This must
   // be kept in sync with |selection_model_|.
-  std::vector<std::unique_ptr<Tab>> contents_data_;
+  std::vector<std::unique_ptr<TabModel>> contents_data_;
 
   // The model for tab groups hosted within this TabStripModel.
   std::unique_ptr<TabGroupModel> group_model_;

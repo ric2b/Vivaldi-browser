@@ -28,6 +28,7 @@
 #include "components/viz/common/resources/shared_image_format.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "gpu/GLES2/gl2extchromium.h"
+#include "gpu/command_buffer/client/client_shared_image.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/raster_interface.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
@@ -266,14 +267,17 @@ Buffer::Texture::Texture(
 
   if (media::IsMultiPlaneFormatForHardwareVideoEnabled()) {
     auto si_format = GetSharedImageFormat(gpu_memory_buffer_->GetFormat());
-    mailbox_ = sii->CreateSharedImage(si_format, gpu_memory_buffer_->GetSize(),
-                                      color_space, kTopLeft_GrSurfaceOrigin,
-                                      kPremul_SkAlphaType, usage, "ExoTexture",
-                                      gpu_memory_buffer_->CloneHandle());
+    auto client_shared_image = sii->CreateSharedImage(
+        si_format, gpu_memory_buffer_->GetSize(), color_space,
+        kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage, "ExoTexture",
+        gpu_memory_buffer_->CloneHandle());
+    CHECK(client_shared_image);
+    mailbox_ = client_shared_image->mailbox();
   } else {
     mailbox_ = sii->CreateSharedImage(
-        gpu_memory_buffer_, gpu_memory_buffer_manager, color_space,
-        kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage, "ExoTexture");
+        gpu_memory_buffer_, gpu_memory_buffer_manager,
+        gfx::BufferPlane::DEFAULT, color_space, kTopLeft_GrSurfaceOrigin,
+        kPremul_SkAlphaType, usage, "ExoTexture");
   }
   DCHECK(!mailbox_.IsZero());
   gpu::raster::RasterInterface* ri = context_provider_->RasterInterface();
@@ -553,6 +557,8 @@ bool Buffer::ProduceTransferableResource(
   resource->id = resource_manager->AllocateResourceId();
   resource->format = viz::SinglePlaneFormat::kRGBA_8888;
   resource->size = gpu_memory_buffer_->GetSize();
+  resource->resource_source =
+      viz::TransferableResource::ResourceSource::kExoBuffer;
 
   // Create a new image texture for |gpu_memory_buffer_| with |texture_target_|
   // if one doesn't already exist. The contents of this buffer are copied to
@@ -779,15 +785,15 @@ void Buffer::MaybeRunPerCommitRelease(
     // fence can have already been signalled. Thus, only watch the fence is
     // readable iff it hasn't been signalled yet.
     base::TimeTicks ticks;
-    auto status = gfx::GpuFence::GetStatusChangeTime(
-        release_fence.owned_fd.get(), &ticks);
+    auto status =
+        gfx::GpuFence::GetStatusChangeTime(release_fence.Peek(), &ticks);
     if (status == gfx::GpuFence::kSignaled) {
       std::move(buffer_release_callback).Run();
       return;
     }
 
     auto controller = base::FileDescriptorWatcher::WatchReadable(
-        release_fence.owned_fd.get(),
+        release_fence.Peek(),
         base::BindRepeating(&Buffer::FenceSignalled, AsWeakPtr(), commit_id));
     buffer_releases_.emplace(
         commit_id,

@@ -29,17 +29,17 @@
 #import "ios/chrome/browser/signin/fake_system_identity.h"
 #import "ios/chrome/browser/signin/fake_system_identity_manager.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
-#import "ios/chrome/browser/sync/mock_sync_service_utils.h"
-#import "ios/chrome/browser/sync/sync_service_factory.h"
-#import "ios/chrome/browser/sync/sync_setup_service_factory.h"
-#import "ios/chrome/browser/sync/sync_setup_service_mock.h"
+#import "ios/chrome/browser/sync/model/mock_sync_service_utils.h"
+#import "ios/chrome/browser/sync/model/sync_service_factory.h"
+#import "ios/chrome/browser/sync/model/sync_setup_service_factory.h"
+#import "ios/chrome/browser/sync/model/sync_setup_service_mock.h"
 #import "ios/chrome/browser/ui/authentication/cells/table_view_central_account_item.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_image_detail_text_item.h"
 #import "ios/chrome/browser/ui/settings/cells/sync_switch_item.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_constants.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_consumer.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_table_view_controller.h"
-#import "ios/chrome/grit/ios_chromium_strings.h"
+#import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/web/public/test/web_task_environment.h"
@@ -77,8 +77,6 @@ class ManageSyncSettingsMediatorTest : public PlatformTest {
         AuthenticationServiceFactory::GetDefaultFactory());
     browser_state_ = builder.Build();
 
-    sync_setup_service_mock_ = static_cast<SyncSetupServiceMock*>(
-        SyncSetupServiceFactory::GetForBrowserState(browser_state_.get()));
     sync_service_mock_ = static_cast<syncer::MockSyncService*>(
         SyncServiceFactory::GetForBrowserState(browser_state_.get()));
     AuthenticationServiceFactory::CreateAndInitializeForBrowserState(
@@ -109,7 +107,6 @@ class ManageSyncSettingsMediatorTest : public PlatformTest {
                                   GetForBrowserState(browser_state_.get())
                   prefService:browser_state_->GetPrefs()
           initialAccountState:initialAccountState];
-    mediator_.syncSetupService = sync_setup_service_mock_;
     mediator_.consumer = consumer_;
   }
 
@@ -118,7 +115,8 @@ class ManageSyncSettingsMediatorTest : public PlatformTest {
             IsInitialSyncFeatureSetupComplete())
         .WillByDefault(Return(true));
     ON_CALL(*sync_service_mock_, HasSyncConsent()).WillByDefault(Return(true));
-    ON_CALL(*sync_setup_service_mock_, IsSyncEverythingEnabled())
+    ON_CALL(*sync_service_mock_->GetMockUserSettings(),
+            IsSyncEverythingEnabled())
         .WillByDefault(Return(true));
     ON_CALL(*sync_service_mock_, GetTransportState())
         .WillByDefault(Return(syncer::SyncService::TransportState::ACTIVE));
@@ -130,7 +128,8 @@ class ManageSyncSettingsMediatorTest : public PlatformTest {
 
   void SimulateFirstSetupSyncOff() {
     ON_CALL(*sync_service_mock_, HasSyncConsent()).WillByDefault(Return(false));
-    ON_CALL(*sync_setup_service_mock_, IsSyncEverythingEnabled())
+    ON_CALL(*sync_service_mock_->GetMockUserSettings(),
+            IsSyncEverythingEnabled())
         .WillByDefault(Return(true));
     ON_CALL(*sync_service_mock_, GetTransportState())
         .WillByDefault(Return(syncer::SyncService::TransportState::DISABLED));
@@ -161,7 +160,6 @@ class ManageSyncSettingsMediatorTest : public PlatformTest {
   IOSChromeScopedTestingLocalState local_state_;
 
   syncer::MockSyncService* sync_service_mock_;
-  SyncSetupServiceMock* sync_setup_service_mock_;
   std::unique_ptr<TestChromeBrowserState> browser_state_;
 
   ManageSyncSettingsMediator* mediator_ = nullptr;

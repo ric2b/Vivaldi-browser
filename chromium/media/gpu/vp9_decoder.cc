@@ -13,6 +13,7 @@
 #include "build/chromeos_buildflags.h"
 #include "media/base/limits.h"
 #include "media/base/media_switches.h"
+#include "media/base/platform_features.h"
 #include "media/gpu/vp9_decoder.h"
 
 namespace media {
@@ -28,20 +29,16 @@ bool GetSpatialLayerFrameSize(const DecoderBuffer& decoder_buffer,
   }
 
   bool enable_vp9_ksvc =
-// On windows, currently only d3d11 supports decoding VP9 kSVC stream, we
-// shouldn't combine the switch kD3D11Vp9kSVCHWDecoding to kVp9kSVCHWDecoding
-// due to we want keep returning false to MediaCapability.
-#if BUILDFLAG(IS_WIN)
-      base::FeatureList::IsEnabled(media::kD3D11Vp9kSVCHWDecoding);
-#elif BUILDFLAG(IS_CHROMEOS) && defined(ARCH_CPU_ARM_FAMILY)
-      // V4L2 stateless API decoder is not capable of decoding VP9 k-SVC stream.
+  // V4L2 stateless decoder does not support VP9 kSVC streams.
+  // See comments in media::IsVp9kSVCHWDecodingEnabled().
+#if BUILDFLAG(IS_CHROMEOS) && defined(ARCH_CPU_ARM_FAMILY)
       false;
 #else
-      base::FeatureList::IsEnabled(media::kVp9kSVCHWDecoding);
-#endif
+      media::IsVp9kSVCHWDecodingEnabled();
+#endif  // BUILDFLAG(IS_CHROMEOS) && defined(ARCH_CPU_ARM_FAMILY)
 
   if (!enable_vp9_ksvc) {
-    DLOG(ERROR) << "Vp9 k-SVC hardware decoding is disabled";
+    DLOG(ERROR) << "VP9 k-SVC hardware decoding is disabled";
     return false;
   }
 
@@ -291,6 +288,12 @@ VP9Decoder::DecodeResult VP9Decoder::Decode() {
 
     DCHECK(!new_pic_size.IsEmpty());
 
+    bool is_color_space_change = false;
+    if (base::FeatureList::IsEnabled(kAVDColorSpaceChanges)) {
+      is_color_space_change = new_color_space.IsSpecified() &&
+                              new_color_space != picture_color_space_;
+    }
+
     const bool is_pic_size_different = new_pic_size != pic_size_;
     const bool is_pic_size_larger = new_pic_size.width() > pic_size_.width() ||
                                     new_pic_size.height() > pic_size_.height();
@@ -298,13 +301,15 @@ VP9Decoder::DecodeResult VP9Decoder::Decode() {
         (ignore_resolution_changes_to_smaller_for_testing_
              ? is_pic_size_larger
              : is_pic_size_different) ||
-        new_profile != profile_ || curr_frame_hdr_->bit_depth != bit_depth_;
+        new_profile != profile_ || curr_frame_hdr_->bit_depth != bit_depth_ ||
+        is_color_space_change;
 
     if (is_new_configuration_different_enough) {
       DVLOG(1) << "New profile: " << GetProfileName(new_profile)
                << ", new resolution: " << new_pic_size.ToString()
                << ", new bit depth: "
-               << base::strict_cast<int>(curr_frame_hdr_->bit_depth);
+               << base::strict_cast<int>(curr_frame_hdr_->bit_depth)
+               << ", new color space: " << new_color_space.ToString();
 
       if (!curr_frame_hdr_->IsKeyframe() &&
           !(curr_frame_hdr_->IsIntra() && pic_size_.IsEmpty())) {
@@ -337,19 +342,6 @@ VP9Decoder::DecodeResult VP9Decoder::Decode() {
       picture_color_space_ = new_color_space;
       size_change_failure_counter_ = 0;
       return kConfigChange;
-    }
-
-    if (new_color_space.IsSpecified() &&
-        new_color_space != picture_color_space_ &&
-        curr_frame_hdr_->IsKeyframe()) {
-      // TODO(posciak): This requires us to be on a keyframe (see above) and is
-      // required, because VDA clients expect all surfaces to be returned before
-      // they can cycle surface sets after receiving kConfigChange.
-      // This is only an implementation detail of VDAs and can be improved.
-      ref_frames_.Clear();
-
-      picture_color_space_ = new_color_space;
-      return kColorSpaceChange;
     }
 
     scoped_refptr<VP9Picture> pic = accelerator_->CreateVP9Picture();

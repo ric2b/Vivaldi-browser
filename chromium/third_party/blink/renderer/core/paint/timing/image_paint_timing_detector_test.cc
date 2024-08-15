@@ -115,7 +115,7 @@ class ImagePaintTimingDetectorTest : public testing::Test,
   ImageRecord* LargestPaintedImage() {
     return GetPaintTimingDetector()
         .GetImagePaintTimingDetector()
-        .records_manager_.largest_painted_image_.get();
+        .records_manager_.largest_painted_image_.Get();
   }
 
   ImageRecord* ChildFrameLargestImage() {
@@ -132,21 +132,20 @@ class ImagePaintTimingDetectorTest : public testing::Test,
   }
 
   size_t ContainerTotalSize() {
-    return GetPaintTimingDetector()
-               .GetImagePaintTimingDetector()
-               .records_manager_.recorded_images_.size() +
-           GetPaintTimingDetector()
-               .GetImagePaintTimingDetector()
-               .records_manager_.pending_images_.size() +
-           GetPaintTimingDetector()
-               .GetImagePaintTimingDetector()
-               .records_manager_.size_ordered_set_.size() +
-           GetPaintTimingDetector()
-               .GetImagePaintTimingDetector()
-               .records_manager_.images_queued_for_paint_time_.size() +
-           GetPaintTimingDetector()
-               .GetImagePaintTimingDetector()
-               .records_manager_.image_finished_times_.size();
+    size_t result = GetPaintTimingDetector()
+                        .GetImagePaintTimingDetector()
+                        .records_manager_.recorded_images_.size() +
+                    GetPaintTimingDetector()
+                        .GetImagePaintTimingDetector()
+                        .records_manager_.pending_images_.size() +
+                    GetPaintTimingDetector()
+                        .GetImagePaintTimingDetector()
+                        .records_manager_.images_queued_for_paint_time_.size() +
+                    GetPaintTimingDetector()
+                        .GetImagePaintTimingDetector()
+                        .records_manager_.image_finished_times_.size();
+
+    return result;
   }
 
   size_t CountChildFrameRecords() {
@@ -168,11 +167,13 @@ class ImagePaintTimingDetectorTest : public testing::Test,
   }
 
   base::TimeTicks LargestPaintTime() {
-    return GetPaintTimingDetector().lcp_details_.largest_image_paint_time_;
+    return GetPaintTimingDetector()
+        .latest_lcp_details_.largest_image_paint_time_;
   }
 
   uint64_t LargestPaintSize() {
-    return GetPaintTimingDetector().lcp_details_.largest_image_paint_size_;
+    return GetPaintTimingDetector()
+        .latest_lcp_details_.largest_image_paint_size_;
   }
 
   static constexpr base::TimeDelta kQuantumOfTime = base::Milliseconds(10);
@@ -766,7 +767,7 @@ TEST_P(ImagePaintTimingDetectorTest,
   )HTML");
   SetImageAndPaint("target", 5, 5);
   UpdateAllLifecyclePhases();
-  EXPECT_EQ(ContainerTotalSize(), 5u);
+  EXPECT_EQ(ContainerTotalSize(), 4u);
 
   GetDocument()
       .getElementById(AtomicString("parent"))
@@ -1254,18 +1255,17 @@ TEST_P(ImagePaintTimingDetectorTest, LargestImagePaint_FullViewportImage) {
       entry, UkmPaintTiming::kLCPDebugging_HasViewportImageName, true);
 }
 
-TEST_P(ImagePaintTimingDetectorTest, LargestImagePaint_Detached_Frame) {
 #if BUILDFLAG(IS_ANDROID)
-  if (RuntimeEnabledFeatures::SolidColorLayersEnabled() ||
-      RuntimeEnabledFeatures::CompositeScrollAfterPaintEnabled()) {
-    // TODO(crbug.com/1353921, crbug.com/1414885):
-    // This test is flaky on Android. Fix it.
-    // https://chrome-swarming.appspot.com/task?id=60c68038be22f011
-    // The first EXPECT_EQ(0u, events.size()) below failed.
-    return;
-  }
+// TODO(crbug.com/1353921): This test is flaky on Android. Fix it.
+// https://chrome-swarming.appspot.com/task?id=60c68038be22f011
+// The first EXPECT_EQ(0u, events.size()) below failed.
+#define MAYBE_LargestImagePaint_Detached_Frame \
+  DISABLED_LargestImagePaint_Detached_Frame
+#else
+#define MAYBE_LargestImagePaint_Detached_Frame LargestImagePaint_Detached_Frame
 #endif
 
+TEST_P(ImagePaintTimingDetectorTest, MAYBE_LargestImagePaint_Detached_Frame) {
   using trace_analyzer::Query;
   GetDocument().SetBaseURLOverride(KURL("http://test.com"));
   SetBodyInnerHTML(R"HTML(

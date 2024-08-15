@@ -123,6 +123,8 @@ class HashRealTimeService : public KeyedService {
  private:
   friend class HashRealTimeServiceTest;
   friend class HashRealTimeServiceDirectFetchTest;
+  FRIEND_TEST_ALL_PREFIXES(HashRealTimeServiceTest,
+                           TestLookupFailure_MissingOhttpKey);
   FRIEND_TEST_ALL_PREFIXES(HashRealTimeServiceTest, TestLookupFailure_NetError);
   FRIEND_TEST_ALL_PREFIXES(HashRealTimeServiceTest,
                            TestLookupFailure_RetriableNetError);
@@ -148,7 +150,7 @@ class HashRealTimeService : public KeyedService {
   FRIEND_TEST_ALL_PREFIXES(HashRealTimeServiceTest,
                            TestBackoffModeRespected_NotCached);
   FRIEND_TEST_ALL_PREFIXES(HashRealTimeServiceTest,
-                           TestLogSearchCacheWithNoQueryParamsMetric);
+                           TestLookupFailure_OhttpClientDestructedEarly);
   FRIEND_TEST_ALL_PREFIXES(HashRealTimeServiceDirectFetchTest,
                            TestLookupFailure_RetriableNetError);
 
@@ -177,6 +179,22 @@ class HashRealTimeService : public KeyedService {
     // There is a bug in the code leading to a NOTREACHED branch.
     kNotReached = 7,
     kMaxValue = kNotReached,
+  };
+
+  // The reason why ReportError is called on backoff operator.
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class BackoffReportErrorReason {
+    kInvalidKey = 0,
+    kResponseError = 1,
+    kMaxValue = kResponseError,
+  };
+
+  // Used only for the return type of the function |DetermineSBThreatInfo|.
+  struct SBThreatInfo {
+    SBThreatInfo(SBThreatType threat_type, int num_full_hash_matches);
+    SBThreatType threat_type;
+    int num_full_hash_matches;
   };
 
   // Returns the traffic annotation tag that is attached in the simple URL
@@ -213,8 +231,9 @@ class HashRealTimeService : public KeyedService {
 
   // Callback for requests sent via OHTTP. Most parameters are used by
   // |OnURLLoaderComplete|, see the description above |OnURLLoaderComplete| for
-  // details. |response_body|, |net_error|, |response_code| and |headers| are
-  // returned from the OHTTP client. |ohttp_key| is sent to the key service.
+  // details. |response_body|, |net_error|, |response_code|, |headers|, and
+  // |ohttp_client_destructed_early| are returned from the OHTTP client.
+  // |ohttp_key| is sent to the key service.
   void OnOhttpComplete(
       const GURL& url,
       const std::vector<std::string>& hash_prefixes_in_request,
@@ -228,7 +247,8 @@ class HashRealTimeService : public KeyedService {
       const absl::optional<std::string>& response_body,
       int net_error,
       int response_code,
-      scoped_refptr<net::HttpResponseHeaders> headers);
+      scoped_refptr<net::HttpResponseHeaders> headers,
+      bool ohttp_client_destructed_early);
 
   // Callback for requests sent directly to the Safe Browsing server. Most
   // parameters are used by |OnURLLoaderComplete|, see the description above
@@ -271,6 +291,10 @@ class HashRealTimeService : public KeyedService {
   //  - |response_code| is the HTTP status code from the server.
   //  - |webui_delegate_token| is used for matching HPRT lookup responses to
   //    pings on chrome://safe-browsing.
+  //  - |ohttp_client_destructed_early| represents whether the OHTTP client
+  //    used for making the request destructed before its normal callback was
+  //    called. This is used only for logging purposes. It is null when there
+  //    is no OHTTP client, i.e. for direct fetch.
   void OnURLLoaderComplete(
       const GURL& url,
       const std::vector<std::string>& hash_prefixes_in_request,
@@ -282,19 +306,17 @@ class HashRealTimeService : public KeyedService {
       std::unique_ptr<std::string> response_body,
       int net_error,
       int response_code,
-      absl::optional<int> webui_delegate_token);
+      absl::optional<int> webui_delegate_token,
+      absl::optional<bool> ohttp_client_destructed_early);
 
   // Determines the most severe threat type based on |result_full_hashes|, which
   // contains the merged caching and server response results. The |url| is
   // required in order to filter down |result_full_hashes| to ones that match
-  // the |url| full hashes. |log_threat_info_size| determines whether to log
-  // SafeBrowsing.HPRT.ThreatInfoSize during the method call.
-  static SBThreatType DetermineSBThreatType(
+  // the |url| full hashes. It also returns the number of full hash matches for
+  // logging purposes.
+  static SBThreatInfo DetermineSBThreatInfo(
       const GURL& url,
-      const std::vector<V5::FullHash>& result_full_hashes,
-      // TODO(crbug.com/1410253): Deprecate this once the experiment is
-      // complete.
-      bool log_threat_info_size);
+      const std::vector<V5::FullHash>& result_full_hashes);
 
   // Returns a number representing the severity of the full hash detail. The
   // lower the number, the more severe it is. Severity is used to narrow down to
@@ -346,24 +368,13 @@ class HashRealTimeService : public KeyedService {
   std::set<std::string> GetHashPrefixesSet(const GURL& url) const;
 
   // Searches the local cache for the input |hash_prefixes|.
-  //  - |skip_logging| specifies whether metric logging should be skipped when
-  //    this function is called.
   //  - |out_missing_hash_prefixes| is an output parameter with a list of which
   //    hash prefixes were not found in the cache and need to be requested.
   //  - |out_cached_full_hashes| is an output parameter with a list of unsafe
   //    full hashes that were found in the cache for any of the |hash_prefixes|.
-  // TODO(crbug.com/1432308): [Also TODO(thefrog)] Remove |skip_logging|
-  // parameter after investigation is complete.
   void SearchCache(std::set<std::string> hash_prefixes,
-                   bool skip_logging,
                    std::vector<std::string>* out_missing_hash_prefixes,
                    std::vector<V5::FullHash>* out_cached_full_hashes) const;
-
-  // Used for logging only. Records whether there would be a cache hit for all
-  // requested prefixes if the URL's query parameters were excluded.
-  // TODO(crbug.com/1432308): [Also TODO(thefrog)] Remove function after
-  // investigation is complete.
-  void LogSearchCacheWithNoQueryParamsMetric(const GURL& url) const;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

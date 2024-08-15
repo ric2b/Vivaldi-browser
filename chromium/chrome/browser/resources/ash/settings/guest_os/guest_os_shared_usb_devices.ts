@@ -65,8 +65,8 @@ export class SettingsGuestOsSharedUsbDevicesElement extends
         type: Object,
         value() {
           return {
-            'vm_name': '',
-            'container_name': '',
+            vm_name: '',
+            container_name: '',
           };
         },
       },
@@ -123,7 +123,7 @@ export class SettingsGuestOsSharedUsbDevicesElement extends
     this.browserProxy_ = GuestOsBrowserProxyImpl.getInstance();
   }
 
-  override ready() {
+  override ready(): void {
     super.ready();
 
     this.addWebUiListener(

@@ -86,8 +86,7 @@ scoped_refptr<base::SequencedTaskRunner> GetPrintingTaskRunner() {
   // Use task runner associated with equivalent of UI thread.  Needed for calls
   // made through `PrintDialogLinuxInterface` to properly execute.
   CHECK(base::SequencedTaskRunner::HasCurrentDefault());
-  scoped_refptr<base::SequencedTaskRunner> task_runner =
-      base::SequencedTaskRunner::GetCurrentDefault();
+  return base::SequencedTaskRunner::GetCurrentDefault();
 #else
 
   static constexpr base::TaskTraits kTraits = {
@@ -95,24 +94,19 @@ scoped_refptr<base::SequencedTaskRunner> GetPrintingTaskRunner() {
 
 #if BUILDFLAG(USE_CUPS)
   // CUPS is thread safe, so a task runner can be allocated for each job.
-  scoped_refptr<base::SequencedTaskRunner> task_runner =
-      base::ThreadPool::CreateSequencedTaskRunner(kTraits);
+  return base::ThreadPool::CreateSequencedTaskRunner(kTraits);
 #elif BUILDFLAG(IS_WIN)
   // For Windows, we want a single threaded task runner shared for all print
   // jobs in the process because Windows printer drivers are oftentimes not
   // thread-safe.  This protects against multiple print jobs to the same device
   // from running in the driver at the same time.
-  static scoped_refptr<base::SequencedTaskRunner> task_runner =
-      base::ThreadPool::CreateSingleThreadTaskRunner(kTraits);
+  return base::ThreadPool::CreateSingleThreadTaskRunner(kTraits);
 #else
   // Be conservative for unsupported platforms, use a single threaded runner
   // so that concurrent print jobs are not in driver code at the same time.
-  static scoped_refptr<base::SequencedTaskRunner> task_runner =
-      base::ThreadPool::CreateSingleThreadTaskRunner(kTraits);
+  return base::ThreadPool::CreateSingleThreadTaskRunner(kTraits);
 #endif
 #endif  // BUILDFLAG(IS_LINUX)
-
-  return task_runner;
 }
 
 std::unique_ptr<Metafile> CreateMetafile(mojom::MetafileDataType data_type) {
@@ -630,7 +624,8 @@ void PrintBackendServiceImpl::EstablishPrintingContext(uint32_t context_id
 #endif
 
   context_container->context = PrintingContext::Create(
-      context_container->delegate.get(), /*skip_system_calls=*/false);
+      context_container->delegate.get(),
+      PrintingContext::ProcessBehavior::kOopEnabledPerformSystemCalls);
 
   bool inserted = persistent_printing_contexts_
                       .insert({context_id, std::move(context_container)})

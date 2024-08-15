@@ -4,9 +4,11 @@
 
 #include "chrome/renderer/accessibility/read_anything_app_controller.h"
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "chrome/renderer/accessibility/ax_tree_distiller.h"
 #include "chrome/test/base/chrome_render_view_test.h"
 #include "content/public/renderer/render_frame.h"
@@ -47,6 +49,10 @@ class MockReadAnythingUntrustedPageHandler
   MOCK_METHOD(void, OnCollapseSelection, (), (override));
   MOCK_METHOD(void, OnCopy, (), (override));
   MOCK_METHOD(void,
+              EnablePDFContentAccessibility,
+              (const ui::AXTreeID& ax_tree_id),
+              (override));
+  MOCK_METHOD(void,
               OnLineSpaceChange,
               (read_anything::mojom::LineSpacing line_spacing),
               (override));
@@ -56,9 +62,18 @@ class MockReadAnythingUntrustedPageHandler
               (override));
   MOCK_METHOD(void, OnFontChange, (const std::string& font), (override));
   MOCK_METHOD(void, OnFontSizeChange, (double font_size), (override));
+  MOCK_METHOD(void, OnSpeechRateChange, (double rate), (override));
+  MOCK_METHOD(void,
+              OnVoiceChange,
+              (const std::string& voice, const std::string& lang),
+              (override));
   MOCK_METHOD(void,
               OnColorChange,
               (read_anything::mojom::Colors color),
+              (override));
+  MOCK_METHOD(void,
+              OnHighlightGranularityChanged,
+              (read_anything::mojom::HighlightGranularity color),
               (override));
 
   mojo::PendingRemote<read_anything::mojom::UntrustedPageHandler>
@@ -169,8 +184,11 @@ class ReadAnythingAppControllerTest : public ChromeRenderViewTest {
     OnActiveAXTreeIDChanged(tree_id, GURL::EmptyGURL());
   }
 
-  void OnActiveAXTreeIDChanged(const ui::AXTreeID& tree_id, const GURL& url) {
-    controller_->OnActiveAXTreeIDChanged(tree_id, ukm::kInvalidSourceId, url);
+  void OnActiveAXTreeIDChanged(const ui::AXTreeID& tree_id,
+                               const GURL& url,
+                               bool force_update_state = false) {
+    controller_->OnActiveAXTreeIDChanged(tree_id, ukm::kInvalidSourceId, url,
+                                         force_update_state);
   }
 
   void OnAXTreeDistilled(const std::vector<ui::AXNodeID>& content_node_ids) {
@@ -222,6 +240,10 @@ class ReadAnythingAppControllerTest : public ChromeRenderViewTest {
 
   void OnFontSizeReset() { controller_->OnFontSizeReset(); }
 
+  void TurnedHighlightOn() { controller_->TurnedHighlightOn(); }
+
+  void TurnedHighlightOff() { controller_->TurnedHighlightOff(); }
+
   std::vector<ui::AXNodeID> GetChildren(ui::AXNodeID ax_node_id) {
     return controller_->GetChildren(ax_node_id);
   }
@@ -268,16 +290,27 @@ class ReadAnythingAppControllerTest : public ChromeRenderViewTest {
     return controller_->model_.ContainsTree(tree_id);
   }
 
-  ui::AXTreeID ActiveTreeId() { return controller_->model_.active_tree_id(); }
+  ui::AXTreeID ActiveTreeId() { return controller_->model_.GetActiveTreeId(); }
+
+  size_t GetNextSentence(const std::u16string& text, size_t maxTextLength) {
+    return controller_->GetNextSentence(text, maxTextLength);
+  }
+
+  std::string LanguageCodeForSpeech() {
+    return controller_->GetLanguageCodeForSpeech();
+  }
+  void SetLanguageCode(std::string code) {
+    controller_->SetLanguageForTesting(code);
+  }
 
   ui::AXTreeID tree_id_;
-  MockAXTreeDistiller* distiller_ = nullptr;
+  raw_ptr<MockAXTreeDistiller, DanglingUntriaged> distiller_ = nullptr;
   testing::StrictMock<MockReadAnythingUntrustedPageHandler> page_handler_;
 
  private:
   // ReadAnythingAppController constructor and destructor are private so it's
   // not accessible by std::make_unique.
-  ReadAnythingAppController* controller_ = nullptr;
+  raw_ptr<ReadAnythingAppController, DanglingUntriaged> controller_ = nullptr;
 };
 
 TEST_F(ReadAnythingAppControllerTest, Theme) {
@@ -1420,15 +1453,11 @@ TEST_F(ReadAnythingAppControllerTest, Selection_IgnoredNode) {
   AccessibilityEventReceived({update_2});
   OnAXTreeDistilled({});
 
-  // We want to check that no crash occurs in this case. These node ids and
-  // offset are incorrect, they should be 2, 3, 0, and 5 (5 is the length of the
-  // world "Hello"). But because we don't have an AXTreeManager in the test,
-  // AXSelection::ToUnignoredSelection() exits early without calculating the
-  // actual ignored selection.
-  EXPECT_EQ(2, StartNodeId());
-  EXPECT_EQ(4, EndNodeId());
-  EXPECT_EQ(0, StartOffset());
-  EXPECT_EQ(0, EndOffset());
+  EXPECT_EQ(0, StartNodeId());
+  EXPECT_EQ(0, EndNodeId());
+  EXPECT_EQ(-1, StartOffset());
+  EXPECT_EQ(-1, EndOffset());
+  EXPECT_EQ(false, HasSelection());
 }
 
 TEST_F(ReadAnythingAppControllerTest, Selection_IsCollapsed) {
@@ -1452,4 +1481,114 @@ TEST_F(ReadAnythingAppControllerTest, OnFontSizeReset_SetsFontSizeToDefault) {
   EXPECT_CALL(page_handler_, OnFontSizeChange(kReadAnythingDefaultFontScale))
       .Times(1);
   OnFontSizeReset();
+}
+
+TEST_F(ReadAnythingAppControllerTest, TurnedHighlightOn_SavesHighlightState) {
+  EXPECT_CALL(page_handler_,
+              OnHighlightGranularityChanged(
+                  read_anything::mojom::HighlightGranularity::kOn))
+      .Times(1);
+  EXPECT_CALL(page_handler_,
+              OnHighlightGranularityChanged(
+                  read_anything::mojom::HighlightGranularity::kOff))
+      .Times(0);
+  TurnedHighlightOn();
+}
+
+TEST_F(ReadAnythingAppControllerTest, TurnedHighlightOff_SavesHighlightState) {
+  EXPECT_CALL(page_handler_,
+              OnHighlightGranularityChanged(
+                  read_anything::mojom::HighlightGranularity::kOn))
+      .Times(0);
+  EXPECT_CALL(page_handler_,
+              OnHighlightGranularityChanged(
+                  read_anything::mojom::HighlightGranularity::kOff))
+      .Times(1);
+  TurnedHighlightOff();
+}
+
+TEST_F(ReadAnythingAppControllerTest, GetNextSentence_ReturnsCorrectIndex) {
+  const std::u16string first_sentence = u"This is a normal sentence. ";
+  const std::u16string second_sentence = u"This is a second sentence.";
+
+  const std::u16string sentence = first_sentence + second_sentence;
+  size_t index = GetNextSentence(sentence, 175);
+  EXPECT_EQ(index, first_sentence.length());
+  EXPECT_EQ(sentence.substr(0, index), first_sentence);
+}
+
+TEST_F(ReadAnythingAppControllerTest,
+       GetNextSentence_MaxLengthCutsOffSentence_ReturnsCorrectIndex) {
+  const std::u16string first_sentence = u"This is a normal sentence. ";
+  const std::u16string second_sentence = u"This is a second sentence.";
+
+  const std::u16string sentence = first_sentence + second_sentence;
+  size_t index = GetNextSentence(sentence, first_sentence.length() - 3);
+  EXPECT_TRUE(index < first_sentence.length());
+  EXPECT_EQ(sentence.substr(0, index), u"This is a normal ");
+}
+
+TEST_F(ReadAnythingAppControllerTest,
+       GetNextSentence_TextLongerThanMaxLength_ReturnsCorrectIndex) {
+  const std::u16string first_sentence = u"This is a normal sentence. ";
+  const std::u16string second_sentence = u"This is a second sentence.";
+
+  const std::u16string sentence = first_sentence + second_sentence;
+  size_t index = GetNextSentence(
+      sentence, first_sentence.length() + second_sentence.length() - 5);
+  EXPECT_EQ(index, first_sentence.length());
+  EXPECT_EQ(sentence.substr(0, index), first_sentence);
+}
+
+TEST_F(ReadAnythingAppControllerTest,
+       GetNextSentence_OnlyOneSentence_ReturnsCorrectIndex) {
+  const std::u16string sentence = u"Hello, this is a normal sentence.";
+
+  size_t index = GetNextSentence(sentence, 175);
+  EXPECT_EQ(index, sentence.length());
+  EXPECT_EQ(sentence.substr(0, index), sentence);
+}
+
+TEST_F(
+    ReadAnythingAppControllerTest,
+    GetNextSentence_MaxLengthCutsOffSentence_OnlyOneSentence_ReturnsCorrectIndex) {
+  const std::u16string sentence = u"Hello, this is a normal sentence.";
+
+  size_t index = GetNextSentence(sentence, 12);
+  EXPECT_TRUE(index < sentence.length());
+  EXPECT_EQ(sentence.substr(0, index), u"Hello, ");
+}
+
+TEST_F(ReadAnythingAppControllerTest,
+       GetLanguageCodeForSpeech_ReturnsCorrectLanguageCode) {
+  SetLanguageCode("es");
+  ASSERT_EQ(LanguageCodeForSpeech(), "es");
+}
+
+TEST_F(ReadAnythingAppControllerTest, AccessibilityEventReceived_PDFHandling) {
+  // Call OnActiveAXTreeIDChanged() to set is_pdf_ state.
+  GURL pdf_url("http://www.google.com/foo/bar.pdf");
+  OnActiveAXTreeIDChanged(tree_id_, pdf_url, true);
+
+  // Send update for main web contentes.
+  ui::AXTreeID pdf_web_contents_tree_id = ui::AXTreeID::CreateNewAXTreeID();
+  ui::AXTreeUpdate update;
+  SetUpdateTreeID(&update);
+  update.nodes.resize(1);
+  update.nodes[0].id = 1;
+  update.nodes[0].AddChildTreeId(pdf_web_contents_tree_id);
+  AccessibilityEventReceived({update});
+
+  // Send update for pdf web contents.
+  ui::AXTreeUpdate pdf_web_contents_update;
+  pdf_web_contents_update.nodes.resize(1);
+  pdf_web_contents_update.root_id = 1;
+  pdf_web_contents_update.nodes[0].id = 1;
+  SetUpdateTreeID(&pdf_web_contents_update, pdf_web_contents_tree_id);
+  AccessibilityEventReceived({pdf_web_contents_update});
+
+  EXPECT_CALL(page_handler_,
+              EnablePDFContentAccessibility(pdf_web_contents_tree_id))
+      .Times(1);
+  Mock::VerifyAndClearExpectations(distiller_);
 }

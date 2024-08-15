@@ -32,6 +32,8 @@ NSString* const kSettingsArticleSuggestionsCellId =
 NSString* const kSettingsLanguagesCellId = @"kSettingsLanguagesCellId";
 NSString* const kSettingsContentSettingsCellId =
     @"kSettingsContentSettingsCellId";
+NSString* const kSettingsDownloadsSettingsCellId =
+    @"kSettingsDownloadsSettingsCellId";
 NSString* const kSettingsBandwidthCellId = @"kSettingsBandwidthCellId";
 NSString* const kSettingsAboutCellId = @"kSettingsAboutCellId";
 NSString* const kSettingsOpenSourceLicencesCellId =
@@ -65,3 +67,4 @@ NSString* const kSettingsTabsCellId = @"kSettingsTabsCellId";
 NSString* const kSettingsMoveInactiveTabsCellId =
     @"kSettingsMoveInactiveTabsCellId";
 NSString* const kSettingsTabPickupCellId = @"kSettingsTabPickupCellId";
+NSString* const kSettingsPrivacyGuideCellId = @"kSettingsPrivacyGuideCellId";

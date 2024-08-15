@@ -137,11 +137,10 @@ void AutofillKeyboardAccessoryAdapter::AcceptSuggestion(
   }
 }
 
-void AutofillKeyboardAccessoryAdapter::AcceptSuggestionWithoutThreshold(
+void AutofillKeyboardAccessoryAdapter::PerformButtonActionForSuggestion(
     int index) {
-  if (controller_) {
-    controller_->AcceptSuggestionWithoutThreshold(OffsetIndexFor(index));
-  }
+  // Actions currently only exist on Desktop.
+  NOTREACHED();
 }
 
 int AutofillKeyboardAccessoryAdapter::GetLineCount() const {
@@ -195,7 +194,8 @@ bool AutofillKeyboardAccessoryAdapter::
 base::WeakPtr<AutofillPopupController>
 AutofillKeyboardAccessoryAdapter::OpenSubPopup(
     const gfx::RectF& anchor_bounds,
-    std::vector<Suggestion> suggestions) {
+    std::vector<Suggestion> suggestions,
+    AutoselectFirstSuggestion autoselect_first_suggestion) {
   NOTIMPLEMENTED() << "No sub-popups on Keyboard Accessory";
   return nullptr;
 }
@@ -282,6 +282,12 @@ std::vector<Suggestion> AutofillKeyboardAccessoryAdapter::GetSuggestions()
                 suggestions.begin() + front_element_.value() + 1);
   }
   return suggestions;
+}
+
+std::optional<AutofillClient::PopupScreenLocation>
+AutofillKeyboardAccessoryAdapter::GetPopupScreenLocation() const {
+  NOTIMPLEMENTED() << "No popup screen location for keyboard accessories.";
+  return std::nullopt;
 }
 
 void AutofillKeyboardAccessoryAdapter::OnDeletionConfirmed(int index) {

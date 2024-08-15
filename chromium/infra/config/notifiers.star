@@ -293,3 +293,24 @@ luci.notifier(
     ],
     on_new_status = ["FAILURE"],
 )
+
+luci.notifier(
+    name = "chrometto-sheriff",
+    notify_emails = [
+        "chrometto-sheriff-oncall@google.com",
+    ],
+    on_new_status = ["FAILURE"],
+)
+
+luci.notifier(
+    name = "peeps-security-core-ssci",
+    notify_emails = [
+        "chops-security-core+ssci-alert@google.com",
+    ],
+    on_occurrence = ["FAILURE"],
+    on_new_status = ["SUCCESS", "INFRA_FAILURE"],
+    template = luci.notifier_template(
+        name = "build_with_step_summary_template",
+        body = io.read_file("templates/build_with_step_summary.template"),
+    ),
+)

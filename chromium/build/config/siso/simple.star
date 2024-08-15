@@ -6,6 +6,9 @@
 
 load("@builtin//struct.star", "module")
 
+def __filegroups(ctx):
+    return {}
+
 def __copy(ctx, cmd):
     input = cmd.inputs[0]
     out = cmd.outputs[0]
@@ -13,8 +16,19 @@ def __copy(ctx, cmd):
     ctx.actions.exit(exit_status = 0)
 
 def __stamp(ctx, cmd):
+    if len(cmd.outputs) > 1:
+        # run touch command as is?
+        # iOS build stamp after swiftc.py would try to touch
+        # dir and non-exist-in-hashfs file?
+        # TODO(b/300385880): fix this workaround.
+        return
+
+    # don't truncate if file exists.
     out = cmd.outputs[0]
-    ctx.actions.write(out)
+    if ctx.fs.exists(out):
+        ctx.actions.write(out, ctx.fs.read(out))
+    else:
+        ctx.actions.write(out)
     ctx.actions.exit(exit_status = 0)
 
 __handlers = {
@@ -41,6 +55,6 @@ def __step_config(ctx, step_config):
 simple = module(
     "simple",
     step_config = __step_config,
-    filegroups = {},
+    filegroups = __filegroups,
     handlers = __handlers,
 )

@@ -14,6 +14,7 @@
 #include "base/uuid.h"
 #include "base/values.h"
 #include "chrome/common/extensions/api/tabs.h"
+#include "components/tab_groups/tab_group_id.h"
 #include "extensions/common/features/feature.h"
 #include "ui/base/window_open_disposition.h"
 
@@ -73,6 +74,7 @@ class ExtensionTabUtil {
     // Vivaldi
     absl::optional<ui::PageTransition> transition;
     absl::optional<std::string> viv_ext_data;
+    absl::optional<bool> ignore_link_routing;
   };
 
   // Opens a new tab given an extension function |function| and creation
@@ -271,6 +273,9 @@ class ExtensionTabUtil {
 
   // Retrieve a TabStripModel only if every browser is editable.
   static TabStripModel* GetEditableTabStripModel(Browser* browser);
+
+  static bool TabIsInSavedTabGroup(content::WebContents* contents,
+                                   TabStripModel* tab_strip_model);
 };
 
 }  // namespace extensions

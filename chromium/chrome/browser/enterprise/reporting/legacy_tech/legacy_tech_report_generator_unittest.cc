@@ -11,15 +11,19 @@
 namespace enterprise_reporting {
 
 namespace {
-base::Time::Exploded kTestDate = {
-    2023, 5,  4,  4,  // May. 4, 2023, Thu
-    22,   10, 15, 0   // 22:10:15.000
-};
 
-base::Time::Exploded kTestDateInMidnight = {
-    2023, 5, 4, 4,  // May. 4, 2023, Thu
-    0,    0, 0, 0   // 00:00:00.000
-};
+constexpr base::Time::Exploded kTestDate = {.year = 2023,
+                                            .month = 5,
+                                            .day_of_week = 4,
+                                            .day_of_month = 4,
+                                            .hour = 22,
+                                            .minute = 10,
+                                            .second = 15};
+
+constexpr base::Time::Exploded kTestDateInMidnight = {.year = 2023,
+                                                      .month = 5,
+                                                      .day_of_week = 4,
+                                                      .day_of_month = 4};
 
 }  // namespace
 
@@ -51,7 +55,8 @@ TEST_F(LegacyTechGeneratorTest, Test) {
   EXPECT_EQ(data.line, report->line());
   base::Time midnight;
   ASSERT_TRUE(base::Time::FromUTCExploded(kTestDateInMidnight, &midnight));
-  EXPECT_EQ(midnight.ToJavaTime(), report->event_timestamp_millis());
+  EXPECT_EQ(midnight.InMillisecondsSinceUnixEpoch(),
+            report->event_timestamp_millis());
 }
 
 }  // namespace enterprise_reporting

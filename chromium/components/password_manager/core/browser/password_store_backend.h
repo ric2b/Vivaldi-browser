@@ -10,7 +10,7 @@
 #include "base/functional/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "components/password_manager/core/browser/password_form_digest.h"
-#include "components/password_manager/core/browser/password_store_backend_error.h"
+#include "components/password_manager/core/browser/password_store_consumer.h"
 #include "components/password_manager/core/browser/password_store_change.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -28,17 +28,9 @@ struct PasswordForm;
 class AffiliatedMatchHelper;
 class SmartBubbleStatsStore;
 
-using LoginsResult = std::vector<std::unique_ptr<PasswordForm>>;
 using LoginsReply = base::OnceCallback<void(LoginsResult)>;
-
-using PasswordChanges = absl::optional<PasswordStoreChangeList>;
-using PasswordChangesOrError =
-    absl::variant<PasswordChanges, PasswordStoreBackendError>;
 using PasswordChangesOrErrorReply =
     base::OnceCallback<void(PasswordChangesOrError)>;
-
-using LoginsResultOrError =
-    absl::variant<LoginsResult, PasswordStoreBackendError>;
 using LoginsOrErrorReply = base::OnceCallback<void(LoginsResultOrError)>;
 
 // The backend is used by the `PasswordStore` to interact with the storage in a
@@ -73,6 +65,12 @@ class PasswordStoreBackend
   // Returns the complete list of PasswordForms (regardless of their blocklist
   // status). Callback is called on the main sequence.
   virtual void GetAllLoginsAsync(LoginsOrErrorReply callback) = 0;
+
+  // Returns the complete list of PasswordForms and fills in affiliation and
+  // branding information for Android credentials. Callback is called on the
+  // main sequence.
+  virtual void GetAllLoginsWithAffiliationAndBrandingAsync(
+      LoginsOrErrorReply callback) = 0;
 
   // Returns the complete list of non-blocklist PasswordForms. Callback is
   // called on the main sequence.
@@ -153,17 +151,14 @@ class PasswordStoreBackend
   virtual std::unique_ptr<syncer::ProxyModelTypeControllerDelegate>
   CreateSyncControllerDelegate() = 0;
 
-  // Clears all the passwords from the local storage.
-  virtual void ClearAllLocalPasswords() = 0;
-
   // Propagates sync initialization event.
   virtual void OnSyncServiceInitialized(syncer::SyncService* sync_service) = 0;
 
   // Factory function for creating the backend. The Local backend requires the
-  // provided `login_db_path` for storage and Android backend for migration
+  // provided `login_db_directory` for storage and Android backend for migration
   // purposes.
   static std::unique_ptr<PasswordStoreBackend> Create(
-      const base::FilePath& login_db_path,
+      const base::FilePath& login_db_directory,
       PrefService* prefs);
 };
 

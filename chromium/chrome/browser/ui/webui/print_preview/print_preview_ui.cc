@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "ash/constants/ash_features.h"
 #include "base/check.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/id_map.h"
@@ -45,8 +46,8 @@
 #include "chrome/common/buildflags.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/branded_strings.h"
 #include "chrome/grit/browser_resources.h"
-#include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/pdf_resources.h"
 #include "chrome/grit/pdf_resources_map.h"
@@ -90,6 +91,7 @@
 #endif
 
 #if BUILDFLAG(ENABLE_OOP_PRINTING)
+#include "chrome/browser/printing/prefs_util.h"
 #include "chrome/browser/printing/print_backend_service_manager.h"
 #include "printing/printing_features.h"
 #endif
@@ -127,10 +129,6 @@ void StopWorker(int document_cookie) {
 
 bool IsValidPageIndex(uint32_t page_index, uint32_t page_count) {
   return page_index < page_count;
-}
-
-bool ShouldUseCompositor(PrintPreviewUI* print_preview_ui) {
-  return IsOopifEnabled() && print_preview_ui->source_is_modifiable();
 }
 
 WebContents* GetInitiator(content::WebUI* web_ui) {
@@ -324,6 +322,9 @@ void AddPrintPreviewFlags(content::WebUIDataSource* source, Profile* profile) {
   source->AddBoolean(
       "isPrintPreviewSetupAssistanceEnabled",
       base::FeatureList::IsEnabled(::features::kPrintPreviewSetupAssistance));
+  source->AddBoolean(
+      "isLocalPrinterObservingEnabled",
+      base::FeatureList::IsEnabled(::features::kLocalPrinterObserving));
 #else
   bool system_default_printer = profile->GetPrefs()->GetBoolean(
       prefs::kPrintPreviewUseSystemDefaultPrinter);
@@ -392,6 +393,28 @@ PrintPreviewHandler* CreatePrintPreviewHandlers(content::WebUI* web_ui) {
 
 }  // namespace
 
+PrintPreviewUIConfig::PrintPreviewUIConfig()
+    : WebUIConfig(content::kChromeUIScheme, chrome::kChromeUIPrintHost) {}
+
+bool PrintPreviewUIConfig::IsWebUIEnabled(
+    content::BrowserContext* browser_context) {
+  Profile* profile = Profile::FromBrowserContext(browser_context);
+  bool disabled = profile->GetPrefs()->GetBoolean(prefs::kPrintPreviewDisabled);
+  return !disabled;
+}
+
+bool PrintPreviewUIConfig::ShouldHandleURL(const GURL& url) {
+  return url.path() == "/" || url.path() == "/test_loader.html";
+}
+
+PrintPreviewUIConfig::~PrintPreviewUIConfig() = default;
+
+std::unique_ptr<content::WebUIController>
+PrintPreviewUIConfig::CreateWebUIController(content::WebUI* web_ui,
+                                            const GURL& url) {
+  return std::make_unique<PrintPreviewUI>(web_ui);
+}
+
 WEB_UI_CONTROLLER_TYPE_IMPL(PrintPreviewUI)
 
 PrintPreviewUI::PrintPreviewUI(content::WebUI* web_ui,
@@ -434,14 +457,14 @@ PrintPreviewUI::~PrintPreviewUI() {
 
 #if BUILDFLAG(ENABLE_OOP_PRINTING)
 void PrintPreviewUI::RegisterPrintBackendServiceManagerClient() {
-  if (base::FeatureList::IsEnabled(features::kEnableOopPrintDrivers)) {
+  if (IsOopPrintingEnabled()) {
     service_manager_client_id_ =
         PrintBackendServiceManager::GetInstance().RegisterQueryClient();
   }
 }
 
 void PrintPreviewUI::UnregisterPrintBackendServiceManagerClient() {
-  if (base::FeatureList::IsEnabled(features::kEnableOopPrintDrivers)) {
+  if (IsOopPrintingEnabled()) {
     PrintBackendServiceManager::GetInstance().UnregisterClient(
         service_manager_client_id_);
   }
@@ -531,6 +554,19 @@ void PrintPreviewUI::NotifyUIPreviewDocumentReady(
     g_test_delegate->PreviewDocumentReady(web_ui()->GetWebContents());
   }
   handler_->OnPrintPreviewReady(*id_, request_id);
+}
+
+bool PrintPreviewUI::ShouldUseCompositor() const {
+  if (!IsOopifEnabled()) {
+    return false;
+  }
+
+  auto* dialog_controller = PrintPreviewDialogController::GetInstance();
+  CHECK(dialog_controller);
+  const mojom::RequestPrintPreviewParams* request_params =
+      dialog_controller->GetRequestParams(web_ui()->GetWebContents());
+  CHECK(request_params);
+  return request_params->is_modifiable;
 }
 
 void PrintPreviewUI::OnCompositePdfPageDone(
@@ -708,25 +744,6 @@ PrintPreviewUI::TakePagesForNupConvert() {
 void PrintPreviewUI::AddPdfPageForNupConversion(
     base::ReadOnlySharedMemoryRegion pdf_page) {
   pages_for_nup_convert_.push_back(std::move(pdf_page));
-}
-
-// static
-void PrintPreviewUI::SetInitialParams(
-    content::WebContents* print_preview_dialog,
-    const mojom::RequestPrintPreviewParams& params) {
-  if (!print_preview_dialog || !print_preview_dialog->GetWebUI())
-    return;
-
-  PrintPreviewUI* print_preview_ui = print_preview_dialog->GetWebUI()
-                                         ->GetController()
-                                         ->GetAs<PrintPreviewUI>();
-  CHECK(print_preview_ui);
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  print_preview_ui->source_is_arc_ = params.is_from_arc;
-#endif
-  print_preview_ui->source_is_modifiable_ = params.is_modifiable;
-  print_preview_ui->source_has_selection_ = params.has_selection;
-  print_preview_ui->print_selection_only_ = params.selection_only;
 }
 
 // static
@@ -925,8 +942,9 @@ void PrintPreviewUI::DidPrepareDocumentForPreview(int32_t document_cookie,
   // Determine if document composition from individual pages with the print
   // compositor is the desired configuration. Issue a preparation call to the
   // PrintCompositeClient if that hasn't been done yet. Otherwise, return early.
-  if (!ShouldUseCompositor(this))
+  if (!ShouldUseCompositor()) {
     return;
+  }
 
   WebContents* web_contents = GetInitiator(web_ui());
   if (!web_contents)
@@ -968,7 +986,7 @@ void PrintPreviewUI::DidPreviewPage(mojom::DidPreviewPageParamsPtr params,
     return;
   }
 
-  if (ShouldUseCompositor(this)) {
+  if (ShouldUseCompositor()) {
     // Don't bother compositing if this request has been cancelled already.
     if (ShouldCancelRequest(id_, request_id))
       return;
@@ -1010,8 +1028,7 @@ void PrintPreviewUI::MetafileReadyForPrinting(
   // Always try to stop the worker.
   StopWorker(params->document_cookie);
 
-  const bool composite_document_using_individual_pages =
-      ShouldUseCompositor(this);
+  const bool composite_document_using_individual_pages = ShouldUseCompositor();
   const base::ReadOnlySharedMemoryRegion& metafile =
       params->content->metafile_data_region;
 

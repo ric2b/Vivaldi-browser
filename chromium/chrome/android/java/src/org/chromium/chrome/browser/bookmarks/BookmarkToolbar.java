@@ -40,8 +40,8 @@ import org.vivaldi.browser.panels.PanelUtils;
 // End Vivaldi
 
 /**
- * Main toolbar of bookmark UI. It is responsible for displaying title and buttons
- * associated with the current context.
+ * Main toolbar of bookmark UI. It is responsible for displaying title and buttons associated with
+ * the current context.
  */
 public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
         implements OnMenuItemClickListener, OnClickListener {
@@ -136,7 +136,7 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
             if (mBookmarkUiMode == BookmarkUiMode.SEARCHING) {
                 showSearchView(mSoftKeyboardVisible);
             } else {
-                hideSearchView(/*notify=*/false);
+                hideSearchView(/* notify= */ false);
             }
         }
     }
@@ -277,6 +277,14 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
         if (mIsSelectionEnabled) {
             mIsSelectionUiShowing = true;
             // Editing a bookmark action on multiple selected items doesn't make sense. So disable.
+            BookmarkId bookmarkId = selectedBookmarks.get(0);
+            if (ChromeApplicationImpl.isVivaldi() &&
+                    bookmarkId != null &&
+                    bookmarkId.getType() == BookmarkType.READING_LIST) {
+                getMenu()
+                        .findItem(R.id.selection_mode_edit_menu_id)
+                        .setVisible(false);
+            } else // End Vivaldi
             getMenu()
                     .findItem(R.id.selection_mode_edit_menu_id)
                     .setVisible(selectedBookmarks.size() == 1);
@@ -322,12 +330,19 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
             // these bookmarks can't be moved or edited. If there are no reading list items
             // selected, then use default behavior.
             if (numReadingListItems > 0) {
+                if (ChromeApplicationImpl.isVivaldi()) {
+                    getMenu().findItem(R.id.selection_mode_move_menu_id).setVisible(false);
+                    getMenu()
+                            .findItem(R.id.selection_mode_edit_menu_id)
+                            .setVisible(false);
+                } else { // end Vivaldi
                 getMenu()
                         .findItem(R.id.selection_mode_move_menu_id)
                         .setVisible(!hasPartnerBoomarkSelected);
                 getMenu()
                         .findItem(R.id.selection_mode_edit_menu_id)
                         .setVisible(selectedBookmarks.size() == 1 && !hasPartnerBoomarkSelected);
+                }
 
                 getMenu().findItem(R.id.selection_open_in_new_tab_id).setVisible(true);
                 getMenu().findItem(R.id.selection_open_in_incognito_tab_id).setVisible(true);

@@ -9,6 +9,7 @@
 
 #include <string>
 
+#include "base/memory/raw_ptr.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -195,9 +196,6 @@ class CONTENT_EXPORT RenderFrameObserver : public IPC::Listener,
 
   // Notifications when |PerformanceTiming| data becomes available
   virtual void DidChangePerformanceTiming() {}
-
-  // Notifications when an input delay data becomes available.
-  virtual void DidObserveInputDelay(base::TimeDelta input_delay) {}
 
   // Notifications when a user interaction latency data becomes available. A
   // user interaction can be built up from multiple input events (e.g. keydown
@@ -387,7 +385,7 @@ class CONTENT_EXPORT RenderFrameObserver : public IPC::Listener,
   // can null out its pointer.
   void RenderFrameGone();
 
-  RenderFrame* render_frame_;
+  raw_ptr<RenderFrame, ExperimentalRenderer> render_frame_;
   // The routing ID of the associated RenderFrame.
   int routing_id_;
 };

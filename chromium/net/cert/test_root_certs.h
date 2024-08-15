@@ -5,8 +5,11 @@
 #ifndef NET_CERT_TEST_ROOT_CERTS_H_
 #define NET_CERT_TEST_ROOT_CERTS_H_
 
+#include <set>
+
 #include "base/containers/span.h"
 #include "base/lazy_instance.h"
+#include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
 #include "net/base/net_export.h"
 #include "net/cert/pki/trust_store.h"
@@ -106,7 +109,7 @@ class NET_EXPORT ScopedTestRoot {
   // |trust| may be specified to change the details of how the trust is
   // interpreted (applies only to CertVerifyProcBuiltin).
   explicit ScopedTestRoot(
-      X509Certificate* cert,
+      scoped_refptr<X509Certificate> cert,
       CertificateTrust trust = CertificateTrust::ForTrustAnchor());
   // Creates a ScopedTestRoot that adds |certs| to the TestRootCerts store.
   // |trust| may be specified to change the details of how the trust is

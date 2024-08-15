@@ -35,6 +35,9 @@ class FeatureTilePixelTest : public AshTestBase {
   void SetUp() override {
     AshTestBase::SetUp();
 
+    // We don't want tooltips to get in the way of the images we're testing.
+    ::views::View::DisableKeyboardTooltipsForTesting();
+
     widget_ = CreateFramelessTestWidget();
     // Ensure the widget is large enough for the tile's focus ring (which is
     // drawn outside the tile's bounds).
@@ -53,6 +56,7 @@ class FeatureTilePixelTest : public AshTestBase {
 
   void TearDown() override {
     widget_.reset();
+    ::views::View::EnableKeyboardTooltipsForTesting();
     AshTestBase::TearDown();
   }
 
@@ -167,6 +171,22 @@ TEST_F(FeatureTilePixelTest, CompactTile) {
   tile->SetLabel(u"One line");
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
       "one_line",
+      /*revision_number=*/0, widget_.get()));
+
+  // Test one-line labels with one-line sub-labels.
+  tile->SetLabel(u"One line");
+  tile->SetSubLabel(u"One line");
+  tile->SetSubLabelVisibility(true);
+  EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
+      "one_line_with_sub_label",
+      /*revision_number=*/0, widget_.get()));
+
+  // Test eliding with sub-labels.
+  tile->SetLabel(u"A very very long label");
+  tile->SetSubLabel(u"A very very long sub-label");
+  tile->SetSubLabelVisibility(true);
+  EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
+      "elided_with_sub_label",
       /*revision_number=*/0, widget_.get()));
 }
 

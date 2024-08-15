@@ -83,7 +83,13 @@ BASE_FEATURE(kAutofillEnableFpanRiskBasedAuthentication,
 // When enabled, enable manual falling component for virtual cards on Android.
 BASE_FEATURE(kAutofillEnableManualFallbackForVirtualCards,
              "AutofillEnableManualFallbackForVirtualCards",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi, ref. VAB-8034.
+
+// When enabled, the merchant_domain field is included in requests to unmask a
+// card.
+BASE_FEATURE(kAutofillEnableMerchantDomainInUnmaskCardRequest,
+             "AutofillEnableMerchantDomainInUnmaskCardRequest",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // When enabled, client side URL filtering will be triggered for the merchant
 // opt-out use-case, so that virtual card suggestions are not shown on websites
@@ -109,12 +115,6 @@ BASE_FEATURE(kAutofillEnableMovingGPayLogoToTheRightOnClank,
 BASE_FEATURE(kAutofillEnableNewSaveCardBubbleUi,
              "AutofillEnableNewSaveCardBubbleUi",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// When enabled, a notification will be displayed on page navigation if the
-// domain has an eligible merchant promo code offer or reward.
-BASE_FEATURE(kAutofillEnableOfferNotificationForPromoCodes,
-             "AutofillEnableOfferNotificationForPromoCodes",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // When enabled, offers will be displayed in the Clank keyboard accessory during
 // downstream.
@@ -175,13 +175,6 @@ BASE_FEATURE(kAutofillEnableVirtualCardFidoEnrollment,
              "AutofillEnableVirtualCardFidoEnrollment",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// When enabled, in the payments settings page on desktop, virtual card
-// enrollment management will be provided so that the user can enroll/unenroll a
-// card in virtual card.
-BASE_FEATURE(kAutofillEnableVirtualCardManagementInDesktopSettingsPage,
-             "AutofillEnableVirtualCardManagementInDesktopSettingsPage",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // When enabled, Chrome will show metadata along with other card information
 // when the virtual card is presented to users.
 BASE_FEATURE(kAutofillEnableVirtualCardMetadata,
@@ -193,13 +186,6 @@ BASE_FEATURE(kAutofillEnableVirtualCardMetadata,
 // views.
 BASE_FEATURE(kAutofillMoveLegalTermsAndIconForNewCardEnrollment,
              "AutofillMoveLegalTermsAndIconForNewCardEnrollment",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// When enabled, Autofill will offer saving a card to the users when the Chrome
-// detects a card number with the last 4 digits that matches an existing server
-// card but has a different expiration date.
-BASE_FEATURE(kAutofillOfferToSaveCardWithSameLastFour,
-             "AutofillOfferToSaveCardWithSameLastFour",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // When enabled, Autofill will attempt to find standalone CVC fields for VCN
@@ -214,6 +200,12 @@ BASE_FEATURE(kAutofillParseVcnCardOnFileStandaloneCvcFields,
 BASE_FEATURE(kAutofillSuggestServerCardInsteadOfLocalCard,
              "AutofillSuggestServerCardInsteadOfLocalCard",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When enabled, GPay-related links direct to the newer GPay Web site instead of
+// the legacy Payments Center.
+BASE_FEATURE(kAutofillUpdateChromeSettingsLinkToGPayWeb,
+             "AutofillUpdateChromeSettingsLinkToGPayWeb",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Controls offering credit card upload to Google Payments. Cannot ever be
 // ENABLED_BY_DEFAULT because the feature state depends on the user's country.
@@ -235,24 +227,6 @@ BASE_FEATURE(kAutofillUpstreamAllowAdditionalEmailDomains,
 // the user's email domain.
 BASE_FEATURE(kAutofillUpstreamAllowAllEmailDomains,
              "AutofillUpstreamAllowAllEmailDomains",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// When enabled, sets the OAuth2 token in GetUploadDetails requests to Google
-// Payments, in order to provide a better experience for users with server-side
-// features disabled but not client-side features.
-BASE_FEATURE(kAutofillUpstreamAuthenticatePreflightCall,
-             "AutofillUpstreamAuthenticatePreflightCall",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// When enabled, the secure data type for cards sent during credit card upload
-// save is updated to match newer server requirements.
-BASE_FEATURE(kAutofillUpstreamUseAlternateSecureDataType,
-             "AutofillUpstreamUseAlternateSecureDataType",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// When enabled, we use the Elo regex to match the BIN ranges.
-BASE_FEATURE(kAutofillUseEloRegexForBinMatching,
-             "AutofillUseEloRegexForBinMatching_LAUNCHED",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_IOS)
@@ -268,6 +242,12 @@ BASE_FEATURE(kAutofillUseTwoDotsForLastFourDigits,
 // authentication on Bling.
 BASE_FEATURE(kAutofillEnablePaymentsMandatoryReauthOnBling,
              "AutofillEnablePaymentsMandatoryReauthOnBling",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When this is enabled, virtual card enrollment and retrieval will be enabled
+// on Bling.
+BASE_FEATURE(kAutofillEnableVirtualCards,
+             "AutofillEnableVirtualCards",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 

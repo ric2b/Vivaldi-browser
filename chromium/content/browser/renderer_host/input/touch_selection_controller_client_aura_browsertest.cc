@@ -315,6 +315,14 @@ class TouchSelectionControllerClientAuraTest : public ContentBrowserTest {
     return selection_controller_client_;
   }
 
+  // Performs a tap to place the cursor at `point`.
+  void TapAndWaitForCursor(ui::test::EventGenerator& generator,
+                           const gfx::Point& point) {
+    selection_controller_client()->InitWaitForSelectionUpdate();
+    generator.GestureTapAt(point);
+    selection_controller_client()->Wait();
+  }
+
   // Performs a long press to select the word at `point`.
   void SelectWithLongPress(ui::test::EventGenerator& generator,
                            const gfx::Point& point) {
@@ -386,6 +394,11 @@ class TouchSelectionControllerClientAuraTest : public ContentBrowserTest {
         ->set_max_touch_move_in_pixels_for_click(5);
   }
 
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    ContentBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitch(blink::switches::kAllowPreCommitInput);
+  }
+
  private:
   void TearDownOnMainThread() override {
     menu_runner_ = nullptr;
@@ -401,23 +414,9 @@ class TouchSelectionControllerClientAuraTest : public ContentBrowserTest {
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-class TouchSelectionControllerClientAuraCAPFeatureTest
-    : public TouchSelectionControllerClientAuraTest,
-      public testing::WithParamInterface<bool> {
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    TouchSelectionControllerClientAuraTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitchASCII(GetParam()
-                                        ? switches::kEnableBlinkFeatures
-                                        : switches::kDisableBlinkFeatures,
-                                    "CompositeAfterPaint");
-    command_line->AppendSwitch(blink::switches::kAllowPreCommitInput);
-  }
-};
-
 // Tests that long-pressing on a text brings up selection handles and the quick
 // menu properly.
-IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
-                       BasicSelection) {
+IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraTest, BasicSelection) {
   // Set the test page up.
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/touch_selection.html"));
   InitSelectionController(true);
@@ -449,10 +448,6 @@ IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
   EXPECT_NE(gfx::RectF(),
             rwhva->selection_controller()->GetVisibleRectBetweenBounds());
 }
-
-INSTANTIATE_TEST_SUITE_P(TouchSelectionForCAPFeatureTests,
-                         TouchSelectionControllerClientAuraCAPFeatureTest,
-                         testing::Bool());
 
 class GestureEventWaiter : public RenderWidgetHost::InputEventObserver {
  public:
@@ -1002,7 +997,7 @@ IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraSiteIsolationTest,
 // Tests that tapping in a textfield brings up the insertion handle, but not the
 // quick menu, initially. Then, successive taps on the insertion handle toggle
 // the quick menu visibility.
-IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
+IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraTest,
                        BasicInsertionFollowedByTapsOnHandle) {
   // Set the test page up.
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/touch_selection.html"));
@@ -1050,7 +1045,7 @@ IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
 #if BUILDFLAG(IS_CHROMEOS)
 // Tests that the text selection can be adjusted by touch dragging after a long
 // press gesture on readable text.
-IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
+IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraTest,
                        LongPressDragSelectionReadableText) {
   // Set the test page up.
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/touch_selection.html"));
@@ -1087,7 +1082,7 @@ IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
 
 // Tests that the text selection can be adjusted by touch dragging after a long
 // press gesture on editable text.
-IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
+IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraTest,
                        LongPressDragSelectionEditableText) {
   // Set the test page up.
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/touch_selection.html"));
@@ -1124,7 +1119,7 @@ IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
 
 // Tests that the text selection can be adjusted by touch dragging after a
 // double press gesture on editable text.
-IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
+IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraTest,
                        DoublePressDragSelection) {
   // Set the test page up.
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/touch_selection.html"));
@@ -1161,7 +1156,7 @@ IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
 
 // Tests that touch selection dragging adjusts the selection using a direction
 // strategy (roughly, expands by word and shrinks by character).
-IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
+IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraTest,
                        SelectionDraggingDirectionStrategy) {
   // Set the test page up.
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/touch_selection.html"));
@@ -1215,7 +1210,7 @@ IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
 }
 
 // Tests that a magnifier is shown when touch selection dragging.
-IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
+IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraTest,
                        SelectionDraggingShowsMagnifier) {
   // Set the test page up.
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/touch_selection.html"));
@@ -1250,8 +1245,7 @@ IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
 }
 
 // Tests that tapping the caret toggles showing and hiding the quick menu.
-IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
-                       TapOnCaret) {
+IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraTest, TapOnCaret) {
   // Set the test page up.
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/touch_selection.html"));
   InitSelectionController(true);
@@ -1298,7 +1292,7 @@ IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
 
 // Tests that the insertion handle and menu are hidden when a mouse event
 // occurs, then can be shown again by tapping on the caret.
-IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
+IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraTest,
                        HandleVisibilityAfterMouseEvent) {
   // Set the test page up.
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/touch_selection.html"));
@@ -1354,7 +1348,7 @@ IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 // Tests that touch selection dragging records a histogram entry.
-IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
+IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraTest,
                        SelectionDraggingMetrics) {
   // Set the test page up.
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/touch_selection.html"));
@@ -1464,8 +1458,7 @@ IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraTest,
 }
 
 // Tests that the quick menu and touch handles are hidden during an scroll.
-IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
-                       HiddenOnScroll) {
+IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraTest, HiddenOnScroll) {
   // Set the test page up.
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/touch_selection.html"));
   InitSelectionController(true);
@@ -1550,7 +1543,7 @@ IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
 
 // Tests that the magnifier is correctly shown for a swipe-to-move-cursor
 // gesture.
-IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
+IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraTest,
                        SwipeToMoveCursorMagnifier) {
   // Set the test page up.
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/touch_selection.html"));
@@ -1590,42 +1583,28 @@ IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
   EXPECT_FALSE(selection_controller_client()->IsMagnifierVisible());
 }
 
-// Tests that the select all command in the quick menu works correctly and that
-// the touch handles and quick menu are shown after the command is executed.
-IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
+// Tests that the select all menu command works correctly.
+IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraTest,
                        SelectAllCommand) {
-  // Set the test page up.
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/touch_selection.html"));
   InitSelectionController(false);
-
   RenderWidgetHostViewAura* rwhva = GetRenderWidgetHostViewAura();
   ui::TouchSelectionControllerTestApi selection_controller_test_api(
       rwhva->selection_controller());
-  EXPECT_EQ(ui::TouchSelectionController::INACTIVE,
-            rwhva->selection_controller()->active_status());
-  EXPECT_FALSE(ui::TouchSelectionMenuRunner::GetInstance()->IsRunning());
-  EXPECT_EQ(gfx::RectF(),
-            rwhva->selection_controller()->GetVisibleRectBetweenBounds());
+  ui::test::EventGenerator generator(rwhva->GetNativeView()->GetRootWindow());
 
-  gfx::NativeView native_view = rwhva->GetNativeView();
-  ui::test::EventGenerator generator(native_view->GetRootWindow());
+  // Tap inside the textfield and wait for the insertion cursor to appear.
+  TapAndWaitForCursor(generator,
+                      ConvertPointFromView(rwhva, generator.delegate(),
+                                           GetPointInTextfield(2)));
 
-  // Tap inside the textfield and wait for the insertion handle to appear.
-  selection_controller_client()->InitWaitForSelectionEvent(
-      ui::INSERTION_HANDLE_SHOWN);
-  gfx::Point point = gfx::ToRoundedPoint(GetPointInTextfield(2));
-  generator.delegate()->ConvertPointFromTarget(native_view, &point);
-  generator.GestureTapAt(point);
-  selection_controller_client()->Wait();
-  EXPECT_EQ(ui::TouchSelectionController::INSERTION_ACTIVE,
-            rwhva->selection_controller()->active_status());
+  // Select all command should be enabled.
   EXPECT_TRUE(
       selection_controller_client()->GetActiveMenuClient()->IsCommandIdEnabled(
           ui::TouchEditable::kSelectAll));
 
   // Execute select all command.
-  selection_controller_client()->InitWaitForSelectionEvent(
-      ui::SELECTION_HANDLES_SHOWN);
+  selection_controller_client()->InitWaitForSelectionUpdate();
   selection_controller_client()->GetActiveMenuClient()->ExecuteCommand(
       ui::TouchEditable::kSelectAll, 0);
   selection_controller_client()->Wait();
@@ -1633,8 +1612,6 @@ IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
   // All text in the textfield should be selected. Touch handles and quick menu
   // should be shown and the select all command should now be disabled since all
   // text is already selected.
-  EXPECT_EQ(ui::TouchSelectionController::SELECTION_ACTIVE,
-            rwhva->selection_controller()->active_status());
   EXPECT_TRUE(ui::TouchSelectionMenuRunner::GetInstance()->IsRunning());
   EXPECT_TRUE(selection_controller_test_api.GetStartVisible());
   EXPECT_TRUE(selection_controller_test_api.GetEndVisible());
@@ -1646,42 +1623,28 @@ IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
           ui::TouchEditable::kSelectAll));
 }
 
-// Tests that the select word command in the quick menu works correctly and that
-// the touch handles and quick menu are shown after the command is executed.
-IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
+// Tests that the select word menu command works correctly.
+IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraTest,
                        SelectWordCommand) {
-  // Set the test page up.
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/touch_selection.html"));
   InitSelectionController(false);
-
   RenderWidgetHostViewAura* rwhva = GetRenderWidgetHostViewAura();
   ui::TouchSelectionControllerTestApi selection_controller_test_api(
       rwhva->selection_controller());
-  EXPECT_EQ(ui::TouchSelectionController::INACTIVE,
-            rwhva->selection_controller()->active_status());
-  EXPECT_FALSE(ui::TouchSelectionMenuRunner::GetInstance()->IsRunning());
-  EXPECT_EQ(gfx::RectF(),
-            rwhva->selection_controller()->GetVisibleRectBetweenBounds());
+  ui::test::EventGenerator generator(rwhva->GetNativeView()->GetRootWindow());
 
-  gfx::NativeView native_view = rwhva->GetNativeView();
-  ui::test::EventGenerator generator(native_view->GetRootWindow());
+  // Tap inside the textfield and wait for the insertion cursor to appear.
+  TapAndWaitForCursor(generator,
+                      ConvertPointFromView(rwhva, generator.delegate(),
+                                           GetPointInTextfield(2)));
 
-  // Tap inside the textfield and wait for the insertion handle to appear.
-  selection_controller_client()->InitWaitForSelectionEvent(
-      ui::INSERTION_HANDLE_SHOWN);
-  gfx::Point point = gfx::ToRoundedPoint(GetPointInTextfield(2));
-  generator.delegate()->ConvertPointFromTarget(native_view, &point);
-  generator.GestureTapAt(point);
-  selection_controller_client()->Wait();
-  EXPECT_EQ(ui::TouchSelectionController::INSERTION_ACTIVE,
-            rwhva->selection_controller()->active_status());
+  // Select word command should be enabled.
   EXPECT_TRUE(
       selection_controller_client()->GetActiveMenuClient()->IsCommandIdEnabled(
           ui::TouchEditable::kSelectWord));
 
   // Execute select word command.
-  selection_controller_client()->InitWaitForSelectionEvent(
-      ui::SELECTION_HANDLES_SHOWN);
+  selection_controller_client()->InitWaitForSelectionUpdate();
   selection_controller_client()->GetActiveMenuClient()->ExecuteCommand(
       ui::TouchEditable::kSelectWord, 0);
   selection_controller_client()->Wait();
@@ -1689,8 +1652,6 @@ IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
   // The closest word should be selected. Touch handles and quick menu should be
   // shown and the select word command should now be disabled since there is a
   // non-empty selection.
-  EXPECT_EQ(ui::TouchSelectionController::SELECTION_ACTIVE,
-            rwhva->selection_controller()->active_status());
   EXPECT_TRUE(ui::TouchSelectionMenuRunner::GetInstance()->IsRunning());
   EXPECT_TRUE(selection_controller_test_api.GetStartVisible());
   EXPECT_TRUE(selection_controller_test_api.GetEndVisible());
@@ -1704,23 +1665,19 @@ IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
 
 // Tests that the select all and select word commands in the quick menu are
 // disabled for empty textfields.
-IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
+IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraTest,
                        SelectCommandsEmptyTextfield) {
-  // Set the test page up.
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/touch_selection.html"));
   InitSelectionController(false);
   RenderWidgetHostViewAura* rwhva = GetRenderWidgetHostViewAura();
+  ui::test::EventGenerator generator(rwhva->GetNativeView()->GetRootWindow());
 
-  // Long-press on an empty textfield and wait for insertion handle to appear.
-  selection_controller_client()->InitWaitForSelectionEvent(
-      ui::INSERTION_HANDLE_SHOWN);
-  gfx::PointF point = GetPointInsideEmptyTextfield();
-  ui::GestureEventDetails long_press_details(ui::ET_GESTURE_LONG_PRESS);
-  long_press_details.set_device_type(ui::GestureDeviceType::DEVICE_TOUCHSCREEN);
-  ui::GestureEvent long_press(point.x(), point.y(), 0, ui::EventTimeForNow(),
-                              long_press_details);
-  rwhva->OnGestureEvent(&long_press);
-  selection_controller_client()->Wait();
+  // Long-press on an empty textfield, then release to make an insertion handle
+  // appear.
+  SelectWithLongPress(generator,
+                      ConvertPointFromView(rwhva, generator.delegate(),
+                                           GetPointInsideEmptyTextfield()));
+  generator.ReleaseTouch();
 
   // Select all and select word commands should be disabled.
   EXPECT_FALSE(
@@ -1737,29 +1694,14 @@ class TouchSelectionControllerClientAuraScaleFactorTest
   static constexpr float kScaleFactor = 2.0f;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
+    TouchSelectionControllerClientAuraTest::SetUpCommandLine(command_line);
     command_line->AppendSwitchASCII(switches::kForceDeviceScaleFactor, "2");
   }
 };
 
-class TouchSelectionControllerClientAuraScaleFactorCAPFeatureTest
-    : public TouchSelectionControllerClientAuraScaleFactorTest,
-      public testing::WithParamInterface<bool> {
- public:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    TouchSelectionControllerClientAuraScaleFactorTest::SetUpCommandLine(
-        command_line);
-    command_line->AppendSwitchASCII(GetParam()
-                                        ? switches::kEnableBlinkFeatures
-                                        : switches::kDisableBlinkFeatures,
-                                    "CompositeAfterPaint");
-    command_line->AppendSwitch(blink::switches::kAllowPreCommitInput);
-  }
-};
-
 // Tests that selection handles are properly positioned at 2x DSF.
-IN_PROC_BROWSER_TEST_P(
-    TouchSelectionControllerClientAuraScaleFactorCAPFeatureTest,
-    SelectionHandleCoordinates) {
+IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraScaleFactorTest,
+                       SelectionHandleCoordinates) {
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/touch_selection.html"));
   InitSelectionController(true);
 
@@ -1790,9 +1732,8 @@ IN_PROC_BROWSER_TEST_P(
 }
 
 // Tests that selection handle coordinates are updated after dragging at 2x DSF.
-IN_PROC_BROWSER_TEST_P(
-    TouchSelectionControllerClientAuraScaleFactorCAPFeatureTest,
-    SelectionHandleCoordinatesAfterDrag) {
+IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraScaleFactorTest,
+                       SelectionHandleCoordinatesAfterDrag) {
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/touch_selection.html"));
   InitSelectionController(true);
 
@@ -1824,9 +1765,8 @@ IN_PROC_BROWSER_TEST_P(
 }
 
 // Tests that the menu is correctly shown after dragging a selection handle.
-IN_PROC_BROWSER_TEST_P(
-    TouchSelectionControllerClientAuraScaleFactorCAPFeatureTest,
-    SelectionHandleDragShowsMenu) {
+IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraScaleFactorTest,
+                       SelectionHandleDragShowsMenu) {
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/touch_selection.html"));
 
   InitSelectionController(true);
@@ -1864,9 +1804,8 @@ IN_PROC_BROWSER_TEST_P(
 }
 
 // Tests that the magnifier is correctly shown when dragging a selection handle.
-IN_PROC_BROWSER_TEST_P(
-    TouchSelectionControllerClientAuraScaleFactorCAPFeatureTest,
-    SelectionHandleDragShowsMagnifier) {
+IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraScaleFactorTest,
+                       SelectionHandleDragShowsMagnifier) {
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/touch_selection.html"));
 
   InitSelectionController(true);
@@ -1903,94 +1842,76 @@ IN_PROC_BROWSER_TEST_P(
   EXPECT_FALSE(selection_controller_client()->IsMagnifierVisible());
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    TouchSelectionScaleFactorForCAPFeatureTests,
-    TouchSelectionControllerClientAuraScaleFactorCAPFeatureTest,
-    testing::Bool());
-
-// Tests that insertion handles are properly positioned at 2x DSF and that the
-// magnifier is updated with the insertion handle.
-IN_PROC_BROWSER_TEST_P(
-    TouchSelectionControllerClientAuraScaleFactorCAPFeatureTest,
-    InsertionHandleCoordinates) {
-  // Set the test page up.
+// Tests that insertion handles are properly positioned at 2x DSF.
+IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraScaleFactorTest,
+                       InsertionHandleCoordinates) {
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/touch_selection.html"));
   InitSelectionController(true);
-
   RenderWidgetHostViewAura* rwhva = GetRenderWidgetHostViewAura();
+  ui::test::EventGenerator generator(rwhva->GetNativeView()->GetRootWindow());
 
-  // Tap inside the textfield and wait for the insertion cursor.
-  selection_controller_client()->InitWaitForSelectionEvent(
-      ui::INSERTION_HANDLE_SHOWN);
+  // Tap inside a textfield and wait for the insertion cursor to appear.
+  TapAndWaitForCursor(generator,
+                      ConvertPointFromView(rwhva, generator.delegate(),
+                                           GetPointInTextfield(2)));
 
-  gfx::PointF point = GetPointInTextfield(2);
+  // Cursor bounds should be a zero-width rect.
+  const gfx::RectF cursor_bounds =
+      rwhva->selection_controller()->GetVisibleRectBetweenBounds();
+  EXPECT_EQ(cursor_bounds.size(), gfx::SizeF(0, kCharacterHeight));
+  // Insertion handle should be shown just below the cursor.
+  const gfx::RectF handle_rect =
+      rwhva->selection_controller()->GetEndHandleRect();
+  EXPECT_LE(cursor_bounds.bottom(), handle_rect.y());
+  EXPECT_LE(handle_rect.y(), cursor_bounds.bottom() + 10);
 
-  ui::GestureEventDetails gesture_tap_down_details(ui::ET_GESTURE_TAP_DOWN);
-  gesture_tap_down_details.set_device_type(
-      ui::GestureDeviceType::DEVICE_TOUCHSCREEN);
-  ui::GestureEvent gesture_tap_down(2, 2, 0, ui::EventTimeForNow(),
-                                    gesture_tap_down_details);
-  rwhva->OnGestureEvent(&gesture_tap_down);
-  ui::GestureEventDetails tap_details(ui::ET_GESTURE_TAP);
-  tap_details.set_device_type(ui::GestureDeviceType::DEVICE_TOUCHSCREEN);
-  tap_details.set_tap_count(1);
-  ui::GestureEvent tap(point.x(), point.y(), 0, ui::EventTimeForNow(),
-                       tap_details);
-  rwhva->OnGestureEvent(&tap);
-
-  selection_controller_client()->Wait();
-
-  EXPECT_EQ(ui::TouchSelectionController::INSERTION_ACTIVE,
-            rwhva->selection_controller()->active_status());
-
-  gfx::RectF initial_handle_rect =
-      rwhva->selection_controller()->GetStartHandleRect();
-
-  // Move the insertion handle. Touch the handle first.
-  gfx::Point handle_point =
-      gfx::ToRoundedPoint(initial_handle_rect.CenterPoint());
-
-  selection_controller_client()->InitWaitForSelectionEvent(
-      ui::INSERTION_HANDLE_DRAG_STARTED);
-  ui::TouchEvent touch_down(
-      ui::ET_TOUCH_PRESSED, handle_point, ui::EventTimeForNow(),
-      ui::PointerDetails(ui::EventPointerType::kTouch, 0));
-  rwhva->OnTouchEvent(&touch_down);
-  selection_controller_client()->Wait();
-
-  // Move it.
+  // Drag to move the cursor handle one character right.
   selection_controller_client()->InitWaitForSelectionEvent(
       ui::INSERTION_HANDLE_MOVED);
-  handle_point.Offset(10, 0);
-  ui::TouchEvent touch_move(
-      ui::ET_TOUCH_MOVED, handle_point, ui::EventTimeForNow(),
-      ui::PointerDetails(ui::EventPointerType::kTouch, 0));
-  rwhva->OnTouchEvent(&touch_move);
+  generator.PressTouch(ConvertPointFromView(rwhva, generator.delegate(),
+                                            handle_rect.CenterPoint()));
+  generator.MoveTouchBy(kScaleFactor * kCharacterWidth, 0);
   selection_controller_client()->Wait();
 
-  // The magnifier should be shown after the insertion handle moves.
-  EXPECT_TRUE(selection_controller_client()->IsMagnifierVisible());
+  // Cursor handle should have moved one character right.
+  EXPECT_EQ(rwhva->selection_controller()->GetEndHandleRect(),
+            handle_rect + gfx::Vector2dF(kCharacterWidth, 0));
+}
 
-  // Then release.
-  selection_controller_client()->InitWaitForSelectionEvent(
-      ui::INSERTION_HANDLE_DRAG_STOPPED);
-  ui::TouchEvent touch_up(ui::ET_TOUCH_RELEASED, handle_point,
-                          ui::EventTimeForNow(),
-                          ui::PointerDetails(ui::EventPointerType::kTouch, 0));
-  rwhva->OnTouchEvent(&touch_up);
-  selection_controller_client()->Wait();
+// Tests that the magnifier is correctly shown when dragging a insertion handle.
+IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraScaleFactorTest,
+                       InsertionHandleDragShowsMagnifier) {
+  ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/touch_selection.html"));
+  InitSelectionController(true);
+  RenderWidgetHostViewAura* rwhva = GetRenderWidgetHostViewAura();
+  ui::test::EventGenerator generator(rwhva->GetNativeView()->GetRootWindow());
 
-  gfx::RectF moved_handle_rect =
-      rwhva->selection_controller()->GetStartHandleRect();
+  // Tap inside a textfield and wait for the insertion cursor to appear.
+  TapAndWaitForCursor(generator,
+                      ConvertPointFromView(rwhva, generator.delegate(),
+                                           GetPointInTextfield(2)));
 
-  // The handle should have moved to the right and the magnifier should no
-  // longer be shown.
-  EXPECT_EQ(initial_handle_rect.y(), moved_handle_rect.y());
-  EXPECT_LT(initial_handle_rect.x(), moved_handle_rect.x());
+  // Magnifier should be hidden if no drag is in progress.
   EXPECT_FALSE(selection_controller_client()->IsMagnifierVisible());
 
-  EXPECT_EQ(ui::TouchSelectionController::INSERTION_ACTIVE,
-            rwhva->selection_controller()->active_status());
+  // Drag to move the cursor handle one character right.
+  const gfx::RectF handle_rect =
+      rwhva->selection_controller()->GetEndHandleRect();
+  selection_controller_client()->InitWaitForSelectionEvent(
+      ui::INSERTION_HANDLE_MOVED);
+  generator.PressTouch(ConvertPointFromView(rwhva, generator.delegate(),
+                                            handle_rect.CenterPoint()));
+  generator.MoveTouchBy(kScaleFactor * kCharacterWidth, 0);
+  selection_controller_client()->Wait();
+
+  // Magnifier should be shown while dragging the handle.
+  EXPECT_TRUE(selection_controller_client()->IsMagnifierVisible());
+
+  // Release touch to end the drag.
+  generator.ReleaseTouch();
+
+  // Magnifier should be hidden after the drag is released.
+  EXPECT_FALSE(selection_controller_client()->IsMagnifierVisible());
 }
 
 }  // namespace content

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {fakeEmptySearchResponse, fakeFeedbackContext, fakeInternalUserFeedbackContext, fakeSearchResponse} from 'chrome://os-feedback/fake_data.js';
+import {fakeEmptySearchResponse, fakeFeedbackContext, fakeInternalUserFeedbackContext, fakeLoginFlowFeedbackContext, fakeSearchResponse} from 'chrome://os-feedback/fake_data.js';
 import {FakeHelpContentProvider} from 'chrome://os-feedback/fake_help_content_provider.js';
 import {FeedbackFlowState} from 'chrome://os-feedback/feedback_flow.js';
 import {SearchResponse} from 'chrome://os-feedback/feedback_types.js';
@@ -185,6 +185,33 @@ export function searchPageTestSuite() {
     // is the default popular content.
     assertNotEquals('', provider.lastQuery);
     assertTrue(page.getIsPopularContentForTesting_());
+  });
+
+  test('searchNotFired_on_oobeOrLogin', async () => {
+    /** {?Element} */
+    let textAreaElement = null;
+    await initializePage();
+    page.feedbackContext = fakeLoginFlowFeedbackContext;
+    textAreaElement = getElement('#descriptionText');
+    const initCallCounts = provider.getHelpContentsCallCount();
+
+    // Enter three chars.
+    textAreaElement.value = 'abc';
+    // Setting the value of the textarea in code does not trigger the
+    // input event. So we trigger it here.
+    textAreaElement.dispatchEvent(new Event('input'));
+
+    await flushTasks();
+    // Verify that getHelpContent() was not called.
+    assertEquals(initCallCounts, provider.getHelpContentsCallCount());
+
+    // Enter 2 more characters. This should trigger another search.
+    textAreaElement.value = 'abc12';
+    textAreaElement.dispatchEvent(new Event('input'));
+
+    await flushTasks();
+    // Verify that getHelpContent() was not called.
+    assertEquals(initCallCounts, provider.getHelpContentsCallCount());
   });
 
   test('HelpContentSearchResultCountColdStart', async () => {
@@ -437,6 +464,33 @@ export function searchPageTestSuite() {
     await clickPromise;
     assertTrue(!!actualCurrentState);
     assertEquals(FeedbackFlowState.SEARCH, actualCurrentState);
+  });
+
+  /**
+   * Test that when the app is opened on oobe or login screen, the help content
+   * section and writing tips are hidden.
+   */
+  test('HideHelpContentSection_oobe_or_login_screen', async () => {
+    await initializePage();
+    assertTrue(isVisible(getElement('iframe')));
+    page.feedbackContext = fakeLoginFlowFeedbackContext;
+    assertEquals('Login', page.feedbackContext.categoryTag);
+
+    assertFalse(isVisible(getElement('iframe')));
+    assertFalse(isVisible(getElement('#feedbackWritingGuidance')));
+  });
+
+  /**
+   * Test that when the app is not opened on oobe or login screen, the help
+   * content section and writing tips are visible.
+   */
+  test('ShowHelpContentSection_if_not_oobe_or_login_screen', async () => {
+    await initializePage();
+    page.feedbackContext = fakeFeedbackContext;
+    assertEquals('MediaApp', page.feedbackContext.categoryTag);
+
+    assertTrue(isVisible(getElement('iframe')));
+    assertTrue(isVisible(getElement('#feedbackWritingGuidance')));
   });
 
   test('typingBluetoothWithInternalAccountShowsQuestionnaire', async () => {

@@ -734,12 +734,6 @@ void BluetoothAdapterFloss::OnAdapterClientsReady(bool enabled) {
     RemoveAdapterObservers();
   }
 
-  if (enabled && IsPresent()) {
-    // Since the adapter was just powered on, it is also implicitly present.
-    // Notify present observers before powered observers.
-    PresentChanged(true);
-  }
-
   NotifyAdapterPoweredChanged(enabled);
 }
 
@@ -1752,7 +1746,8 @@ void BluetoothAdapterFloss::OnLowEnergyScanSessionDestroyed(
 
 void BluetoothAdapterFloss::OnUnregisterScanner(uint8_t scanner_id,
                                                 DBusResult<bool> ret) {
-  BLUETOOTH_LOG(EVENT) << __func__ << ": scanner_id = " << scanner_id;
+  BLUETOOTH_LOG(EVENT) << __func__
+                       << ": scanner_id = " << static_cast<int>(scanner_id);
 
   if (!ret.has_value()) {
     BLUETOOTH_LOG(ERROR) << "Failed UnregisterScanner: " << ret.error();

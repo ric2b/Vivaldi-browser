@@ -277,7 +277,7 @@ const struct {
   const char* state = "Texas";
   const char* zip = "78744";
   const char* country = "US";
-  const char* phone = "15125551234";
+  const char* phone = "5125551234";
   const char* company = "Initech";
   const char* email = "red.swingline@initech.com";
 } kDefaultAddressValues;
@@ -2085,7 +2085,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, ComparePhoneNumbers) {
   profile.SetRawInfo(ADDRESS_HOME_ZIP, u"95110");
   profile.SetRawInfo(ADDRESS_HOME_COUNTRY, u"US");
   profile.SetRawInfo(PHONE_HOME_WHOLE_NUMBER, u"1-408-555-4567");
-  SetTestProfile(browser()->profile(), profile);
+  AddTestProfile(browser()->profile(), profile);
 
   GURL url = embedded_test_server()->GetURL("/autofill/form_phones.html");
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
@@ -2138,7 +2138,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, NoAutofillForCompanyName) {
   profile.SetRawInfo(ADDRESS_HOME_ZIP, u"95110");
   profile.SetRawInfo(COMPANY_NAME, ASCIIToUTF16(company_name));
   profile.SetRawInfo(PHONE_HOME_WHOLE_NUMBER, u"408-871-4567");
-  SetTestProfile(browser()->profile(), profile);
+  AddTestProfile(browser()->profile(), profile);
 
   GURL url =
       embedded_test_server()->GetURL("/autofill/read_only_field_test.html");
@@ -2209,7 +2209,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, NoAutofillForReadOnlyFields) {
   profile.SetRawInfo(ADDRESS_HOME_ZIP, u"95110");
   profile.SetRawInfo(COMPANY_NAME, u"Company X");
   profile.SetRawInfo(PHONE_HOME_WHOLE_NUMBER, u"408-871-4567");
-  SetTestProfile(browser()->profile(), profile);
+  AddTestProfile(browser()->profile(), profile);
 
   GURL url =
       embedded_test_server()->GetURL("/autofill/read_only_field_test.html");
@@ -2246,7 +2246,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, FormFillableOnReset) {
   EXPECT_EQ("Texas", GetFieldValueById("ADDRESS_HOME_STATE"));
   EXPECT_EQ("78744", GetFieldValueById("ADDRESS_HOME_ZIP"));
   EXPECT_EQ("United States", GetFieldValueById("ADDRESS_HOME_COUNTRY"));
-  EXPECT_EQ("15125551234", GetFieldValueById("PHONE_HOME_WHOLE_NUMBER"));
+  EXPECT_EQ("5125551234", GetFieldValueById("PHONE_HOME_WHOLE_NUMBER"));
 }
 
 // Test Autofill distinguishes a middle initial in a name.
@@ -2273,7 +2273,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
   profile.SetRawInfo(NAME_LAST, u"Smith");
   profile.SetRawInfo(EMAIL_ADDRESS, ASCIIToUTF16(email));
   profile.SetRawInfo(PHONE_HOME_WHOLE_NUMBER, u"4088714567");
-  SetTestProfile(browser()->profile(), profile);
+  AddTestProfile(browser()->profile(), profile);
 
   GURL url = embedded_test_server()->GetURL(
       "/autofill/autofill_confirmemail_form.html");
@@ -2304,7 +2304,6 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
   streets.push_back("Ct");
 
   constexpr int kNumProfiles = 1500;
-  std::vector<AutofillProfile> profiles;
   for (int i = 0; i < kNumProfiles; i++) {
     AutofillProfile profile;
     std::u16string name(base::NumberToString16(i));
@@ -2322,9 +2321,8 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
     profile.SetRawInfo(ADDRESS_HOME_STATE, u"CA");
     profile.SetRawInfo(ADDRESS_HOME_ZIP, zip);
     profile.SetRawInfo(ADDRESS_HOME_COUNTRY, u"US");
-    profiles.push_back(profile);
+    AddTestProfile(browser()->profile(), profile);
   }
-  SetTestProfiles(browser()->profile(), &profiles);
 
   GURL url = embedded_test_server()->GetURL(
       "/autofill/latency_after_submit_test.html");
@@ -2482,7 +2480,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, FieldsChangeName) {
   EXPECT_EQ("Austin", GetFieldValueById("city"));
   EXPECT_EQ("Initech", GetFieldValueById("company"));
   EXPECT_EQ("red.swingline@initech.com", GetFieldValueById("email"));
-  EXPECT_EQ("15125551234", GetFieldValueById("phone"));
+  EXPECT_EQ("5125551234", GetFieldValueById("phone"));
 }
 
 // Test that credit card autofill works.
@@ -2501,7 +2499,9 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, FillLocalCreditCard) {
 
 // Test that we do not fill formless non-checkout forms when we enable the
 // formless form restrictions.
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, NoAutocomplete) {
+//
+// TODO(crbug.com/1478563): Deflake this test everywhere.
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, DISABLED_NoAutocomplete) {
   CreateTestProfile();
   GURL url =
       embedded_test_server()->GetURL("/autofill/formless_no_autocomplete.html");
@@ -2523,7 +2523,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, NoAutocomplete) {
   EXPECT_EQ("Austin", GetFieldValueById("city"));
   EXPECT_EQ("Initech", GetFieldValueById("company"));
   EXPECT_EQ("red.swingline@initech.com", GetFieldValueById("email"));
-  EXPECT_EQ("15125551234", GetFieldValueById("phone"));
+  EXPECT_EQ("5125551234", GetFieldValueById("phone"));
 }
 
 // Test that we do not fill formless non-checkout forms when we enable the
@@ -2531,7 +2531,8 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, NoAutocomplete) {
 // version of the the test in that at least one of the fields has an
 // autocomplete attribute, so autofill will always be aware of the existence
 // of the form.
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, SomeAutocomplete) {
+// TODO(crbug.com/1478122): Flaky.
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, DISABLED_SomeAutocomplete) {
   CreateTestProfile();
   GURL url = embedded_test_server()->GetURL(
       "/autofill/formless_some_autocomplete.html");
@@ -2553,12 +2554,13 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, SomeAutocomplete) {
   EXPECT_EQ("Austin", GetFieldValueById("city"));
   EXPECT_EQ("Initech", GetFieldValueById("company"));
   EXPECT_EQ("red.swingline@initech.com", GetFieldValueById("email"));
-  EXPECT_EQ("15125551234", GetFieldValueById("phone"));
+  EXPECT_EQ("5125551234", GetFieldValueById("phone"));
 }
 
 // Test that we do not fill formless non-checkout forms when we enable the
 // formless form restrictions.
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, AllAutocomplete) {
+// TODO(crbug.com/1478122): Flaky.
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, DISABLED_AllAutocomplete) {
   CreateTestProfile();
   GURL url = embedded_test_server()->GetURL(
       "/autofill/formless_all_autocomplete.html");
@@ -2579,7 +2581,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, AllAutocomplete) {
   EXPECT_EQ("Austin", GetFieldValueById("city"));
   EXPECT_EQ("Initech", GetFieldValueById("company"));
   EXPECT_EQ("red.swingline@initech.com", GetFieldValueById("email"));
-  EXPECT_EQ("15125551234", GetFieldValueById("phone"));
+  EXPECT_EQ("5125551234", GetFieldValueById("phone"));
 }
 
 // Test that an 'onchange' event is not fired when a <selectlist> preview
@@ -2604,9 +2606,9 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
   // Hide autofill preview.
   content::RenderWidgetHost* render_widget_host =
       GetWebContents()->GetRenderWidgetHostView()->GetRenderWidgetHost();
-  SendKeyToPopupAndWait(ui::DomKey::ESCAPE,
-                        {ObservedUiEvents::kSuggestionsHidden},
-                        render_widget_host);
+  ASSERT_TRUE(SendKeyToPopupAndWait(ui::DomKey::ESCAPE,
+                                    {ObservedUiEvents::kSuggestionsHidden},
+                                    render_widget_host));
   ASSERT_FALSE(IsPopupShown());
 
   // Select element on `other` and wait for `onchange` event.
@@ -2876,7 +2878,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
   EXPECT_EQ("Austin", GetFieldValueById("city_form1"));
   EXPECT_EQ("Initech", GetFieldValueById("company_form1"));
   EXPECT_EQ("red.swingline@initech.com", GetFieldValueById("email_form1"));
-  EXPECT_EQ("15125551234", GetFieldValueById("phone_form1"));
+  EXPECT_EQ("5125551234", GetFieldValueById("phone_form1"));
 }
 
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
@@ -2898,7 +2900,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
   EXPECT_EQ("Austin", GetFieldValueById("city_form1"));
   EXPECT_EQ("Initech", GetFieldValueById("company_form1"));
   EXPECT_EQ("red.swingline@initech.com", GetFieldValueById("email_form1"));
-  EXPECT_EQ("15125551234", GetFieldValueById("phone_form1"));
+  EXPECT_EQ("5125551234", GetFieldValueById("phone_form1"));
 
   refill = ListenForRefill("firstname_form2");
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname_form2"), this));
@@ -2912,7 +2914,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
   EXPECT_EQ("Austin", GetFieldValueById("city_form2"));
   EXPECT_EQ("Initech", GetFieldValueById("company_form2"));
   EXPECT_EQ("red.swingline@initech.com", GetFieldValueById("email_form2"));
-  EXPECT_EQ("15125551234", GetFieldValueById("phone_form2"));
+  EXPECT_EQ("5125551234", GetFieldValueById("phone_form2"));
 }
 
 // Test that forms that dynamically change a second time do not get filled.
@@ -3012,7 +3014,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
   EXPECT_EQ("Austin", GetFieldValueById("city"));
   EXPECT_EQ("Initech", GetFieldValueById("company"));
   EXPECT_EQ("red.swingline@initech.com", GetFieldValueById("email"));
-  EXPECT_EQ("15125551234", GetFieldValueById("phone"));
+  EXPECT_EQ("5125551234", GetFieldValueById("phone"));
 }
 
 // Test that we can autofill forms that dynamically change the visibility of a
@@ -3038,13 +3040,21 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
   EXPECT_EQ("Austin", GetFieldValueById("city"));
   EXPECT_EQ("Initech", GetFieldValueById("company"));
   EXPECT_EQ("red.swingline@initech.com", GetFieldValueById("email"));
-  EXPECT_EQ("15125551234", GetFieldValueById("phone"));
+  EXPECT_EQ("5125551234", GetFieldValueById("phone"));
 }
 
 // Test that we can autofill forms that dynamically change the element that
 // has been clicked on.
+// TODO(crbug.com/1481004): Re-enable this test
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_DynamicFormFill_FirstElementDisappears \
+  DISABLED_DynamicFormFill_FirstElementDisappears
+#else
+#define MAYBE_DynamicFormFill_FirstElementDisappears \
+  DynamicFormFill_FirstElementDisappears
+#endif
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
-                       DynamicFormFill_FirstElementDisappears) {
+                       MAYBE_DynamicFormFill_FirstElementDisappears) {
   CreateTestProfile();
   GURL url = embedded_test_server()->GetURL(
       "a.com", "/autofill/dynamic_form_element_invalid.html");
@@ -3061,13 +3071,21 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
   EXPECT_EQ("Austin", GetFieldValueById("city"));
   EXPECT_EQ("Initech", GetFieldValueById("company"));
   EXPECT_EQ("red.swingline@initech.com", GetFieldValueById("email"));
-  EXPECT_EQ("15125551234", GetFieldValueById("phone"));
+  EXPECT_EQ("5125551234", GetFieldValueById("phone"));
 }
 
 // Test that we can autofill forms that dynamically change the element that
 // has been clicked on, even though the form has no name.
+// TODO(crbug.com/1481004): Re-enable this test
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_DynamicFormFill_FirstElementDisappearsNoNameForm \
+  DISABLED_DynamicFormFill_FirstElementDisappearsNoNameForm
+#else
+#define MAYBE_DynamicFormFill_FirstElementDisappearsNoNameForm \
+  DynamicFormFill_FirstElementDisappearsNoNameForm
+#endif
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
-                       DynamicFormFill_FirstElementDisappearsNoNameForm) {
+                       MAYBE_DynamicFormFill_FirstElementDisappearsNoNameForm) {
   CreateTestProfile();
 
   GURL url = embedded_test_server()->GetURL(
@@ -3085,7 +3103,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
   EXPECT_EQ("Austin", GetFieldValueById("city"));
   EXPECT_EQ("Initech", GetFieldValueById("company"));
   EXPECT_EQ("red.swingline@initech.com", GetFieldValueById("email"));
-  EXPECT_EQ("15125551234", GetFieldValueById("phone"));
+  EXPECT_EQ("5125551234", GetFieldValueById("phone"));
 }
 
 // Test that we can autofill forms that dynamically change the element that
@@ -3119,8 +3137,17 @@ IN_PROC_BROWSER_TEST_F(
 // Test that we can autofill forms that dynamically change the element that
 // has been clicked on, even though there are multiple forms with identical
 // names.
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
-                       DynamicFormFill_FirstElementDisappearsBadnameUnowned) {
+// TODO(crbug.com/1481004): Re-enable this test
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_DynamicFormFill_FirstElementDisappearsBadnameUnowned \
+  DISABLED_DynamicFormFill_FirstElementDisappearsBadnameUnowned
+#else
+#define MAYBE_DynamicFormFill_FirstElementDisappearsBadnameUnowned \
+  DynamicFormFill_FirstElementDisappearsBadnameUnowned
+#endif
+IN_PROC_BROWSER_TEST_F(
+    AutofillInteractiveTestDynamicForm,
+    MAYBE_DynamicFormFill_FirstElementDisappearsBadnameUnowned) {
   CreateTestProfile();
   GURL url = embedded_test_server()->GetURL(
       "a.com", "/autofill/dynamic_form_element_invalid_unowned_badnames.html");
@@ -3171,8 +3198,16 @@ IN_PROC_BROWSER_TEST_F(
 
 // Test that we can autofill forms that dynamically change the element that
 // has been clicked on, even though the elements are unowned.
+// TODO(crbug.com/1481004): Re-enable this test
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_DynamicFormFill_FirstElementDisappearsUnowned \
+  DISABLED_DynamicFormFill_FirstElementDisappearsUnowned
+#else
+#define MAYBE_DynamicFormFill_FirstElementDisappearsUnowned \
+  DynamicFormFill_FirstElementDisappearsUnowned
+#endif
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
-                       DynamicFormFill_FirstElementDisappearsUnowned) {
+                       MAYBE_DynamicFormFill_FirstElementDisappearsUnowned) {
   CreateTestProfile();
   GURL url = embedded_test_server()->GetURL(
       "a.com", "/autofill/dynamic_form_element_invalid_unowned.html");
@@ -3189,7 +3224,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
   EXPECT_EQ("Austin", GetFieldValueById("city"));
   EXPECT_EQ("Initech", GetFieldValueById("company"));
   EXPECT_EQ("red.swingline@initech.com", GetFieldValueById("email"));
-  EXPECT_EQ("15125551234", GetFieldValueById("phone"));
+  EXPECT_EQ("5125551234", GetFieldValueById("phone"));
 }
 
 // Test that credit card fields are re-filled.
@@ -3231,7 +3266,7 @@ void DoDynamicChangingFormFill_SelectUpdated(
 
   // Check that the test page correctly parsed the 'is_selectlist' GET parameter
   // by checking type of the inserted field.
-  auto has_n_controls_of_type = [](const std::string& control_type,
+  auto has_n_controls_of_type = [](FormControlType control_type,
                                    size_t expected_number,
                                    const FormStructure& form) {
     size_t num_found = 0u;
@@ -3245,8 +3280,10 @@ void DoDynamicChangingFormFill_SelectUpdated(
   ASSERT_TRUE(WaitForMatchingForm(
       test->GetBrowserAutofillManager(),
       should_test_selectlist
-          ? base::BindRepeating(has_n_controls_of_type, "selectlist", 1)
-          : base::BindRepeating(has_n_controls_of_type, "select-one", 2)));
+          ? base::BindRepeating(has_n_controls_of_type,
+                                FormControlType::kSelectList, 1)
+          : base::BindRepeating(has_n_controls_of_type,
+                                FormControlType::kSelectOne, 2)));
 
   ValueWaiter refill = test->ListenForRefill("state");
   // Trigger first fill.
@@ -3331,7 +3368,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
   EXPECT_EQ("Austin", GetFieldValueById("city"));
   EXPECT_EQ("Initech", GetFieldValueById("company"));
   EXPECT_EQ("red.swingline@initech.com", GetFieldValueById("email"));
-  EXPECT_EQ("15125551234", GetFieldValueById("phone"));
+  EXPECT_EQ("5125551234", GetFieldValueById("phone"));
 }
 
 // Test that we can Autofill dynamically generated forms with no name if the
@@ -3355,7 +3392,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
   EXPECT_EQ("Austin", GetFieldValueById("city_form1"));
   EXPECT_EQ("Initech", GetFieldValueById("company_form1"));
   EXPECT_EQ("red.swingline@initech.com", GetFieldValueById("email_form1"));
-  EXPECT_EQ("15125551234", GetFieldValueById("phone_form1"));
+  EXPECT_EQ("5125551234", GetFieldValueById("phone_form1"));
 }
 
 // Test that we can Autofill dynamically changing selects that have options
@@ -3381,7 +3418,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
   EXPECT_EQ("Austin", GetFieldValueById("city"));
   EXPECT_EQ("Initech", GetFieldValueById("company"));
   EXPECT_EQ("red.swingline@initech.com", GetFieldValueById("email"));
-  EXPECT_EQ("15125551234", GetFieldValueById("phone"));
+  EXPECT_EQ("5125551234", GetFieldValueById("phone"));
 }
 
 // Test that we can Autofill dynamically generated synthetic forms if the
@@ -3406,7 +3443,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
   EXPECT_EQ("Initech", GetFieldValueById("company_syntheticform1"));
   EXPECT_EQ("red.swingline@initech.com",
             GetFieldValueById("email_syntheticform1"));
-  EXPECT_EQ("15125551234", GetFieldValueById("phone_syntheticform1"));
+  EXPECT_EQ("5125551234", GetFieldValueById("phone_syntheticform1"));
 }
 
 // Test that we can Autofill dynamically synthetic forms when the select options
@@ -3430,7 +3467,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
   EXPECT_EQ("Austin", GetFieldValueById("city"));
   EXPECT_EQ("Initech", GetFieldValueById("company"));
   EXPECT_EQ("red.swingline@initech.com", GetFieldValueById("email"));
-  EXPECT_EQ("15125551234", GetFieldValueById("phone"));
+  EXPECT_EQ("5125551234", GetFieldValueById("phone"));
 }
 
 // Some websites have JavaScript handlers that mess with the input of the user

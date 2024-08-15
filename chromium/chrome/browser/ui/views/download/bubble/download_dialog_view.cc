@@ -41,6 +41,8 @@
 #include "ui/views/layout/flex_layout_view.h"
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/layout/table_layout.h"
+#include "ui/views/style/typography.h"
+#include "ui/views/style/typography_provider.h"
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
@@ -53,6 +55,7 @@ constexpr char kFullBubbleVisibleHistogramName[] =
 
 class ShowAllDownloadsButton : public RichHoverButton {
  public:
+  METADATA_HEADER(ShowAllDownloadsButton);
   explicit ShowAllDownloadsButton(
       base::RepeatingClosure show_all_downloads_callback)
       : RichHoverButton(
@@ -105,12 +108,12 @@ class ShowAllDownloadsButton : public RichHoverButton {
                           features::IsChromeRefresh2023()
                               ? 0
                               : GetLayoutInsets(DOWNLOAD_ICON).right())
-        .AddRows(
-            1, views::TableLayout::kFixedSize,
-            // Force row to have sufficient height for full line-height of
-            // the title.
-            views::style::GetLineHeight(views::style::CONTEXT_DIALOG_BODY_TEXT,
-                                        views::style::STYLE_PRIMARY));
+        .AddRows(1, views::TableLayout::kFixedSize,
+                 // Force row to have sufficient height for full line-height of
+                 // the title.
+                 views::TypographyProvider::Get().GetLineHeight(
+                     views::style::CONTEXT_DIALOG_BODY_TEXT,
+                     views::style::STYLE_PRIMARY));
 
     // TODO(pkasting): This class should subclass Button, not HoverButton.
     table_layout->SetChildViewIgnoredByLayout(image(), true);
@@ -120,6 +123,9 @@ class ShowAllDownloadsButton : public RichHoverButton {
     Layout();
   }
 };
+
+BEGIN_METADATA(ShowAllDownloadsButton, RichHoverButton)
+END_METADATA
 
 }  // namespace
 
@@ -187,14 +193,13 @@ DownloadDialogView::DownloadDialogView(
     base::WeakPtr<Browser> browser,
     base::WeakPtr<DownloadBubbleUIController> bubble_controller,
     base::WeakPtr<DownloadBubbleNavigationHandler> navigation_handler,
-    std::vector<DownloadUIModel::DownloadUIModelPtr> rows)
+    const DownloadBubbleRowListViewInfo& info)
     : navigation_handler_(std::move(navigation_handler)),
       browser_(std::move(browser)) {
   AddHeader();
   MaybeAddOtrInfoRow(browser_.get());
   BuildAndAddScrollView(browser_, std::move(bubble_controller),
-                        navigation_handler_, std::move(rows),
-                        DefaultPreferredWidth());
+                        navigation_handler_, info, DefaultPreferredWidth());
   AddFooter();
 }
 

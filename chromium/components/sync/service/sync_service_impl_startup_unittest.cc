@@ -138,8 +138,9 @@ class SyncServiceImplStartupTest : public testing::Test {
   void SetSyncFeatureEnabledPrefs() {
     CHECK(!sync_service_);
 
-    sync_prefs_.SetSyncRequested(true);
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
     sync_prefs_.SetInitialSyncFeatureSetupComplete();
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
   }
 
   SyncPrefs* sync_prefs() { return &sync_prefs_; }
@@ -289,6 +290,12 @@ TEST_F(SyncServiceImplStartupTest, WebSignoutDuringDeferredStartup) {
   base::HistogramTester histogram_tester;
   SignInWithSyncConsent();
   SetSyncFeatureEnabledPrefs();
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // On Ash, deferred startup is only possible if first sync completed earlier.
+  component_factory()->set_first_time_sync_configure_done(true);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
   CreateSyncService();
   sync_service()->Initialize();
 
@@ -390,7 +397,7 @@ TEST_F(SyncServiceImplStartupTest, StartInvalidCredentials) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(SyncServiceImplStartupTest, StartAshNoCredentials) {
   // We've never completed startup.
-  ASSERT_FALSE(sync_prefs()->IsInitialSyncFeatureSetupComplete());
+  ASSERT_FALSE(component_factory()->HasTransportDataIncludingFirstSync());
 
   // On ChromeOS, the user is always immediately signed in, but a refresh token
   // isn't necessarily available yet.
@@ -415,7 +422,7 @@ TEST_F(SyncServiceImplStartupTest, StartAshNoCredentials) {
 
 TEST_F(SyncServiceImplStartupTest, StartAshFirstTime) {
   // We've never completed Sync startup.
-  ASSERT_FALSE(sync_prefs()->IsInitialSyncFeatureSetupComplete());
+  ASSERT_FALSE(component_factory()->HasTransportDataIncludingFirstSync());
 
   // There is already a signed-in user.
   SignInWithSyncConsent();
@@ -450,9 +457,21 @@ TEST_F(SyncServiceImplStartupTest, DisableSync) {
   EXPECT_EQ(SyncService::TransportState::ACTIVE,
             sync_service()->GetTransportState());
 
-  // Sync-the-feature is still considered off.
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // On Ash, sync-the-feature remains on. Note however that this is not a
+  // common scenario, because in most case StopAndClear() would be issued from
+  // a codepath that would prevent either sync-the-feature (e.g. dashboard
+  // reset) or sync-the-transport (e.g. unrecoverable error) from starting.
+  EXPECT_TRUE(sync_service()->IsSyncFeatureEnabled());
+  EXPECT_TRUE(sync_service()->IsSyncFeatureActive());
+#else   // BUILDFLAG(IS_CHROMEOS_ASH)
+  // Except for Ash, StopAndClear() turns sync-the-feature off because
+  // IsInitialSyncFeatureSetupComplete() becomes false.
+  EXPECT_FALSE(
+      sync_service()->GetUserSettings()->IsInitialSyncFeatureSetupComplete());
   EXPECT_FALSE(sync_service()->IsSyncFeatureEnabled());
   EXPECT_FALSE(sync_service()->IsSyncFeatureActive());
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   // Call StopAndClear() again while the sync service is already in transport
   // mode. It should immediately start up again in transport mode.
@@ -505,26 +524,7 @@ TEST_F(SyncServiceImplStartupTest, ManagedStartup) {
   EXPECT_FALSE(engine());
 }
 
-class SyncServiceImplStartupTestWithIgnoreSyncRequestedFeature
-    : public SyncServiceImplStartupTest,
-      public ::testing::WithParamInterface<bool> {
- public:
-  SyncServiceImplStartupTestWithIgnoreSyncRequestedFeature() {
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
-    scoped_feature_list_.InitWithFeatureState(
-        kSyncIgnoreSyncRequestedPreference, GetParam());
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
-  }
-
-  ~SyncServiceImplStartupTestWithIgnoreSyncRequestedFeature() override =
-      default;
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-TEST_P(SyncServiceImplStartupTestWithIgnoreSyncRequestedFeature,
-       SwitchManaged) {
+TEST_F(SyncServiceImplStartupTest, SwitchManaged) {
   // Sync starts out fully set up and enabled.
   SetSyncFeatureEnabledPrefs();
   SignInWithSyncConsent();
@@ -577,7 +577,8 @@ TEST_P(SyncServiceImplStartupTestWithIgnoreSyncRequestedFeature,
   // removed, for historic reasons. It is unclear if this behavior is optional,
   // because it is indistinguishable from the sync-reset-via-dashboard case.
   // It can be resolved by invoking SetSyncFeatureRequested().
-  EXPECT_TRUE(sync_service()->IsSyncFeatureDisabledViaDashboard());
+  EXPECT_TRUE(
+      sync_service()->GetUserSettings()->IsSyncFeatureDisabledViaDashboard());
 #else
   EXPECT_FALSE(
       sync_service()->GetUserSettings()->IsInitialSyncFeatureSetupComplete());
@@ -587,16 +588,14 @@ TEST_P(SyncServiceImplStartupTestWithIgnoreSyncRequestedFeature,
   EXPECT_FALSE(sync_service()->IsSyncFeatureActive());
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    SyncIgnoreSyncRequestedPreference,
-    SyncServiceImplStartupTestWithIgnoreSyncRequestedFeature,
-    ::testing::Values(false, true));
-
 TEST_F(SyncServiceImplStartupTest, StartDownloadFailed) {
-  sync_prefs()->SetSyncRequested(true);
   CreateSyncService();
   SignInWithSyncConsent();
+  ASSERT_FALSE(component_factory()->HasTransportDataIncludingFirstSync());
+
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   ASSERT_FALSE(sync_prefs()->IsInitialSyncFeatureSetupComplete());
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
   // Prevent automatic (and successful) completion of engine initialization.
   component_factory()->AllowFakeEngineInitCompletion(false);
@@ -621,6 +620,7 @@ TEST_F(SyncServiceImplStartupTest, StartDownloadFailed) {
 TEST_F(SyncServiceImplStartupTest, FullStartupSequenceFirstTime) {
   // We've never completed startup.
   ASSERT_FALSE(sync_prefs()->IsInitialSyncFeatureSetupComplete());
+  ASSERT_FALSE(component_factory()->HasTransportDataIncludingFirstSync());
 
   CreateSyncService({SESSIONS});
   sync_service()->Initialize();
@@ -753,6 +753,12 @@ TEST_F(SyncServiceImplStartupTest, FullStartupSequenceNthTime) {
 TEST_F(SyncServiceImplStartupTest, DeferredStartInterruptedByDataType) {
   base::HistogramTester histogram_tester;
   SetSyncFeatureEnabledPrefs();
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // On Ash, deferred startup is only possible if first sync completed earlier.
+  component_factory()->set_first_time_sync_configure_done(true);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
   SignInWithSyncConsent();
   CreateSyncService();
 

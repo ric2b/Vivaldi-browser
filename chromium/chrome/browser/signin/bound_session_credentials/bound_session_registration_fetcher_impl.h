@@ -13,6 +13,7 @@
 #include "base/functional/callback.h"
 #include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
+#include "base/types/expected.h"
 #include "chrome/browser/signin/bound_session_credentials/bound_session_cookie_refresh_service.h"
 #include "chrome/browser/signin/bound_session_credentials/bound_session_registration_fetcher_param.h"
 #include "chrome/browser/signin/bound_session_credentials/registration_token_helper.h"
@@ -33,7 +34,22 @@ class UnexportableKeyService;
 class BoundSessionRegistrationFetcherImpl
     : public BoundSessionRegistrationFetcher {
  public:
-  explicit BoundSessionRegistrationFetcherImpl(
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  // Public for testing.
+  enum class RegistrationError {
+    kNone = 0,
+    kGenerateRegistrationTokenFailed = 1,
+    kNetworkError = 2,
+    kServerError = 3,
+    kParseJsonFailed = 4,
+    kRequiredFieldMissing = 5,
+    kInvalidSessionParams = 6,
+    kRequiredCredentialFieldMissing = 7,
+    kMaxValue = kRequiredCredentialFieldMissing
+  };
+
+  BoundSessionRegistrationFetcherImpl(
       BoundSessionRegistrationFetcherParam registration_params,
       scoped_refptr<network::SharedURLLoaderFactory> loader_factory,
       unexportable_keys::UnexportableKeyService& key_service);
@@ -53,11 +69,31 @@ class BoundSessionRegistrationFetcherImpl
   void Start(RegistrationCompleteCallback callback) override;
 
  private:
+  template <class Result>
+  using RegistrationErrorOr = base::expected<Result, RegistrationError>;
+
+  FRIEND_TEST_ALL_PREFIXES(BoundSessionRegistrationFetcherImplTest,
+                           ParseCredentials);
+  FRIEND_TEST_ALL_PREFIXES(BoundSessionRegistrationFetcherImplTest,
+                           ParseCredentialsError);
+  FRIEND_TEST_ALL_PREFIXES(BoundSessionRegistrationFetcherImplTest,
+                           ParseCredentialsSkipsExtraFields);
+
   void OnURLLoaderComplete(std::unique_ptr<std::string> response_body);
   void OnRegistrationTokenCreated(
       absl::optional<RegistrationTokenHelper::Result> result);
 
   void StartFetchingRegistration(const std::string& registration_token);
+
+  void RunCallbackAndRecordMetrics(
+      RegistrationErrorOr<bound_session_credentials::BoundSessionParams>
+          params_or_error);
+
+  RegistrationErrorOr<bound_session_credentials::BoundSessionParams>
+  ParseJsonResponse(std::unique_ptr<std::string> response_body);
+
+  RegistrationErrorOr<std::vector<bound_session_credentials::Credential>>
+  ParseCredentials(const base::Value::List& credentials_list);
 
   BoundSessionRegistrationFetcherParam registration_params_;
   const raw_ref<unexportable_keys::UnexportableKeyService> key_service_;

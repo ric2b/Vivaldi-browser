@@ -46,6 +46,18 @@ bool CookieInclusionStatus::operator!=(
   return !operator==(other);
 }
 
+bool CookieInclusionStatus::operator<(
+    const CookieInclusionStatus& other) const {
+  static_assert(NUM_EXCLUSION_REASONS <= sizeof(unsigned long) * CHAR_BIT,
+                "use .ullong() instead");
+  static_assert(NUM_WARNING_REASONS <= sizeof(unsigned long) * CHAR_BIT,
+                "use .ullong() instead");
+  return std::make_pair(exclusion_reasons_.to_ulong(),
+                        warning_reasons_.to_ulong()) <
+         std::make_pair(other.exclusion_reasons_.to_ulong(),
+                        other.warning_reasons_.to_ulong());
+}
+
 bool CookieInclusionStatus::IsInclude() const {
   return exclusion_reasons_.none();
 }
@@ -231,6 +243,7 @@ std::string CookieInclusionStatus::GetDebugString() const {
       {EXCLUDE_SHADOWING_DOMAIN, "EXCLUDE_SHADOWING_DOMAIN"},
       {EXCLUDE_DISALLOWED_CHARACTER, "EXCLUDE_DISALLOWED_CHARACTER"},
       {EXCLUDE_THIRD_PARTY_PHASEOUT, "EXCLUDE_THIRD_PARTY_PHASEOUT"},
+      {EXCLUDE_NO_COOKIE_CONTENT, "EXCLUDE_NO_COOKIE_CONTENT"},
   };
   static_assert(
       std::size(exclusion_reasons) == ExclusionReason::NUM_EXCLUSION_REASONS,
@@ -338,10 +351,13 @@ CookieInclusionStatus CookieInclusionStatus::MakeFromReasonsForTesting(
 }
 
 bool CookieInclusionStatus::ExcludedByUserPreferences() const {
-  if (HasOnlyExclusionReason(ExclusionReason::EXCLUDE_USER_PREFERENCES))
+  if (HasOnlyExclusionReason(ExclusionReason::EXCLUDE_USER_PREFERENCES) ||
+      HasOnlyExclusionReason(ExclusionReason::EXCLUDE_THIRD_PARTY_PHASEOUT)) {
     return true;
+  }
   return exclusion_reasons_.count() == 2 &&
-         exclusion_reasons_[ExclusionReason::EXCLUDE_USER_PREFERENCES] &&
+         (exclusion_reasons_[ExclusionReason::EXCLUDE_USER_PREFERENCES] ||
+          exclusion_reasons_[ExclusionReason::EXCLUDE_THIRD_PARTY_PHASEOUT]) &&
          exclusion_reasons_
              [ExclusionReason::
                   EXCLUDE_THIRD_PARTY_BLOCKED_WITHIN_FIRST_PARTY_SET];

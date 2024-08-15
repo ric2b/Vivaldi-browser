@@ -89,8 +89,9 @@ NSEvent* BuildFakeMouseEvent(CGEventType mouse_type,
                              float tilt_y = 0.0,
                              float tangential_pressure = 0.0,
                              NSUInteger button_number = 0) {
-  base::apple::ScopedCFTypeRef<CGEventRef> cg_event(CGEventCreateMouseEvent(
+  base::apple::ScopedCFTypeRef<CGEventRef> cg_event_ref(CGEventCreateMouseEvent(
       /*source=*/nullptr, mouse_type, location, button));
+  CGEventRef cg_event = cg_event_ref.get();
   CGEventSetIntegerValueField(cg_event, kCGMouseEventSubtype, subtype);
   CGEventSetDoubleValueField(cg_event, kCGTabletEventRotation, rotation);
   CGEventSetDoubleValueField(cg_event, kCGMouseEventPressure, pressure);
@@ -833,8 +834,8 @@ TEST(WebInputEventBuilderMacTest, BuildWebTouchEvents) {
             touch_event.touches[0].pointer_type);
   EXPECT_EQ(0, touch_event.touches[0].id);
   EXPECT_FLOAT_EQ(0.3, std::round(touch_event.touches[0].force * 10) / 10);
-  EXPECT_EQ(0.5 * 90, touch_event.touches[0].tilt_x);
-  EXPECT_EQ(0.6 * 90, touch_event.touches[0].tilt_y);
+  EXPECT_EQ(0.5 * 90, std::round(touch_event.touches[0].tilt_x));
+  EXPECT_EQ(0.6 * 90, std::round(touch_event.touches[0].tilt_y));
   EXPECT_FLOAT_EQ(
       0.7, std::round(touch_event.touches[0].tangential_pressure * 10) / 10);
   EXPECT_EQ(60, touch_event.touches[0].twist);

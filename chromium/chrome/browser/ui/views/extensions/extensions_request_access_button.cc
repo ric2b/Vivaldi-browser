@@ -28,6 +28,7 @@
 #include "components/feature_engagement/public/event_constants.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/views/view_class_properties.h"
 
 namespace {
@@ -134,9 +135,15 @@ bool ExtensionsRequestAccessButton::IsShowingConfirmationFor(
 std::u16string ExtensionsRequestAccessButton::GetTooltipText(
     const gfx::Point& p) const {
   std::vector<std::u16string> tooltip_parts;
+  content::WebContents* active_contents = GetActiveWebContents();
+
+  // Active contents can be null if the window is closing.
+  if (!active_contents) {
+    return std::u16string();
+  }
   tooltip_parts.push_back(l10n_util::GetStringFUTF16(
       IDS_EXTENSIONS_REQUEST_ACCESS_BUTTON_TOOLTIP_MULTIPLE_EXTENSIONS,
-      GetCurrentHost(GetActiveWebContents())));
+      GetCurrentHost(active_contents)));
   for (const auto& extension_id : extension_ids_) {
     ToolbarActionViewController* action =
         extensions_container_->GetActionForId(extension_id);
@@ -201,3 +208,6 @@ content::WebContents* ExtensionsRequestAccessButton::GetActiveWebContents()
     const {
   return browser_->tab_strip_model()->GetActiveWebContents();
 }
+
+BEGIN_METADATA(ExtensionsRequestAccessButton, ToolbarButton)
+END_METADATA

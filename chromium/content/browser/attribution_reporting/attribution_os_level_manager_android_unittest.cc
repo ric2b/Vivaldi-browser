@@ -18,6 +18,7 @@
 #include "content/browser/attribution_reporting/os_registration.h"
 #include "content/browser/attribution_reporting/test/mock_content_browser_client.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -62,7 +63,8 @@ TEST_F(AttributionOsLevelManagerAndroidTest, Register) {
     SCOPED_TRACE(test_case.desc);
 
     MockAttributionReportingContentBrowserClient browser_client;
-    EXPECT_CALL(browser_client, ShouldUseOsWebSourceAttributionReporting())
+    EXPECT_CALL(browser_client,
+                ShouldUseOsWebSourceAttributionReporting(testing::_))
         .WillRepeatedly(testing::Return(test_case.should_use_os_web_source));
     ScopedContentBrowserClientSetting setting(&browser_client);
 
@@ -71,7 +73,8 @@ TEST_F(AttributionOsLevelManagerAndroidTest, Register) {
     manager_->Register(
         OsRegistration(GURL("https://r.test"), /*debug_reporting=*/false,
                        url::Origin::Create(GURL("https://o.test")),
-                       test_case.input_event, /*is_within_fenced_frame=*/false),
+                       test_case.input_event, /*is_within_fenced_frame=*/false,
+                       /*render_frame_id=*/GlobalRenderFrameHostId()),
         /*is_debug_key_allowed=*/false,
         base::BindLambdaForTesting([&](const OsRegistration&, bool success) {
           // We don't check `success` here because the measurement API may or

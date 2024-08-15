@@ -58,8 +58,7 @@ class BrowserPluginGuest : public WebContentsObserver {
   // Creates a new guest WebContentsImpl with the provided |params| with |this|
   // as the |opener|.
   std::unique_ptr<WebContentsImpl> CreateNewGuestWindow(
-      const WebContents::CreateParams& params,
-      int disposition);
+      const WebContents::CreateParams& params);
 
   // WebContentsObserver implementation.
   void DidStartNavigation(NavigationHandle* navigation_handle) override;

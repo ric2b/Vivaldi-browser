@@ -22,6 +22,11 @@ class GURL;
 
 // Instructs the delegate to reload this page.
 - (void)sadTabViewControllerReload:(SadTabViewController*)sadTabViewController;
+
+// Vivaldi
+- (void)vivaldiReportAnIssue:(const GURL&)URL;
+// End Vivaldi
+
 @end
 
 // View controller that displays a SadTab view.

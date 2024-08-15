@@ -47,27 +47,23 @@ class TestPersonalDataManager : public PersonalDataManager {
                        profile_or_credit_card) override;
   std::string SaveImportedCreditCard(
       const CreditCard& imported_credit_card) override;
-  void AddUpiId(const std::string& upi_id) override;
   void AddProfile(const AutofillProfile& profile) override;
   void UpdateProfile(const AutofillProfile& profile) override;
   void RemoveByGUID(const std::string& guid) override;
   bool IsEligibleForAddressAccountStorage() const override;
   void AddCreditCard(const CreditCard& credit_card) override;
-  std::string AddIban(const Iban& iban) override;
+  std::string AddIban(const Iban iban) override;
+  std::string UpdateIban(const Iban& iban) override;
   void DeleteLocalCreditCards(const std::vector<CreditCard>& cards) override;
   void UpdateCreditCard(const CreditCard& credit_card) override;
   void AddFullServerCreditCard(const CreditCard& credit_card) override;
   const std::string& GetDefaultCountryCodeForNewAddress() const override;
-  void SetProfilesForAllSources(
-      std::vector<AutofillProfile>* profiles) override;
-  bool SetProfilesForSource(base::span<const AutofillProfile> new_profiles,
-                            AutofillProfile::Source source) override;
   void LoadProfiles() override;
   void LoadCreditCards() override;
   void LoadCreditCardCloudTokenData() override;
   void LoadIbans() override;
   bool IsAutofillProfileEnabled() const override;
-  bool IsAutofillCreditCardEnabled() const override;
+  bool IsAutofillPaymentMethodsEnabled() const override;
   bool IsAutofillWalletImportEnabled() const override;
   bool ShouldSuggestServerCards() const override;
   std::string CountryCodeForCurrentTimezone() const override;
@@ -108,6 +104,9 @@ class TestPersonalDataManager : public PersonalDataManager {
   // Adds offer data to |autofill_offer_data_|.
   void AddAutofillOfferData(const AutofillOfferData& offer_data);
 
+  // Adds an `iban` to `server_ibans_`.
+  void AddServerIban(const Iban& iban);
+
   // Adds a `url` to `image` mapping to the local `credit_card_art_images_`
   // cache.
   void AddCardArtImage(const GURL& url, const gfx::Image& image);
@@ -130,12 +129,8 @@ class TestPersonalDataManager : public PersonalDataManager {
     return num_times_save_imported_credit_card_called_;
   }
 
-  int num_times_save_upi_id_called() const {
-    return num_times_save_upi_id_called_;
-  }
-
-  void SetAutofillCreditCardEnabled(bool autofill_credit_card_enabled) {
-    autofill_credit_card_enabled_ = autofill_credit_card_enabled;
+  void SetAutofillPaymentMethodsEnabled(bool autofill_payment_methods_enabled) {
+    autofill_payment_methods_enabled_ = autofill_payment_methods_enabled;
   }
 
   void SetAutofillProfileEnabled(bool autofill_profile_enabled) {
@@ -166,12 +161,15 @@ class TestPersonalDataManager : public PersonalDataManager {
   void ClearCreditCardArtImages() { credit_card_art_images_.clear(); }
 
  private:
+  // This should be called when you just want to delete the element via `guid`
+  // and not trigger `NotifyPersonalDataObserver()`.
+  void RemoveByGuidWithoutNotifications(const std::string& guid);
+
   std::string timezone_country_code_;
   std::string default_country_code_;
   int num_times_save_imported_credit_card_called_ = 0;
-  int num_times_save_upi_id_called_ = 0;
   absl::optional<bool> autofill_profile_enabled_;
-  absl::optional<bool> autofill_credit_card_enabled_;
+  absl::optional<bool> autofill_payment_methods_enabled_;
   absl::optional<bool> autofill_wallet_import_enabled_;
   absl::optional<bool> eligible_for_account_storage_;
   absl::optional<bool> payment_methods_mandatory_reauth_enabled_;

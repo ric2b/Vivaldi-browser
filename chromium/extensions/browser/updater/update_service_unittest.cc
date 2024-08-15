@@ -139,6 +139,12 @@ class FakeUpdateClient : public update_client::UpdateClient {
                                   reason);
   }
 
+  void SendInstallPing(const update_client::CrxComponent& crx_component,
+                       bool success,
+                       int error_code,
+                       int extra_code1,
+                       update_client::Callback callback) override {}
+
   void set_delay_update() { delay_update_ = true; }
 
   void set_is_malware_update_item() { is_malware_update_item_ = true; }
@@ -231,7 +237,12 @@ void FakeUpdateClient::Update(const std::vector<std::string>& ids,
                               CrxStateChangeCallback crx_state_change_callback,
                               bool is_foreground,
                               update_client::Callback callback) {
-  data_ = std::move(crx_data_callback).Run(ids);
+  std::move(crx_data_callback)
+      .Run(ids, base::BindLambdaForTesting(
+                    [&](const std::vector<
+                        absl::optional<update_client::CrxComponent>>& output) {
+                      data_ = output;
+                    }));
 
   UpdateRequest request{ids, crx_state_change_callback, std::move(callback)};
 

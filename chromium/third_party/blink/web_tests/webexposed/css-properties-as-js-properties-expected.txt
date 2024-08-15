@@ -41,8 +41,6 @@ backgroundPosition
 backgroundPositionX
 backgroundPositionY
 backgroundRepeat
-backgroundRepeatX
-backgroundRepeatY
 backgroundSize
 basePalette
 baselineShift
@@ -164,6 +162,7 @@ dominantBaseline
 dynamicRangeLimit
 emptyCells
 fallback
+fieldSizing
 fill
 fillOpacity
 fillRule
@@ -203,7 +202,6 @@ fontVariantPosition
 fontVariationSettings
 fontWeight
 forcedColorAdjust
-formSizing
 gap
 getPropertyPriority
 getPropertyValue
@@ -274,6 +272,14 @@ markerEnd
 markerMid
 markerStart
 mask
+maskClip
+maskComposite
+maskImage
+maskMode
+maskOrigin
+maskPosition
+maskRepeat
+maskSize
 maskType
 mathDepth
 mathShift
@@ -434,6 +440,7 @@ tableLayout
 textAlign
 textAlignLast
 textAnchor
+textAutospace
 textBoxTrim
 textCombineUpright
 textDecoration
@@ -457,11 +464,6 @@ textUnderlineOffset
 textUnderlinePosition
 textWrap
 timelineScope
-toggle
-toggleGroup
-toggleRoot
-toggleTrigger
-toggleVisibility
 top
 touchAction
 transform
@@ -587,8 +589,6 @@ webkitMaskPosition
 webkitMaskPositionX
 webkitMaskPositionY
 webkitMaskRepeat
-webkitMaskRepeatX
-webkitMaskRepeatY
 webkitMaskSize
 webkitMaxLogicalHeight
 webkitMaxLogicalWidth

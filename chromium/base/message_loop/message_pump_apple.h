@@ -75,6 +75,9 @@ class BASE_EXPORT MessagePumpCFRunLoopBase : public MessagePump {
   void ScheduleWork() override;
   void ScheduleDelayedWork(
       const Delegate::NextWorkInfo& next_work_info) override;
+  TimeTicks AdjustDelayedRunTime(TimeTicks earliest_time,
+                                 TimeTicks run_time,
+                                 TimeTicks latest_time) override;
 
 #if BUILDFLAG(IS_IOS)
   // Some iOS message pumps do not support calling |Run()| to spin the main
@@ -112,7 +115,7 @@ class BASE_EXPORT MessagePumpCFRunLoopBase : public MessagePump {
   void OnDidQuit();
 
   // Accessors for private data members to be used by subclasses.
-  CFRunLoopRef run_loop() const { return run_loop_; }
+  CFRunLoopRef run_loop() const { return run_loop_.get(); }
   int nesting_level() const { return nesting_level_; }
   int run_nesting_level() const { return run_nesting_level_; }
   bool keep_running() const { return keep_running_; }
@@ -145,7 +148,7 @@ class BASE_EXPORT MessagePumpCFRunLoopBase : public MessagePump {
   class ScopedModeEnabler;
 
   // The maximum number of run loop modes that can be monitored.
-  static constexpr int kNumModes = 4;
+  static constexpr int kNumModes = 3;
 
   // Timer callback scheduled by ScheduleDelayedWork.  This does not do any
   // work, but it signals |work_source_| so that delayed work can be performed
@@ -239,6 +242,7 @@ class BASE_EXPORT MessagePumpCFRunLoopBase : public MessagePump {
 
   // Time at which `delayed_work_timer_` is set to fire.
   base::TimeTicks delayed_work_scheduled_at_ = base::TimeTicks::Max();
+  base::TimeDelta delayed_work_leeway_;
 
   // The recursion depth of the currently-executing CFRunLoopRun loop on the
   // run loop's thread.  0 if no run loops are running inside of whatever scope
@@ -427,10 +431,6 @@ BASE_EXPORT bool IsHandlingSendEvent();
 #endif  // !BUILDFLAG(IS_IOS)
 
 }  // namespace message_pump_apple
-
-// Tasks posted to the message loop are posted under this mode, as well
-// as kCFRunLoopCommonModes.
-extern const CFStringRef BASE_EXPORT kMessageLoopExclusiveRunLoopMode;
 
 }  // namespace base
 

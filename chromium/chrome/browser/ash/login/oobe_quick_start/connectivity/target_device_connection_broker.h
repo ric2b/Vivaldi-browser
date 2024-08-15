@@ -10,7 +10,6 @@
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/values.h"
-#include "chrome/browser/ash/login/oobe_quick_start/connectivity/random_session_id.h"
 #include "chrome/browser/ash/login/oobe_quick_start/connectivity/session_context.h"
 #include "chromeos/ash/components/quick_start/types.h"
 #include "chromeos/ash/services/nearby/public/mojom/quick_start_decoder_types.mojom-shared.h"
@@ -69,25 +68,22 @@ class TargetDeviceConnectionBroker {
     virtual void Close(
         TargetDeviceConnectionBroker::ConnectionClosedReason reason) = 0;
 
-    // Request wifi credentials from target Android device. The session_id is
-    // used to identify this QuickStart session and is distinct from the
-    // RandomSessionId.
+    // Request wifi credentials from target Android device.
     virtual void RequestWifiCredentials(
-        int32_t session_id,
         RequestWifiCredentialsCallback callback) = 0;
 
     // Notify Android device that the Chromebook will download an update and
-    // reboot. The session_id should be the same as the one sent in
-    // RequestWifiCredentials().
+    // reboot.
     virtual void NotifySourceOfUpdate(
-        int32_t session_id,
         NotifySourceOfUpdateCallback callback) = 0;
 
-    // Begin the account transfer process and retrieve
-    // an Assertion from the source device. The user will be asked to confirm
-    // their lock screen PIN/pattern/etc. on the source device.
-    // This object's client must provide a "challenge" to be sent to the remote
-    // source device.
+    // The first step in the account transfer process which involves retrieving
+    // GAIA account info from the source device.
+    virtual void RequestAccountInfo(base::OnceClosure callback) = 0;
+
+    // Begin the account transfer process and retrieve an Assertion from the
+    // source device. The caller must provide a "challenge" nonce to be sent to
+    // the remote source device.
     virtual void RequestAccountTransferAssertion(
         const Base64UrlString& challenge,
         RequestAccountTransferAssertionCallback callback) = 0;
@@ -100,7 +96,8 @@ class TargetDeviceConnectionBroker {
     // AuthenticatedConnection caller.
     virtual base::Value::Dict GetPrepareForUpdateInfo() = 0;
 
-    // Retrieve CryptAuth ID from BootstrapConfigurations response.
+    // Retrieve Instance ID (CryptAuth device ID) from BootstrapConfigurations
+    // response.
     std::string get_phone_instance_id() { return phone_instance_id_; }
 
    protected:
@@ -195,7 +192,7 @@ class TargetDeviceConnectionBroker {
       base::OnceClosure on_stop_advertising_callback) = 0;
 
   // Gets the 3 digits of the discoverable name. e.g.: Chromebook (123)
-  virtual std::string GetSessionIdDisplayCode() = 0;
+  virtual std::string GetAdvertisingIdDisplayCode() = 0;
 
  protected:
   void MaybeNotifyFeatureStatus();

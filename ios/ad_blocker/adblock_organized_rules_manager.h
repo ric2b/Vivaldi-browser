@@ -45,6 +45,8 @@ class OrganizedRulesManager : public RuleManager::Observer {
   OrganizedRulesManager(const OrganizedRulesManager&) = delete;
   OrganizedRulesManager& operator=(const OrganizedRulesManager&) = delete;
 
+  void SetIncognitoBrowserState(web::BrowserState* browser_state);
+
   RuleGroup group() const { return group_; }
   std::string organized_rules_checksum() const {
     return organized_rules_checksum_;

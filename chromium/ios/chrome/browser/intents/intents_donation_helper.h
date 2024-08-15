@@ -7,13 +7,7 @@
 
 #import <Foundation/Foundation.h>
 
-// All intent types available for donation.
-enum IntentType {
-  INTENT_SEARCH_IN_CHROME,   // SearchInChromeIntent
-  INTENT_OPEN_READING_LIST,  // OpenReadingListIntent
-  INTENT_OPEN_BOOKMARKS,     // OpenBookmarksIntent
-  INTENT_TYPE_COUNT,
-};
+#import "ios/chrome/browser/intents/intent_type.h"
 
 /// Set of utils for donating INInteractions matching INIntents.
 @interface IntentDonationHelper : NSObject

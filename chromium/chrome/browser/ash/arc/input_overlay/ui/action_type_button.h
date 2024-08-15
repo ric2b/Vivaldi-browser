@@ -8,6 +8,7 @@
 #include <string>
 
 #include "ash/style/option_button_base.h"
+#include "base/memory/raw_ref.h"
 
 namespace arc::input_overlay {
 
@@ -23,8 +24,8 @@ class ActionTypeButton : public ash::OptionButtonBase {
   ActionTypeButton& operator=(const ActionTypeButton&) = delete;
   ~ActionTypeButton() override;
 
-  // Used by the button group to change text color.
-  void RefreshTextColor();
+  // Used by the button group to change colors.
+  void RefreshColors();
 
  private:
   // ash::OptionButtonBase:
@@ -39,7 +40,7 @@ class ActionTypeButton : public ash::OptionButtonBase {
   gfx::Size CalculatePreferredSize() const override;
   void OnThemeChanged() override;
 
-  const gfx::VectorIcon& icon_;
+  const raw_ref<const gfx::VectorIcon> icon_;
 };
 
 }  // namespace arc::input_overlay

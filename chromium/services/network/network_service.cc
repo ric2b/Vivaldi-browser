@@ -109,9 +109,6 @@
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/application_status_listener.h"
 #include "net/android/http_auth_negotiate_android.h"
-#include "services/network/sandboxed_vfs_delegate.h"
-#include "sql/database.h"
-#include "sql/sandboxed_vfs.h"
 #endif
 
 #if BUILDFLAG(IS_CT_SUPPORTED)
@@ -130,18 +127,15 @@ namespace {
 
 NetworkService* g_network_service = nullptr;
 
-#if BUILDFLAG(IS_ANDROID)
-constexpr char kSandboxedVfsName[] = "network_service";
-#endif
-
 std::unique_ptr<net::NetworkChangeNotifier> CreateNetworkChangeNotifierIfNeeded(
     net::NetworkChangeNotifier::ConnectionType initial_connection_type,
     net::NetworkChangeNotifier::ConnectionSubtype initial_connection_subtype,
     bool mock_network_change_notifier) {
   // There is a global singleton net::NetworkChangeNotifier if NetworkService
   // is running inside of the browser process.
-  if (mock_network_change_notifier)
+  if (mock_network_change_notifier) {
     return net::NetworkChangeNotifier::CreateMockIfNeeded();
+  }
   return net::NetworkChangeNotifier::CreateIfNeeded(initial_connection_type,
                                                     initial_connection_subtype);
 }
@@ -333,8 +327,9 @@ class NetworkService::DelayedDohProbeActivator {
   // expired.
   void MaybeActivateDohProbes(NetworkContext* network_context) {
     // If timer is still running, probes will be started on completion.
-    if (doh_probes_timer_.IsRunning())
+    if (doh_probes_timer_.IsRunning()) {
       return;
+    }
 
     network_context->ActivateDohProbes();
   }
@@ -376,17 +371,20 @@ NetworkService::NetworkService(
 #endif
   }
 
-  if (receiver.is_valid())
+  if (receiver.is_valid()) {
     Bind(std::move(receiver));
+  }
 
-  if (!delay_initialization_until_set_client)
+  if (!delay_initialization_until_set_client) {
     Initialize(mojom::NetworkServiceParams::New());
+  }
 }
 
 void NetworkService::Initialize(mojom::NetworkServiceParamsPtr params,
                                 bool mock_network_change_notifier) {
-  if (initialized_)
+  if (initialized_) {
     return;
+  }
 
   initialized_ = true;
 
@@ -405,19 +403,21 @@ void NetworkService::Initialize(mojom::NetworkServiceParamsPtr params,
                         CRYPTO_needs_hwcap2_workaround());
 #endif
 
-  if (!params->environment.empty())
+  if (!params->environment.empty()) {
     SetEnvironment(std::move(params->environment));
+  }
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
 
-  // Record this once per session, though the switch is appled on a
+  // Record this once per session, though the switch is applied on a
   // per-NetworkContext basis.
   UMA_HISTOGRAM_BOOLEAN(
       "Net.Certificate.IgnoreCertificateErrorsSPKIListPresent",
       command_line->HasSwitch(switches::kIgnoreCertificateErrorsSPKIList));
 
-  if (params->system_dns_resolver)
+  if (params->system_dns_resolver) {
     SetSystemDnsResolver(std::move(params->system_dns_resolver));
+  }
 
   std::unique_ptr<net::NetworkChangeNotifier> network_change_notifier =
       CreateNetworkChangeNotifierIfNeeded(
@@ -520,8 +520,9 @@ NetworkService::~NetworkService() {
                                           base::OnceClosure());
   }
 
-  if (initialized_)
+  if (initialized_) {
     trace_net_log_observer_.StopWatchForTraceStart();
+  }
 
   net::SetSystemDnsResolverOverride(base::NullCallback());
 }
@@ -578,20 +579,22 @@ std::unique_ptr<NetworkService> NetworkService::CreateForTesting() {
 void NetworkService::RegisterNetworkContext(NetworkContext* network_context) {
   DCHECK_EQ(0u, network_contexts_.count(network_context));
   network_contexts_.insert(network_context);
-  if (quic_disabled_)
+  if (quic_disabled_) {
     network_context->DisableQuic();
+  }
 
-  // The params may already be present, so we propagate it
-  // to this new network_context. When params gets changed
-  // via ConfigureHttpAuthPrefs method, we propagate the change
-  // to all NetworkContexts in |network_contexts_|
+  // The params may already be present, so we propagate it to this new
+  // network_context. When params gets changed via ConfigureHttpAuthPrefs
+  // method, we propagate the change to all NetworkContexts in
+  // |network_contexts_|.
   if (http_auth_dynamic_network_service_params_) {
     network_context->OnHttpAuthDynamicParamsChanged(
         http_auth_dynamic_network_service_params_.get());
   }
 
-  if (doh_probe_activator_)
+  if (doh_probe_activator_) {
     doh_probe_activator_->MaybeActivateDohProbes(network_context);
+  }
 
 #if BUILDFLAG(IS_CT_SUPPORTED)
   network_context->url_request_context()
@@ -605,19 +608,12 @@ void NetworkService::DeregisterNetworkContext(NetworkContext* network_context) {
   network_contexts_.erase(network_context);
 }
 
-#if BUILDFLAG(IS_ANDROID)
-void NetworkService::InvalidateNetworkContextPath(const base::FilePath& path) {
-  if (sandboxed_vfs_delegate_ptr_) {
-    sandboxed_vfs_delegate_ptr_->InvalidateFileBrokerPath(path);
-  }
-}
-#endif  // BUILDFLAG(IS_ANDROID)
-
 void NetworkService::CreateNetLogEntriesForActiveObjects(
     net::NetLog::ThreadSafeObserver* observer) {
   std::set<net::URLRequestContext*> contexts;
-  for (NetworkContext* nc : network_contexts_)
+  for (NetworkContext* nc : network_contexts_) {
     contexts.insert(nc->url_request_context());
+  }
   return net::CreateNetLogEntriesForActiveObjects(contexts, observer);
 }
 
@@ -656,8 +652,9 @@ void NetworkService::StartNetLog(base::File file,
 void NetworkService::AttachNetLogProxy(
     mojo::PendingRemote<mojom::NetLogProxySource> proxy_source,
     mojo::PendingReceiver<mojom::NetLogProxySink> proxy_sink) {
-  if (!net_log_proxy_sink_)
+  if (!net_log_proxy_sink_) {
     net_log_proxy_sink_ = std::make_unique<NetLogProxySink>();
+  }
   net_log_proxy_sink_->AttachSource(std::move(proxy_source),
                                     std::move(proxy_sink));
 }
@@ -753,8 +750,9 @@ void NetworkService::SetRawHeadersAccess(
 
 void NetworkService::SetMaxConnectionsPerProxy(int32_t max_connections) {
   int new_limit = max_connections;
-  if (new_limit < 0)
-    new_limit = net::kDefaultMaxSocketsPerProxyServer;
+  if (new_limit < 0) {
+    new_limit = net::kDefaultMaxSocketsPerProxyChain;
+  }
 
   // Clamp the value between min_limit and max_limit.
   int max_limit = 99;
@@ -763,18 +761,20 @@ void NetworkService::SetMaxConnectionsPerProxy(int32_t max_connections) {
   new_limit = std::clamp(new_limit, min_limit, max_limit);
 
   // Assign the global limit.
-  net::ClientSocketPoolManager::set_max_sockets_per_proxy_server(
+  net::ClientSocketPoolManager::set_max_sockets_per_proxy_chain(
       net::HttpNetworkSession::NORMAL_SOCKET_POOL, new_limit);
 }
 
 bool NetworkService::HasRawHeadersAccess(int32_t process_id,
                                          const GURL& resource_url) const {
   // Allow raw headers for browser-initiated requests.
-  if (!process_id)
+  if (!process_id) {
     return true;
+  }
   auto it = raw_headers_access_origins_by_pid_.find(process_id);
-  if (it == raw_headers_access_origins_by_pid_.end())
+  if (it == raw_headers_access_origins_by_pid_.end()) {
     return false;
+  }
   return it->second.find(url::Origin::Create(resource_url)) != it->second.end();
 }
 
@@ -841,23 +841,14 @@ void NetworkService::OnApplicationStateChange(
     }
   }
 }
-
-void NetworkService::SetSandboxedVFS() {
-  // TODO(crbug.com/1117049): stop disabling mmaping by default once
-  // sql::Database is more configurable.
-  sql::Database::DisableMmapByDefault();
-  auto delegate = std::make_unique<SandboxedVfsDelegate>();
-  sandboxed_vfs_delegate_ptr_ = delegate.get();
-  sql::SandboxedVfs::Register(kSandboxedVfsName, std::move(delegate),
-                              /*make_default=*/true);
-}
 #endif
 
 void NetworkService::SetEnvironment(
     std::vector<mojom::EnvironmentVariablePtr> environment) {
   std::unique_ptr<base::Environment> env(base::Environment::Create());
-  for (const auto& variable : environment)
+  for (const auto& variable : environment) {
     env->SetVar(variable->name, variable->value);
+  }
 }
 
 void NetworkService::SetTrustTokenKeyCommitments(
@@ -876,6 +867,10 @@ void NetworkService::ParseHeaders(
 
 void NetworkService::EnableDataUseUpdates(bool enable) {
   data_use_updates_enabled_ = enable;
+}
+
+void NetworkService::SetIPv6ReachabilityOverride(bool reachability_override) {
+  host_resolver_manager_->SetIPv6ReachabilityOverride(reachability_override);
 }
 
 #if BUILDFLAG(IS_CT_SUPPORTED)
@@ -1036,14 +1031,14 @@ void NetworkService::OnStartNetLogBoundedScratchDirectoryCreated(
     uint64_t max_total_size,
     net::NetLogCaptureMode capture_mode,
     base::Value::Dict constants,
-    const base::FilePath& inprogress_dir_path) {
-  if (inprogress_dir_path.empty()) {
+    const base::FilePath& in_progress_dir_path) {
+  if (in_progress_dir_path.empty()) {
     LOG(ERROR) << "Unable to create scratch directory for net-log.";
     return;
   }
 
   file_net_log_observer_ = net::FileNetLogObserver::CreateBoundedPreExisting(
-      inprogress_dir_path, std::move(file), max_total_size, capture_mode,
+      in_progress_dir_path, std::move(file), max_total_size, capture_mode,
       std::make_unique<base::Value::Dict>(std::move(constants)));
   file_net_log_observer_->StartObserving(net_log_);
 }
@@ -1119,8 +1114,9 @@ void NetworkService::Bind(
 
 mojom::URLLoaderNetworkServiceObserver*
 NetworkService::GetDefaultURLLoaderNetworkServiceObserver() {
-  if (default_url_loader_network_service_observer_)
+  if (default_url_loader_network_service_observer_) {
     return default_url_loader_network_service_observer_.get();
+  }
   return nullptr;
 }
 

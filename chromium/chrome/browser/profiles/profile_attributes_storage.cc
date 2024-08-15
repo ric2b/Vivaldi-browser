@@ -29,6 +29,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "chrome/browser/profiles/profile_avatar_downloader.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_metrics.h"
@@ -52,12 +53,6 @@
 #if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/ui/browser_list.h"
 #endif
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "base/feature_list.h"
-#include "chrome/browser/profiles/profile.h"
-#include "chromeos/constants/chromeos_features.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 namespace {
 
@@ -316,15 +311,7 @@ ProfileAttributesStorage::ProfileAttributesStorage(
 
     // `info` may become invalid after this call.
     // Profiles loaded from disk can never be omitted.
-    bool is_omitted = false;
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-    // Lacros has one exception to the above rule: web app profiles are
-    // persisted on disk and hidden from the UI.
-    is_omitted = base::FeatureList::IsEnabled(
-                     chromeos::features::kExperimentalWebAppProfileIsolation) &&
-                 Profile::IsWebAppProfileName(kv.first);
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
-    InitEntryWithKey(kv.first, is_omitted);
+    InitEntryWithKey(kv.first, /*is_omitted=*/false);
   }
 
   // A profile name can depend on other profile names. Do an additional pass to
@@ -846,6 +833,14 @@ void ProfileAttributesStorage::RecordProfilesState() {
 
   for (ProfileAttributesEntry* entry : entries) {
     RecordProfileState(entry, profile_metrics::StateSuffix::kAll);
+
+    if (policy::ManagementServiceFactory::GetForPlatform()->IsManaged()) {
+      RecordProfileState(entry,
+                         profile_metrics::StateSuffix::kAllManagedDevice);
+    } else {
+      RecordProfileState(entry,
+                         profile_metrics::StateSuffix::kAllUnmanagedDevice);
+    }
 
     switch (type) {
       case MultiProfileUserType::kSingleProfile:

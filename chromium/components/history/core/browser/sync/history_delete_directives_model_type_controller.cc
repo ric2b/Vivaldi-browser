@@ -14,6 +14,8 @@
 #include "components/sync/service/sync_service.h"
 #include "components/sync/service/sync_user_settings.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace history {
 
 namespace {
@@ -30,11 +32,9 @@ using DelegateMode =
     syncer::SyncableServiceBasedModelTypeController::DelegateMode;
 
 DelegateMode GetDelegateMode() {
-  // Transport mode is only supported with Full History Sync
-  // (`kSyncEnableHistoryDataType`), and Full History Sync itself only supports
-  // transport mode if `kReplaceSyncPromosWithSignInPromos` is also enabled.
-  if (base::FeatureList::IsEnabled(syncer::kSyncEnableHistoryDataType) &&
-      base::FeatureList::IsEnabled(
+  // Transport mode is only supported if if `kReplaceSyncPromosWithSignInPromos`
+  // is enabled.
+  if (base::FeatureList::IsEnabled(
           syncer::kReplaceSyncPromosWithSignInPromos)) {
     return DelegateMode::kTransportModeWithSingleModel;
   }
@@ -64,7 +64,7 @@ HistoryDeleteDirectivesModelTypeController::
 syncer::DataTypeController::PreconditionState
 HistoryDeleteDirectivesModelTypeController::GetPreconditionState() const {
   DCHECK(CalledOnValidThread());
-  if (helper_.sync_service()->GetUserSettings()->IsEncryptEverythingEnabled()) {
+  if (helper_.sync_service()->GetUserSettings()->IsEncryptEverythingEnabled() && !vivaldi::IsVivaldiRunning()) {
     return PreconditionState::kMustStopAndClearData;
   }
   return helper_.GetPreconditionState();

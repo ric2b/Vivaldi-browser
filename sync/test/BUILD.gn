@@ -17,9 +17,9 @@ source_set("sync_integration_testsupport"){
     "//skia",
     "//testing/gmock",
     "//testing/gtest",
-    "//vivaldi/notes",
-    "//vivaldi/notes:browser",
-    "//vivaldi/notes/tests:notes",
+    "//vivaldi/components/notes",
+    "//vivaldi/components/notes:browser",
+    "//vivaldi/components/notes/tests:notes",
   ]
 }
 

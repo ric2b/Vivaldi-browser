@@ -1,5 +1,6 @@
 import pytest
 
+from webdriver.bidi.error import NoSuchFrameException
 from webdriver.bidi.modules.input import Actions, get_element_origin
 from webdriver.bidi.modules.script import ContextTarget
 
@@ -7,6 +8,14 @@ from .. import get_events, get_object_from_context
 from . import get_shadow_root_from_test_page
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_invalid_browsing_context(bidi_session):
+    actions = Actions()
+    actions.add_wheel()
+
+    with pytest.raises(NoSuchFrameException):
+        await bidi_session.input.perform_actions(actions=actions, context="foo")
 
 
 @pytest.mark.parametrize("delta_x, delta_y", [(0, 10), (5, 0), (5, 10)])
@@ -109,7 +118,7 @@ async def test_scroll_shadow_tree(
 
     # Add a simplified event recorder to track events in the test ShadowRoot.
     scrollable = await bidi_session.script.call_function(
-        function_declaration=f"""shadowRoot => {{
+        function_declaration="""shadowRoot => {{
             window.wheelEvents = [];
             const scrollable = shadowRoot.querySelector("#scrollableShadowTree");
             scrollable.addEventListener("wheel",

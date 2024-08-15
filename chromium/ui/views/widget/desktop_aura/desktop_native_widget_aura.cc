@@ -239,7 +239,8 @@ class DesktopNativeWidgetAuraWindowParentingClient
 
   // Overridden from client::WindowParentingClient:
   aura::Window* GetDefaultParent(aura::Window* window,
-                                 const gfx::Rect& bounds) override {
+                                 const gfx::Rect& bounds,
+                                 const int64_t display_id) override {
     // TODO(crbug.com/1236997): Re-enable this logic once Fuchsia's windowing
     // APIs provide the required functionality.
 #if !BUILDFLAG(IS_FUCHSIA)
@@ -584,11 +585,10 @@ void DesktopNativeWidgetAura::InitNativeWidget(Widget::InitParams params) {
     }
     host_.reset(desktop_window_tree_host_->AsWindowTreeHost());
   }
+  host_->window()->SetProperty(kDesktopNativeWidgetAuraKey, this);
   desktop_window_tree_host_->Init(params);
 
   host_->window()->AddChild(content_window_);
-  host_->window()->SetProperty(kDesktopNativeWidgetAuraKey, this);
-
   host_->window()->AddObserver(new RootWindowDestructionObserver(this));
 
   // The WindowsModalityController event filter should be at the head of the
@@ -1303,6 +1303,20 @@ void DesktopNativeWidgetAura::OnKeyEvent(ui::KeyEvent* event) {
 
 void DesktopNativeWidgetAura::OnMouseEvent(ui::MouseEvent* event) {
   DCHECK(content_window_->IsVisible());
+
+#if BUILDFLAG(IS_WIN)
+  if (event->type() == ui::ET_MOUSE_MOVED) {
+    // Showing a tooltip causes Windows to generate a MOUSE_MOVED
+    // event to the same location it was already at; when that happens,
+    // we need to throw the event away rather than acting as if someone
+    // moved the mouse and showing a new tooltip.
+    if (event->location() == last_mouse_loc_) {
+      return;
+    }
+    last_mouse_loc_ = event->location();
+  }
+#endif
+
   if (tooltip_manager_.get())
     tooltip_manager_->UpdateTooltip();
   TooltipManagerAura::UpdateTooltipManagerForCapture(this);

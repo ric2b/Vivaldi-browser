@@ -50,6 +50,10 @@ update_target("//components/version_info:version_info") {
       "//vivaldi/prefs:prefs_files_generator",
     ]
   }
+
+  configs += [
+    "//vivaldi/gn/config:release_kind"
+  ]
 }
 
 foreach(_target_config, CHROMIUM_VIVALDI_RESOURCE_LIST) {

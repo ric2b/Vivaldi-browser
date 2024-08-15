@@ -37,7 +37,7 @@ ChromeWebContentsViewDelegateViewsMac::
     ~ChromeWebContentsViewDelegateViewsMac() = default;
 
 gfx::NativeWindow ChromeWebContentsViewDelegateViewsMac::GetNativeWindow() {
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents_);
+  Browser* browser = chrome::FindBrowserWithTab(web_contents_);
   return browser ? browser->window()->GetNativeWindow() : nullptr;
 }
 
@@ -87,10 +87,10 @@ bool ChromeWebContentsViewDelegateViewsMac::TakeFocus(bool reverse) {
   return GetFocusHelper()->TakeFocus(reverse);
 }
 
-void ChromeWebContentsViewDelegateViewsMac::OnPerformDrop(
+void ChromeWebContentsViewDelegateViewsMac::OnPerformingDrop(
     const content::DropData& drop_data,
     DropCompletionCallback callback) {
-  HandleOnPerformDrop(web_contents_, drop_data, std::move(callback));
+  HandleOnPerformingDrop(web_contents_, drop_data, std::move(callback));
 }
 
 std::unique_ptr<RenderViewContextMenuBase>

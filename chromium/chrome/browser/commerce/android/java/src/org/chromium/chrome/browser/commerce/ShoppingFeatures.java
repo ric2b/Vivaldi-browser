@@ -16,13 +16,20 @@ import org.chromium.components.commerce.core.ShoppingService;
 public class ShoppingFeatures {
     private static Boolean sShoppingListEligibleForTestsing;
 
-    /** Wrapper function for ShoppingService.isShoppingListEligibile(). */
+    /** Use {@link #isShoppingListEligible(Profile)} */
+    @Deprecated
     public static boolean isShoppingListEligible() {
         if (BuildConfig.IS_VIVALDI) return false;
         if (sShoppingListEligibleForTestsing != null) return sShoppingListEligibleForTestsing;
-        if (!ProfileManager.isInitialized()) return false;
 
-        Profile profile = Profile.getLastUsedRegularProfile();
+        if (!ProfileManager.isInitialized()) return false;
+        return isShoppingListEligible(Profile.getLastUsedRegularProfile());
+    }
+
+    /** Wrapper function for ShoppingService.isShoppingListEligibile(). */
+    public static boolean isShoppingListEligible(Profile profile) {
+        if (sShoppingListEligibleForTestsing != null) return sShoppingListEligibleForTestsing;
+
         if (profile == null) return false;
         ShoppingService service = ShoppingServiceFactory.getForProfile(profile);
         if (service == null) return false;

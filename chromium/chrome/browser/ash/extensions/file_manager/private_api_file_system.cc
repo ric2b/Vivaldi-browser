@@ -72,7 +72,6 @@
 #include "chrome/browser/chromeos/policy/dlp/dlp_file_destination.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager_factory.h"
-#include "chrome/browser/enterprise/data_controls/component.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -83,6 +82,7 @@
 #include "chromeos/ash/components/disks/disk_mount_manager.h"
 #include "components/drive/event_logger.h"
 #include "components/drive/file_system_core_util.h"
+#include "components/enterprise/data_controls/component.h"
 #include "components/prefs/pref_service.h"
 #include "components/storage_monitor/storage_info.h"
 #include "components/storage_monitor/storage_monitor.h"
@@ -1485,8 +1485,8 @@ FileManagerPrivateInternalSearchFilesFunction::Run() {
 
   size_t max_results =
       base::internal::checked_cast<size_t>(search_params.max_results);
-  base::Time modified_time =
-      base::Time::FromJsTime(search_params.modified_timestamp);
+  base::Time modified_time = base::Time::FromMillisecondsSinceUnixEpoch(
+      search_params.modified_timestamp);
 
   // Barrier that collects results from the file search by name and image
   // search by (query) terms. Explicitly waits for 2 tasks to complete.
@@ -1539,7 +1539,8 @@ void FileManagerPrivateInternalSearchFilesFunction::RunImageSearchByQuery(
     OnResultsReadyCallback callback) {
   // If the feature is not enabled or the query is too short return empty match.
   std::u16string q16 = base::UTF8ToUTF16(query);
-  if (!search_features::IsLauncherImageSearchEnabled() ||
+  if (!ash::features::IsFilesLocalImageSearchEnabled() ||
+      !search_features::IsLauncherImageSearchEnabled() ||
       app_list::IsQueryTooShort(q16)) {
     std::move(callback).Run({});
     return;
@@ -2035,7 +2036,8 @@ void FileManagerPrivateInternalParseTrashInfoFilesFunction::
     info.restore_entry.file_is_directory =
         entry_definition_list->at(i).is_directory;
     info.trash_info_file_name = trash_info_path.BaseName().value();
-    info.deletion_date = deletion_date.ToJsTimeIgnoringNull();
+    info.deletion_date =
+        deletion_date.InMillisecondsFSinceUnixEpochIgnoringNull();
 
     results.push_back(std::move(info));
   }

@@ -14,7 +14,8 @@
 
 #include "mediapipe/gpu/gl_texture_buffer.h"
 
-#include "absl/log/log.h"
+#include "absl/log/absl_check.h"
+#include "absl/log/absl_log.h"
 #include "mediapipe/framework/formats/image_frame.h"
 #include "mediapipe/gpu/gl_context.h"
 #include "mediapipe/gpu/gl_texture_view.h"
@@ -172,7 +173,7 @@ bool GlTextureBuffer::CreateInternal(const void* data, int alignment) {
       // normal single-context behavior. E.g. if you do bind, delete, render,
       // unbind, the object is not deleted until the unbind, and it waits for
       // the render to finish.
-      DLOG_IF(ERROR, !glIsTexture(name_to_delete))
+      ABSL_DLOG_IF(ERROR, !glIsTexture(name_to_delete))
           << "Deleting invalid texture id: " << name_to_delete;
       glDeleteTextures(1, &name_to_delete);
     });

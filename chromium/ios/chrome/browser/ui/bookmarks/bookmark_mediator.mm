@@ -17,16 +17,16 @@
 #import "components/pref_registry/pref_registry_syncable.h"
 #import "components/prefs/pref_service.h"
 #import "components/sync/service/sync_service.h"
+#import "components/sync/service/sync_user_settings.h"
 #import "ios/chrome/browser/bookmarks/model/bookmarks_utils.h"
 #import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
-#import "ios/chrome/browser/default_browser/utils.h"
+#import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/shared/ui/util/url_with_title.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
-#import "ios/chrome/browser/sync/sync_setup_service.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
 #import "ios/chrome/browser/ui/ntp/metrics/home_metrics.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -57,9 +57,6 @@ using bookmarks::BookmarkNode;
 
   // Sync service for this mediator.
   syncer::SyncService* _syncService;
-
-  // The setup service for this mediator.
-  SyncSetupService* _syncSetupService;
 }
 
 + (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry {
@@ -79,9 +76,7 @@ using bookmarks::BookmarkNode;
                                        prefs:(PrefService*)prefs
                        authenticationService:
                            (AuthenticationService*)authenticationService
-                                 syncService:(syncer::SyncService*)syncService
-                            syncSetupService:
-                                (SyncSetupService*)syncSetupService {
+                                 syncService:(syncer::SyncService*)syncService {
   self = [super init];
   if (self) {
     _localOrSyncableBookmarkModel = localOrSyncableBookmarkModel->AsWeakPtr();
@@ -91,7 +86,6 @@ using bookmarks::BookmarkNode;
     _prefs = prefs;
     _authenticationService = authenticationService->GetWeakPtr();
     _syncService = syncService;
-    _syncSetupService = syncSetupService;
   }
   return self;
 }
@@ -102,7 +96,6 @@ using bookmarks::BookmarkNode;
   _prefs = nullptr;
   _authenticationService = nullptr;
   _syncService = nullptr;
-  _syncSetupService = nullptr;
 }
 
 - (MDCSnackbarMessage*)addBookmarkWithTitle:(NSString*)title
@@ -264,8 +257,9 @@ using bookmarks::BookmarkNode;
       _authenticationService->HasPrimaryIdentity(signin::ConsentLevel::kSync);
   BOOL savedIntoAccount =
       (storageType == bookmarks::StorageType::kAccount) ||
-      (hasSyncConsent && _syncSetupService->IsDataTypePreferred(
-                             syncer::UserSelectableType::kBookmarks));
+      (hasSyncConsent &&
+       _syncService->GetUserSettings()->GetSelectedTypes().Has(
+           syncer::UserSelectableType::kBookmarks));
   return savedIntoAccount;
 }
 

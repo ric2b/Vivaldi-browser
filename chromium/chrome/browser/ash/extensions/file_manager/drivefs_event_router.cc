@@ -13,7 +13,8 @@
 #include "chrome/browser/ash/drive/file_system_util.h"
 #include "chrome/browser/ash/extensions/file_manager/private_api_util.h"
 #include "chrome/common/extensions/api/file_manager_private.h"
-#include "chromeos/ash/components/drivefs/drivefs_pin_manager.h"
+#include "chromeos/ash/components/drivefs/drivefs_host.h"
+#include "chromeos/ash/components/drivefs/drivefs_pinning_manager.h"
 #include "chromeos/ash/components/drivefs/sync_status_tracker.h"
 #include "extensions/browser/extension_event_histogram_value.h"
 
@@ -48,7 +49,8 @@ file_manager_private::DriveConfirmDialogType ConvertDialogReasonType(
 DriveFsEventRouter::DriveFsEventRouter(
     Profile* profile,
     SystemNotificationManager* notification_manager)
-    : notification_manager_(notification_manager), profile_(profile) {}
+    : profile_(profile), notification_manager_(notification_manager) {}
+
 DriveFsEventRouter::~DriveFsEventRouter() = default;
 
 DriveFsEventRouter::SyncingStatusState::SyncingStatusState() = default;
@@ -392,6 +394,29 @@ void DriveFsEventRouter::OnError(const drivefs::mojom::DriveError& error) {
                    file_manager_private::OnDriveSyncError::kEventName,
                    file_manager_private::OnDriveSyncError::Create(event));
   }
+}
+
+void DriveFsEventRouter::Observe(
+    drive::DriveIntegrationService* const service) {
+  DCHECK(service);
+  drive::DriveIntegrationService::Observer::Observe(service);
+  drivefs::DriveFsHost* const host = service->GetDriveFsHost();
+  drivefs::DriveFsHost::Observer::Observe(host);
+  host->set_dialog_handler(
+      base::BindRepeating(&DriveFsEventRouter::DisplayConfirmDialog,
+                          weak_ptr_factory_.GetWeakPtr()));
+}
+
+void DriveFsEventRouter::Reset() {
+  if (drivefs::DriveFsHost* const host = GetHost()) {
+    host->set_dialog_handler({});
+  }
+  drivefs::DriveFsHost::Observer::Reset();
+  drive::DriveIntegrationService::Observer::Reset();
+}
+
+void DriveFsEventRouter::OnDriveIntegrationServiceDestroyed() {
+  Reset();
 }
 
 void DriveFsEventRouter::OnBulkPinProgress(

@@ -17,7 +17,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
@@ -42,7 +41,6 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
 #include "chrome/browser/ui/ui_features.h"
-#include "chrome/browser/ui/user_education/scoped_new_badge_tracker.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_menu_delegate.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/frame/app_menu_button.h"
@@ -51,7 +49,6 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/bookmarks/browser/bookmark_model.h"
-#include "components/feature_engagement/public/feature_constants.h"
 #include "components/zoom/page_zoom.h"
 #include "components/zoom/zoom_controller.h"
 #include "components/zoom/zoom_event_manager.h"
@@ -97,6 +94,8 @@
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/controls/menu/menu_scroll_view_container.h"
 #include "ui/views/controls/menu/submenu_view.h"
+#include "ui/views/style/typography.h"
+#include "ui/views/style/typography_provider.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/views/view_utils.h"
 #include "ui/views/widget/widget.h"
@@ -954,8 +953,6 @@ AppMenu::AppMenu(Browser* browser, ui::MenuModel* model, int run_types)
     : browser_(browser), model_(model), run_types_(run_types) {
   global_error_observation_.Observe(
       GlobalErrorServiceFactory::GetForProfile(browser->profile()));
-  new_badge_tracker_ =
-      std::make_unique<ScopedNewBadgeTracker>(browser_->profile());
 
   DCHECK(!root_);
   root_ = new MenuItemView(this);
@@ -1023,8 +1020,9 @@ absl::optional<SkColor> AppMenu::GetLabelColor(int command_id) const {
   return GetLabelFontList(command_id)
              ? absl::make_optional(
                    root_->GetSubmenu()->GetColorProvider()->GetColor(
-                       views::style::GetColorId(views::style::CONTEXT_MENU,
-                                                views::style::STYLE_PRIMARY)))
+                       views::TypographyProvider::Get().GetColorId(
+                           views::style::CONTEXT_MENU,
+                           views::style::STYLE_PRIMARY)))
              : absl::nullopt;
 }
 
@@ -1137,8 +1135,7 @@ bool AppMenu::IsCommandEnabled(int command_id) const {
     return true;
   }
 
-  if ((base::FeatureList::IsEnabled(features::kExtensionsMenuInAppMenu) ||
-       features::IsChromeRefresh2023()) &&
+  if (features::IsExtensionMenuInRootAppMenu() &&
       command_id == IDC_EXTENSIONS_SUBMENU) {
     return true;
   }
@@ -1214,25 +1211,6 @@ void AppMenu::WillShowMenu(MenuItemView* menu) {
     CreateBookmarkMenu();
   else if (bookmark_menu_delegate_)
     bookmark_menu_delegate_->WillShowMenu(menu);
-
-  if (menu->GetCommand() == IDC_MORE_TOOLS_MENU) {
-    std::vector<MenuItemView*> more_tools_items =
-        menu->GetSubmenu()->GetMenuItems();
-
-    auto performanceItem =
-        base::ranges::find_if(more_tools_items, [](MenuItemView* item) -> bool {
-          return item->GetCommand() == IDC_PERFORMANCE;
-        });
-
-    if (performanceItem != more_tools_items.end()) {
-      bool show_new_badge =
-          browser_->window()->IsFeaturePromoActive(
-              feature_engagement::kIPHHighEfficiencyModeFeature) ||
-          new_badge_tracker_->TryShowNewBadge(
-              feature_engagement::kIPHPerformanceNewBadgeFeature);
-      (*performanceItem)->set_is_new(show_new_badge);
-    }
-  }
 }
 
 void AppMenu::WillHideMenu(MenuItemView* menu) {
@@ -1395,7 +1373,10 @@ void AppMenu::PopulateMenu(MenuItemView* parent, MenuModel* model) {
             std::make_unique<RecentTabsMenuModelDelegate>(
                 this, model->GetSubmenuModelAt(i), item);
         break;
-
+      case IDC_SHOW_MANAGEMENT_PAGE:
+        parent->SetTooltip(model->GetAccessibleNameAt(i),
+                           IDC_SHOW_MANAGEMENT_PAGE);
+        break;
       default: {
         if (features::IsChromeRefresh2023() &&
             IsOtherProfileCommand(model->GetCommandIdAt(i))) {

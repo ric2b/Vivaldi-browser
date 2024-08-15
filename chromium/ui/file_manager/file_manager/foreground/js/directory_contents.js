@@ -2,25 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from 'chrome://resources/ash/common/assert.js';
 import {dispatchSimpleEvent} from 'chrome://resources/ash/common/cr_deprecated.js';
 import {NativeEventTarget as EventTarget} from 'chrome://resources/ash/common/event_target.js';
 
 import {mountGuest} from '../../common/js/api.js';
 import {AsyncQueue, ConcurrentQueue} from '../../common/js/async_util.js';
 import {createDOMError} from '../../common/js/dom_utils.js';
-import {isEntryInsideDrive} from '../../common/js/entry_utils.js';
+import {isEntryInsideDrive, isFakeEntry, readEntriesRecursively} from '../../common/js/entry_utils.js';
 import {FileType} from '../../common/js/file_type.js';
 import {EntryList} from '../../common/js/files_app_entry_types.js';
-import {metrics} from '../../common/js/metrics.js';
+import {recordInterval, recordMediumCount, startInterval} from '../../common/js/metrics.js';
 import {getEarliestTimestamp} from '../../common/js/recent_date_bucket.js';
 import {createTrashReaders} from '../../common/js/trash.js';
-import {util} from '../../common/js/util.js';
+import {FileErrorToDomError} from '../../common/js/util.js';
 import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
-import {EntryLocation} from '../../externs/entry_location.js';
 import {FakeEntry, FilesAppDirEntry, FilesAppEntry} from '../../externs/files_app_entry_interfaces.js';
-import {SearchLocation, SearchOptions, SearchRecency} from '../../externs/ts/state.js';
-import {VolumeInfo} from '../../externs/volume_info.js';
+import {SearchLocation, SearchOptions} from '../../externs/ts/state.js';
 import {VolumeManager} from '../../externs/volume_manager.js';
 import {getDefaultSearchOptions} from '../../state/ducks/search.js';
 import {getStore} from '../../state/store.js';
@@ -42,18 +39,22 @@ export class ContentScanner {
    * directory, or starts to search with some query on a file system.
    * Derived classes must override this method.
    *
-   * @param {function(Array<Entry>)} entriesCallback Called when some chunk of
-   *     entries are read. This can be called a couple of times until the
+   * @param {function(Array<Entry>):void} entriesCallback Called when some chunk
+   *     of entries are read. This can be called a couple of times until the
    *     completion.
-   * @param {function()} successCallback Called when the scan is completed
+   * @param {function():void} successCallback Called when the scan is completed
    *     successfully.
-   * @param {function(DOMError)} errorCallback Called an error occurs.
+   * @param {function(DOMError):void} errorCallback Called an error occurs.
    * @param {boolean=} invalidateCache True to invalidate the backend scanning
    *     result cache. This param only works if the corresponding backend
    *     scanning supports cache.
    */
   async scan(
+      // @ts-ignore: error TS6133: 'errorCallback' is declared but its value is
+      // never read.
       entriesCallback, successCallback, errorCallback,
+      // @ts-ignore: error TS6133: 'invalidateCache' is declared but its value
+      // is never read.
       invalidateCache = false) {}
 
   /**
@@ -82,27 +83,32 @@ export class DirectoryContentScanner extends ContentScanner {
    * @override
    */
   async scan(
+      // @ts-ignore: error TS7006: Parameter 'errorCallback' implicitly has an
+      // 'any' type.
       entriesCallback, successCallback, errorCallback,
+      // @ts-ignore: error TS6133: 'invalidateCache' is declared but its value
+      // is never read.
       invalidateCache = false) {
     if (!this.entry_ || !this.entry_.createReader) {
       // If entry is not specified or if entry doesn't implement createReader,
       // we cannot read it.
-      errorCallback(createDOMError(util.FileError.INVALID_MODIFICATION_ERR));
+      errorCallback(
+          createDOMError(FileErrorToDomError.INVALID_MODIFICATION_ERR));
       return;
     }
 
-    metrics.startInterval('DirectoryScan');
+    startInterval('DirectoryScan');
     const reader = this.entry_.createReader();
     const readEntries = () => {
       reader.readEntries(entries => {
         if (this.cancelled_) {
-          errorCallback(createDOMError(util.FileError.ABORT_ERR));
+          errorCallback(createDOMError(FileErrorToDomError.ABORT_ERR));
           return;
         }
 
         if (entries.length === 0) {
           // All entries are read.
-          metrics.recordInterval('DirectoryScan');
+          recordInterval('DirectoryScan');
           successCallback();
           return;
         }
@@ -112,121 +118,6 @@ export class DirectoryContentScanner extends ContentScanner {
       }, errorCallback);
     };
     readEntries();
-    return;
-  }
-}
-
-/**
- * Scanner of the entries for the search results on Drive File System.
- */
-export class DriveSearchContentScanner extends ContentScanner {
-  /** @param {string} query The query string. */
-  constructor(query) {
-    super();
-    this.query_ = query;
-  }
-
-  /**
-   * Starts to search on Drive File System.
-   * @override
-   */
-  async scan(
-      entriesCallback, successCallback, errorCallback,
-      invalidateCache = false) {
-    // Let's give another search a chance to cancel us before we begin.
-    setTimeout(() => {
-      // Check cancelled state before read the entries.
-      if (this.cancelled_) {
-        errorCallback(createDOMError(util.FileError.ABORT_ERR));
-        return;
-      }
-      chrome.fileManagerPrivate.searchDrive(
-          {
-            query: this.query_,
-            category: chrome.fileManagerPrivate.FileCategory.ALL,
-            nextFeed: '',
-          },
-          (entries, nextFeed) => {
-            if (chrome.runtime.lastError) {
-              console.error(chrome.runtime.lastError.message);
-            }
-
-            if (this.cancelled_) {
-              errorCallback(createDOMError(util.FileError.ABORT_ERR));
-              return;
-            }
-
-            // TODO(tbarzic): Improve error handling.
-            if (!entries) {
-              console.warn('Drive search encountered an error.');
-              errorCallback(
-                  createDOMError(util.FileError.INVALID_MODIFICATION_ERR));
-              return;
-            }
-
-            if (entries.length >= DriveSearchContentScanner.MAX_RESULTS_) {
-              // More results were received than expected, so trim.
-              entries =
-                  entries.slice(0, DriveSearchContentScanner.MAX_RESULTS_);
-            }
-
-            if (entries.length > 0) {
-              entriesCallback(entries);
-            }
-
-            successCallback();
-          });
-    }, DriveSearchContentScanner.SCAN_DELAY_);
-    return;
-  }
-}
-
-/**
- * Delay in milliseconds to be used for drive search scan, in order to reduce
- * the number of server requests while user is typing the query.
- * @type {number}
- * @private
- * @const
- */
-DriveSearchContentScanner.SCAN_DELAY_ = 200;
-
-/**
- * Maximum number of results which is shown on the search.
- * @type {number}
- * @private
- * @const
- */
-DriveSearchContentScanner.MAX_RESULTS_ = 100;
-
-/**
- * Scanner of the entries of the file name search on the directory tree, whose
- * root is entry.
- */
-export class LocalSearchContentScanner extends ContentScanner {
-  /**
-   * @param {DirectoryEntry} entry The root of the search target directory tree.
-   * @param {string} query The query of the search.
-   */
-  constructor(entry, query) {
-    super();
-    this.entry_ = entry;
-    this.query_ = query.toLowerCase();
-  }
-
-  /**
-   * Starts the file name search.
-   * @override
-   */
-  async scan(
-      entriesCallback, successCallback, errorCallback,
-      invalidateCache = false) {
-    util.readEntriesRecursively(assert(this.entry_), (entries) => {
-      const matchEntries = entries.filter(
-          entry => entry.name.toLowerCase().indexOf(this.query_) >= 0);
-      if (matchEntries.length > 0) {
-        entriesCallback(matchEntries);
-      }
-    }, successCallback, errorCallback, () => this.cancelled_);
     return;
   }
 }
@@ -286,13 +177,20 @@ export class SearchV2ContentScanner extends ContentScanner {
    * @return {!Array<!DirectoryEntry>}
    */
   getSearchRoots_(dirEntry) {
+    // @ts-ignore: error TS2339: Property 'type_name' does not exist on type
+    // 'FileSystemDirectoryEntry | FilesAppEntry'.
     const typeName = dirEntry.type_name;
     if (typeName !== 'EntryList' && typeName !== 'VolumeEntry') {
+      // @ts-ignore: error TS2322: Type 'FileSystemDirectoryEntry |
+      // FilesAppEntry' is not assignable to type 'FileSystemDirectoryEntry'.
       return [dirEntry];
     }
     const allRoots = [dirEntry].concat(
+        // @ts-ignore: error TS2769: No overload matches this call.
         /** @type {EntryList} */ (dirEntry).getUIChildren());
-    return allRoots.filter(entry => !util.isFakeEntry(entry))
+    return allRoots
+        .filter(entry => !isFakeEntry(entry))
+        // @ts-ignore: error TS18047: 'entry.filesystem' is possibly 'null'.
         .map(entry => entry.filesystem.root);
   }
 
@@ -368,7 +266,7 @@ export class SearchV2ContentScanner extends ContentScanner {
    */
   makeFileSearchPromise_(params, metricVariant) {
     return new Promise((resolve, reject) => {
-      metrics.startInterval(`Search.${metricVariant}.Latency`);
+      startInterval(`Search.${metricVariant}.Latency`);
       chrome.fileManagerPrivate.searchFiles(
           params,
           /**
@@ -376,13 +274,13 @@ export class SearchV2ContentScanner extends ContentScanner {
            */
           (entries) => {
             if (this.cancelled_) {
-              reject(createDOMError(util.FileError.ABORT_ERR));
+              reject(createDOMError(FileErrorToDomError.ABORT_ERR));
             } else if (chrome.runtime.lastError) {
               reject(createDOMError(
-                  util.FileError.NOT_READABLE_ERR,
+                  FileErrorToDomError.NOT_READABLE_ERR,
                   chrome.runtime.lastError.message));
             } else {
-              metrics.recordInterval(`Search.${metricVariant}.Latency`);
+              recordInterval(`Search.${metricVariant}.Latency`);
               resolve(entries);
             }
           });
@@ -400,13 +298,19 @@ export class SearchV2ContentScanner extends ContentScanner {
    * @private
    */
   makeReadEntriesRecursivelyPromise_(
+      // @ts-ignore: error TS7006: Parameter 'folder' implicitly has an 'any'
+      // type.
       folder, modifiedTimestamp, category, maxResults, metricVariant) {
     // A promise that resolves to an entry if it is modified after cutoffDate or
     // null, otherwise. Used to filter entries by modified time. If we fail to
     // get metadata for an entry we return it without comparison, to be on the
     // safe side.
+    // @ts-ignore: error TS7006: Parameter 'cutoffDate' implicitly has an 'any'
+    // type.
     const newDateFilterPromise = (entry, cutoffDate) => new Promise(resolve => {
       entry.getMetadata(
+          // @ts-ignore: error TS7006: Parameter 'metadata' implicitly has an
+          // 'any' type.
           (metadata) => {
             resolve(metadata.modificationTime > cutoffDate ? entry : null);
           },
@@ -415,10 +319,12 @@ export class SearchV2ContentScanner extends ContentScanner {
           });
     });
     return new Promise((resolve, reject) => {
-      metrics.startInterval(`Search.${metricVariant}.Latency`);
+      startInterval(`Search.${metricVariant}.Latency`);
+      // @ts-ignore: error TS7034: Variable 'collectedEntries' implicitly has
+      // type 'any[]' in some locations where its type cannot be determined.
       const collectedEntries = [];
       let workLeft = 1;
-      util.readEntriesRecursively(
+      readEntriesRecursively(
           folder,
           // More entries found callback.
           (entries) => {
@@ -445,7 +351,9 @@ export class SearchV2ContentScanner extends ContentScanner {
                     collectedEntries.push(...modified.filter(e => e !== null));
                     workLeft -= modified.length;
                     if (workLeft <= 0) {
-                      metrics.recordInterval(`Search.${metricVariant}.Latency`);
+                      recordInterval(`Search.${metricVariant}.Latency`);
+                      // @ts-ignore: error TS7005: Variable 'collectedEntries'
+                      // implicitly has an 'any[]' type.
                       resolve(collectedEntries);
                     }
                   });
@@ -454,14 +362,18 @@ export class SearchV2ContentScanner extends ContentScanner {
           // All entries read callback.
           () => {
             if (--workLeft <= 0) {
-              metrics.recordInterval(`Search.${metricVariant}.Latency`);
+              recordInterval(`Search.${metricVariant}.Latency`);
+              // @ts-ignore: error TS7005: Variable 'collectedEntries'
+              // implicitly has an 'any[]' type.
               resolve(collectedEntries);
             }
           },
           // Error callback.
           () => {
             if (!this.cancelled_ && collectedEntries.length >= maxResults) {
-              metrics.recordInterval(`Search.${metricVariant}.Latency`);
+              recordInterval(`Search.${metricVariant}.Latency`);
+              // @ts-ignore: error TS7005: Variable 'collectedEntries'
+              // implicitly has an 'any[]' type.
               resolve(collectedEntries);
             } else {
               reject();
@@ -489,6 +401,9 @@ export class SearchV2ContentScanner extends ContentScanner {
   makeFileSearchPromiseList_(
       modifiedTimestamp, category, maxResults, metricVariant, folders) {
     /** @type {!chrome.fileManagerPrivate.SearchMetadataParams} */
+    // @ts-ignore: error TS2741: Property 'rootDir' is missing in type '{ query:
+    // string; types: string; maxResults: number; modifiedTimestamp: number;
+    // category: string; }' but required in type 'SearchMetadataParams'.
     const baseParams = {
       query: this.query_,
       types: chrome.fileManagerPrivate.SearchType.ALL,
@@ -538,6 +453,8 @@ export class SearchV2ContentScanner extends ContentScanner {
    * @private
    */
   createRemovablesSearch_(modifiedTimestamp, category, maxResults) {
+    // @ts-ignore: error TS6133: 'rootFolderList' is declared but its value is
+    // never read.
     const rootFolderList = this.getRootFoldersByVolumeType_(
         VolumeManagerCommon.VolumeType.REMOVABLE);
     return this.makeFileSearchPromiseList_(
@@ -594,11 +511,17 @@ export class SearchV2ContentScanner extends ContentScanner {
    * @private
    */
   createDriveSearch_(modifiedTimestamp, category, maxResults) {
+    // @ts-ignore: error TS2345: Argument of type 'string | null' is not
+    // assignable to parameter of type 'string'.
     const searchType = this.driveSearchTypeMap_.get(this.rootType_) ||
         chrome.fileManagerPrivate.SearchType.ALL;
     return new Promise((resolve, reject) => {
-      metrics.startInterval('Search.Drive.Latency');
+      startInterval('Search.Drive.Latency');
       chrome.fileManagerPrivate.searchDriveMetadata(
+          // @ts-ignore: error TS2345: Argument of type '{ query: string;
+          // category: string; types: string; maxResults: number;
+          // modifiedTimestamp: number; }' is not assignable to parameter of
+          // type 'SearchMetadataParams'.
           {
             query: this.query_,
             category: category,
@@ -609,14 +532,15 @@ export class SearchV2ContentScanner extends ContentScanner {
           (results) => {
             if (chrome.runtime.lastError) {
               reject(createDOMError(
-                  util.FileError.NOT_READABLE_ERR,
+                  FileErrorToDomError.NOT_READABLE_ERR,
                   chrome.runtime.lastError.message));
             } else if (this.cancelled_) {
-              reject(createDOMError(util.FileError.ABORT_ERR));
+              reject(createDOMError(FileErrorToDomError.ABORT_ERR));
             } else if (!results) {
-              reject(createDOMError(util.FileError.INVALID_MODIFICATION_ERR));
+              reject(
+                  createDOMError(FileErrorToDomError.INVALID_MODIFICATION_ERR));
             } else {
-              metrics.recordInterval('Search.Drive.Latency');
+              recordInterval('Search.Drive.Latency');
               resolve(results.map(r => r.entry));
             }
           });
@@ -631,6 +555,8 @@ export class SearchV2ContentScanner extends ContentScanner {
    * @private
    */
   createDirectorySearch_(modifiedTimestamp, category, maxResults) {
+    // @ts-ignore: error TS2345: Argument of type '{ rootType: string | null; }'
+    // is not assignable to parameter of type 'FileData'.
     if (isEntryInsideDrive({rootType: this.rootType_})) {
       return [
         this.createDriveSearch_(modifiedTimestamp, category, maxResults),
@@ -682,7 +608,11 @@ export class SearchV2ContentScanner extends ContentScanner {
    * @override
    */
   async scan(
+      // @ts-ignore: error TS7006: Parameter 'errorCallback' implicitly has an
+      // 'any' type.
       entriesCallback, successCallback, errorCallback,
+      // @ts-ignore: error TS6133: 'invalidateCache' is declared but its value
+      // is never read.
       invalidateCache = false) {
     const category = this.options_.fileCategory;
     const modifiedTimestamp =
@@ -703,6 +633,8 @@ export class SearchV2ContentScanner extends ContentScanner {
     // entries are available. We call successCallback only once all of them are
     // settled, but we do not wish to wait for all of promises to be settled
     // before showing the entries.
+    // @ts-ignore: error TS7006: Parameter 'entries' implicitly has an 'any'
+    // type.
     const entriesCallbackCaller = (entries) => {
       if (entries && entries.length > 0) {
         entriesCallback(entries);
@@ -720,7 +652,7 @@ export class SearchV2ContentScanner extends ContentScanner {
             }
           }
           successCallback();
-          metrics.recordMediumCount('Search.ResultCount', resultCount);
+          recordMediumCount('Search.ResultCount', resultCount);
         });
   }
 }
@@ -743,22 +675,29 @@ export class DriveMetadataSearchContentScanner extends ContentScanner {
    * @override
    */
   async scan(
+      // @ts-ignore: error TS7006: Parameter 'errorCallback' implicitly has an
+      // 'any' type.
       entriesCallback, successCallback, errorCallback,
+      // @ts-ignore: error TS6133: 'invalidateCache' is declared but its value
+      // is never read.
       invalidateCache = false) {
     chrome.fileManagerPrivate.searchDriveMetadata(
+        // @ts-ignore: error TS2345: Argument of type '{ query: string; types:
+        // string; maxResults: number; }' is not assignable to parameter of type
+        // 'SearchMetadataParams'.
         {query: '', types: this.searchType_, maxResults: 100}, results => {
           if (chrome.runtime.lastError) {
             console.error(chrome.runtime.lastError.message);
           }
           if (this.cancelled_) {
-            errorCallback(createDOMError(util.FileError.ABORT_ERR));
+            errorCallback(createDOMError(FileErrorToDomError.ABORT_ERR));
             return;
           }
 
           if (!results) {
             console.warn('Drive search encountered an error.');
             errorCallback(
-                createDOMError(util.FileError.INVALID_MODIFICATION_ERR));
+                createDOMError(FileErrorToDomError.INVALID_MODIFICATION_ERR));
             return;
           }
 
@@ -785,23 +724,23 @@ export class RecentContentScanner extends ContentScanner {
     super();
 
     /**
-     * @private {string}
+     * @private @type {string}
      */
     this.query_ = query.toLowerCase();
 
     /**
-     * @private {VolumeManager}
+     * @private @type {VolumeManager}
      */
     this.volumeManager_ = volumeManager;
 
     /**
-     * @private {chrome.fileManagerPrivate.SourceRestriction}
+     * @private @type {chrome.fileManagerPrivate.SourceRestriction}
      */
     this.sourceRestriction_ = opt_sourceRestriction ||
         chrome.fileManagerPrivate.SourceRestriction.ANY_SOURCE;
 
     /**
-     * @private {chrome.fileManagerPrivate.FileCategory}
+     * @private @type {chrome.fileManagerPrivate.FileCategory}
      */
     this.fileCategory_ =
         opt_fileCategory || chrome.fileManagerPrivate.FileCategory.ALL;
@@ -811,11 +750,10 @@ export class RecentContentScanner extends ContentScanner {
    * @override
    */
   async scan(
+      // @ts-ignore: error TS7006: Parameter 'errorCallback' implicitly has an
+      // 'any' type.
       entriesCallback, successCallback, errorCallback,
       invalidateCache = false) {
-    /** @type {function(!Entry): boolean} */
-    const isMatchQuery = (entry) =>
-        entry.name.toLowerCase().indexOf(this.query_) >= 0;
     /**
      * Files app launched with "volumeFilter" launch parameter will filter out
      * some volumes. Before returning the recent entries, we need to check if
@@ -825,18 +763,16 @@ export class RecentContentScanner extends ContentScanner {
     const isAllowedVolume = (entry) =>
         this.volumeManager_.getVolumeInfo(entry) !== null;
     chrome.fileManagerPrivate.getRecentFiles(
-        this.sourceRestriction_, this.fileCategory_, invalidateCache,
-        entries => {
+        this.sourceRestriction_, this.query_, this.fileCategory_,
+        invalidateCache, entries => {
           if (chrome.runtime.lastError) {
             console.error(chrome.runtime.lastError.message);
             errorCallback(
-                createDOMError(util.FileError.INVALID_MODIFICATION_ERR));
+                createDOMError(FileErrorToDomError.INVALID_MODIFICATION_ERR));
             return;
           }
           if (entries.length > 0) {
-            entriesCallback(entries.filter(
-                entry =>
-                    isMatchQuery(assert(entry)) && isAllowedVolume(entry)));
+            entriesCallback(entries.filter(entry => isAllowedVolume(entry)));
           }
           successCallback();
         });
@@ -868,11 +804,15 @@ export class MediaViewContentScanner extends ContentScanner {
    * @override
    */
   async scan(
+      // @ts-ignore: error TS7006: Parameter 'errorCallback' implicitly has an
+      // 'any' type.
       entriesCallback, successCallback, errorCallback,
+      // @ts-ignore: error TS6133: 'invalidateCache' is declared but its value
+      // is never read.
       invalidateCache = false) {
     // To provide flatten view of files, this media-view scanner retrieves files
     // in directories inside the media's root entry recursively.
-    util.readEntriesRecursively(
+    readEntriesRecursively(
         this.rootEntry_,
         entries => entriesCallback(entries.filter(entry => !entry.isDirectory)),
         successCallback, errorCallback, () => false);
@@ -897,7 +837,11 @@ export class CrostiniMounter extends ContentScanner {
    * @override
    */
   async scan(
+      // @ts-ignore: error TS7006: Parameter 'errorCallback' implicitly has an
+      // 'any' type.
       entriesCallback, successCallback, errorCallback,
+      // @ts-ignore: error TS6133: 'invalidateCache' is declared but its value
+      // is never read.
       invalidateCache = false) {
     chrome.fileManagerPrivate.mountCrostini(() => {
       if (chrome.runtime.lastError) {
@@ -930,7 +874,7 @@ export class GuestOsMounter extends ContentScanner {
   constructor(guest_id) {
     super();
 
-    /** @private @const {number} */
+    /** @private @const @type {number} */
     this.guest_id_ = guest_id;
   }
 
@@ -938,7 +882,11 @@ export class GuestOsMounter extends ContentScanner {
    * @override
    */
   async scan(
+      // @ts-ignore: error TS7006: Parameter 'errorCallback' implicitly has an
+      // 'any' type.
       entriesCallback, successCallback, errorCallback,
+      // @ts-ignore: error TS6133: 'invalidateCache' is declared but its value
+      // is never read.
       invalidateCache = false) {
     try {
       await mountGuest(this.guest_id_);
@@ -946,6 +894,8 @@ export class GuestOsMounter extends ContentScanner {
     } catch (error) {
       errorCallback(createDOMError(
           // TODO(crbug/1293229): Strings
+          // @ts-ignore: error TS2345: Argument of type 'unknown' is not
+          // assignable to parameter of type 'string | undefined'.
           constants.CROSTINI_CONNECT_ERR, error));
     }
     return;
@@ -970,17 +920,23 @@ export class TrashContentScanner extends ContentScanner {
    * @override
    */
   async scan(
+      // @ts-ignore: error TS7006: Parameter 'errorCallback' implicitly has an
+      // 'any' type.
       entriesCallback, successCallback, errorCallback,
+      // @ts-ignore: error TS6133: 'invalidateCache' is declared but its value
+      // is never read.
       invalidateCache = false) {
+    // @ts-ignore: error TS7006: Parameter 'idx' implicitly has an 'any' type.
     const readEntries = (idx) => {
       if (this.readers_.length === idx) {
         // All Trash directories have been read.
         successCallback();
         return;
       }
+      // @ts-ignore: error TS2532: Object is possibly 'undefined'.
       this.readers_[idx].readEntries(entries => {
         if (this.cancelled_) {
-          errorCallback(createDOMError(util.FileError.ABORT_ERR));
+          errorCallback(createDOMError(FileErrorToDomError.ABORT_ERR));
           return;
         }
 
@@ -1003,7 +959,7 @@ export class FileFilter extends EventTarget {
     super();
 
     /**
-     * @type {Object<Function>}
+     * @type {Record<string, Function>}
      * @private
      */
     this.filters_ = {};
@@ -1032,8 +988,8 @@ export class FileFilter extends EventTarget {
 
   /**
    * @param {string} name Filter identifier.
-   * @param {function((Entry|FilesAppEntry))} callback A filter - a function
-   *     receiving an Entry, and returning bool.
+   * @param {function((Entry|FilesAppEntry)):void} callback A filter - a
+   *     function receiving an Entry, and returning bool.
    */
   addFilter(name, callback) {
     this.filters_[name] = callback;
@@ -1139,6 +1095,8 @@ export class FileFilter extends EventTarget {
    */
   filter(entry) {
     for (const name in this.filters_) {
+      // @ts-ignore: error TS2722: Cannot invoke an object which is possibly
+      // 'undefined'.
       if (!this.filters_[name](entry)) {
         return false;
       }
@@ -1149,14 +1107,14 @@ export class FileFilter extends EventTarget {
 
 /**
  * Top-level Android folders which are visible by default.
- * @const {!Array<string>}
+ * @const @type {!Array<string>}
  */
 FileFilter.DEFAULT_ANDROID_FOLDERS =
     ['Documents', 'Movies', 'Music', 'Pictures'];
 
 /**
  * Windows files or folders to hide by default.
- * @const {!Array<string>}
+ * @const @type {!Array<string>}
  */
 FileFilter.WINDOWS_HIDDEN = ['$RECYCLE.BIN'];
 
@@ -1178,7 +1136,7 @@ export class FileListContext {
     this.fileList = new FileListModel(metadataModel);
 
     /**
-     * @public {!MetadataModel}
+     * @public @type {!MetadataModel}
      * @const
      */
     this.metadataModel = metadataModel;
@@ -1189,7 +1147,7 @@ export class FileListContext {
     this.fileFilter = fileFilter;
 
     /**
-     * @public {!Array<string>}
+     * @public @type {!Array<string>}
      * @const
      */
     this.prefetchPropertyNames = Array.from(new Set([
@@ -1199,7 +1157,7 @@ export class FileListContext {
       ...constants.DLP_METADATA_PREFETCH_PROPERTY_NAMES,
     ]));
 
-    /** @public {!VolumeManager} */
+    /** @public @type {!VolumeManager} */
     this.volumeManager = volumeManager;
   }
 }
@@ -1225,10 +1183,10 @@ export class DirectoryContents extends EventTarget {
   constructor(context, isSearch, directoryEntry, scannerFactory) {
     super();
 
-    /** @private {FileListContext} */
+    /** @private @type {FileListContext} */
     this.context_ = context;
 
-    /** @private {FileListModel} */
+    /** @private @type {FileListModel} */
     this.fileList_ = context.fileList;
     this.fileList_.InitNewDirContents(context.volumeManager);
 
@@ -1244,6 +1202,7 @@ export class DirectoryContents extends EventTarget {
      * Metadata snapshot which is used to know which file is actually changed.
      * @type {Object}
      */
+    // @ts-ignore: error TS2322: Type 'null' is not assignable to type 'Object'.
     this.metadataSnapshot_ = null;
   }
 
@@ -1283,6 +1242,7 @@ export class DirectoryContents extends EventTarget {
     const metadata =
         this.context_.metadataModel.getCache(entries, ['modificationTime']);
     for (let i = 0; i < entries.length; i++) {
+      // @ts-ignore: error TS2532: Object is possibly 'undefined'.
       snapshot[entries[i].toURL()] = metadata[i];
     }
     return snapshot;
@@ -1311,6 +1271,8 @@ export class DirectoryContents extends EventTarget {
       const spliceArgs = this.fileList_.slice();
       const fileList = this.context_.fileList;
       spliceArgs.unshift(0, fileList.length);
+      // @ts-ignore: error TS2345: Argument of type 'any[]' is not assignable to
+      // parameter of type '[number, number, ...any[]]'.
       fileList.splice.apply(fileList, spliceArgs);
       this.fileList_ = fileList;
 
@@ -1322,14 +1284,28 @@ export class DirectoryContents extends EventTarget {
             this.context_.metadataModel.getCache(entries, ['modificationTime']);
 
         for (let i = 0; i < entries.length; i++) {
+          // @ts-ignore: error TS2532: Object is possibly 'undefined'.
           const url = entries[i].toURL();
           const newMetadata = newMetadatas[i];
           // If the Files app fails to obtain both old and new modificationTime,
           // regard the entry as not updated.
+          // @ts-ignore: error TS7053: Element implicitly has an 'any' type
+          // because expression of type 'string' can't be used to index type
+          // 'Object'.
           if ((this.metadataSnapshot_[url] &&
+               // @ts-ignore: error TS7053: Element implicitly has an 'any' type
+               // because expression of type 'string' can't be used to index
+               // type 'Object'.
                this.metadataSnapshot_[url].modificationTime &&
+               // @ts-ignore: error TS7053: Element implicitly has an 'any' type
+               // because expression of type 'string' can't be used to index
+               // type 'Object'.
                this.metadataSnapshot_[url].modificationTime.getTime()) !==
+              // @ts-ignore: error TS18048: 'newMetadata' is possibly
+              // 'undefined'.
               (newMetadata.modificationTime &&
+               // @ts-ignore: error TS18048: 'newMetadata' is possibly
+               // 'undefined'.
                newMetadata.modificationTime.getTime())) {
             updatedIndexes.push(i);
           }
@@ -1346,6 +1322,8 @@ export class DirectoryContents extends EventTarget {
    * @return {boolean} If the scan is active.
    */
   isScanning() {
+    // @ts-ignore: error TS2322: Type 'boolean | ContentScanner' is not
+    // assignable to type 'boolean'.
     return this.scanner_ || this.processNewEntriesQueue_.isRunning();
   }
 
@@ -1411,11 +1389,14 @@ export class DirectoryContents extends EventTarget {
   update(updatedEntries, removedUrls) {
     const removedMap = {};
     for (let i = 0; i < removedUrls.length; i++) {
+      // @ts-ignore: error TS2538: Type 'undefined' cannot be used as an index
+      // type.
       removedMap[removedUrls[i]] = true;
     }
 
     const updatedMap = {};
     for (let i = 0; i < updatedEntries.length; i++) {
+      // @ts-ignore: error TS2532: Object is possibly 'undefined'.
       updatedMap[updatedEntries[i].toURL()] = updatedEntries[i];
     }
 
@@ -1433,14 +1414,19 @@ export class DirectoryContents extends EventTarget {
           end++;
         }
         // Remove the range [begin, end) at once to avoid multiple sorting.
+        // @ts-ignore: error TS2555: Expected at least 3 arguments, but got 2.
         this.fileList_.splice(begin, end - begin);
         i--;
         continue;
       }
 
       if (url in updatedMap) {
+        // @ts-ignore: error TS7053: Element implicitly has an 'any' type
+        // because expression of type 'any' can't be used to index type '{}'.
         updatedList.push(updatedMap[url]);
         updatedIndexes.push(i);
+        // @ts-ignore: error TS7053: Element implicitly has an 'any' type
+        // because expression of type 'any' can't be used to index type '{}'.
         delete updatedMap[url];
       }
     }
@@ -1449,8 +1435,12 @@ export class DirectoryContents extends EventTarget {
       this.fileList_.updateIndexes(updatedIndexes);
     }
 
+    // @ts-ignore: error TS7034: Variable 'addedList' implicitly has type
+    // 'any[]' in some locations where its type cannot be determined.
     const addedList = [];
     for (const url in updatedMap) {
+      // @ts-ignore: error TS7053: Element implicitly has an 'any' type because
+      // expression of type 'string' can't be used to index type '{}'.
       addedList.push(updatedMap[url]);
     }
 
@@ -1459,6 +1449,8 @@ export class DirectoryContents extends EventTarget {
     }
 
     this.prefetchMetadata(updatedList, true, () => {
+      // @ts-ignore: error TS7005: Variable 'addedList' implicitly has an
+      // 'any[]' type.
       this.onNewEntries_(true, addedList);
       this.onScanFinished_();
       this.onScanCompleted_();
@@ -1525,6 +1517,8 @@ export class DirectoryContents extends EventTarget {
       // handlers.
       callback();
       const event = new Event('scan-failed');
+      // @ts-ignore: error TS2339: Property 'error' does not exist on type
+      // 'Event'.
       event.error = error;
       this.dispatchEvent(event);
     });
@@ -1551,6 +1545,9 @@ export class DirectoryContents extends EventTarget {
     // This is a temporary solution. We need to fix a root cause of slow toURL.
     // See crbug.com/370908 for detail.
     entries.forEach(entry => {
+      // @ts-ignore: error TS7053: Element implicitly has an 'any' type because
+      // expression of type '"cachedUrl"' can't be used to index type
+      // 'FileSystemEntry'.
       entry['cachedUrl'] = entry.toURL();
     });
 
@@ -1561,10 +1558,16 @@ export class DirectoryContents extends EventTarget {
           // filters or are already present in the current file list.
           const currentURLs = {};
           for (let i = 0; i < this.fileList_.length; ++i) {
+            // @ts-ignore: error TS7053: Element implicitly has an 'any' type
+            // because expression of type 'any' can't be used to index type
+            // '{}'.
             currentURLs[this.fileList_.item(i).toURL()] = true;
           }
           const entriesFiltered = entries.filter(
               (e) => this.context_.fileFilter.filter(e) &&
+                  // @ts-ignore: error TS7053: Element implicitly has an 'any'
+                  // type because expression of type '"cachedUrl"' can't be used
+                  // to index type 'FileSystemEntry'.
                   !(e['cachedUrl'] in currentURLs));
 
           // Update the filelist without waiting the metadata.
@@ -1585,6 +1588,8 @@ export class DirectoryContents extends EventTarget {
 
         const chunk = entries.slice(i, i + MAX_CHUNK_SIZE);
         prefetchMetadataQueue.run(
+            // @ts-ignore: error TS7006: Parameter 'callbackInner' implicitly
+            // has an 'any' type.
             ((chunk, callbackInner) => {
               this.prefetchMetadata(chunk, refresh, () => {
                 if (!prefetchMetadataQueue.isCancelled()) {
@@ -1612,7 +1617,7 @@ export class DirectoryContents extends EventTarget {
    * @param {!Array<!Entry>} entries Files.
    * @param {boolean} refresh True to refresh metadata, or false to use cached
    *     one.
-   * @param {function(Object)} callback Callback on done.
+   * @param {function(Object):void} callback Callback on done.
    */
   prefetchMetadata(entries, refresh, callback) {
     if (refresh) {

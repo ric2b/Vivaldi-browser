@@ -34,6 +34,7 @@
 #include "components/viz/service/display/bsp_tree.h"
 #include "components/viz/service/display/bsp_walk_action.h"
 #include "components/viz/service/display/output_surface.h"
+#include "components/viz/service/display/render_pass_alpha_type.h"
 #include "components/viz/service/display/skia_output_surface.h"
 #include "gpu/command_buffer/common/capabilities.h"
 #include "media/base/video_util.h"
@@ -327,8 +328,8 @@ void DirectRenderer::DrawFrame(
   reshape_params.device_scale_factor = device_scale_factor;
   reshape_params.color_space = frame_color_space;
   reshape_params.format = frame_buffer_format;
-  reshape_params.alpha_type =
-      frame_has_alpha ? kPremul_SkAlphaType : kOpaque_SkAlphaType;
+  reshape_params.alpha_type = frame_has_alpha ? RenderPassAlphaType::kPremul
+                                              : RenderPassAlphaType::kOpaque;
   if (next_frame_needs_full_frame_redraw_ ||
       reshape_params != reshape_params_ ||
       display_transform != reshape_display_transform_) {
@@ -722,22 +723,6 @@ void DirectRenderer::DrawRenderPass(const AggregatedRenderPass* render_pass) {
     SetScissorStateForQuad(quad, render_pass_scissor_in_draw_space,
                            render_pass_requires_scissor);
 
-    if (OverlayCandidate::RequiresOverlay(&quad)) {
-      // We cannot composite this quad properly, replace it with a fallback
-      // solid color quad.
-      SolidColorDrawQuad overlay_fallback;
-      overlay_fallback.SetAll(quad.shared_quad_state, quad.rect, quad.rect,
-                              /*needs_blending=*/false,
-#if DCHECK_IS_ON()
-                              SkColors::kMagenta,
-#else
-                              SkColors::kBlack,
-#endif
-                              /*anti_aliasing_off=*/true);
-      DoDrawQuad(&overlay_fallback, nullptr);
-      continue;
-    }
-
     DoDrawQuad(&quad, nullptr);
   }
   FlushPolygons(&poly_list, render_pass_scissor_in_draw_space,
@@ -784,6 +769,7 @@ DirectRenderer::CalculateRenderPassRequirements(
     requirements.color_space = reshape_color_space();
     requirements.format =
         GetSinglePlaneSharedImageFormat(reshape_buffer_format());
+    requirements.alpha_type = reshape_alpha_type();
 
     // All root render pass backings allocated by the renderer needs to
     // eventually go into some composition tree. Other things that own/allocate
@@ -793,26 +779,21 @@ DirectRenderer::CalculateRenderPassRequirements(
 #if BUILDFLAG(IS_WIN)
     requirements.scanout_dcomp_surface =
         render_pass->needs_synchronous_dcomp_commit;
-
-    // On Windows, the root render pass can be made transparent due to overlay
-    // processing promoting a quad as an underlay. If the format we picked does
-    // not have alpha bits, we ned to change to one that does.
-    if (render_pass->has_transparent_background &&
-        requirements.format.HasAlpha() == 0) {
-      requirements.format =
-          GetColorSpaceSharedImageFormat(requirements.color_space);
-    }
 #endif
+    CHECK_EQ(requirements.alpha_type == RenderPassAlphaType::kOpaque,
+             !render_pass->has_transparent_background);
   } else {
     requirements.size = CalculateTextureSizeForRenderPass(render_pass);
     requirements.generate_mipmap = render_pass->generate_mipmap;
     requirements.color_space = RenderPassColorSpace(render_pass);
     requirements.format =
         GetColorSpaceSharedImageFormat(requirements.color_space);
+    requirements.alpha_type = RenderPassAlphaType::kPremul;
   }
 
   if (render_pass->has_transparent_background) {
-    DCHECK(requirements.format.HasAlpha());
+    CHECK(requirements.format.HasAlpha());
+    CHECK_EQ(requirements.alpha_type, RenderPassAlphaType::kPremul);
   }
 
   return requirements;
@@ -921,6 +902,15 @@ gfx::Rect DirectRenderer::ComputeScissorRectForRenderPass(
               gfx::Rect expanded_rect =
                   GetExpandedRectWithPixelMovingForegroundFilter(
                       *rpdq, *foreground_filters);
+
+              // Expanding damage outside of the 'clip_rect' can cause parts of
+              // the root to be rendered that may never have been included due
+              // to 'aggregate_only_damaged_' in SurfaceAggregator. See
+              // crbug.com/1492891
+              if (rpdq->shared_quad_state->clip_rect) {
+                expanded_rect.Intersect(*rpdq->shared_quad_state->clip_rect);
+              }
+
               if (root_damage_rect.Intersects(expanded_rect))
                 root_damage_rect.Union(expanded_rect);
             }
@@ -1129,17 +1119,9 @@ SharedImageFormat DirectRenderer::GetColorSpaceSharedImageFormat(
     gfx::ColorSpace color_space) const {
   gpu::Capabilities caps;
   caps.texture_format_bgra8888 = SupportsBGRA();
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  // TODO(crbug.com/1317015): add support RGBA_F16 in LaCrOS.
-  auto format = color_space.IsHDR()
-                    ? SinglePlaneFormat::kRGBA_1010102
-                    : PlatformColor::BestSupportedTextureFormat(caps);
-#else
   auto format = color_space.IsHDR()
                     ? SinglePlaneFormat::kRGBA_F16
                     : PlatformColor::BestSupportedTextureFormat(caps);
-#endif
   return format;
 }
 

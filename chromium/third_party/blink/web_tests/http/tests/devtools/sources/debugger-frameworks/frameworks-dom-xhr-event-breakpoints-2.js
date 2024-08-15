@@ -7,12 +7,11 @@ import {ElementsTestRunner} from 'elements_test_runner';
 import {SourcesTestRunner} from 'sources_test_runner';
 
 import * as Common from 'devtools/core/common/common.js';
+import * as SDK from 'devtools/core/sdk/sdk.js';
 
 (async function() {
   TestRunner.addResult(
       `Tests framework black-boxing on DOM, XHR and Event breakpoints.\n`);
-  await TestRunner.loadLegacyModule('elements');
-  await TestRunner.loadLegacyModule('sources');
   await TestRunner.showPanel('sources');
   await TestRunner.loadHTML(`
       <div id="rootElement"></div>
@@ -92,7 +91,7 @@ import * as Common from 'devtools/core/common/common.js';
 
   SourcesTestRunner.runDebuggerTestSuite([
     function testSteppingThroughEventListenerBreakpoint(next) {
-      SDK.domDebuggerManager
+      SDK.DOMDebuggerModel.DOMDebuggerManager.instance()
           .resolveEventListenerBreakpoint({eventName: 'listener:click'})
           .setEnabled(true);
       TestRunner.evaluateInPageWithTimeout('addListenerAndClick(true)');

@@ -47,6 +47,7 @@
 #include "components/download/public/common/download_danger_type.h"
 #include "components/download/public/common/download_features.h"
 #include "components/download/public/common/download_interrupt_reasons.h"
+#include "components/download/public/common/download_stats.h"
 #include "components/download/public/common/mock_download_item.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -867,6 +868,7 @@ TEST_F(ChromeDownloadManagerDelegateTest, InterceptDownloadForAutomotive) {
   if (!base::android::BuildInfo::GetInstance()->is_automotive()) {
     GTEST_SKIP() << "This test should only run on automotive.";
   }
+  base::HistogramTester histograms;
 
   TestDownloadMessageBridge* message_bridge = new TestDownloadMessageBridge();
   delegate()->SetDownloadMessageBridgeForTesting(
@@ -882,6 +884,8 @@ TEST_F(ChromeDownloadManagerDelegateTest, InterceptDownloadForAutomotive) {
   should_intercept = delegate()->InterceptDownloadIfApplicable(
       kUrl, "", "", mime_type, "", 10, false /*is_transient*/, nullptr);
   EXPECT_TRUE(should_intercept);
+  histograms.ExpectUniqueSample("Download.Blocked.ContentType.Automotive",
+                                download::DownloadContent::PDF, 1);
 
   EXPECT_EQ(1, message_bridge->GetMessageShownCount());
 }
@@ -1488,7 +1492,9 @@ TEST_F(ChromeDownloadManagerDelegateTest,
 TEST_F(ChromeDownloadManagerDelegateTest, InsecureDownloadsBlocked) {
   const GURL kSecureUrl("https://example.net/");
   const GURL kInsecureUrl("http://example.net/");
-  const GURL kBlobFile("blob:null/xyz.foo");
+  const GURL kNullBlobFile("blob:null/foo");
+  const GURL kSecureBlobFile("blob:https://example.com/foo");
+  const GURL kInsecureBlobFile("blob:http://example.com/foo");
   const GURL kTextFile("http://example.com/foo.txt");
   const GURL kImageFile("http://example.com/foo.png");
   const GURL kMovieFile("http://example.com/foo.mp4");
@@ -1497,6 +1503,7 @@ TEST_F(ChromeDownloadManagerDelegateTest, InsecureDownloadsBlocked) {
   const GURL kLocalFile("http://localhost/foo");
   const auto kSecureOrigin = Origin::Create(GURL("https://example.org"));
   const auto kInsecureOrigin = Origin::Create(GURL("http://example.org"));
+  const auto kBlankOrigin = Origin::Create(GURL(""));
 
   const struct {
     // The file's final URL.
@@ -1538,9 +1545,48 @@ TEST_F(ChromeDownloadManagerDelegateTest, InsecureDownloadsBlocked) {
        download::DownloadItem::InsecureDownloadStatus::SILENT_BLOCK,
        "insecure_redirect"},
       // Blobs initiated from secure origins shouldn't be blocked.
-      {kBlobFile, kSecureOrigin, kSecureUrl,
+      {kNullBlobFile, kSecureOrigin, kSecureUrl,
        download::DOWNLOAD_INTERRUPT_REASON_NONE,
-       download::DownloadItem::InsecureDownloadStatus::SAFE, "secure_blob"},
+       download::DownloadItem::InsecureDownloadStatus::SAFE,
+       "null_secure_blob"},
+      {kSecureBlobFile, kSecureOrigin, kSecureUrl,
+       download::DOWNLOAD_INTERRUPT_REASON_NONE,
+       download::DownloadItem::InsecureDownloadStatus::SAFE,
+       "secure_secure_blob"},
+      // Neither should blobs initiated from unknown origins, out of an
+      // abundance of caution.
+      {kNullBlobFile, absl::nullopt, absl::nullopt,
+       download::DOWNLOAD_INTERRUPT_REASON_NONE,
+       download::DownloadItem::InsecureDownloadStatus::SAFE,
+       "null_unknown_blob"},
+      {kSecureBlobFile, absl::nullopt, absl::nullopt,
+       download::DOWNLOAD_INTERRUPT_REASON_NONE,
+       download::DownloadItem::InsecureDownloadStatus::SAFE,
+       "secure_unknown_blob"},
+      // Empty origins show up as opaque and should be treated like we don't
+      // have an initiator.  Note this may introduce a bypass risk but insecure
+      // download warnings are not a security boundary.
+      {kNullBlobFile, kBlankOrigin, absl::nullopt,
+       download::DOWNLOAD_INTERRUPT_REASON_NONE,
+       download::DownloadItem::InsecureDownloadStatus::SAFE, "null_blank_blob"},
+      {kSecureBlobFile, kBlankOrigin, absl::nullopt,
+       download::DOWNLOAD_INTERRUPT_REASON_NONE,
+       download::DownloadItem::InsecureDownloadStatus::SAFE,
+       "secure_blank_blob"},
+      // If we affirmatively know that a blob's initiator is insecure, however,
+      // it should still be blocked.
+      {kNullBlobFile, kInsecureOrigin, absl::nullopt,
+       download::DOWNLOAD_INTERRUPT_REASON_NONE,
+       download::DownloadItem::InsecureDownloadStatus::BLOCK,
+       "null_insecure_blob"},
+      {kInsecureBlobFile, kInsecureOrigin, absl::nullopt,
+       download::DOWNLOAD_INTERRUPT_REASON_NONE,
+       download::DownloadItem::InsecureDownloadStatus::BLOCK,
+       "insecure_insecure_blob"},
+      {kSecureBlobFile, kInsecureOrigin, absl::nullopt,
+       download::DOWNLOAD_INTERRUPT_REASON_NONE,
+       download::DownloadItem::InsecureDownloadStatus::BLOCK,
+       "secure_insecure_blob"},
       // Text, images, audio, etc shouldn't be blocked, even when insecure.
       {kTextFile, kInsecureOrigin, kInsecureUrl,
        download::DOWNLOAD_INTERRUPT_REASON_NONE,
@@ -1865,7 +1911,8 @@ class TestDownloadProtectionService
 
   void CheckClientDownload(
       DownloadItem* download_item,
-      safe_browsing::CheckDownloadRepeatingCallback callback) override {
+      safe_browsing::CheckDownloadRepeatingCallback callback,
+      base::optional_ref<const std::string> password) override {
     std::move(callback).Run(MockCheckClientDownload());
   }
   MOCK_METHOD0(MockCheckClientDownload, safe_browsing::DownloadCheckResult());

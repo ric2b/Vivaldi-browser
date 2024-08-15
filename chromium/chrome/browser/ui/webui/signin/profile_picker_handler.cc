@@ -557,6 +557,7 @@ void ProfilePickerHandler::HandleLaunchSelectedProfile(
 void ProfilePickerHandler::OnProfileForDialogLoaded(Profile* profile) {
   if (!profile)
     return;
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
   ProfileAttributesEntry* entry =
       g_browser_process->profile_manager()
           ->GetProfileAttributesStorage()
@@ -565,8 +566,15 @@ void ProfilePickerHandler::OnProfileForDialogLoaded(Profile* profile) {
   if (entry->IsSigninRequired()) {
     DCHECK(signin_util::IsForceSigninEnabled());
     if (entry->CanBeManaged()) {
-      ProfilePickerForceSigninDialog::ShowReauthDialog(
-          profile, base::UTF16ToUTF8(entry->GetUserName()));
+      if (base::FeatureList::IsEnabled(kForceSigninFlowInProfilePicker)) {
+        ProfilePicker::SwitchToReauth(
+            profile,
+            base::BindOnce(&ProfilePickerHandler::OnReauthErrorCallback,
+                           weak_factory_.GetWeakPtr()));
+      } else {
+        ProfilePickerForceSigninDialog::ShowReauthDialog(
+            profile, base::UTF16ToUTF8(entry->GetUserName()));
+      }
     } else if (entry->GetActiveTime() != base::Time()) {
       // If force-sign-in is enabled, do not allow users to sign in to a
       // pre-existing locked profile, as this may force unexpected profile data
@@ -581,14 +589,21 @@ void ProfilePickerHandler::OnProfileForDialogLoaded(Profile* profile) {
       // Fresh sign in via profile picker without existing email address.
       ProfilePickerForceSigninDialog::ShowForceSigninDialog(profile);
     }
+  }
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-  } else if (!profiles::AreSecondaryProfilesAllowed() &&
-             !Profile::IsMainProfilePath(profile->GetPath())) {
+  if (!profiles::AreSecondaryProfilesAllowed() &&
+      !Profile::IsMainProfilePath(profile->GetPath())) {
     LoginUIServiceFactory::GetForProfile(profile)
         ->SetProfileBlockingErrorMessage();
     ProfilePicker::ShowDialogAndDisplayErrorMessage(profile);
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
   }
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+}
+
+void ProfilePickerHandler::OnReauthErrorCallback() {
+  AllowJavascript();
+  FireWebUIListener("display-force-signin-error-dialog", base::Value());
 }
 
 void ProfilePickerHandler::HandleLaunchGuestProfile(
@@ -838,11 +853,17 @@ void ProfilePickerHandler::HandleRemoveProfile(const base::Value::List& args) {
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
   RecordProfilePickerAction(ProfilePickerAction::kDeleteProfile);
+  DCHECK(profile_statistics_keep_alive_);
+
+  // Deleting the profile may delete `this` (see See https://crbug.com/1488267),
+  // if the profile picker was shown in a tab. Keep the `ScopedProfileKeepAlive`
+  // until the end of the function, to avoid the profile being unloaded and
+  // reloaded.
+  std::unique_ptr<ScopedProfileKeepAlive> profile_statistics_keep_alive =
+      std::move(profile_statistics_keep_alive_);
   webui::DeleteProfileAtPath(*profile_path,
                              ProfileMetrics::DELETE_PROFILE_USER_MANAGER);
-
-  DCHECK(profile_statistics_keep_alive_);
-  profile_statistics_keep_alive_.reset();
+  // Do not use `this` after this point, it may be deleted.
 }
 
 void ProfilePickerHandler::HandleUpdateProfileOrder(

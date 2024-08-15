@@ -12,9 +12,11 @@
 #include <set>
 #include <vector>
 
+#include "ash/accelerators/accelerator_capslock_state_machine.h"
 #include "ash/accelerators/accelerator_history_impl.h"
 #include "ash/accelerators/accelerator_launcher_state_machine.h"
 #include "ash/accelerators/accelerator_prefs.h"
+#include "ash/accelerators/accelerator_shift_disable_capslock_state_machine.h"
 #include "ash/accelerators/accelerator_table.h"
 #include "ash/accelerators/ash_accelerator_configuration.h"
 #include "ash/accelerators/exit_warning_handler.h"
@@ -39,18 +41,6 @@ namespace ash {
 
 struct AcceleratorData;
 class ExitWarningHandler;
-
-/**
-Encode a shortcut as an int.
-- The low 16 bits represent the key code.
-- The high 16 bits represent the modififers.
-  - The 31 bit: Command key
-  - The 30 bit: Alt key
-  - The 29 bit: Control key
-  - The 28 bit: Shift key
-  - All other bits are 0
-*/
-ASH_EXPORT int GetEncodedShortcut(const ui::Accelerator& accelerator);
 
 // AcceleratorControllerImpl provides functions for registering or unregistering
 // global keyboard accelerators, which are handled earlier than any windows. It
@@ -242,6 +232,9 @@ class ASH_EXPORT AcceleratorControllerImpl
   // A tracker for the current and previous accelerators.
   std::unique_ptr<AcceleratorHistoryImpl> accelerator_history_;
   std::unique_ptr<AcceleratorLauncherStateMachine> launcher_state_machine_;
+  std::unique_ptr<AcceleratorCapslockStateMachine> capslock_state_machine_;
+  std::unique_ptr<AcceleratorShiftDisableCapslockStateMachine>
+      shift_disable_state_machine_;
 
   // Manages all accelerator mappings.
   raw_ptr<AshAcceleratorConfiguration, ExperimentalAsh>

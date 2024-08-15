@@ -439,6 +439,15 @@
     "xor",
     // highlight
     "plus-lighter",
+
+    //
+    // mask-composite
+    //
+    // "add",
+    "subtract",
+    "intersect",
+    "exclude",
+
     //
     // vertical-align
     //
@@ -706,6 +715,7 @@
     // last baseline,
     // first baseline,
     // stretch
+    "anchor-center",
 
     // justify-content
     // start
@@ -787,6 +797,12 @@
     // auto
     "from-font",
 
+    //
+    // text-spacing-trim
+    //
+    "space-all",
+    "space-first",
+
     // text-underline-position
     // auto
     // "from-font",
@@ -825,11 +841,6 @@
     "manual",
 
     // -webkit-appearance
-    // The order here must match the order in the ControlPart enum in
-    // theme_types.h.
-    // All appearance values that should be accepted by the parser should be
-    // listed between 'checkbox' and 'textarea'. This is checked in
-    // CSSParserFastPaths::IsValidKeywordPropertyAndValue.
     "checkbox",
     "radio",
     "button",
@@ -879,6 +890,9 @@
 
     // CSS 3 SHAPES
     "margin-box",
+
+    // https://drafts.fxtf.org/css-masking/#valdef-mask-clip-no-clip
+    "no-clip",
 
     //
     // background-size
@@ -1097,6 +1111,12 @@
     "window-controls-overlay",
     "tabbed",
 
+    // (display-state:) media feature
+    // normal
+    // fullscreen
+    "minimized",
+    "maximized",
+
     // (overflow-block:) media feature
     "paged",
 
@@ -1167,6 +1187,11 @@
     // mask-type
     "alpha",
     "luminance",
+
+    // mask-mode
+    // alpha
+    // luminance
+    "match-source",
 
     // color-interpolation / color-interpolation-filters
     // auto
@@ -1249,6 +1274,7 @@
     // right
     // unsafe
     // safe
+    // anchor-center
     "legacy",
 
     // scroll-behavior
@@ -1642,20 +1668,6 @@
     // Layered @import rule
     "layer",
 
-    // toggle-root
-    "group",
-    "self",
-    "cycle",
-    "cycle-on",
-
-    // toggle-trigger
-    "prev",
-    "next",
-    "set",
-
-    // toggle-visibility
-    "toggle",
-
     // color-contrast()
     "color-contrast",
     "vs",
@@ -1710,6 +1722,7 @@
     // scroll()
     "root",
     "nearest",
+    "self",
 
     // transition-behavior
     "allow-discrete",

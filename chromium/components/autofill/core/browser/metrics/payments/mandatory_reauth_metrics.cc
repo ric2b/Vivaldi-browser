@@ -21,6 +21,10 @@ std::string_view GetSourceForOptInOrOptOutEvent(
       return "CheckoutLocalCard";
     case MandatoryReauthOptInOrOutSource::kCheckoutVirtualCard:
       return "CheckoutVirtualCard";
+    case MandatoryReauthOptInOrOutSource::kCheckoutFullServerCard:
+      return "CheckoutFullServerCard";
+    case MandatoryReauthOptInOrOutSource::kCheckoutMaskedServerCard:
+      return "CheckoutMaskedServerCard";
     case MandatoryReauthOptInOrOutSource::kUnknown:
       return "Unknown";
   }
@@ -32,7 +36,7 @@ void LogMandatoryReauthOfferOptInDecision(
     MandatoryReauthOfferOptInDecision opt_in_decision) {
   base::UmaHistogramEnumeration(
       "Autofill.PaymentMethods.MandatoryReauth.CheckoutFlow."
-      "ReauthOfferOptInDecision",
+      "ReauthOfferOptInDecision2",
       opt_in_decision);
 }
 

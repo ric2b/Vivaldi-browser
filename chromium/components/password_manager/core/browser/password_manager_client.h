@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "base/functional/callback.h"
-#include "base/memory/scoped_refptr.h"
 #include "base/types/strong_alias.h"
 #include "build/build_config.h"
 #include "components/autofill/core/common/language_code.h"
@@ -212,7 +211,7 @@ class PasswordManagerClient {
 
   // Instructs the client to show a keyboard replacing surface UI (e.g.
   // TouchToFill).
-  virtual void ShowKeyboardReplacingSurface(
+  virtual bool ShowKeyboardReplacingSurface(
       PasswordManagerDriver* driver,
       const SubmissionReadinessParams& submission_readiness_params,
       bool is_webauthn_form);
@@ -220,7 +219,7 @@ class PasswordManagerClient {
 
   // Returns a pointer to a DeviceAuthenticator. Might be null if
   // BiometricAuthentication is not available for a given platform.
-  virtual scoped_refptr<device_reauth::DeviceAuthenticator>
+  virtual std::unique_ptr<device_reauth::DeviceAuthenticator>
   GetDeviceAuthenticator();
 
   // Informs the embedder that the user has requested to generate a
@@ -279,7 +278,8 @@ class PasswordManagerClient {
   // Called when a password is saved in an automated fashion. Embedder may
   // inform the user that this save has occurred.
   virtual void AutomaticPasswordSave(
-      std::unique_ptr<PasswordFormManagerForUI> saved_form_manager) = 0;
+      std::unique_ptr<PasswordFormManagerForUI> saved_form_manager,
+      bool is_update_confirmation) = 0;
 
   // Called when a password is autofilled. |best_matches| contains the
   // PasswordForm into which a password was filled: the client may choose to

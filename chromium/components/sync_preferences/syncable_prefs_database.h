@@ -14,15 +14,44 @@
 
 namespace sync_preferences {
 
+enum class PrefSensitivity {
+  // The pref is not sensitive and does not require any additional opt-ins.
+  kNone,
+  // The pref contains sensitive information and requires history opt-in to
+  // allow syncing.
+  kSensitiveRequiresHistory,
+};
+
+enum class MergeBehavior {
+  // The account value wins. This is the default behavior. Any pref update is
+  // applied to both - the local value as well as the account value.
+  kNone,
+  // For dictionary values, all entries in `account_value` and `local_value` are
+  // merged recursively. In case of a conflict, the entry from `account_value`
+  // wins. With a DualLayerUserPrefStore, pref updates are split between the
+  // account value and the local value and only the relevant updates are applied
+  // to each.
+  kMergeableDict,
+  // For list values, all entries of `account_value` come first, followed by all
+  // entries in the `local_value`. Any repeating entry in `local_value` is
+  // omitted. Any pref update overwrites both - the local value as well as the
+  // account value.
+  kMergeableListWithRewriteOnUpdate,
+  // A custom merge logic has been implemented for this pref.
+  kCustom
+};
+
 // This class represents the metadata corresponding to a syncable preference.
 class SyncablePrefMetadata {
  public:
   constexpr SyncablePrefMetadata(int syncable_pref_id,
                                  syncer::ModelType model_type,
-                                 bool is_history_opt_in_required)
+                                 PrefSensitivity pref_sensitivity,
+                                 MergeBehavior merge_behavior)
       : syncable_pref_id_(syncable_pref_id),
         model_type_(model_type),
-        is_history_opt_in_required_(is_history_opt_in_required) {
+        pref_sensitivity_(pref_sensitivity),
+        merge_behaviour_(merge_behavior) {
     // TODO(crbug.com/1424774): Allow OS_* types only if IS_CHROMEOS_ASH is
     // true. This isn't the case now because of an outlier entry in
     // common_syncable_prefs_database.
@@ -40,15 +69,22 @@ class SyncablePrefMetadata {
   // OS_PREFERENCES or OS_PRIORITY_PREFERENCES.
   syncer::ModelType model_type() const { return model_type_; }
 
+  // Returns the sensitivity of the pref. It is used to determine whether the
+  // pref requires history opt-in.
+  PrefSensitivity pref_sensitivity() const { return pref_sensitivity_; }
+
   // Returns whether the pref requires history opt-in to be synced.
   bool is_history_opt_in_required() const {
-    return is_history_opt_in_required_;
+    return pref_sensitivity() == PrefSensitivity::kSensitiveRequiresHistory;
   }
+
+  MergeBehavior merge_behavior() const { return merge_behaviour_; }
 
  private:
   int syncable_pref_id_;
   syncer::ModelType model_type_;
-  bool is_history_opt_in_required_;
+  PrefSensitivity pref_sensitivity_;
+  MergeBehavior merge_behaviour_;
 };
 
 // This class provides an interface to define the list of syncable
@@ -74,6 +110,10 @@ class SyncablePrefsDatabase {
   // Returns true if `pref_name` is part of the allowlist of syncable
   // preferences.
   bool IsPreferenceSyncable(const std::string& pref_name) const;
+
+  // Return true if `pref_name` is a mergeable syncable preference.
+  // Note: `pref_name` must be syncable.
+  bool IsPreferenceMergeable(const std::string& pref_name) const;
 };
 
 }  // namespace sync_preferences

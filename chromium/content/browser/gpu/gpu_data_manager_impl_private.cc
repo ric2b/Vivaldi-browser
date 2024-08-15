@@ -1626,14 +1626,17 @@ void GpuDataManagerImplPrivate::NotifyGpuInfoUpdate() {
 
 bool GpuDataManagerImplPrivate::IsGpuProcessUsingHardwareGpu() const {
   if (base::StartsWith(gpu_info_.gl_renderer, "Google SwiftShader",
-                       base::CompareCase::SENSITIVE))
+                       base::CompareCase::SENSITIVE)) {
     return false;
+  }
   if (base::StartsWith(gpu_info_.gl_renderer, "ANGLE",
                        base::CompareCase::SENSITIVE) &&
-      gpu_info_.gl_renderer.find("SwiftShader Device") != std::string::npos)
+      gpu_info_.gl_renderer.find("SwiftShader Device") != std::string::npos) {
     return false;
-  if (gpu_info_.gl_renderer == "Disabled")
+  }
+  if (gpu_info_.gl_renderer == "Disabled") {
     return false;
+  }
   return true;
 }
 

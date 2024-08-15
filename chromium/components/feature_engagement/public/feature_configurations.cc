@@ -13,6 +13,9 @@
 #if BUILDFLAG(IS_IOS)
 #include "components/feature_engagement/public/ios_promo_feature_configuration.h"
 #endif  // BUILDFLAG(IS_IOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "components/feature_engagement/public/scalable_iph_feature_configurations.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace {
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
@@ -133,6 +136,20 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
     return config;
   }
 
+  if (kIPHGMCLocalMediaCastingFeature.name == feature->name) {
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(ANY, 0);
+    config->session_rate_impact.type = SessionRateImpact::Type::NONE;
+    config->trigger = EventConfig("gmc_local_media_cast_iph_trigger",
+                                  Comparator(EQUAL, 0), 180, 180);
+    config->used = EventConfig("media_route_started_from_gmc",
+                               Comparator(EQUAL, 0), 180, 180);
+
+    return config;
+  }
+
   if (kIPHDesktopSharedHighlightingFeature.name == feature->name) {
     // A config that allows the shared highlighting desktop IPH to be shown
     // when a user receives a highlight:
@@ -154,18 +171,29 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
     return config;
   }
 
-  if (kIPHCookieControlsFeature.name == feature->name) {
+  if (kIPHTrackingProtectionOffboardingFeature.name == feature->name) {
     absl::optional<FeatureConfig> config = FeatureConfig();
     config->valid = true;
     config->availability = Comparator(ANY, 0);
-    config->session_rate = Comparator(EQUAL, 0);
-    // Show promo up to 3 times per year and only if user hasn't interacted with
-    // the cookie controls bubble in the last week.
-    config->trigger = EventConfig("iph_cookie_controls_triggered",
-                                  Comparator(LESS_THAN, 3), 360, 360);
-    config->used =
-        EventConfig(feature_engagement::events::kCookieControlsBubbleShown,
-                    Comparator(EQUAL, 0), 7, 7);
+    config->session_rate = Comparator(ANY, 0);
+    config->trigger =
+        EventConfig("iph_tracking_protection_offboarding_triggered",
+                    Comparator(GREATER_THAN_OR_EQUAL, 0), 0, 0);
+    config->used = EventConfig("iph_tracking_protection_offboarding_used",
+                               Comparator(ANY, 0), 0, 0);
+    return config;
+  }
+
+  if (kIPHTrackingProtectionOnboardingFeature.name == feature->name) {
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(ANY, 0);
+    config->trigger =
+        EventConfig("iph_tracking_protection_onboarding_triggered",
+                    Comparator(GREATER_THAN_OR_EQUAL, 0), 0, 0);
+    config->used = EventConfig("iph_tracking_protection_onboarding_used",
+                               Comparator(ANY, 0), 0, 0);
     return config;
   }
 
@@ -196,22 +224,6 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
     config->event_configs.insert(
         EventConfig("high_efficiency_prompt_in_trigger",
                     Comparator(LESS_THAN, 1), 360, 360));
-    return config;
-  }
-
-  if (kIPHPerformanceNewBadgeFeature.name == feature->name) {
-    absl::optional<FeatureConfig> config = FeatureConfig();
-    config->valid = true;
-    config->availability = Comparator(ANY, 0);
-    config->session_rate = Comparator(ANY, 0);
-    config->session_rate_impact.type = SessionRateImpact::Type::NONE;
-    // Show the new badge max 20 times within a year
-    config->trigger = EventConfig("performance_new_badge_shown",
-                                  Comparator(LESS_THAN, 20), 360, 360);
-
-    // Badge stops showing after the user uses it 3 times
-    config->used = EventConfig("performance_activated",
-                               Comparator(LESS_THAN, 3), 360, 360);
     return config;
   }
 
@@ -347,7 +359,9 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
     absl::optional<FeatureConfig> config = FeatureConfig();
     config->valid = true;
     config->availability = Comparator(ANY, 0);
-    config->session_rate = Comparator(EQUAL, 0);
+    config->session_rate = Comparator(ANY, 0);
+    config->session_rate_impact.type = SessionRateImpact::Type::NONE;
+
     // Show the promo up to 3 times a year.
     config->trigger = EventConfig("iph_companion_side_panel_trigger",
                                   Comparator(LESS_THAN, 3), 360, 360);
@@ -404,6 +418,22 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
     return config;
   }
 
+  if (kIPHDesktopNewTabPageModulesCustomizeFeature.name == feature->name) {
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(EQUAL, 0);
+    config->session_rate_impact.type = SessionRateImpact::Type::ALL;
+    // Show the promo max once every 10 years if the user hasn't interacted with
+    // the modules within the last year.
+    config->trigger = EventConfig("iph_desktop_new_tab_page_modules_triggered",
+                                  Comparator(EQUAL, 0), 3600, 3600);
+    config->used = EventConfig(events::kDesktopNTPModuleUsed,
+                               Comparator(EQUAL, 0), 360, 360);
+    config->snooze_params.max_limit = 5;
+    return config;
+  }
+
   if (kIPHPasswordsWebAppProfileSwitchFeature.name == feature->name) {
     absl::optional<FeatureConfig> config = FeatureConfig();
     config->valid = true;
@@ -425,6 +455,19 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
     config->trigger = EventConfig("iph_password_manager_shortcut_triggered",
                                   Comparator(EQUAL, 0), 360, 360);
     config->used = EventConfig("password_manager_shortcut_created",
+                               Comparator(EQUAL, 0), 360, 360);
+    return config;
+  }
+
+  if (kIPHPasswordSharingFeature.name == feature->name) {
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(ANY, 0);
+    config->session_rate_impact.type = SessionRateImpact::Type::NONE;
+    config->trigger = EventConfig("password_sharing_iph_triggered",
+                                  Comparator(EQUAL, 0), 360, 360);
+    config->used = EventConfig("password_share_button_clicked",
                                Comparator(EQUAL, 0), 360, 360);
     return config;
   }
@@ -460,6 +503,21 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
     return config;
   }
 
+  if (kIPHComposeNewBadgeFeature.name == feature->name) {
+    // A config that allows the new badge for the Compose feature to be shown at
+    // most 4 times in a 10-day window and only while the user has opened the
+    // Compose feature less than 3 times.
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(ANY, 0);
+    config->trigger = EventConfig("compose_new_badge_triggered",
+                                  Comparator(LESS_THAN, 4), 10, 360);
+    config->used =
+        EventConfig("compose_activated", Comparator(LESS_THAN, 3), 360, 360);
+    return config;
+  }
+
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) ||
         // BUILDFLAG(IS_CHROMEOS)
 
@@ -489,6 +547,21 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
 
 #if BUILDFLAG(IS_ANDROID)
 
+  if (kIPHCCTMinimized.name == feature->name) {
+    // A config that allows the Custom Tab minimize button IPH to be shown once
+    // a day, up to 3 times, unless the button is clicked at least once.
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(EQUAL, 0);
+    config->trigger = EventConfig("cct_minimized_iph_trigger",
+                                  Comparator(LESS_THAN, 3), 360, 360);
+    config->event_configs.insert(EventConfig("cct_minimized_iph_trigger",
+                                             Comparator(LESS_THAN, 1), 1, 360));
+    config->used = EventConfig("cct_minimize_button_clicked",
+                               Comparator(EQUAL, 0), 360, 360);
+    return config;
+  }
   if (kIPHDataSaverDetailFeature.name == feature->name) {
     absl::optional<FeatureConfig> config = FeatureConfig();
     config->valid = true;
@@ -917,6 +990,22 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
     return config;
   }
 
+  if (kIPHWebFeedPostFollowDialogFeatureWithUIUpdate.name == feature->name) {
+    // A config that allows one of the WebFeed post follow dialogs to be
+    // presented 3 times after the UI update.
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(ANY, 0);
+    config->trigger =
+        EventConfig("web_feed_post_follow_dialog_trigger_with_ui_update",
+                    Comparator(LESS_THAN, 3), 360, 360);
+    config->used =
+        EventConfig("web_feed_post_follow_dialog_shown_with_ui_update",
+                    Comparator(ANY, 0), 360, 360);
+    return config;
+  }
+
   if (kIPHVideoTutorialNTPChromeIntroFeature.name == feature->name) {
     // A config that allows the chrome intro video tutorial card to show up
     // until explicitly interacted upon.
@@ -1333,6 +1422,21 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
     return config;
   }
 
+  if (kIPHRequestDesktopSiteWindowSettingFeature.name == feature->name) {
+    // A config that allows the RDS window setting IPH to be shown at most once
+    // in 3 years per device.
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(EQUAL, 0);
+    config->used = EventConfig("request_desktop_site_window_setting_iph_shown",
+                               Comparator(EQUAL, 0), 1080, 1080);
+    config->trigger =
+        EventConfig("request_desktop_site_window_setting_iph_trigger",
+                    Comparator(EQUAL, 0), 1080, 1080);
+    return config;
+  }
+
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) || \
@@ -1421,6 +1525,43 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
 
     session_rate_impact.affected_features = affected_features;
     config->session_rate_impact = session_rate_impact;
+    return config;
+  }
+
+  if (kIPHCookieControlsFeature.name == feature->name) {
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(EQUAL, 0);
+    // Show promo up to 3 times per year and only if user hasn't interacted with
+    // the cookie controls bubble in the last week.
+    config->trigger = EventConfig("iph_cookie_controls_triggered",
+                                  Comparator(LESS_THAN, 3), 360, 360);
+#if !BUILDFLAG(IS_ANDROID)
+    config->used =
+        EventConfig(feature_engagement::events::kCookieControlsBubbleShown,
+                    Comparator(EQUAL, 0), 7, 7);
+#endif  // !BUILDFLAG(IS_ANDROID)
+    return config;
+  }
+
+  if (kIPH3pcdUserBypassFeature.name == feature->name) {
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(ANY, 0);
+    config->session_rate_impact.type = SessionRateImpact::Type::NONE;
+    // Show promo only once and only if user hasn't interacted with
+    // the cookie controls bubble in the last year.
+    config->trigger =
+        EventConfig("iph_3pcd_user_bypass_triggered", Comparator(EQUAL, 0),
+                    feature_engagement::kMaxStoragePeriod,
+                    feature_engagement::kMaxStoragePeriod);
+#if !BUILDFLAG(IS_ANDROID)
+    config->used =
+        EventConfig(feature_engagement::events::kCookieControlsBubbleShown,
+                    Comparator(ANY, 0), 360, 360);
+#endif  // !BUILDFLAG(IS_ANDROID)
     return config;
   }
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) ||
@@ -1682,12 +1823,64 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
     return config;
   }
 
+  if (kIPHiOSLensKeyboardFeature.name == feature->name) {
+    // A config that allows a user education bubble to be shown for the Lens
+    // button in the omnibox keyboard. Will be shown up to 3 times, but
+    // opening Lens from the keyboard will prevent the bubble from appearing
+    // again.
+
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(EQUAL, 0);
+    config->trigger =
+        EventConfig("lens_keyboard_feature_trigger", Comparator(LESS_THAN, 3),
+                    feature_engagement::kMaxStoragePeriod,
+                    feature_engagement::kMaxStoragePeriod);
+    config->used = EventConfig("lens_keyboard_used", Comparator(EQUAL, 0),
+                               feature_engagement::kMaxStoragePeriod,
+                               feature_engagement::kMaxStoragePeriod);
+    return config;
+  }
+
+  if (kIPHiOSParcelTrackingFeature.name == feature->name) {
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(ANY, 0);
+    // The IPH is shown at most once.
+    config->trigger =
+        EventConfig(feature_engagement::events::kParcelTrackingTriggered,
+                    Comparator(EQUAL, 0), feature_engagement::kMaxStoragePeriod,
+                    feature_engagement::kMaxStoragePeriod);
+    config->used =
+        EventConfig("parcel_tracking_feature_used", Comparator(EQUAL, 0),
+                    feature_engagement::kMaxStoragePeriod,
+                    feature_engagement::kMaxStoragePeriod);
+    // The user has tracked a parcel.
+    config->event_configs.insert(
+        EventConfig(feature_engagement::events::kParcelTracked,
+                    Comparator(GREATER_THAN_OR_EQUAL, 1),
+                    feature_engagement::kMaxStoragePeriod,
+                    feature_engagement::kMaxStoragePeriod));
+    config->blocked_by.type = BlockedBy::Type::NONE;
+    config->blocking.type = Blocking::Type::NONE;
+    return config;
+  }
+
   // iOS Promo Configs are split out into a separate file, so check that too.
   if (absl::optional<FeatureConfig> ios_promo_feature_config =
           GetClientSideiOSPromoFeatureConfig(feature)) {
     return ios_promo_feature_config;
   }
 #endif  // BUILDFLAG(IS_IOS)
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  if (absl::optional<FeatureConfig> scalable_iph_feature_config =
+          GetScalableIphFeatureConfig(feature)) {
+    return scalable_iph_feature_config;
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   if (kIPHDummyFeature.name == feature->name) {
     // Only used for tests. Various magic tricks are used below to ensure this

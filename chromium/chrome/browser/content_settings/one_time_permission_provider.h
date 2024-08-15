@@ -65,7 +65,7 @@ class OneTimePermissionProvider
   bool UpdateLastVisitTime(const ContentSettingsPattern& primary_pattern,
                            const ContentSettingsPattern& secondary_pattern,
                            ContentSettingsType content_type) override;
-  bool RenewContentSetting(
+  absl::optional<base::TimeDelta> RenewContentSetting(
       const GURL& primary_url,
       const GURL& secondary_url,
       ContentSettingsType type,
@@ -81,7 +81,9 @@ class OneTimePermissionProvider
 
   // OneTimePermissionsTrackerObserver:
   void OnLastPageFromOriginClosed(const url::Origin&) override;
-  void OnAllTabsInBackgroundTimerExpired(const url::Origin&) override;
+  void OnAllTabsInBackgroundTimerExpired(
+      const url::Origin& origin,
+      const BackgroundExpiryType& expiry_type) override;
   void OnCapturingVideoExpired(const url::Origin&) override;
   void OnCapturingAudioExpired(const url::Origin&) override;
 

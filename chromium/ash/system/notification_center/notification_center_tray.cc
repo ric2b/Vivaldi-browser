@@ -37,6 +37,8 @@ NotificationCenterTray::NotificationCenterTray(Shelf* shelf)
               /*model=*/nullptr,
               /*notification_center_tray=*/this)) {
   DCHECK(features::IsQsRevampEnabled());
+  SetCallback(base::BindRepeating(&NotificationCenterTray::OnTrayButtonPressed,
+                                  base::Unretained(this)));
   SetID(VIEW_ID_SA_NOTIFICATION_TRAY);
   set_use_bounce_in_animation(false);
 
@@ -81,6 +83,15 @@ void NotificationCenterTray::OnSystemTrayVisibilityChanged(
     bool system_tray_visible) {
   system_tray_visible_ = system_tray_visible;
   UpdateVisibility();
+}
+
+void NotificationCenterTray::OnTrayButtonPressed() {
+  if (GetBubbleWidget()) {
+    CloseBubble();
+    return;
+  }
+
+  ShowBubble();
 }
 
 NotificationListView* NotificationCenterTray::GetNotificationListView() {
@@ -196,24 +207,6 @@ TrayBubbleView* NotificationCenterTray::GetBubbleView() {
 
 views::Widget* NotificationCenterTray::GetBubbleWidget() const {
   return bubble_ ? bubble_->GetBubbleWidget() : nullptr;
-}
-
-void NotificationCenterTray::OnAnyBubbleVisibilityChanged(
-    views::Widget* bubble_widget,
-    bool visible) {
-  if (!IsBubbleShown()) {
-    return;
-  }
-
-  if (bubble_widget == GetBubbleWidget()) {
-    return;
-  }
-
-  if (visible) {
-    // Another bubble is becoming visible while this bubble is being shown, so
-    // hide this bubble.
-    CloseBubble();
-  }
 }
 
 void NotificationCenterTray::UpdateLayout() {

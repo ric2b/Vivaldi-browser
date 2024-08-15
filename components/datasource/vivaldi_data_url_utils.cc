@@ -165,9 +165,9 @@ std::string MakeUrl(PathType type, base::StringPiece data) {
   return url;
 }
 
-scoped_refptr<base::RefCountedMemory> ReadFileOnBlockingThread(
-    const base::FilePath& file_path,
-    bool log_not_found) {
+bool ReadFileToVectorOnBlockingThread(const base::FilePath& file_path,
+                                      std::vector<unsigned char>& buffer,
+                                      bool log_not_found) {
   base::File file(file_path, base::File::FLAG_READ | base::File::FLAG_OPEN);
   if (!file.IsValid()) {
     if (file.error_details() == base::File::FILE_ERROR_NOT_FOUND) {
@@ -178,32 +178,41 @@ scoped_refptr<base::RefCountedMemory> ReadFileOnBlockingThread(
       LOG(ERROR) << "Failed to open file " << file_path.value()
                  << " for reading";
     }
-    return nullptr;
+    return false;
   }
   int64_t len64 = file.GetLength();
   if (len64 < 0) {
     // Realistically this can happen for named pipes or other special files.
     LOG(ERROR) << "Attempt to read from a file with no length defined "
                << file_path;
-    return nullptr;
+    return false;
   }
   if (len64 > kMaxAllowedRead) {
     LOG(ERROR) << "File length for " << file_path << " (" << len64
                << ") exceeded " << kMaxAllowedRead;
-    return nullptr;
+    return false;
   }
   static_assert(kMaxAllowedRead <= INT_MAX, "check that cast to int is OK");
   int len = static_cast<int>(len64);
-  std::vector<unsigned char> buffer;
   if (len) {
     buffer.resize(len);
     int read_len = file.Read(0, reinterpret_cast<char*>(buffer.data()), len);
     if (read_len != len) {
       LOG(ERROR) << "Failed to read " << len << "bytes from " << file_path;
-      return nullptr;
+      return false;
     }
   }
-  return base::RefCountedBytes::TakeVector(&buffer);
+  return true;
 }
 
+scoped_refptr<base::RefCountedMemory> ReadFileOnBlockingThread(
+    const base::FilePath& file_path,
+    bool log_not_found) {
+  std::vector<unsigned char> buffer;
+  if (!ReadFileToVectorOnBlockingThread(file_path, buffer, log_not_found)) {
+    return nullptr;
+  }
+
+  return base::RefCountedBytes::TakeVector(&buffer);
+}
 }  // namespace vivaldi_data_url_utils

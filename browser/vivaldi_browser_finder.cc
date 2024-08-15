@@ -31,9 +31,9 @@ VivaldiBrowserWindow* FindWindowForEmbedderWebContents(
   return nullptr;
 }
 
-Browser* FindBrowserWithWebContents(const content::WebContents* web_contents) {
+Browser* FindBrowserWithTab(const content::WebContents* web_contents) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+  Browser* browser = chrome::FindBrowserWithTab(web_contents);
 
   // NOTE(espen@vivaldi.com): Some elements (e.g., within panels) will not match
   // in the function above. We have to find the window that contains the web

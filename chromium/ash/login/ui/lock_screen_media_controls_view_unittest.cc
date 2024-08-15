@@ -3,23 +3,22 @@
 // found in the LICENSE file.
 
 #include "ash/login/ui/lock_screen_media_controls_view.h"
-#include "ash/login/ui/lock_contents_view_test_api.h"
-#include "base/memory/raw_ptr.h"
 
 #include "ash/constants/ash_features.h"
 #include "ash/login/ui/fake_login_detachable_base_model.h"
 #include "ash/login/ui/lock_contents_view.h"
+#include "ash/login/ui/lock_contents_view_test_api.h"
 #include "ash/login/ui/login_test_base.h"
 #include "ash/login/ui/media_controls_header_view.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/style/dark_light_mode_controller_impl.h"
+#include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
 #include "base/test/power_monitor_test.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/timer/mock_timer.h"
 #include "components/media_message_center/media_controls_progress_view.h"
-#include "media/base/media_switches.h"
 #include "services/media_session/public/cpp/test/test_media_controller.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -35,6 +34,7 @@
 #include "ui/views/animation/bounds_animator_observer.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/view_utils.h"
 
 namespace ash {
 
@@ -55,9 +55,9 @@ MediaSessionAction kActionButtonOrder[] = {
     MediaSessionAction::kNextTrack};
 
 // Checks if the view class name is used by a media button.
-bool IsMediaButtonType(const char* class_name) {
-  return class_name == views::ImageButton::kViewClassName ||
-         class_name == views::ToggleImageButton::kViewClassName;
+bool IsMediaButtonType(const views::View* view) {
+  return views::IsViewClass<views::ImageButton>(view) ||
+         views::IsViewClass<views::ToggleImageButton>(view);
 }
 
 class AnimationWaiter : public ui::LayerAnimationObserver,
@@ -385,7 +385,7 @@ TEST_F(LockScreenMediaControlsViewTest, ButtonsSanityCheck) {
   for (int i = 0; i < 5; /* size of |button_row| */ i++) {
     auto* child = media_action_buttons()[i];
 
-    ASSERT_TRUE(IsMediaButtonType(child->GetClassName()));
+    ASSERT_TRUE(IsMediaButtonType(child));
 
     ASSERT_EQ(
         static_cast<MediaSessionAction>(views::Button::AsButton(child)->tag()),
@@ -528,11 +528,7 @@ TEST_F(LockScreenMediaControlsViewTest, CloseButtonVisibility) {
   EXPECT_FALSE(CloseButtonHasImage());
 }
 
-TEST_F(LockScreenMediaControlsViewTest,
-       MediaControlsNotShownIfSensitiveWithHideMetadataFeatureFlagDisabled) {
-  base::test::ScopedFeatureList scoped_feature_list_;
-  scoped_feature_list_.InitAndDisableFeature(
-      media::kHideIncognitoMediaMetadata);
+TEST_F(LockScreenMediaControlsViewTest, MediaControlsNotShownIfSensitive) {
   SimulateMediaSessionChanged(
       media_session::mojom::MediaPlaybackState::kPlaying,
       /*is_sensitive=*/true);
@@ -540,13 +536,10 @@ TEST_F(LockScreenMediaControlsViewTest,
   EXPECT_FALSE(media_controls_view_->IsDrawn());
 }
 
-TEST_F(LockScreenMediaControlsViewTest,
-       MediaControlsShownIfSensitiveWithHideMetadataFeatureFlagEnabled) {
-  base::test::ScopedFeatureList scoped_feature_list_;
-  scoped_feature_list_.InitAndEnableFeature(media::kHideIncognitoMediaMetadata);
+TEST_F(LockScreenMediaControlsViewTest, MediaControlsShownIfNotSensitive) {
   SimulateMediaSessionChanged(
       media_session::mojom::MediaPlaybackState::kPlaying,
-      /*is_sensitive=*/true);
+      /*is_sensitive=*/false);
 
   EXPECT_TRUE(media_controls_view_->IsDrawn());
 }

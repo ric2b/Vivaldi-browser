@@ -13,7 +13,15 @@
 #include "third_party/blink/renderer/core/html/html_marquee_element.h"
 #include "third_party/blink/renderer/core/input_type_names.h"
 #include "third_party/blink/renderer/core/layout/box_layout_extra_input.h"
+#include "third_party/blink/renderer/core/layout/custom/custom_layout_algorithm.h"
+#include "third_party/blink/renderer/core/layout/custom/layout_custom.h"
+#include "third_party/blink/renderer/core/layout/flex/flex_layout_algorithm.h"
+#include "third_party/blink/renderer/core/layout/forms/layout_fieldset.h"
+#include "third_party/blink/renderer/core/layout/geometry/fragment_geometry.h"
 #include "third_party/blink/renderer/core/layout/geometry/writing_mode_converter.h"
+#include "third_party/blink/renderer/core/layout/grid/grid_layout_algorithm.h"
+#include "third_party/blink/renderer/core/layout/inline/inline_cursor.h"
+#include "third_party/blink/renderer/core/layout/inline/inline_node.h"
 #include "third_party/blink/renderer/core/layout/intrinsic_sizing_info.h"
 #include "third_party/blink/renderer/core/layout/layout_block_flow.h"
 #include "third_party/blink/renderer/core/layout/layout_inline.h"
@@ -21,27 +29,19 @@
 #include "third_party/blink/renderer/core/layout/layout_multi_column_set.h"
 #include "third_party/blink/renderer/core/layout/layout_multi_column_spanner_placeholder.h"
 #include "third_party/blink/renderer/core/layout/layout_video.h"
+#include "third_party/blink/renderer/core/layout/list/layout_list_item.h"
+#include "third_party/blink/renderer/core/layout/mathml/math_fraction_layout_algorithm.h"
+#include "third_party/blink/renderer/core/layout/mathml/math_layout_utils.h"
+#include "third_party/blink/renderer/core/layout/mathml/math_operator_layout_algorithm.h"
+#include "third_party/blink/renderer/core/layout/mathml/math_padded_layout_algorithm.h"
+#include "third_party/blink/renderer/core/layout/mathml/math_radical_layout_algorithm.h"
+#include "third_party/blink/renderer/core/layout/mathml/math_row_layout_algorithm.h"
+#include "third_party/blink/renderer/core/layout/mathml/math_scripts_layout_algorithm.h"
+#include "third_party/blink/renderer/core/layout/mathml/math_space_layout_algorithm.h"
+#include "third_party/blink/renderer/core/layout/mathml/math_token_layout_algorithm.h"
+#include "third_party/blink/renderer/core/layout/mathml/math_under_over_layout_algorithm.h"
 #include "third_party/blink/renderer/core/layout/min_max_sizes.h"
-#include "third_party/blink/renderer/core/layout/ng/custom/layout_ng_custom.h"
-#include "third_party/blink/renderer/core/layout/ng/custom/ng_custom_layout_algorithm.h"
-#include "third_party/blink/renderer/core/layout/ng/flex/ng_flex_layout_algorithm.h"
-#include "third_party/blink/renderer/core/layout/ng/geometry/ng_fragment_geometry.h"
-#include "third_party/blink/renderer/core/layout/ng/grid/ng_grid_layout_algorithm.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_node.h"
-#include "third_party/blink/renderer/core/layout/ng/layout_ng_fieldset.h"
 #include "third_party/blink/renderer/core/layout/ng/legacy_layout_tree_walking.h"
-#include "third_party/blink/renderer/core/layout/ng/list/layout_ng_list_item.h"
-#include "third_party/blink/renderer/core/layout/ng/mathml/ng_math_fraction_layout_algorithm.h"
-#include "third_party/blink/renderer/core/layout/ng/mathml/ng_math_layout_utils.h"
-#include "third_party/blink/renderer/core/layout/ng/mathml/ng_math_operator_layout_algorithm.h"
-#include "third_party/blink/renderer/core/layout/ng/mathml/ng_math_padded_layout_algorithm.h"
-#include "third_party/blink/renderer/core/layout/ng/mathml/ng_math_radical_layout_algorithm.h"
-#include "third_party/blink/renderer/core/layout/ng/mathml/ng_math_row_layout_algorithm.h"
-#include "third_party/blink/renderer/core/layout/ng/mathml/ng_math_scripts_layout_algorithm.h"
-#include "third_party/blink/renderer/core/layout/ng/mathml/ng_math_space_layout_algorithm.h"
-#include "third_party/blink/renderer/core/layout/ng/mathml/ng_math_token_layout_algorithm.h"
-#include "third_party/blink/renderer/core/layout/ng/mathml/ng_math_under_over_layout_algorithm.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_block_break_token.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_block_layout_algorithm.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_box_fragment.h"
@@ -62,11 +62,11 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_replaced_layout_algorithm.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_simplified_layout_algorithm.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_space_utils.h"
-#include "third_party/blink/renderer/core/layout/ng/table/layout_ng_table_cell.h"
-#include "third_party/blink/renderer/core/layout/ng/table/ng_table_layout_algorithm.h"
-#include "third_party/blink/renderer/core/layout/ng/table/ng_table_row_layout_algorithm.h"
-#include "third_party/blink/renderer/core/layout/ng/table/ng_table_section_layout_algorithm.h"
 #include "third_party/blink/renderer/core/layout/shapes/shape_outside_info.h"
+#include "third_party/blink/renderer/core/layout/table/layout_table_cell.h"
+#include "third_party/blink/renderer/core/layout/table/table_layout_algorithm.h"
+#include "third_party/blink/renderer/core/layout/table/table_row_layout_algorithm.h"
+#include "third_party/blink/renderer/core/layout/table/table_section_layout_algorithm.h"
 #include "third_party/blink/renderer/core/layout/text_autosizer.h"
 #include "third_party/blink/renderer/core/mathml/mathml_element.h"
 #include "third_party/blink/renderer/core/mathml/mathml_fraction_element.h"
@@ -85,6 +85,8 @@
 #include "ui/gfx/geometry/size_f.h"
 
 namespace blink {
+
+using mojom::blink::FormControlType;
 
 namespace {
 
@@ -124,24 +126,24 @@ NOINLINE void DetermineMathMLAlgorithmAndRun(
   auto* element = box.GetNode();
   if (element) {
     if (IsA<MathMLSpaceElement>(element)) {
-      CreateAlgorithmAndRun<NGMathSpaceLayoutAlgorithm>(params, callback);
+      CreateAlgorithmAndRun<MathSpaceLayoutAlgorithm>(params, callback);
       return;
     } else if (IsA<MathMLFractionElement>(element) &&
                IsValidMathMLFraction(params.node)) {
-      CreateAlgorithmAndRun<NGMathFractionLayoutAlgorithm>(params, callback);
+      CreateAlgorithmAndRun<MathFractionLayoutAlgorithm>(params, callback);
       return;
     } else if (IsA<MathMLRadicalElement>(element) &&
                IsValidMathMLRadical(params.node)) {
-      CreateAlgorithmAndRun<NGMathRadicalLayoutAlgorithm>(params, callback);
+      CreateAlgorithmAndRun<MathRadicalLayoutAlgorithm>(params, callback);
       return;
     } else if (IsA<MathMLPaddedElement>(element)) {
-      CreateAlgorithmAndRun<NGMathPaddedLayoutAlgorithm>(params, callback);
+      CreateAlgorithmAndRun<MathPaddedLayoutAlgorithm>(params, callback);
       return;
     } else if (IsA<MathMLTokenElement>(element)) {
       if (IsOperatorWithSpecialShaping(params.node))
-        CreateAlgorithmAndRun<NGMathOperatorLayoutAlgorithm>(params, callback);
+        CreateAlgorithmAndRun<MathOperatorLayoutAlgorithm>(params, callback);
       else if (IsTextOnlyToken(params.node))
-        CreateAlgorithmAndRun<NGMathTokenLayoutAlgorithm>(params, callback);
+        CreateAlgorithmAndRun<MathTokenLayoutAlgorithm>(params, callback);
       else
         CreateAlgorithmAndRun<NGBlockLayoutAlgorithm>(params, callback);
       return;
@@ -149,14 +151,14 @@ NOINLINE void DetermineMathMLAlgorithmAndRun(
                IsValidMathMLScript(params.node)) {
       if (IsA<MathMLUnderOverElement>(element) &&
           !IsUnderOverLaidOutAsSubSup(params.node)) {
-        CreateAlgorithmAndRun<NGMathUnderOverLayoutAlgorithm>(params, callback);
+        CreateAlgorithmAndRun<MathUnderOverLayoutAlgorithm>(params, callback);
       } else {
-        CreateAlgorithmAndRun<NGMathScriptsLayoutAlgorithm>(params, callback);
+        CreateAlgorithmAndRun<MathScriptsLayoutAlgorithm>(params, callback);
       }
       return;
     }
   }
-  CreateAlgorithmAndRun<NGMathRowLayoutAlgorithm>(params, callback);
+  CreateAlgorithmAndRun<MathRowLayoutAlgorithm>(params, callback);
 }
 
 template <typename Callback>
@@ -164,20 +166,20 @@ NOINLINE void DetermineAlgorithmAndRun(const NGLayoutAlgorithmParams& params,
                                        const Callback& callback) {
   const ComputedStyle& style = params.node.Style();
   const LayoutBox& box = *params.node.GetLayoutBox();
-  if (box.IsLayoutNGFlexibleBox()) {
-    CreateAlgorithmAndRun<NGFlexLayoutAlgorithm>(params, callback);
+  if (box.IsFlexibleBox()) {
+    CreateAlgorithmAndRun<FlexLayoutAlgorithm>(params, callback);
   } else if (box.IsTable()) {
-    CreateAlgorithmAndRun<NGTableLayoutAlgorithm>(params, callback);
+    CreateAlgorithmAndRun<TableLayoutAlgorithm>(params, callback);
   } else if (box.IsTableRow()) {
-    CreateAlgorithmAndRun<NGTableRowLayoutAlgorithm>(params, callback);
+    CreateAlgorithmAndRun<TableRowLayoutAlgorithm>(params, callback);
   } else if (box.IsTableSection()) {
-    CreateAlgorithmAndRun<NGTableSectionLayoutAlgorithm>(params, callback);
-  } else if (box.IsLayoutNGCustom()) {
-    CreateAlgorithmAndRun<NGCustomLayoutAlgorithm>(params, callback);
+    CreateAlgorithmAndRun<TableSectionLayoutAlgorithm>(params, callback);
+  } else if (box.IsLayoutCustom()) {
+    CreateAlgorithmAndRun<CustomLayoutAlgorithm>(params, callback);
   } else if (box.IsMathML()) {
     DetermineMathMLAlgorithmAndRun(box, params, callback);
-  } else if (box.IsLayoutNGGrid()) {
-    CreateAlgorithmAndRun<NGGridLayoutAlgorithm>(params, callback);
+  } else if (box.IsLayoutGrid()) {
+    CreateAlgorithmAndRun<GridLayoutAlgorithm>(params, callback);
   } else if (box.IsLayoutReplaced()) {
     CreateAlgorithmAndRun<NGReplacedLayoutAlgorithm>(params, callback);
   } else if (box.IsFieldset()) {
@@ -246,10 +248,11 @@ bool CanUseCachedIntrinsicInlineSizes(const NGConstraintSpace& constraint_space,
     return false;
   }
 
-  if (node.IsNGTableCell() && To<LayoutNGTableCell>(node.GetLayoutBox())
-                                      ->IntrinsicLogicalWidthsBorderSizes() !=
-                                  constraint_space.TableCellBorders())
+  if (node.IsTableCell() && To<LayoutTableCell>(node.GetLayoutBox())
+                                    ->IntrinsicLogicalWidthsBorderSizes() !=
+                                constraint_space.TableCellBorders()) {
     return false;
+  }
 
   // We may have something like:
   // "grid-template-columns: repeat(auto-fill, 50px); min-width: 50%;"
@@ -265,7 +268,7 @@ bool CanUseCachedIntrinsicInlineSizes(const NGConstraintSpace& constraint_space,
 
 absl::optional<LayoutUnit> ContentMinimumInlineSize(
     const NGBlockNode& block_node,
-    const NGBoxStrut& border_padding) {
+    const BoxStrut& border_padding) {
   // Table layout is never allowed to go below the min-intrinsic size.
   if (block_node.IsTable())
     return absl::nullopt;
@@ -290,16 +293,21 @@ absl::optional<LayoutUnit> ContentMinimumInlineSize(
   else
     inline_size += border_padding.InlineSum();
 
-  if (block_node.IsTextControl())
+  const bool apply_form_sizing = style.ApplyControlFixedSize();
+  if (block_node.IsTextControl() && apply_form_sizing) {
     return inline_size;
-  if (IsA<HTMLSelectElement>(node))
+  }
+  if (IsA<HTMLSelectElement>(node) && apply_form_sizing) {
     return inline_size;
+  }
   if (const auto* input_element = DynamicTo<HTMLInputElement>(node)) {
-    const AtomicString& type = input_element->type();
-    if (type == input_type_names::kFile)
+    FormControlType type = input_element->FormControlType();
+    if (type == FormControlType::kInputFile && apply_form_sizing) {
       return inline_size;
-    if (type == input_type_names::kRange)
+    }
+    if (type == FormControlType::kInputRange) {
       return inline_size;
+    }
   }
   return absl::nullopt;
 }
@@ -318,15 +326,15 @@ const NGLayoutResult* NGBlockNode::Layout(
   // pointer to the value previous shared vector.
   if (const NGLayoutResult* previous_result =
           box_->GetCachedLayoutResult(break_token)) {
-    constraint_space.ExclusionSpace().PreInitialize(
-        previous_result->GetConstraintSpaceForCaching().ExclusionSpace());
+    constraint_space.GetExclusionSpace().PreInitialize(
+        previous_result->GetConstraintSpaceForCaching().GetExclusionSpace());
   }
 
   NGLayoutCacheStatus cache_status;
 
   // We may be able to hit the cache without calculating fragment geometry
   // (calculating that isn't necessarily very cheap). So, start off without it.
-  absl::optional<NGFragmentGeometry> fragment_geometry;
+  absl::optional<FragmentGeometry> fragment_geometry;
 
   // CachedLayoutResult() might clear flags, so remember the need for layout
   // before attempting to hit the cache.
@@ -353,7 +361,7 @@ const NGLayoutResult* NGBlockNode::Layout(
         To<NGPhysicalBoxFragment>(layout_result->PhysicalFragment());
     // If we have fragment items, and we're not done (more fragments to follow),
     // be sure to miss the cache for any subsequent fragments, lest finalization
-    // be missed (which could cause trouble for NGInlineCursor when walking the
+    // be missed (which could cause trouble for InlineCursor when walking the
     // items).
     bool clear_trailing_results =
         new_fragment.BreakToken() && new_fragment.HasItems();
@@ -444,7 +452,7 @@ const NGLayoutResult* NGBlockNode::Layout(
   }
 
   // All these variables may change after layout due to scrollbars changing.
-  NGBoxStrut scrollbars_before = ComputeScrollbars(constraint_space, *this);
+  BoxStrut scrollbars_before = ComputeScrollbars(constraint_space, *this);
   const LayoutUnit inline_size_before =
       fragment_geometry->border_box_size.inline_size;
   const bool intrinsic_logical_widths_dirty_before =
@@ -485,7 +493,7 @@ const NGLayoutResult* NGBlockNode::Layout(
   // Skip this part if side-effects aren't allowed, though. Also skip it if we
   // are resuming layout after a fragmentainer break. Changing the intrinsic
   // inline-size halfway through layout of a node doesn't make sense.
-  NGBoxStrut scrollbars_after = ComputeScrollbars(constraint_space, *this);
+  BoxStrut scrollbars_after = ComputeScrollbars(constraint_space, *this);
   if ((scrollbars_before != scrollbars_after ||
        inline_size_before != fragment_geometry->border_box_size.inline_size) &&
       !NGDisableSideEffectsScope::IsDisabled() && !IsBreakInside(break_token)) {
@@ -753,7 +761,7 @@ void NGBlockNode::PrepareForLayout() const {
   // TODO(layoutng) Can UpdateMarkerTextIfNeeded call be moved
   // somewhere else? List items need up-to-date markers before layout.
   if (IsListItem())
-    To<LayoutNGListItem>(box_.Get())->UpdateMarkerTextIfNeeded();
+    To<LayoutListItem>(box_.Get())->UpdateMarkerTextIfNeeded();
 }
 
 void NGBlockNode::FinishLayout(
@@ -807,7 +815,7 @@ void NGBlockNode::FinishLayout(
   StoreResultInLayoutBox(layout_result, break_token, clear_trailing_results);
 
   if (block_flow) {
-    const NGFragmentItems* items = physical_fragment.Items();
+    const FragmentItems* items = physical_fragment.Items();
     bool has_inline_children = items || HasInlineChildren(block_flow);
 
     // Don't consider display-locked objects as having any children.
@@ -831,9 +839,9 @@ void NGBlockNode::FinishLayout(
       if (items)
         CopyFragmentItemsToLayoutBox(physical_fragment, *items, break_token);
     } else {
-      // We still need to clear |NGInlineNodeData| in case it had inline
+      // We still need to clear |InlineNodeData| in case it had inline
       // children.
-      block_flow->ClearNGInlineNodeData();
+      block_flow->ClearInlineNodeData();
     }
   } else {
     DCHECK(!physical_fragment.HasItems());
@@ -880,7 +888,7 @@ MinMaxSizesResult NGBlockNode::ComputeMinMaxSizes(
   // TODO(layoutng) Can UpdateMarkerTextIfNeeded call be moved
   // somewhere else? List items need up-to-date markers before layout.
   if (IsListItem())
-    To<LayoutNGListItem>(box_.Get())->UpdateMarkerTextIfNeeded();
+    To<LayoutListItem>(box_.Get())->UpdateMarkerTextIfNeeded();
 
   const bool is_in_perform_layout = box_->GetFrameView()->IsInPerformLayout();
   // In some scenarios, GridNG and FlexNG will run layout on their items during
@@ -889,11 +897,11 @@ MinMaxSizesResult NGBlockNode::ComputeMinMaxSizes(
   if (!is_in_perform_layout &&
       (IsGrid() ||
        (IsFlexibleBox() && Style().ResolvedIsColumnFlexDirection()))) {
-    const NGFragmentGeometry fragment_geometry =
+    const FragmentGeometry fragment_geometry =
         CalculateInitialFragmentGeometry(constraint_space, *this,
                                          /* break_token */ nullptr,
                                          /* is_intrinsic */ true);
-    const NGBoxStrut border_padding =
+    const BoxStrut border_padding =
         fragment_geometry.border + fragment_geometry.padding;
     MinMaxSizes sizes;
     sizes.min_size = border_padding.InlineSum();
@@ -944,11 +952,11 @@ MinMaxSizesResult NGBlockNode::ComputeMinMaxSizes(
 
   if (!Style().AspectRatio().IsAuto() && !IsReplaced() &&
       type == MinMaxSizesType::kContent) {
-    const NGFragmentGeometry fragment_geometry =
+    const FragmentGeometry fragment_geometry =
         CalculateInitialFragmentGeometry(constraint_space, *this,
                                          /* break_token */ nullptr,
                                          /* is_intrinsic */ true);
-    const NGBoxStrut border_padding =
+    const BoxStrut border_padding =
         fragment_geometry.border + fragment_geometry.padding;
     if (fragment_geometry.border_box_size.block_size != kIndefiniteSize) {
       const LayoutUnit inline_size_from_ar = InlineSizeFromAspectRatio(
@@ -978,7 +986,7 @@ MinMaxSizesResult NGBlockNode::ComputeMinMaxSizes(
       DependsOnBlockConstraints() ||
       UseParentPercentageResolutionBlockSizeForChildren();
 
-  const NGFragmentGeometry fragment_geometry = CalculateInitialFragmentGeometry(
+  const FragmentGeometry fragment_geometry = CalculateInitialFragmentGeometry(
       constraint_space, *this, /* break_token */ nullptr,
       /* is_intrinsic */ true);
   const LayoutUnit initial_block_size =
@@ -996,7 +1004,7 @@ MinMaxSizesResult NGBlockNode::ComputeMinMaxSizes(
 
   box_->SetIntrinsicLogicalWidthsDirty(kMarkOnlyThis);
 
-  const NGBoxStrut border_padding =
+  const BoxStrut border_padding =
       fragment_geometry.border + fragment_geometry.padding;
 
   MinMaxSizesResult result = ComputeMinMaxSizesWithAlgorithm(
@@ -1029,8 +1037,8 @@ MinMaxSizesResult NGBlockNode::ComputeMinMaxSizes(
       /* child_depends_on_block_constraints */
       result.depends_on_block_constraints, result.sizes);
 
-  if (IsNGTableCell()) {
-    To<LayoutNGTableCell>(box_.Get())
+  if (IsTableCell()) {
+    To<LayoutTableCell>(box_.Get())
         ->SetIntrinsicLogicalWidthsBorderSizes(
             constraint_space.TableCellBorders());
   }
@@ -1063,6 +1071,11 @@ NGLayoutInputNode NGBlockNode::NextSibling() const {
 }
 
 NGLayoutInputNode NGBlockNode::FirstChild() const {
+  // If this layout is blocked by a display-lock, then we pretend this node has
+  // no children.
+  if (ChildLayoutBlockedByDisplayLock()) {
+    return nullptr;
+  }
   auto* block = DynamicTo<LayoutBlock>(box_.Get());
   if (UNLIKELY(!block))
     return NGBlockNode(box_->FirstChildBox());
@@ -1072,7 +1085,7 @@ NGLayoutInputNode NGBlockNode::FirstChild() const {
   if (!AreNGBlockFlowChildrenInline(block))
     return NGBlockNode(To<LayoutBox>(child));
 
-  NGInlineNode inline_node(To<LayoutBlockFlow>(block));
+  InlineNode inline_node(To<LayoutBlockFlow>(block));
   if (!inline_node.IsBlockLevel())
     return std::move(inline_node);
 
@@ -1103,14 +1116,14 @@ NGBlockNode NGBlockNode::GetRenderedLegend() const {
   if (!IsFieldsetContainer())
     return nullptr;
   return NGBlockNode(
-      LayoutNGFieldset::FindInFlowLegend(*To<LayoutBlock>(box_.Get())));
+      LayoutFieldset::FindInFlowLegend(*To<LayoutBlock>(box_.Get())));
 }
 
 NGBlockNode NGBlockNode::GetFieldsetContent() const {
   if (!IsFieldsetContainer())
     return nullptr;
   return NGBlockNode(
-      To<LayoutNGFieldset>(box_.Get())->FindAnonymousFieldsetContentBox());
+      To<LayoutFieldset>(box_.Get())->FindAnonymousFieldsetContentBox());
 }
 
 LayoutUnit NGBlockNode::EmptyLineBlockSize(
@@ -1234,7 +1247,7 @@ void NGBlockNode::PlaceChildrenInLayoutBox(
     bool needs_invalidation_check) const {
   for (const auto& child_fragment : physical_fragment.Children()) {
     // Skip any line-boxes we have as children, this is handled within
-    // NGInlineNode at the moment.
+    // InlineNode at the moment.
     if (!child_fragment->IsBox())
       continue;
 
@@ -1273,7 +1286,7 @@ void NGBlockNode::PlaceChildrenInFlowThread(
   // design document for legacy multicol:
   // https://www.chromium.org/developers/design-documents/multi-column-layout
 
-  NGBoxStrut border_scrollbar_padding;
+  BoxStrut border_scrollbar_padding;
   WritingModeConverter converter(space.GetWritingDirection(),
                                  physical_fragment.Size());
   LayoutUnit column_row_inline_size;
@@ -1352,7 +1365,7 @@ void NGBlockNode::PlaceChildrenInFlowThread(
       LayoutBox* placeholder = child_box->SpannerPlaceholder();
       if (!child_fragment.BreakToken()) {
         // Last fragment for this spanner. Update its placeholder.
-        placeholder->SetLocation(child_box->Location());
+        placeholder->SetLocation(child_box->DeprecatedLocation());
         placeholder->SetSize(child_box->Size());
       }
 
@@ -1409,7 +1422,7 @@ void NGBlockNode::PlaceChildrenInFlowThread(
         LayoutPoint point = LayoutBoxUtils::ComputeLocation(
             child_fragment, child.offset, physical_fragment,
             previous_container_break_token);
-        flow_thread->SetLocationAndUpdateOverflowControlsIfNeeded(point);
+        flow_thread->SetLocation(point);
         flow_thread->SetLogicalWidth(logical_size.inline_size);
         has_processed_first_column_in_flow_thread = true;
       }
@@ -1487,7 +1500,7 @@ void NGBlockNode::PlaceChildrenInFlowThread(
     // there, but they aren't stored as child fragments of |column| in that case
     // (but rather inside fragment items). Make sure that they get positioned,
     // too.
-    if (const NGFragmentItems* items = child_fragment.Items()) {
+    if (const FragmentItems* items = child_fragment.Items()) {
       CopyFragmentItemsToLayoutBox(child_fragment, *items,
                                    previous_column_break_token);
     }
@@ -1515,7 +1528,7 @@ void NGBlockNode::CopyChildFragmentPosition(
   LayoutPoint point = LayoutBoxUtils::ComputeLocation(
       child_fragment, offset, container_fragment,
       previous_container_break_token);
-  layout_box->SetLocationAndUpdateOverflowControlsIfNeeded(point);
+  layout_box->SetLocation(point);
 
   if (needs_invalidation_check)
     layout_box->SetShouldCheckForPaintInvalidation();
@@ -1533,7 +1546,7 @@ void NGBlockNode::MakeRoomForExtraColumns(LayoutUnit block_size) const {
 
 void NGBlockNode::CopyFragmentItemsToLayoutBox(
     const NGPhysicalBoxFragment& container,
-    const NGFragmentItems& items,
+    const FragmentItems& items,
     const NGBlockBreakToken* previous_break_token) const {
   LayoutUnit previously_consumed_block_size;
   if (previous_break_token) {
@@ -1541,7 +1554,7 @@ void NGBlockNode::CopyFragmentItemsToLayoutBox(
         previous_break_token->ConsumedBlockSizeForLegacy();
   }
   bool initial_container_is_flipped = Style().IsFlippedBlocksWritingMode();
-  for (NGInlineCursor cursor(container, items); cursor; cursor.MoveToNext()) {
+  for (InlineCursor cursor(container, items); cursor; cursor.MoveToNext()) {
     if (const NGPhysicalBoxFragment* child = cursor.Current().BoxFragment()) {
       // Replaced elements and inline blocks need Location() set relative to
       // their block container. Similarly for block-in-inline anonymous wrapper
@@ -1565,8 +1578,7 @@ void NGBlockNode::CopyFragmentItemsToLayoutBox(
           maybe_flipped_offset.top += previously_consumed_block_size;
         else
           maybe_flipped_offset.left += previously_consumed_block_size;
-        layout_box->SetLocationAndUpdateOverflowControlsIfNeeded(
-            maybe_flipped_offset.ToLayoutPoint());
+        layout_box->SetLocation(maybe_flipped_offset.ToLayoutPoint());
         if (UNLIKELY(layout_box->HasSelfPaintingLayer()))
           layout_box->Layer()->SetNeedsVisualOverflowRecalc();
 #if DCHECK_IS_ON()
@@ -1587,14 +1599,14 @@ void NGBlockNode::CopyFragmentItemsToLayoutBox(
 }
 
 bool NGBlockNode::IsInlineFormattingContextRoot(
-    NGInlineNode* first_child_out) const {
+    InlineNode* first_child_out) const {
   if (const auto* block = DynamicTo<LayoutBlockFlow>(box_.Get())) {
     if (!AreNGBlockFlowChildrenInline(block))
       return false;
     NGLayoutInputNode first_child = FirstChild();
     if (first_child.IsInline()) {
       if (first_child_out)
-        *first_child_out = To<NGInlineNode>(first_child);
+        *first_child_out = To<InlineNode>(first_child);
       return true;
     }
   }
@@ -1697,8 +1709,7 @@ bool NGBlockNode::HasNonVisibleBlockOverflow() const {
 }
 
 bool NGBlockNode::IsCustomLayoutLoaded() const {
-  DCHECK(box_->IsLayoutNGCustom());
-  return To<LayoutNGCustom>(box_.Get())->IsLoaded();
+  return To<LayoutCustom>(box_.Get())->IsLoaded();
 }
 
 MathScriptType NGBlockNode::ScriptType() const {
@@ -1780,7 +1791,7 @@ void NGBlockNode::UpdateMarginPaddingInfoIfNeeded(
     // is able to return the correct value. This isn't ideal, but eventually
     // we'll answer these queries from the fragment.
     const auto* containing_block = box_->ContainingBlock();
-    if (UNLIKELY(containing_block && containing_block->IsLayoutNGGrid())) {
+    if (UNLIKELY(containing_block && containing_block->IsLayoutGrid())) {
       box_->SetOverrideContainingBlockContentLogicalWidth(
           space.PercentageResolutionInlineSizeForParentWritingMode());
     }
@@ -1808,9 +1819,8 @@ void NGBlockNode::UpdateShapeOutsideInfoIfNeeded(
   // model and computing the correct sizes of shapes.
   ShapeOutsideInfo* shape_outside = box_->GetShapeOutsideInfo();
   WritingMode writing_mode = box_->ContainingBlock()->Style()->GetWritingMode();
-  NGBoxStrut margins =
-      ComputePhysicalMargins(constraint_space, Style())
-          .ConvertToLogical({writing_mode, TextDirection::kLtr});
+  BoxStrut margins = ComputePhysicalMargins(constraint_space, Style())
+                         .ConvertToLogical({writing_mode, TextDirection::kLtr});
   shape_outside->SetReferenceBoxLogicalSize(
       box_size.ConvertToLogical(writing_mode),
       LogicalSize(margins.InlineSum(), margins.BlockSum()));

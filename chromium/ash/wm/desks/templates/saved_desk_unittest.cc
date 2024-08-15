@@ -318,10 +318,14 @@ class SavedDeskTest : public OverviewTestBase {
       const auto* dialog_accept_button = ash::GetSavedDeskDialogAcceptButton();
       LeftClickOn(dialog_accept_button);
     }
+
     // Wait for the dialog to close.
     base::RunLoop().RunUntilIdle();
     SavedDeskGridViewTestApi(grid_view).WaitForItemMoveAnimationDone();
     SavedDeskLibraryViewTestApi(saved_desk_library_view).WaitForAnimationDone();
+    SavedDeskPresenterTestApi(
+        GetOverviewGridList()[0]->overview_session()->saved_desk_presenter())
+        .MaybeWaitForModel();
   }
 
   void WaitForSavedDeskLibrary() {
@@ -989,8 +993,7 @@ TEST_F(SavedDeskTest, SaveDeskButtonContainerAligned) {
   // https://crbug.com/1289020.
 
   // Delete an overview item and verify.
-  auto* item = GetOverviewItemForWindow(test_widget->GetNativeWindow());
-  item->CloseWindow();
+  GetOverviewItemForWindow(test_widget->GetNativeWindow())->CloseWindows();
 
   // `NativeWidgetAura::Close()` fires a post task.
   base::RunLoop().RunUntilIdle();
@@ -1044,8 +1047,7 @@ TEST_F(SavedDeskTest, SaveDeskButtonFocusRing) {
 
 // Tests that the save desk as template button and save for later button are
 // enabled and disabled as expected based on the number of saved desk entries.
-// Disabled for being flaky: crbug.com/1472035
-TEST_F(SavedDeskTest, DISABLED_SaveDeskButtonsEnabledDisabled) {
+TEST_F(SavedDeskTest, SaveDeskButtonsEnabledDisabled) {
   // Prepare the test environment, like creating an app window which should be
   // supported.
   auto no_app_id_window = CreateAppWindow();
@@ -1209,35 +1211,6 @@ TEST_F(SavedDeskTest, SaveDeskAsTemplateButtonShowsSavedDeskGrid) {
   EXPECT_TRUE(GetOverviewGridList()[0]->IsShowingSavedDeskLibrary());
 }
 
-// SaveDeskButtonContainerVisibilityObserver waits for the save desk buttons on
-// the observed root window to become visible.
-class SaveDeskButtonContainerVisibilityObserver : public aura::WindowObserver {
- public:
-  explicit SaveDeskButtonContainerVisibilityObserver(aura::Window* root_window)
-      : root_window_(root_window) {
-    root_window_->AddObserver(this);
-  }
-  SaveDeskButtonContainerVisibilityObserver(
-      const SaveDeskButtonContainerVisibilityObserver&) = delete;
-  SaveDeskButtonContainerVisibilityObserver& operator=(
-      const SaveDeskButtonContainerVisibilityObserver&) = delete;
-  ~SaveDeskButtonContainerVisibilityObserver() override {
-    DCHECK(root_window_);
-    root_window_->RemoveObserver(this);
-  }
-
-  void Wait() { run_loop_.Run(); }
-
-  void OnWindowVisibilityChanged(aura::Window* window, bool visible) override {
-    if (visible && window->GetId() == kShellWindowId_SaveDeskButtonContainer)
-      run_loop_.Quit();
-  }
-
- private:
-  base::RunLoop run_loop_;
-  raw_ptr<aura::Window> root_window_;
-};
-
 // Tests that the desks bar is created before the save desk buttons are visible.
 // Regression test for https://crbug.com/1349971.
 TEST_F(SavedDeskTest, DesksBarLoadsBeforeSaveDeskButtons) {
@@ -1251,13 +1224,13 @@ TEST_F(SavedDeskTest, DesksBarLoadsBeforeSaveDeskButtons) {
 
   aura::Window* root_window = Shell::GetPrimaryRootWindow();
 
-  SaveDeskButtonContainerVisibilityObserver button_container_observer(
-      root_window);
+  views::NamedWidgetShownWaiter waiter(views::test::AnyWidgetTestPasskey{},
+                                       "SaveDeskButtonContainerWidget");
   EnterOverview();
-  button_container_observer.Wait();
+  waiter.WaitIfNeededAndGet();
 
   // Ensure we are in overview.
-  auto* overview_controller = Shell::Get()->overview_controller();
+  auto* overview_controller = OverviewController::Get();
   ASSERT_TRUE(overview_controller->InOverviewSession());
 
   // Check to see that the desks bar has been created. Previously, there was a
@@ -3556,18 +3529,13 @@ TEST_F(SavedDeskTest, TimeStrFormat) {
   // ``Tomorrow 10:30 AM`` for test.
   base::Time time_long_ago, time_today, time_yesterday;
 
-  // 01-01-2022 10:30 AM.
-  base::Time::Exploded exploded_long_ago = {
-      /*year=*/2022,
-      /*month=*/1,
-      /*day_of_week=*/6,
-      /*day_of_month=*/1,
-      /*hour=*/10,
-      /*minute=*/30,
-      /*second=*/0,
-      /*millisecond=*/0,
-  };
-  ASSERT_TRUE(base::Time::FromLocalExploded(exploded_long_ago, &time_long_ago));
+  static constexpr base::Time::Exploded kLongAgo = {.year = 2022,
+                                                    .month = 1,
+                                                    .day_of_week = 6,
+                                                    .day_of_month = 1,
+                                                    .hour = 10,
+                                                    .minute = 30};
+  ASSERT_TRUE(base::Time::FromLocalExploded(kLongAgo, &time_long_ago));
 
   // Today 10:30 AM.
   base::Time::Exploded exploded_today;
@@ -3651,7 +3619,7 @@ TEST_F(SavedDeskTest, SnapWindowTest) {
   LeftClickOn(GetItemViewFromSavedDeskGrid(/*grid_item_index=*/0));
 
   // Test that overview is still active and there is no crash.
-  EXPECT_TRUE(Shell::Get()->overview_controller()->InOverviewSession());
+  EXPECT_TRUE(OverviewController::Get()->InOverviewSession());
 }
 
 // Test that when an unsupported window left in overview grid and a supported
@@ -4720,7 +4688,7 @@ TEST_F(DeskSaveAndRecallTest, NewDeskButtonDisabledWhenRecallingToMaxDesks) {
   ActivateDesk(controller->desks().back().get());
   aura::WindowTracker tracker({CreateAppWindow().release()});
   ToggleOverview();
-  ASSERT_TRUE(Shell::Get()->overview_controller()->InOverviewSession());
+  ASSERT_TRUE(OverviewController::Get()->InOverviewSession());
 
   // We should have the max number of desks at this point and therefore the new
   // desk button should be disabled.

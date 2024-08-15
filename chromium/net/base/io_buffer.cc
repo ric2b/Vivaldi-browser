@@ -4,6 +4,8 @@
 
 #include "net/base/io_buffer.h"
 
+#include <utility>
+
 #include "base/check_op.h"
 #include "base/numerics/safe_math.h"
 
@@ -11,26 +13,21 @@ namespace net {
 
 // TODO(eroman): IOBuffer is being converted to require buffer sizes and offsets
 // be specified as "size_t" rather than "int" (crbug.com/488553). To facilitate
-// this move (since LOTS of code needs to be updated), both "size_t" and "int
-// are being accepted. When using "size_t" this function ensures that it can be
-// safely converted to an "int" without truncation.
+// this move (since LOTS of code needs to be updated), this function ensures
+// that sizes can be safely converted to an "int" without truncation. The
+// assert ensures calling this with an "int" argument is also safe.
 void IOBuffer::AssertValidBufferSize(size_t size) {
+  static_assert(sizeof(size_t) >= sizeof(int));
   base::CheckedNumeric<int>(size).ValueOrDie();
 }
 
-void IOBuffer::AssertValidBufferSize(int size) {
-  CHECK_GE(size, 0);
-}
-
-IOBuffer::IOBuffer() : data_(nullptr) {}
+IOBuffer::IOBuffer() = default;
 
 IOBuffer::IOBuffer(size_t buffer_size) {
   AssertValidBufferSize(buffer_size);
-  data_ = new char[buffer_size];
-#if BUILDFLAG(IS_IOS)
-  // TODO(crbug.com/1335423): Investigating crashes on iOS.
-  CHECK(data_);
-#endif  // BUILDFLAG(IS_IOS)
+  if (buffer_size) {
+    data_ = new char[buffer_size];
+  }
 }
 
 IOBuffer::IOBuffer(char* data)
@@ -52,28 +49,15 @@ IOBufferWithSize::IOBufferWithSize(char* data, size_t size)
 
 IOBufferWithSize::~IOBufferWithSize() = default;
 
-StringIOBuffer::StringIOBuffer(const std::string& s)
-    : IOBuffer(static_cast<char*>(nullptr)), string_data_(s) {
-  AssertValidBufferSize(s.size());
-  data_ = const_cast<char*>(string_data_.data());
-}
-
-StringIOBuffer::StringIOBuffer(std::unique_ptr<std::string> s)
-    : IOBuffer(static_cast<char*>(nullptr)) {
-  AssertValidBufferSize(s->size());
-  string_data_.swap(*s.get());
-  data_ = const_cast<char*>(string_data_.data());
+StringIOBuffer::StringIOBuffer(std::string s) : string_data_(std::move(s)) {
+  AssertValidBufferSize(string_data_.size());
+  data_ = string_data_.data();
 }
 
 StringIOBuffer::~StringIOBuffer() {
   // We haven't allocated the buffer, so remove it before the base class
   // destructor tries to delete[] it.
   data_ = nullptr;
-}
-
-DrainableIOBuffer::DrainableIOBuffer(scoped_refptr<IOBuffer> base, int size)
-    : IOBuffer(base->data()), base_(std::move(base)), size_(size) {
-  AssertValidBufferSize(size);
 }
 
 DrainableIOBuffer::DrainableIOBuffer(scoped_refptr<IOBuffer> base, size_t size)
@@ -152,9 +136,8 @@ PickledIOBuffer::~PickledIOBuffer() {
   data_ = nullptr;
 }
 
-WrappedIOBuffer::WrappedIOBuffer(const char* data)
-    : IOBuffer(const_cast<char*>(data)) {
-}
+WrappedIOBuffer::WrappedIOBuffer(const char* data, size_t size)
+    : IOBufferWithSize(const_cast<char*>(data), size) {}
 
 WrappedIOBuffer::~WrappedIOBuffer() {
   data_ = nullptr;

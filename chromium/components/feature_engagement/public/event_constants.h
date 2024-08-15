@@ -65,6 +65,9 @@ extern const char kWebUITabStripOpened[];
 // The PWA was installed by the user.
 extern const char kDesktopPwaInstalled[];
 
+// A module's actions were clicked on the NewTabPage.
+extern const char kDesktopNTPModuleUsed[];
+
 // The user entered the special "focus help bubble" accelerator.
 extern const char kFocusHelpBubbleAcceleratorPressed[];
 
@@ -77,9 +80,6 @@ extern const char kBatterySaverDialogShown[];
 
 // The user has opened the high efficiency page action chip
 extern const char kHighEfficiencyDialogShown[];
-
-// The user clicked on the performance menu item
-extern const char kPerformanceMenuItemActivated[];
 
 // Extensions menu is opened when any extension has access to the current site.
 extern const char kExtensionsMenuOpenedWhileExtensionHasAccess[];
@@ -133,6 +133,9 @@ extern const char kPriceNotificationsUsed[];
 
 // The user has been shown a default browser promo.
 extern const char kDefaultBrowserPromoShown[];
+
+// The user tapped Remind Me Later on a default browser promo.
+extern const char kDefaultBrowserPromoRemindMeLater[];
 
 // The Password Manager widget promo was triggered.
 extern const char kPasswordManagerWidgetPromoTriggered[];
@@ -196,6 +199,15 @@ extern const char kShareToolbarItemUsed[];
 // The user has met a condition that makes the default browser video promo
 // eligible to be displayed.
 extern const char kDefaultBrowserVideoPromoConditionsMet[];
+
+// The user has triggered the Lens button in the Omnibox keyboard.
+extern const char kLensButtonKeyboardUsed[];
+
+// The user has triggered Parcel Tracking.
+extern const char kParcelTrackingTriggered[];
+
+// The user has tracked a parcel.
+extern const char kParcelTracked[];
 
 #endif  // BUILDFLAG(IS_IOS)
 

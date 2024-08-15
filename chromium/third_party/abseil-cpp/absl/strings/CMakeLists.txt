@@ -38,9 +38,9 @@ absl_cc_library(
     "ascii.h"
     "charconv.h"
     "escaping.h"
+    "has_absl_stringify.h"
     "internal/damerau_levenshtein_distance.h"
     "internal/string_constant.h"
-    "internal/has_absl_stringify.h"
     "match.h"
     "numbers.h"
     "str_cat.h"
@@ -103,6 +103,18 @@ absl_cc_library(
   PUBLIC
 )
 
+absl_cc_library(
+  NAME
+    has_ostream_operator
+  HDRS
+    "has_ostream_operator.h"
+  COPTS
+    ${ABSL_DEFAULT_COPTS}
+  DEPS
+    absl::config
+  PUBLIC
+)
+
 # Internal-only target, do not depend on directly.
 absl_cc_library(
   NAME
@@ -152,6 +164,32 @@ absl_cc_test(
     absl::fixed_array
     GTest::gmock_main
     absl::check
+)
+
+absl_cc_test(
+  NAME
+    has_absl_stringify_test
+  SRCS
+    "has_absl_stringify_test.cc"
+  COPTS
+    ${ABSL_TEST_COPTS}
+  DEPS
+    absl::optional
+    absl::strings
+    GTest::gmock_main
+)
+
+absl_cc_test(
+  NAME
+    has_ostream_operator_test
+  SRCS
+    "has_ostream_operator_test.cc"
+  COPTS
+    ${ABSL_TEST_COPTS}
+  DEPS
+    absl::has_ostream_operator
+    absl::optional
+    GTest::gmock_main
 )
 
 absl_cc_test(
@@ -637,8 +675,6 @@ absl_cc_library(
     "internal/cord_rep_crc.h"
     "internal/cord_rep_consume.h"
     "internal/cord_rep_flat.h"
-    "internal/cord_rep_ring.h"
-    "internal/cord_rep_ring_reader.h"
   SRCS
     "internal/cord_internal.cc"
     "internal/cord_rep_btree.cc"
@@ -646,7 +682,6 @@ absl_cc_library(
     "internal/cord_rep_btree_reader.cc"
     "internal/cord_rep_crc.cc"
     "internal/cord_rep_consume.cc"
-    "internal/cord_rep_ring.cc"
   COPTS
     ${ABSL_DEFAULT_COPTS}
   DEPS
@@ -1112,41 +1147,6 @@ absl_cc_test(
     absl::cord_internal
     absl::cord_rep_test_util
     absl::crc_cord_state
-    GTest::gmock_main
-)
-
-absl_cc_test(
-  NAME
-    cord_ring_test
-  SRCS
-    "cord_ring_test.cc"
-  COPTS
-    ${ABSL_TEST_COPTS}
-  DEPS
-    absl::base
-    absl::config
-    absl::cord_internal
-    absl::core_headers
-    absl::raw_logging_internal
-    absl::span
-    absl::strings
-    GTest::gmock_main
-)
-
-absl_cc_test(
-  NAME
-    cord_ring_reader_test
-  SRCS
-    "cord_ring_reader_test.cc"
-  COPTS
-    ${ABSL_TEST_COPTS}
-  DEPS
-    absl::base
-    absl::config
-    absl::cord_internal
-    absl::core_headers
-    absl::span
-    absl::strings
     GTest::gmock_main
 )
 

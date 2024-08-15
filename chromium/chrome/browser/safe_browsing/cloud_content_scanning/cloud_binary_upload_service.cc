@@ -9,6 +9,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/ranges/algorithm.h"
 #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
+#include "chrome/browser/enterprise/connectors/connectors_service.h"
 #include "chrome/browser/enterprise/util/affiliation.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager.h"
@@ -61,17 +62,18 @@ net::NetworkTrafficAnnotationTag GetTrafficAnnotationTag(bool is_app) {
     return net::DefineNetworkTrafficAnnotation(
         "safe_browsing_binary_upload_app", R"(
         semantics {
-          sender: "Advanced Protection Program"
+          sender: "Safe Browsing"
           description:
-            "For users part of Google's Advanced Protection Program, when a "
-            "file is downloaded, Chrome will upload that file to Safe Browsing "
-            "for detailed scanning."
+            "For users opted in to Enhanced Safe Browsing or Google's Advanced "
+            "Protection Program, when a file is downloaded, Chrome may upload "
+            "that file to Safe Browsing for detailed scanning."
           trigger:
             "The browser will upload the file to Google when the user "
-            "downloads a file, and the browser is enrolled into the "
-            "Advanced Protection Program."
+            "downloads a suspicious file and the user is opted in to Enhanced "
+            "Safe Browsing or Google's Advanced Protection Program."
           data:
-            "The downloaded file. Also an access token (enterprise only)."
+            "The downloaded file and metadata about how the user came to "
+            "download that file (including URLs)."
           destination: GOOGLE_OWNED_SERVICE
           internal {
             contacts {
@@ -85,13 +87,13 @@ net::NetworkTrafficAnnotationTag GetTrafficAnnotationTag(bool is_app) {
           last_reviewed: "2023-07-28"
         }
         policy {
-          cookies_allowed: YES
-          cookies_store: "Safe Browsing Cookie Store"
+          cookies_allowed: NO
           setting: "This is disabled by default an can only be enabled by "
-            "policy."
+            "opting in to Enhanced Safe Browsing or the Advanced Protection "
+            "Program."
           chrome_policy {
-            AdvancedProtectionAllowed {
-              AdvancedProtectionAllowed: false
+            SafeBrowsingDeepScanningEnabled: {
+              SafeBrowsingDeepScanningEnabled: false
             }
           }
         }
@@ -173,7 +175,17 @@ bool CanUseAccessToken(const BinaryUploadService::Request& request,
     return true;
   }
 
-  return chrome::enterprise_util::IsProfileAffiliated(profile);
+  // The access token can always be included in affiliated use cases.
+  if (chrome::enterprise_util::IsProfileAffiliated(profile)) {
+    return true;
+  }
+
+  // This code being reached implies that the browser and profile are
+  // not affiliated. In that case, and only with the new relaxed affiliation
+  // logic, it's ok to attach the access token for profile requests.
+  return request.per_profile_request() &&
+         base::FeatureList::IsEnabled(
+             enterprise_connectors::kEnableRelaxedAffiliationCheck);
 }
 
 }  // namespace
@@ -517,7 +529,8 @@ void CloudBinaryUploadService::OnGetRequestData(Request::Id request_id,
   upload_request->set_access_token(request->access_token());
 
   WebUIInfoSingleton::GetInstance()->AddToDeepScanRequests(
-      request->per_profile_request(), request->content_analysis_request());
+      request->per_profile_request(), request->access_token(),
+      request->content_analysis_request());
 
   // |request| might have been deleted by the call to Start() in tests, so don't
   // dereference it afterwards.
@@ -625,7 +638,8 @@ void CloudBinaryUploadService::FinishRequest(
   // We add the request here in case we never actually uploaded anything, so
   // it wasn't added in OnGetRequestData
   WebUIInfoSingleton::GetInstance()->AddToDeepScanRequests(
-      request->per_profile_request(), request->content_analysis_request());
+      request->per_profile_request(), request->access_token(),
+      request->content_analysis_request());
   WebUIInfoSingleton::GetInstance()->AddToDeepScanResponses(
       active_tokens_[request->id()], ResultToString(result), response);
 

@@ -13,6 +13,7 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Typeface;
 import android.net.Uri;
+import android.os.Build;
 import android.text.Spannable;
 import android.text.SpannableString;
 import android.text.TextUtils;
@@ -22,6 +23,9 @@ import android.text.style.StyleSpan;
 import androidx.annotation.MainThread;
 import androidx.annotation.Nullable;
 
+import org.jni_zero.CalledByNative;
+import org.jni_zero.NativeMethods;
+
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.BuildInfo;
 import org.chromium.base.ContentUriUtils;
@@ -29,8 +33,6 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.FileUtils;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.Log;
-import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
@@ -52,8 +54,9 @@ import org.chromium.chrome.browser.profiles.ProfileKey;
 import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
-import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
+import org.chromium.chrome.browser.tabmodel.document.ChromeAsyncTabLauncher;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
+import org.chromium.components.background_task_scheduler.TaskIds;
 import org.chromium.components.download.DownloadState;
 import org.chromium.components.download.ResumeMode;
 import org.chromium.components.embedder_support.util.UrlConstants;
@@ -67,7 +70,6 @@ import org.chromium.components.offline_items_collection.OfflineItem;
 import org.chromium.components.offline_items_collection.OpenParams;
 import org.chromium.content_public.browser.BrowserStartupController;
 import org.chromium.content_public.browser.LoadUrlParams;
-import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.widget.Toast;
@@ -90,6 +92,13 @@ public class DownloadUtils {
     private static final String DOCUMENTS_UI_PACKAGE_NAME = "com.android.documentsui";
     public static final String EXTRA_SHOW_PREFETCHED_CONTENT =
             "org.chromium.chrome.browser.download.SHOW_PREFETCHED_CONTENT";
+
+    // TODO(crbug/1483735): Remove this once robolectric support is added.
+    private static Integer sMinSdkVersionForUserInitiatedJobsForTesting;
+
+    public static void setMinSdkVersionForUserInitiatedJobsForTesting(Integer minVersion) {
+        sMinSdkVersionForUserInitiatedJobsForTesting = minVersion;
+    }
 
     /**
      * Displays the download manager UI. Note the UI is different on tablets and on phones.
@@ -136,8 +145,7 @@ public class DownloadUtils {
 
         // Use tab's profile if a valid tab exists.
         if (otrProfileID == null && tab != null) {
-            Profile profile = Profile.fromWebContents(tab.getWebContents());
-            otrProfileID = profile != null ? profile.getOTRProfileID() : otrProfileID;
+            otrProfileID = tab.getProfile().getOTRProfileID();
         }
 
         // If the profile is off-the-record and it does not exist, then do not start the activity.
@@ -151,8 +159,8 @@ public class DownloadUtils {
             LoadUrlParams params = new LoadUrlParams(UrlConstants.DOWNLOADS_URL);
             if (tab == null || !tab.isInitialized()) {
                 // Open a new tab, which pops Chrome into the foreground.
-                TabDelegate delegate = new TabDelegate(false);
-                delegate.createNewTab(params, TabLaunchType.FROM_CHROME_UI, null);
+                ChromeAsyncTabLauncher delegate = new ChromeAsyncTabLauncher(false);
+                delegate.launchNewTab(params, TabLaunchType.FROM_CHROME_UI, null);
             } else {
                 // Download Home shows up inside an existing tab, but only if the last Activity was
                 // the ChromeTabbedActivity.
@@ -241,6 +249,32 @@ public class DownloadUtils {
     }
 
     /**
+     * Called to determine whether to use user initiated Jobs API for ensuring download completion.
+     * @return True for using Jobs. False for using Foreground service.
+     */
+    public static boolean shouldUseUserInitiatedJobs() {
+        int minSupportedVersion = sMinSdkVersionForUserInitiatedJobsForTesting == null
+                ? 34
+                : sMinSdkVersionForUserInitiatedJobsForTesting;
+        return ChromeFeatureList.sDownloadsMigrateToJobsAPI.isEnabled()
+                && Build.VERSION.SDK_INT >= minSupportedVersion;
+    }
+
+    /**
+     * Called to determine whether a given job is a user-initiated job or a regular job.
+     * @return Whether the job is an user initiated job.
+     */
+    public static boolean isUserInitiatedJob(int taskId) {
+        switch (taskId) {
+            case TaskIds.DOWNLOAD_AUTO_RESUMPTION_UNMETERED_JOB_ID:
+            case TaskIds.DOWNLOAD_AUTO_RESUMPTION_ANY_NETWORK_JOB_ID:
+                return DownloadUtils.shouldUseUserInitiatedJobs();
+            default:
+                return false;
+        }
+    }
+
+    /**
      * @return Whether or not pagination headers should be shown on download home.
      */
     public static boolean shouldShowPaginationHeaders() {
@@ -297,8 +331,7 @@ public class DownloadUtils {
         if (tab.isShowingErrorPage()) {
             // The download needs to be scheduled to happen at later time due to current network
             // error.
-            final OfflinePageBridge bridge =
-                    OfflinePageBridge.getForProfile(Profile.fromWebContents(tab.getWebContents()));
+            final OfflinePageBridge bridge = OfflinePageBridge.getForProfile(tab.getProfile());
             bridge.scheduleDownload(tab.getWebContents(), OfflinePageBridge.ASYNC_NAMESPACE,
                     tab.getUrl().getSpec(), DownloadUiActionFlags.PROMPT_DUPLICATE, origin);
         } else {
@@ -306,13 +339,7 @@ public class DownloadUtils {
             OfflinePageDownloadBridge.startDownload(tab, origin);
             DownloadUtils.recordDownloadPageMetrics(tab);
         }
-
-        WebContents webContents = tab.getWebContents();
-        if (webContents == null) return;
-
-        Profile profile = Profile.fromWebContents(webContents);
-        if (profile == null) return;
-        Tracker tracker = TrackerFactory.getTrackerForProfile(profile);
+        Tracker tracker = TrackerFactory.getTrackerForProfile(tab.getProfile());
         tracker.notifyEvent(EventConstants.DOWNLOAD_PAGE_STARTED);
     }
 
@@ -334,8 +361,7 @@ public class DownloadUtils {
 
         // Download will only be allowed for the error page if download button is shown in the page.
         if (tab.isShowingErrorPage()) {
-            final OfflinePageBridge bridge =
-                    OfflinePageBridge.getForProfile(Profile.fromWebContents(tab.getWebContents()));
+            final OfflinePageBridge bridge = OfflinePageBridge.getForProfile(tab.getProfile());
             return bridge.isShowingDownloadButtonInErrorPage(tab.getWebContents());
         }
 

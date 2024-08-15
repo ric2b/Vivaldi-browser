@@ -239,7 +239,6 @@ public abstract class TabModelFilter implements TabModelObserver, TabList {
     public void didSelectTab(Tab tab, int type, int lastId) {
         selectTab(tab);
         if (!shouldNotifyObserversOnSetIndex()) return;
-        if (!shouldNotifyObservers()) return; // Vivaldi
         for (TabModelObserver observer : mFilteredObservers) {
             observer.didSelectTab(tab, type, lastId);
         }
@@ -248,7 +247,6 @@ public abstract class TabModelFilter implements TabModelObserver, TabList {
     @Override
     public void willCloseTab(Tab tab, boolean animate, boolean didCloseAlone) {
         closeTab(tab);
-        if (!shouldNotifyObservers()) return; // Vivaldi
         for (TabModelObserver observer : mFilteredObservers) {
             observer.willCloseTab(tab, animate, didCloseAlone);
         }
@@ -256,7 +254,6 @@ public abstract class TabModelFilter implements TabModelObserver, TabList {
 
     @Override
     public void onFinishingTabClosure(Tab tab) {
-        if (!shouldNotifyObservers()) return; // Vivaldi
         for (TabModelObserver observer : mFilteredObservers) {
             observer.onFinishingTabClosure(tab);
         }
@@ -264,7 +261,6 @@ public abstract class TabModelFilter implements TabModelObserver, TabList {
 
     @Override
     public void onFinishingMultipleTabClosure(List<Tab> tabs) {
-        if (!shouldNotifyObservers()) return; // Vivaldi
         for (TabModelObserver observer : mFilteredObservers) {
             observer.onFinishingMultipleTabClosure(tabs);
         }
@@ -272,7 +268,6 @@ public abstract class TabModelFilter implements TabModelObserver, TabList {
 
     @Override
     public void willAddTab(Tab tab, int type) {
-        if (!shouldNotifyObservers()) return; // Vivaldi
         for (TabModelObserver observer : mFilteredObservers) {
             observer.willAddTab(tab, type);
         }
@@ -282,7 +277,6 @@ public abstract class TabModelFilter implements TabModelObserver, TabList {
     public void didAddTab(Tab tab, @TabLaunchType int type, @TabCreationState int creationState,
             boolean markedForSelection) {
         addTab(tab);
-        if (!shouldNotifyObservers()) return; // Vivaldi
         for (TabModelObserver observer : mFilteredObservers) {
             observer.didAddTab(tab, type, creationState, markedForSelection);
         }
@@ -297,7 +291,6 @@ public abstract class TabModelFilter implements TabModelObserver, TabList {
 
     @Override
     public void tabPendingClosure(Tab tab) {
-        if (!shouldNotifyObservers()) return; // Vivaldi
         for (TabModelObserver observer : mFilteredObservers) {
             observer.tabPendingClosure(tab);
         }
@@ -314,7 +307,6 @@ public abstract class TabModelFilter implements TabModelObserver, TabList {
     public void tabClosureUndone(Tab tab) {
         addTab(tab);
         reorder();
-        if (!shouldNotifyObservers()) return; // Vivaldi
         for (TabModelObserver observer : mFilteredObservers) {
             observer.tabClosureUndone(tab);
         }
@@ -322,7 +314,6 @@ public abstract class TabModelFilter implements TabModelObserver, TabList {
 
     @Override
     public void tabClosureCommitted(Tab tab) {
-        if (!shouldNotifyObservers()) return; // Vivaldi
         for (TabModelObserver observer : mFilteredObservers) {
             observer.tabClosureCommitted(tab);
         }
@@ -330,7 +321,6 @@ public abstract class TabModelFilter implements TabModelObserver, TabList {
 
     @Override
     public void willCloseAllTabs(boolean incognito) {
-        if (!shouldNotifyObservers()) return; // Vivaldi
         for (TabModelObserver observer : mFilteredObservers) {
             observer.willCloseAllTabs(incognito);
         }
@@ -345,7 +335,6 @@ public abstract class TabModelFilter implements TabModelObserver, TabList {
 
     @Override
     public void allTabsClosureCommitted(boolean isIncognito) {
-        if (!shouldNotifyObservers()) return; // Vivaldi
         for (TabModelObserver observer : mFilteredObservers) {
             observer.allTabsClosureCommitted(isIncognito);
         }
@@ -354,7 +343,6 @@ public abstract class TabModelFilter implements TabModelObserver, TabList {
     @Override
     public void tabRemoved(Tab tab) {
         removeTab(tab);
-        if (!shouldNotifyObservers()) return; // Vivaldi
         for (TabModelObserver observer : mFilteredObservers) {
             observer.tabRemoved(tab);
         }
@@ -365,16 +353,8 @@ public abstract class TabModelFilter implements TabModelObserver, TabList {
         mTabRestoreCompleted = true;
 
         if (getCount() != 0) reorder();
-        if (!shouldNotifyObservers()) return; // Vivaldi
         for (TabModelObserver observer : mFilteredObservers) {
             observer.restoreCompleted();
         }
     }
-
-    /**
-     * Vivaldi: We can change the TabModelFilter during runtime and we only notify the one which
-     * is active.
-     * @return Whether filter should notify observers about changes in the tab model.
-     */
-    protected boolean shouldNotifyObservers() { return true; }
 }

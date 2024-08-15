@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {util} from '../../common/js/util.js';
+import {comparePath} from '../../common/js/entry_utils.js';
 import {FileKey, State} from '../../externs/ts/state.js';
 import {Slice} from '../../lib/base_store.js';
 import {getEntry} from '../store.js';
@@ -14,7 +14,7 @@ import {cacheEntries} from './all_entries.js';
  * @suppress {checkTypes}
  */
 
-const slice = new Slice<State>('folderShortcuts');
+const slice = new Slice<State, State['folderShortcuts']>('folderShortcuts');
 export {slice as folderShortcutsSlice};
 
 /** Create action to refresh all folder shortcuts with provided ones. */
@@ -56,7 +56,7 @@ function addFolderShortcutReducer(currentState: State, payload: {
     const shortcutEntry = getEntry(currentState, folderShortcuts[i]!);
     // The folder shortcut array is sorted, the new item will be added just
     // before the first larger item.
-    if (util.comparePath(shortcutEntry!, entry) > 0) {
+    if (comparePath(shortcutEntry!, entry) > 0) {
       return {
         ...currentState,
         folderShortcuts: [

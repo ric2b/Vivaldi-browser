@@ -191,6 +191,7 @@ base::WeakPtr<file_manager::Volume> InstallFileSystemProviderChromeApp(
 std::vector<file_tasks::FullTaskDescriptor> GetTasksForFile(
     Profile* profile,
     const base::FilePath& file) {
+  base::ScopedAllowBlockingForTesting allow_blocking;
   std::string mime_type;
   net::GetMimeTypeFromFile(file, &mime_type);
   CHECK(!mime_type.empty());
@@ -236,8 +237,8 @@ void AddFakeAppWithIntentFilters(
   app->readiness = apps::Readiness::kReady;
   app->intent_filters = std::move(intent_filters);
   apps.push_back(std::move(app));
-  app_service_proxy->AppRegistryCache().OnApps(
-      std::move(apps), app_type, false /* should_notify_initialized */);
+  app_service_proxy->OnApps(std::move(apps), app_type,
+                            false /* should_notify_initialized */);
 }
 
 void AddFakeWebApp(const std::string& app_id,

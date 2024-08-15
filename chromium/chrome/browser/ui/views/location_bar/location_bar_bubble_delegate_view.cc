@@ -83,7 +83,7 @@ LocationBarBubbleDelegateView::LocationBarBubbleDelegateView(
       WebContentsObserver(web_contents) {
   // Add observer to close the bubble if the fullscreen state changes.
   if (web_contents) {
-    Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+    Browser* browser = chrome::FindBrowserWithTab(web_contents);
     // |browser| can be null in tests.
     if (browser) {
       fullscreen_observation_.Observe(
@@ -91,6 +91,12 @@ LocationBarBubbleDelegateView::LocationBarBubbleDelegateView(
       fullscreen_controller_ = browser->exclusive_access_manager()
                                    ->fullscreen_controller()
                                    ->GetWeakPtr();
+      // NOTE(andre@vivaldi.com) : We changed the arrow from TOP_RIGHT to FLOAT
+      // because lack of time. Float will center the bubble-dialog in the
+      // anchor. Good enough until we make a proper views system. VB-101925.
+      if (browser->is_vivaldi()) {
+        SetArrow(views::BubbleBorder::FLOAT);
+      }
     }
   }
   // TODO(pbos): Removing this seems to crash on linux-ozone-rel which seems

@@ -4,6 +4,7 @@
 
 #include "components/autofill/content/renderer/form_autofill_util.h"
 
+#include "base/feature_list.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -23,6 +24,7 @@
 #include "content/public/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/web_document.h"
@@ -65,7 +67,7 @@ struct AutofillFieldUtilCase {
 
 // An <input> with a label placed on top of it (usually used as a placeholder
 // replacement).
-const char* kPoorMansPlaceholder = R"(
+const char* kPoorMansPlaceholderFullOverlap = R"(
   <style>
     .fixed_position_and_size {
       position: fixed;
@@ -75,8 +77,97 @@ const char* kPoorMansPlaceholder = R"(
       height: 20px;
     }
   </style>
-  <input id='target' class=fixed_position_and_size>
+  <input id=target class=fixed_position_and_size>
   <span class=fixed_position_and_size>label</span>
+)";
+
+// The <input> element partially overlaps the label (placeholder) but the label
+// is not fully contained in the <input> element. This is a common case for
+// placeholders that moph into a minified version when the user focuses an
+// <input> element.
+const char* kPoorMansPlaceholderPartialOverlap = R"(
+  <style>
+    .fixed_position_and_size {
+      position: fixed;
+      top: 30px;
+      left: 0;
+      width: 100px;
+      height: 20px;
+    }
+    .overlapping_position_and_size {
+      position: fixed;
+      top: 25px;
+      left: 0;
+      width: 100px;
+      height: 20px;
+    }
+  </style>
+  <input id=target class=fixed_position_and_size>
+  <span class=overlapping_position_and_size>label</span>
+)";
+
+// The <input> element touches the next element vertically but does not overlap.
+// The label should not be considered a placeholder.
+const char* kPoorMansPlaceholderNoOverlap = R"(
+  <input id='target'>
+  <div>not a label</div>
+)";
+
+// The <input> element touches the next element horizontally but does not
+// overlap. The label should not be considered a placeholder.
+const char* kPoorMansPlaceholderNoOverlap2 = R"(
+  <input id=target>
+  <span>not a label</span>
+)";
+
+// The span exceeds the vertical limits of the input element, which is a
+// pattern often observed in error messages. Therefore we don't consider the
+// span a label.
+const char* kPoorMansPlaceholderPossiblyErrorMessage = R"(
+  <style>
+    .fixed_position_and_size {
+      position: fixed;
+      top: 0px;
+      left: 0;
+      width: 100px;
+      height: 20px;
+    }
+    .label_position_and_size {
+      position: fixed;
+      top: 15px;
+      left: 0;
+      width: 100px;
+      height: 25px;
+    }
+  </style>
+  <input id=target class=fixed_position_and_size>
+  <span class=overlapping_position_and_size>not a label</span>
+)";
+
+// The span is not horizontally contained in the input element. We don't
+// consider this a label because have seen several cases where the actual
+// label was on the left of the input field in a <table> structure and the
+// text on the right, which just touched the element contained non-label
+// data (e.g. instructions like "don't enter symbols").
+const char* kPoorMansPlaceholderNoHorizontalContainment = R"(
+  <style>
+    .fixed_position_and_size {
+      position: fixed;
+      top: 0px;
+      left: 0;
+      width: 100px;
+      height: 20px;
+    }
+    .label_position_and_size {
+      position: fixed;
+      top: 15px;
+      left: 90px;
+      width: 100px;
+      height: 20px;
+    }
+  </style>
+  <input id=target class=fixed_position_and_size>
+  <span class=overlapping_position_and_size>not a label</span>
 )";
 
 void VerifyButtonTitleCache(const WebFormElement& form_target,
@@ -89,21 +180,46 @@ void VerifyButtonTitleCache(const WebFormElement& form_target,
 
 bool HaveSameFormControlId(const WebFormControlElement& element,
                            const FormFieldData& field) {
-  FieldRendererId element_renderer_id(element.UniqueRendererFormControlId());
-  return element_renderer_id == field.unique_renderer_id;
+  return GetFieldRendererId(element) == field.unique_renderer_id;
 }
 
 class FormAutofillUtilsTest : public content::RenderViewTest {
  public:
   FormAutofillUtilsTest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kAutofillEnableSelectList);
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/{blink::features::
+                                  kAutofillUseDomNodeIdForRendererId,
+                              features::kAutofillContentEditables,
+                              features::kAutofillEnableSelectList},
+        /*disabled_features=*/{});
   }
   ~FormAutofillUtilsTest() override = default;
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 };
+
+// Tests that WebFormElementToFormData() sets the
+// Form[Field]Data::{name,id_attribute,name_attribute} correctly.
+TEST_F(FormAutofillUtilsTest, WebFormElementToFormDataIdAndNames) {
+  LoadHTML(R"(
+    <form id=form-id name=form-name>
+      <input type=text id=input-id name=input-name>
+    </form>
+  )");
+  FormData form_data;
+  ASSERT_TRUE(WebFormElementToFormData(
+      GetFormElementById(GetMainFrame()->GetDocument(), "form-id"),
+      WebFormControlElement(), /*field_data_manager=*/nullptr,
+      {ExtractOption::kOptions}, &form_data, /*field=*/nullptr));
+  EXPECT_EQ(form_data.name, u"form-name");
+  EXPECT_EQ(form_data.id_attribute, u"form-id");
+  EXPECT_EQ(form_data.name_attribute, u"form-name");
+  ASSERT_EQ(form_data.fields.size(), 1u);
+  EXPECT_EQ(form_data.fields[0].name, u"input-name");
+  EXPECT_EQ(form_data.fields[0].id_attribute, u"input-id");
+  EXPECT_EQ(form_data.fields[0].name_attribute, u"input-name");
+}
 
 // Tests that large option values/contents are truncated while building the
 // FormData.
@@ -127,7 +243,7 @@ TEST_F(FormAutofillUtilsTest, TruncateLargeOptionValuesAndContents) {
   FormData form_data;
   ASSERT_TRUE(WebFormElementToFormData(
       web_form, WebFormControlElement(), /*field_data_manager=*/nullptr,
-      EXTRACT_OPTIONS, &form_data, /*field=*/nullptr));
+      {ExtractOption::kOptions}, &form_data, /*field=*/nullptr));
 
   ASSERT_EQ(form_data.fields.size(), 1u);
   ASSERT_EQ(form_data.fields[0].options.size(), 1u);
@@ -214,8 +330,8 @@ TEST_F(FormAutofillUtilsTest, FindChildTextSkipElementTest) {
     WebVector<WebElement> web_to_skip =
         web_frame->GetDocument().QuerySelectorAll("div[class='skip']");
     std::set<WebNode> to_skip;
-    for (size_t i = 0; i < web_to_skip.size(); ++i) {
-      to_skip.insert(web_to_skip[i]);
+    for (const WebElement& element : web_to_skip) {
+      to_skip.insert(element);
     }
 
     EXPECT_EQ(test_case.expected_label,
@@ -267,7 +383,16 @@ TEST_F(FormAutofillUtilsTest, InferLabelForElementTest) {
        u""},
       {"Infer from next sibling",
        "<input id='target' type='checkbox'>hello <b>world</b>", u"hello world"},
-      {"Poor man's placeholder", kPoorMansPlaceholder, u"label"},
+      {"Poor man's placeholder", kPoorMansPlaceholderFullOverlap, u"label"},
+      {"Poor man's placeholder partial overlap",
+       kPoorMansPlaceholderPartialOverlap, u"label"},
+      {"Poor man's placeholder no overlap", kPoorMansPlaceholderNoOverlap, u""},
+      {"Poor man's placeholder no overlap 2", kPoorMansPlaceholderNoOverlap2,
+       u""},
+      {"Poor man's placeholder: possibly an error message",
+       kPoorMansPlaceholderPossiblyErrorMessage, u""},
+      {"Poor man's placeholder: no horizontal containment",
+       kPoorMansPlaceholderNoHorizontalContainment, u""},
   };
   for (auto test_case : test_cases) {
     SCOPED_TRACE(test_case.description);
@@ -316,7 +441,8 @@ TEST_F(FormAutofillUtilsTest, InferLabelSourceTest) {
        FormFieldData::LabelSource::kTdTag},
       {"<dl><dt>label</dt><dd><input id='target'></dd></dl>",
        FormFieldData::LabelSource::kDdTag},
-      {kPoorMansPlaceholder, FormFieldData::LabelSource::kOverlayingLabel}};
+      {kPoorMansPlaceholderFullOverlap,
+       FormFieldData::LabelSource::kOverlayingLabel}};
 
   for (auto test_case : test_cases) {
     SCOPED_TRACE(testing::Message() << test_case.label_source);
@@ -417,7 +543,8 @@ TEST_F(FormAutofillUtilsTest, GetButtonTitles_DisabledIfNoCache) {
   WebFormElement form_target;
   ASSERT_FALSE(web_frame->GetDocument().Body().IsNull());
 
-  autofill::ButtonTitleList actual = GetButtonTitles(form_target, nullptr);
+  autofill::ButtonTitleList actual =
+      GetButtonTitles(form_target, /*button_titles_cache=*/nullptr);
 
   EXPECT_TRUE(actual.empty());
 }
@@ -443,8 +570,9 @@ TEST_F(FormAutofillUtilsTest, IsEnabled) {
 
   autofill::FormData target;
   EXPECT_TRUE(UnownedFormElementsToFormData(
-      control_elements, iframe_elements, nullptr, web_frame->GetDocument(),
-      nullptr, EXTRACT_NONE, &target, nullptr));
+      control_elements, iframe_elements, /*element=*/nullptr,
+      web_frame->GetDocument(), nullptr, /*extract_options=*/{}, &target,
+      /*field=*/nullptr));
   const struct {
     const char16_t* const name;
     bool enabled;
@@ -483,8 +611,9 @@ TEST_F(FormAutofillUtilsTest, IsReadonly) {
 
   autofill::FormData target;
   EXPECT_TRUE(UnownedFormElementsToFormData(
-      control_elements, iframe_elements, nullptr, web_frame->GetDocument(),
-      nullptr, EXTRACT_NONE, &target, nullptr));
+      control_elements, iframe_elements, /*element=*/nullptr,
+      web_frame->GetDocument(), nullptr, /*extract_options=*/{}, &target,
+      /*field=*/nullptr));
   const struct {
     const char16_t* const name;
     bool readonly;
@@ -525,8 +654,9 @@ TEST_F(FormAutofillUtilsTest, IsFocusable) {
 
   autofill::FormData target;
   EXPECT_TRUE(UnownedFormElementsToFormData(
-      control_elements, iframe_elements, nullptr, web_frame->GetDocument(),
-      nullptr, EXTRACT_NONE, &target, nullptr));
+      control_elements, iframe_elements, /*element=*/nullptr,
+      web_frame->GetDocument(), nullptr, /*extract_options=*/{}, &target,
+      /*field=*/nullptr));
   ASSERT_EQ(2u, target.fields.size());
   EXPECT_EQ(u"name1", target.fields[0].name);
   EXPECT_TRUE(target.fields[0].is_focusable);
@@ -540,11 +670,12 @@ TEST_F(FormAutofillUtilsTest, FindFormByUniqueId) {
   WebVector<WebFormElement> forms = doc.Forms();
 
   for (const auto& form : forms)
-    EXPECT_EQ(form, FindFormByUniqueRendererId(doc, GetFormRendererId(form)));
+    EXPECT_EQ(form, FindFormByRendererId(doc, GetFormRendererId(form)));
 
   // Expect null form element for non-existing form id.
-  FormRendererId non_existing_id(forms[0].UniqueRendererFormId() + 1000);
-  EXPECT_TRUE(FindFormByUniqueRendererId(doc, non_existing_id).IsNull());
+  FormRendererId non_existing_form_id(GetFormRendererId(forms[0]).value() +
+                                      1000);
+  EXPECT_TRUE(FindFormByRendererId(doc, non_existing_form_id).IsNull());
 }
 
 // Used in ParameterizedFindFormControlByRendererIdTest.
@@ -554,13 +685,13 @@ struct FindFormControlTestParam {
   bool expectation;
 };
 
-// Tests FindFormControlElementByUniqueRendererId().
+// Tests FindFormControlByRendererId().
 class ParameterizedFindFormControlByRendererIdTest
     : public FormAutofillUtilsTest,
       public testing::WithParamInterface<FindFormControlTestParam> {};
 
 TEST_P(ParameterizedFindFormControlByRendererIdTest,
-       FindFormControlElementByUniqueRendererId) {
+       FindFormControlByRendererId) {
   LoadHTML(R"(
     <body>
       <input id="nonexistentField">
@@ -593,8 +724,8 @@ TEST_P(ParameterizedFindFormControlByRendererIdTest,
 
   EXPECT_EQ(
       GetParam().expectation,
-      queried_field == FindFormControlElementByUniqueRendererId(
-                           doc, queried_field_id, form_to_be_searched_id));
+      queried_field == FindFormControlByRendererId(doc, queried_field_id,
+                                                   form_to_be_searched_id));
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -605,66 +736,30 @@ INSTANTIATE_TEST_SUITE_P(
            FindFormControlTestParam{"nonexistentField", "form1", false},
            FindFormControlTestParam{"nonexistentField", "form2", false},
            FindFormControlTestParam{"ownedField1", absl::nullopt, true},
-           FindFormControlTestParam{"ownedField1", std::string(), false},
            FindFormControlTestParam{"ownedField1", "form1", true},
-           FindFormControlTestParam{"ownedField1", "form2", false},
            FindFormControlTestParam{"ownedField2", absl::nullopt, true},
-           FindFormControlTestParam{"ownedField2", std::string(), false},
-           FindFormControlTestParam{"ownedField2", "form1", false},
            FindFormControlTestParam{"ownedField2", "form2", true},
            FindFormControlTestParam{"unownedField", absl::nullopt, true},
-           FindFormControlTestParam{"unownedField", std::string(), true},
-           FindFormControlTestParam{"unownedField", "form1", false},
-           FindFormControlTestParam{"unownedField", "form2", false}));
+           FindFormControlTestParam{"unownedField", std::string(), true}));
 
-TEST_F(FormAutofillUtilsTest, FindFormControlElementsByUniqueIdNoForm) {
+TEST_F(FormAutofillUtilsTest, FindFormControlElementsByUniqueId) {
   LoadHTML("<body><input id='i1'><input id='i2'><input id='i3'></body>");
   WebDocument doc = GetMainFrame()->GetDocument();
   auto input1 = GetFormControlElementById(doc, "i1");
   auto input3 = GetFormControlElementById(doc, "i3");
-  FieldRendererId non_existing_id(input3.UniqueRendererFormControlId() + 1000);
+  FieldRendererId non_existing_field_id(GetFieldRendererId(input3).value() +
+                                        1000);
 
-  std::vector<FieldRendererId> renderer_ids = {
-      GetFieldRendererId(input3), non_existing_id, GetFieldRendererId(input1)};
+  std::vector<FieldRendererId> renderer_ids = {GetFieldRendererId(input3),
+                                               non_existing_field_id,
+                                               GetFieldRendererId(input1)};
 
-  auto elements = FindFormControlElementsByUniqueRendererId(doc, renderer_ids);
+  auto elements = FindFormControlsByRendererId(doc, renderer_ids);
 
   ASSERT_EQ(3u, elements.size());
   EXPECT_EQ(input3, elements[0]);
   EXPECT_TRUE(elements[1].IsNull());
   EXPECT_EQ(input1, elements[2]);
-}
-
-TEST_F(FormAutofillUtilsTest, FindFormControlElementsByUniqueIdWithForm) {
-  LoadHTML(
-      "<body><form id='f1'><input id='i1'><input id='i2'></form><input "
-      "id='i3'></body>");
-  WebDocument doc = GetMainFrame()->GetDocument();
-  auto form = GetFormElementById(doc, "f1");
-  auto input1 = GetFormControlElementById(doc, "i1");
-  auto input3 = GetFormControlElementById(doc, "i3");
-  FieldRendererId non_existing_id(input3.UniqueRendererFormControlId() + 1000);
-
-  std::vector<FieldRendererId> renderer_ids = {
-      GetFieldRendererId(input3), non_existing_id, GetFieldRendererId(input1)};
-
-  auto elements = FindFormControlElementsByUniqueRendererId(
-      doc, GetFormRendererId(form), renderer_ids);
-
-  // |input3| is not in the form, so it shouldn't be returned.
-  ASSERT_EQ(3u, elements.size());
-  EXPECT_TRUE(elements[0].IsNull());
-  EXPECT_TRUE(elements[1].IsNull());
-  EXPECT_EQ(input1, elements[2]);
-
-  // Expect that no elements are returned for non existing form id.
-  FormRendererId non_existing_form_id(form.UniqueRendererFormId() + 1000);
-  elements = FindFormControlElementsByUniqueRendererId(
-      doc, non_existing_form_id, renderer_ids);
-  ASSERT_EQ(3u, elements.size());
-  EXPECT_TRUE(elements[0].IsNull());
-  EXPECT_TRUE(elements[1].IsNull());
-  EXPECT_TRUE(elements[2].IsNull());
 }
 
 // Tests the extraction of the aria-label attribute.
@@ -797,9 +892,9 @@ TEST_F(FormAutofillUtilsTest, IsOwnedByFrame) {
   content::RenderFrame* child_frame = GetIframeById(doc, "child_frame");
   WebElement div = GetElementById(doc, "div");
 
-  EXPECT_FALSE(IsOwnedByFrame(WebElement(), nullptr));
+  EXPECT_FALSE(IsOwnedByFrame(WebElement(), /*frame=*/nullptr));
   EXPECT_FALSE(IsOwnedByFrame(WebElement(), main_frame));
-  EXPECT_FALSE(IsOwnedByFrame(div, nullptr));
+  EXPECT_FALSE(IsOwnedByFrame(div, /*frame=*/nullptr));
   EXPECT_FALSE(IsOwnedByFrame(div, child_frame));
   EXPECT_TRUE(IsOwnedByFrame(div, main_frame));
   ExecuteJavaScriptForTests(R"(document.getElementById('div').remove();)");
@@ -815,9 +910,10 @@ TEST_F(FormAutofillUtilsTest, IsActionEmptyFalse) {
   auto web_form = GetFormElementById(doc, "form1");
 
   FormData form_data;
-  ASSERT_TRUE(WebFormElementToFormData(
-      web_form, WebFormControlElement(), nullptr /*field_data_manager*/,
-      EXTRACT_VALUE, &form_data, nullptr /* FormFieldData */));
+  ASSERT_TRUE(WebFormElementToFormData(web_form, WebFormControlElement(),
+                                       /*field_data_manager=*/nullptr,
+                                       {ExtractOption::kValue}, &form_data,
+                                       /*field=*/nullptr));
 
   EXPECT_FALSE(form_data.is_action_empty);
 }
@@ -828,9 +924,10 @@ TEST_F(FormAutofillUtilsTest, IsActionEmptyTrue) {
   auto web_form = GetFormElementById(doc, "form1");
 
   FormData form_data;
-  ASSERT_TRUE(WebFormElementToFormData(
-      web_form, WebFormControlElement(), nullptr /*field_data_manager*/,
-      EXTRACT_VALUE, &form_data, nullptr /* FormFieldData */));
+  ASSERT_TRUE(WebFormElementToFormData(web_form, WebFormControlElement(),
+                                       /*field_data_manager=*/nullptr,
+                                       {ExtractOption::kValue}, &form_data,
+                                       /*field=*/nullptr));
 
   EXPECT_TRUE(form_data.is_action_empty);
 }
@@ -842,8 +939,9 @@ TEST_F(FormAutofillUtilsTest, ExtractBounds) {
 
   FormData form_data;
   ASSERT_TRUE(FindFormAndFieldForFormControlElement(
-      web_control, nullptr /*field_data_manager*/, EXTRACT_BOUNDS, &form_data,
-      nullptr /* FormFieldData */));
+      web_control, /*field_data_manager=*/nullptr, {ExtractOption::kBounds},
+      &form_data,
+      /*field=*/nullptr));
 
   EXPECT_FALSE(form_data.fields.back().bounds.IsEmpty());
 }
@@ -855,8 +953,9 @@ TEST_F(FormAutofillUtilsTest, NotExtractBounds) {
 
   FormData form_data;
   ASSERT_TRUE(FindFormAndFieldForFormControlElement(
-      web_control, nullptr /*field_data_manager*/, &form_data,
-      nullptr /* FormFieldData */));
+      web_control, /*field_data_manager=*/nullptr, /*extract_options=*/{},
+      &form_data,
+      /*field=*/nullptr));
 
   EXPECT_TRUE(form_data.fields.back().bounds.IsEmpty());
 }
@@ -868,8 +967,9 @@ TEST_F(FormAutofillUtilsTest, ExtractUnownedBounds) {
 
   FormData form_data;
   ASSERT_TRUE(FindFormAndFieldForFormControlElement(
-      web_control, nullptr /*field_data_manager*/, EXTRACT_BOUNDS, &form_data,
-      nullptr /* FormFieldData */));
+      web_control, /*field_data_manager=*/nullptr, {ExtractOption::kBounds},
+      &form_data,
+      /*field=*/nullptr));
 
   EXPECT_FALSE(form_data.fields.back().bounds.IsEmpty());
 }
@@ -881,15 +981,13 @@ TEST_F(FormAutofillUtilsTest, GetDataListSuggestions) {
       "value='2'></datalist></body>");
   WebDocument doc = GetMainFrame()->GetDocument();
   auto web_control = GetElementById(doc, "i1").To<WebInputElement>();
-  std::vector<std::u16string> values;
-  std::vector<std::u16string> labels;
-  GetDataListSuggestions(web_control, &values, &labels);
-  ASSERT_EQ(values.size(), 2u);
-  ASSERT_EQ(labels.size(), 2u);
-  EXPECT_EQ(values[0], u"1");
-  EXPECT_EQ(values[1], u"2");
-  EXPECT_EQ(labels[0], u"");
-  EXPECT_EQ(labels[1], u"");
+  std::vector<SelectOption> options;
+  GetDataListSuggestions(web_control, &options);
+  ASSERT_EQ(options.size(), 2u);
+  EXPECT_EQ(options[0].value, u"1");
+  EXPECT_EQ(options[1].value, u"2");
+  EXPECT_EQ(options[0].content, u"");
+  EXPECT_EQ(options[1].content, u"");
 }
 
 TEST_F(FormAutofillUtilsTest, GetDataListSuggestionsWithLabels) {
@@ -899,15 +997,13 @@ TEST_F(FormAutofillUtilsTest, GetDataListSuggestionsWithLabels) {
       "value='2'>two</option></datalist></body>");
   WebDocument doc = GetMainFrame()->GetDocument();
   auto web_control = GetElementById(doc, "i1").To<WebInputElement>();
-  std::vector<std::u16string> values;
-  std::vector<std::u16string> labels;
-  GetDataListSuggestions(web_control, &values, &labels);
-  ASSERT_EQ(values.size(), 2u);
-  ASSERT_EQ(labels.size(), 2u);
-  EXPECT_EQ(values[0], u"1");
-  EXPECT_EQ(values[1], u"2");
-  EXPECT_EQ(labels[0], u"one");
-  EXPECT_EQ(labels[1], u"two");
+  std::vector<SelectOption> options;
+  GetDataListSuggestions(web_control, &options);
+  ASSERT_EQ(options.size(), 2u);
+  EXPECT_EQ(options[0].value, u"1");
+  EXPECT_EQ(options[1].value, u"2");
+  EXPECT_EQ(options[0].content, u"one");
+  EXPECT_EQ(options[1].content, u"two");
 }
 
 TEST_F(FormAutofillUtilsTest, ExtractDataList) {
@@ -920,19 +1016,16 @@ TEST_F(FormAutofillUtilsTest, ExtractDataList) {
   FormData form_data;
   FormFieldData form_field_data;
   ASSERT_TRUE(FindFormAndFieldForFormControlElement(
-      web_control, nullptr /*field_data_manager*/, EXTRACT_DATALIST, &form_data,
-      &form_field_data));
+      web_control, /*field_data_manager=*/nullptr, {ExtractOption::kDatalist},
+      &form_data, &form_field_data));
 
-  auto& values = form_data.fields.back().datalist_values;
-  auto& labels = form_data.fields.back().datalist_labels;
-  ASSERT_EQ(values.size(), 2u);
-  ASSERT_EQ(labels.size(), 2u);
-  EXPECT_EQ(values[0], u"1");
-  EXPECT_EQ(values[1], u"2");
-  EXPECT_EQ(labels[0], u"one");
-  EXPECT_EQ(labels[1], u"two");
-  EXPECT_EQ(form_field_data.datalist_values, values);
-  EXPECT_EQ(form_field_data.datalist_labels, labels);
+  auto& options = form_data.fields.back().datalist_options;
+  ASSERT_EQ(options.size(), 2u);
+  EXPECT_EQ(options[0].value, u"1");
+  EXPECT_EQ(options[1].value, u"2");
+  EXPECT_EQ(options[0].content, u"one");
+  EXPECT_EQ(options[1].content, u"two");
+  EXPECT_EQ(form_field_data.datalist_options.size(), options.size());
 }
 
 TEST_F(FormAutofillUtilsTest, NotExtractDataList) {
@@ -945,11 +1038,9 @@ TEST_F(FormAutofillUtilsTest, NotExtractDataList) {
   FormData form_data;
   FormFieldData form_field_data;
   ASSERT_TRUE(FindFormAndFieldForFormControlElement(
-      web_control, nullptr /*field_data_manager*/, &form_data,
-      &form_field_data));
-
-  EXPECT_TRUE(form_data.fields.back().datalist_values.empty());
-  EXPECT_TRUE(form_data.fields.back().datalist_labels.empty());
+      web_control, /*field_data_manager=*/nullptr, /*extract_options=*/{},
+      &form_data, &form_field_data));
+  EXPECT_TRUE(form_data.fields.back().datalist_options.empty());
 }
 
 // Tests the visibility detection of iframes.
@@ -1383,15 +1474,17 @@ TEST_P(FieldFramesTest, ExtractFieldsAndFrames) {
     std::vector<WebElement> iframe_elements =
         form_util::GetUnownedIframeElements(doc);
     ASSERT_TRUE(UnownedFormElementsToFormData(
-        control_elements, iframe_elements, nullptr, doc, nullptr, EXTRACT_NONE,
-        &form_data, nullptr));
+        control_elements, iframe_elements, /*element=*/nullptr, doc,
+        /*field_data_manager=*/nullptr, /*extract_options=*/{}, &form_data,
+        /*field=*/nullptr));
     host_form = FormRendererId();
   } else {  // Real <form>.
     ASSERT_GT(std::strlen(test_case.form_id), 0u);
     auto form_element = GetFormElementById(doc, test_case.form_id);
     ASSERT_TRUE(WebFormElementToFormData(form_element, WebFormControlElement(),
-                                         nullptr, EXTRACT_NONE, &form_data,
-                                         nullptr));
+                                         /*field_data_manager=*/nullptr,
+                                         /*extract_options=*/{}, &form_data,
+                                         /*field=*/nullptr));
     host_form = GetFormRendererId(form_element);
   }
 
@@ -1489,10 +1582,11 @@ INSTANTIATE_TEST_SUITE_P(
         // do not belong to the form of interest.
         std::string html;
         for (const FieldOrFrame& field_or_frame : fields_and_frames) {
-          html += base::StringPrintf(field_or_frame.is_frame
-                                         ? "<iframe id='%s'></iframe>"
-                                         : "<input id='%s'>",
-                                     field_or_frame.id);
+          html +=
+              field_or_frame.is_frame
+                  ? base::StringPrintf("<iframe id='%s'></iframe>",
+                                       field_or_frame.id)
+                  : base::StringPrintf("<input id='%s'>", field_or_frame.id);
         }
         if (!is_synthetic_form) {
           html = base::StringPrintf("<form id='%s'>%s</form>", form_id,
@@ -1564,8 +1658,9 @@ TEST_P(SelectListAutofillParamTest, WebFormElementToFormData) {
   auto form_element = GetFormElementById(doc, "form");
   FormData form_data;
   ASSERT_TRUE(WebFormElementToFormData(form_element, WebFormControlElement(),
-                                       nullptr, EXTRACT_NONE, &form_data,
-                                       nullptr));
+                                       /*field_data_manager=*/nullptr,
+                                       /*extract_options=*/{}, &form_data,
+                                       /*field=*/nullptr));
   EXPECT_EQ(form_data.fields.size(),
             IsAutofillingSelectListEnabled() ? 2u : 1u);
 
@@ -1610,8 +1705,10 @@ TEST_F(FormAutofillUtilsTest, ExtractNoFramesIfTooManyIframes) {
   WebFormElement form = GetFormElementById(doc, "f");
   {
     FormData form_data;
-    ASSERT_TRUE(WebFormElementToFormData(form, WebFormControlElement(), nullptr,
-                                         EXTRACT_NONE, &form_data, nullptr));
+    ASSERT_TRUE(WebFormElementToFormData(form, WebFormControlElement(),
+                                         /*field_data_manager_=*/nullptr,
+                                         /*extract_options=*/{}, &form_data,
+                                         /*field=*/nullptr));
     EXPECT_EQ(form_data.fields.size(), kMaxExtractableFields - 1);
     EXPECT_EQ(form_data.child_frames.size(), kMaxExtractableChildFrames);
   }
@@ -1622,8 +1719,10 @@ TEST_F(FormAutofillUtilsTest, ExtractNoFramesIfTooManyIframes) {
   for (int i = 0; i < 3; ++i) {
     CreateFormElement("iframe");
     FormData form_data;
-    ASSERT_TRUE(WebFormElementToFormData(form, WebFormControlElement(), nullptr,
-                                         EXTRACT_NONE, &form_data, nullptr));
+    ASSERT_TRUE(WebFormElementToFormData(form, WebFormControlElement(),
+                                         /*field_data_manager=*/nullptr,
+                                         /*extract_options=*/{}, &form_data,
+                                         /*field=*/nullptr));
     EXPECT_EQ(form_data.fields.size(), kMaxExtractableFields - 1);
     EXPECT_TRUE(form_data.child_frames.empty());
   }
@@ -1653,8 +1752,10 @@ TEST_F(FormAutofillUtilsTest, ExtractNoFieldsOrFramesIfTooManyFields) {
   WebFormElement form = GetFormElementById(doc, "f");
   {
     FormData form_data;
-    ASSERT_TRUE(WebFormElementToFormData(form, WebFormControlElement(), nullptr,
-                                         EXTRACT_NONE, &form_data, nullptr));
+    ASSERT_TRUE(WebFormElementToFormData(form, WebFormControlElement(),
+                                         /*field_data_manager=*/nullptr,
+                                         /*extract_options=*/{}, &form_data,
+                                         /*field=*/nullptr));
     EXPECT_EQ(form_data.fields.size(), kMaxExtractableFields - 1);
     EXPECT_EQ(form_data.child_frames.size(), kMaxExtractableChildFrames);
   }
@@ -1667,8 +1768,9 @@ TEST_F(FormAutofillUtilsTest, ExtractNoFieldsOrFramesIfTooManyFields) {
     CreateFormElement("input");
     FormData form_data;
     ASSERT_FALSE(WebFormElementToFormData(form, WebFormControlElement(),
-                                          nullptr, EXTRACT_NONE, &form_data,
-                                          nullptr));
+                                          nullptr, /*extract_options=*/{},
+                                          &form_data,
+                                          /*field=*/nullptr));
     EXPECT_TRUE(form_data.fields.empty());
     EXPECT_TRUE(form_data.child_frames.empty());
   }
@@ -1904,6 +2006,82 @@ TEST_F(FormAutofillUtilsTest, NextWebNode_Backward) {
   }
 
   EXPECT_THAT(found_elements, Pointwise(SameNode(), expected_elements));
+}
+
+// Tests that GetMaxLength() of non-text form controls is 0, and text form
+// controls default to the maximum 32 bit integer (and *not* 64 bit integer, so
+// that we can still do arithmetic with the maximum length).
+TEST_F(FormAutofillUtilsTest, GetMaxLength) {
+  struct TestCase {
+    const char* html;
+    uint64_t expected_max_length;
+  };
+  static constexpr TestCase test_cases[] = {
+      {"<input id=field>", FormFieldData::kDefaultMaxLength},
+      {"<input id=field type=text>", FormFieldData::kDefaultMaxLength},
+      {"<input id=field type=text maxlength=-1>",
+       FormFieldData::kDefaultMaxLength},
+      {"<input id=field type=password>", FormFieldData::kDefaultMaxLength},
+      {"<input id=field type=text maxlength=123>", 123},
+      {"<textarea id=field>", FormFieldData::kDefaultMaxLength},
+      {"<textarea id=field maxlength=123>", 123},
+      {"<input id=field type=submit>", 0},
+      {"<select id=field></select>", 0},
+  };
+  for (auto test_case : test_cases) {
+    SCOPED_TRACE(test_case.html);
+    LoadHTML(test_case.html);
+    WebLocalFrame* web_frame = GetMainFrame();
+    ASSERT_NE(nullptr, web_frame);
+    WebFormControlElement field =
+        GetElementById(web_frame->GetDocument(), "field")
+            .DynamicTo<WebFormControlElement>();
+    EXPECT_FALSE(field.IsNull());
+    EXPECT_EQ(test_case.expected_max_length, GetMaxLength(field));
+  }
+}
+
+TEST_F(FormAutofillUtilsTest, FindFormForContentEditableSuccess) {
+  LoadHTML(
+      R"(<body>
+         <div id=my-id
+              name=my-name
+              class=my-class
+              autocomplete=given-name
+              contenteditable>
+         </div>
+         </body>)");
+  WebElement content_editable =
+      GetMainFrame()->GetDocument().GetElementById("my-id");
+  ASSERT_FALSE(content_editable.IsNull());
+  std::optional<FormData> form = FindFormForContentEditable(content_editable);
+  ASSERT_EQ(form->fields.size(), 1u);
+  const FormFieldData& field = form->fields[0];
+  EXPECT_TRUE(form->unique_renderer_id);
+  EXPECT_EQ(*form->unique_renderer_id, *field.unique_renderer_id);
+  EXPECT_EQ(form->unique_renderer_id, field.host_form_id);
+  EXPECT_EQ(field.parsed_autocomplete->field_type, HtmlFieldType::kGivenName);
+  EXPECT_EQ(field.name, u"my-id");
+  EXPECT_EQ(field.id_attribute, u"my-id");
+  EXPECT_EQ(field.name_attribute, u"my-name");
+  EXPECT_EQ(field.css_classes, u"my-class");
+  // TODO(crbug.com/1490372): Extract the value.
+  EXPECT_EQ(field.value, u"");
+}
+
+TEST_F(FormAutofillUtilsTest, FindFormForContentEditableFailures) {
+  LoadHTML(
+      R"(<body>
+         <div id=ce1></div>
+         <div contenteditable><div id=ce2 contenteditable></div></div>
+         <form id=ce3 contenteditable></form>
+         <textarea id=ce4 contenteditable><div contenteditable></textarea>
+         </body>)");
+  WebDocument doc = GetMainFrame()->GetDocument();
+  ASSERT_FALSE(FindFormForContentEditable(doc.GetElementById("ce1")));
+  ASSERT_FALSE(FindFormForContentEditable(doc.GetElementById("ce2")));
+  ASSERT_FALSE(FindFormForContentEditable(doc.GetElementById("ce3")));
+  ASSERT_FALSE(FindFormForContentEditable(doc.GetElementById("ce4")));
 }
 
 }  // namespace

@@ -24,6 +24,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/blink/public/mojom/loader/referrer.mojom.h"
 #include "third_party/blink/public/mojom/loader/transferrable_url_loader.mojom.h"
+#include "third_party/blink/public/mojom/navigation/renderer_content_settings.mojom.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_proto.h"
 #include "url/gurl.h"
 
@@ -108,8 +109,10 @@ class MockNavigationHandle : public NavigationHandle {
   }
   MOCK_METHOD0(GetSearchableFormURL, const GURL&());
   MOCK_METHOD0(GetSearchableFormEncoding, const std::string&());
-  ReloadType GetReloadType() override { return reload_type_; }
-  RestoreType GetRestoreType() override { return RestoreType::kNotRestored; }
+  ReloadType GetReloadType() const override { return reload_type_; }
+  RestoreType GetRestoreType() const override {
+    return RestoreType::kNotRestored;
+  }
   const GURL& GetBaseURLForDataURL() override { return base_url_for_data_url_; }
   MOCK_METHOD0(IsPost, bool());
   const blink::mojom::Referrer& GetReferrer() override { return referrer_; }
@@ -203,7 +206,7 @@ class MockNavigationHandle : public NavigationHandle {
               RegisterSubresourceOverride,
               (blink::mojom::TransferrableURLLoaderPtr));
   MOCK_METHOD(bool, IsSameProcess, ());
-  MOCK_METHOD(NavigationEntry*, GetNavigationEntry, ());
+  MOCK_METHOD(NavigationEntry*, GetNavigationEntry, (), (const, override));
   MOCK_METHOD(int, GetNavigationEntryOffset, ());
   MOCK_METHOD(void,
               ForceEnableOriginTrials,
@@ -237,6 +240,14 @@ class MockNavigationHandle : public NavigationHandle {
   CommitDeferringCondition* GetCommitDeferringConditionForTesting() override {
     return nullptr;
   }
+
+  void SetContentSettings(
+      blink::mojom::RendererContentSettingsPtr content_settings) override {}
+  blink::mojom::RendererContentSettingsPtr GetContentSettingsForTesting()
+      override {
+    return nullptr;
+  }
+  MOCK_METHOD(void, SetIsAdTagged, ());
 
   blink::RuntimeFeatureStateContext& GetMutableRuntimeFeatureStateContext()
       override {

@@ -4,6 +4,9 @@
 
 package org.chromium.chrome.browser.notifications.permissions;
 
+import android.Manifest;
+import android.os.Build;
+
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationManagerCompat;
@@ -20,15 +23,17 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.notifications.NotificationUmaTracker;
 import org.chromium.chrome.browser.notifications.NotificationUmaTracker.NotificationPermissionState;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.permissions.AndroidPermissionDelegate;
-import org.chromium.ui.permissions.PermissionConstants;
 import org.chromium.ui.permissions.PermissionPrefs;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.concurrent.TimeUnit;
+
+// Vivaldi
+import org.chromium.build.BuildConfig;
 
 /**
  * Central class containing the logic for when to trigger notification permission request optionally
@@ -166,7 +171,8 @@ public class NotificationPermissionController implements UnownedUserData {
      * @return True if any UI was shown (either rationale dialog or OS prompt), false otherwise.
      */
     public boolean requestPermissionIfNeeded(boolean contextual) {
-        if (!BuildInfo.isAtLeastT() || !BuildInfo.targetsAtLeastT()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+                || !BuildInfo.targetsAtLeastT()
                 || ApiCompatibilityUtils.isDemoUser()) {
             return false;
         }
@@ -196,16 +202,16 @@ public class NotificationPermissionController implements UnownedUserData {
     }
 
     private void recordOsPromptShown() {
-        SharedPreferencesManager.getInstance().incrementInt(
+        ChromeSharedPreferences.getInstance().incrementInt(
                 ChromePreferenceKeys.NOTIFICATION_PERMISSION_REQUEST_COUNT);
         NotificationUmaTracker.getInstance().onNotificationPermissionRequested();
     }
 
     private void recordRationaleUiShown() {
-        SharedPreferencesManager.getInstance().incrementInt(
+        ChromeSharedPreferences.getInstance().incrementInt(
                 ChromePreferenceKeys.NOTIFICATION_PERMISSION_REQUEST_COUNT);
         NotificationUmaTracker.getInstance().onNotificationPermissionRequested();
-        SharedPreferencesManager.getInstance().writeLong(
+        ChromeSharedPreferences.getInstance().writeLong(
                 ChromePreferenceKeys.NOTIFICATION_PERMISSION_RATIONALE_TIMESTAMP_KEY,
                 TimeUtils.currentTimeMillis());
     }
@@ -214,15 +220,15 @@ public class NotificationPermissionController implements UnownedUserData {
     int shouldRequestPermission() {
         // Notifications only require permission starting at Android T. And apps targeting < T can't
         // request permission as the OS prompts the user automatically.
-        if (!BuildInfo.isAtLeastT() || !BuildInfo.targetsAtLeastT()) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || !BuildInfo.targetsAtLeastT()) {
             return PermissionRequestMode.DO_NOT_REQUEST;
         }
 
-        if (mAndroidPermissionDelegate.hasPermission(PermissionConstants.NOTIFICATION_PERMISSION)) {
+        if (mAndroidPermissionDelegate.hasPermission(Manifest.permission.POST_NOTIFICATIONS)) {
             return PermissionRequestMode.DO_NOT_REQUEST;
         }
         if (!mAndroidPermissionDelegate.canRequestPermission(
-                    PermissionConstants.NOTIFICATION_PERMISSION)) {
+                    Manifest.permission.POST_NOTIFICATIONS)) {
             return PermissionRequestMode.DO_NOT_REQUEST;
         }
 
@@ -233,7 +239,7 @@ public class NotificationPermissionController implements UnownedUserData {
 
         // Check if we have already exhausted the max number of times we can request permission.
         // If we have already declined OS prompt twice, we would have bailed out earlier above.
-        int previousAttemptCount = SharedPreferencesManager.getInstance().readInt(
+        int previousAttemptCount = ChromeSharedPreferences.getInstance().readInt(
                 ChromePreferenceKeys.NOTIFICATION_PERMISSION_REQUEST_COUNT);
         int maxPermissionRequestCount = ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
                 ChromeFeatureList.NOTIFICATION_PERMISSION_VARIANT,
@@ -245,7 +251,7 @@ public class NotificationPermissionController implements UnownedUserData {
         // Decide whether to show the rationale or just the system prompt.
         boolean meetsAndroidRationaleAPI =
                 mAndroidPermissionDelegate.shouldShowRequestPermissionRationale(
-                        PermissionConstants.NOTIFICATION_PERMISSION);
+                        Manifest.permission.POST_NOTIFICATIONS);
         boolean shouldShowRationale = shouldAlwaysShowRationaleFirst() || meetsAndroidRationaleAPI;
         return shouldShowRationale ? PermissionRequestMode.REQUEST_PERMISSION_WITH_RATIONALE
                                    : PermissionRequestMode.REQUEST_ANDROID_PERMISSION;
@@ -262,9 +268,11 @@ public class NotificationPermissionController implements UnownedUserData {
         NotificationManagerCompat manager =
                 NotificationManagerCompat.from(ContextUtils.getApplicationContext());
         boolean notificationsEnabledAtAppLevel = manager.areNotificationsEnabled();
-        if (!BuildInfo.isAtLeastT()) return notificationsEnabledAtAppLevel;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            return notificationsEnabledAtAppLevel;
+        }
 
-        if (mAndroidPermissionDelegate.hasPermission(PermissionConstants.NOTIFICATION_PERMISSION)) {
+        if (mAndroidPermissionDelegate.hasPermission(Manifest.permission.POST_NOTIFICATIONS)) {
             return true;
         }
 
@@ -273,7 +281,7 @@ public class NotificationPermissionController implements UnownedUserData {
                         ChromeFeatureList.NOTIFICATION_PERMISSION_VARIANT,
                         FIELD_TRIAL_ALLOW_SITE_NOTIFICATION_REQUESTS, true);
         boolean canRequestPermission = mAndroidPermissionDelegate.canRequestPermission(
-                PermissionConstants.NOTIFICATION_PERMISSION);
+                Manifest.permission.POST_NOTIFICATIONS);
         return allowRequestingPermissionsForSiteNotifications && canRequestPermission;
     }
 
@@ -282,14 +290,14 @@ public class NotificationPermissionController implements UnownedUserData {
      * include how many times we've asked or if the permission is denied by policy.
      */
     private void recordCurrentNotificationPermissionStatus() {
-        if (mAndroidPermissionDelegate.hasPermission(PermissionConstants.NOTIFICATION_PERMISSION)) {
+        if (mAndroidPermissionDelegate.hasPermission(Manifest.permission.POST_NOTIFICATIONS)) {
             NotificationUmaTracker.getInstance().recordNotificationPermissionState(
                     NotificationPermissionState.ALLOWED);
             return;
         }
 
         if (mAndroidPermissionDelegate.isPermissionRevokedByPolicy(
-                    PermissionConstants.NOTIFICATION_PERMISSION)) {
+                    Manifest.permission.POST_NOTIFICATIONS)) {
             NotificationUmaTracker.getInstance().recordNotificationPermissionState(
                     NotificationPermissionState.DENIED_BY_DEVICE_POLICY);
             return;
@@ -297,7 +305,7 @@ public class NotificationPermissionController implements UnownedUserData {
 
         // Get number of times we've requested for notification permission at startup.
         // This count is updated on NotificationUmaTracker.onNotificationPermissionRequested.
-        int promptCount = SharedPreferencesManager.getInstance().readInt(
+        int promptCount = ChromeSharedPreferences.getInstance().readInt(
                 ChromePreferenceKeys.NOTIFICATION_PERMISSION_REQUEST_COUNT, 0);
 
         switch (promptCount) {
@@ -321,7 +329,7 @@ public class NotificationPermissionController implements UnownedUserData {
     }
 
     private void requestAndroidPermission() {
-        String[] permissionsToRequest = {PermissionConstants.NOTIFICATION_PERMISSION};
+        String[] permissionsToRequest = {Manifest.permission.POST_NOTIFICATIONS};
         mAndroidPermissionDelegate.requestPermissions(permissionsToRequest,
                 (permissions, grantResults)
                         -> NotificationUmaTracker.getInstance()
@@ -333,7 +341,7 @@ public class NotificationPermissionController implements UnownedUserData {
     private static boolean hasEnoughTimeExpiredForRetriggerSinceLastDenial() {
         long lastAndroidPermissionRequestTimestamp =
                 PermissionPrefs.getAndroidNotificationPermissionRequestTimestamp();
-        long lastRationaleTimestamp = SharedPreferencesManager.getInstance().readLong(
+        long lastRationaleTimestamp = ChromeSharedPreferences.getInstance().readLong(
                 ChromePreferenceKeys.NOTIFICATION_PERMISSION_RATIONALE_TIMESTAMP_KEY, 0);
         long lastRequestTimestamp =
                 Math.max(lastRationaleTimestamp, lastAndroidPermissionRequestTimestamp);
@@ -358,6 +366,8 @@ public class NotificationPermissionController implements UnownedUserData {
     }
 
     private static boolean shouldAlwaysShowRationaleFirst() {
+        // Vivaldi
+        if (BuildConfig.IS_VIVALDI) return false;
         return ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
                 ChromeFeatureList.NOTIFICATION_PERMISSION_VARIANT,
                 FIELD_TRIAL_ALWAYS_SHOW_RATIONALE_BEFORE_REQUESTING_PERMISSION, true);
@@ -367,7 +377,7 @@ public class NotificationPermissionController implements UnownedUserData {
         boolean wasAndroidPermissionShown =
                 PermissionPrefs.getAndroidNotificationPermissionRequestTimestamp() != 0;
         boolean wasRationaleShown =
-                SharedPreferencesManager.getInstance().readLong(
+                ChromeSharedPreferences.getInstance().readLong(
                         ChromePreferenceKeys.NOTIFICATION_PERMISSION_RATIONALE_TIMESTAMP_KEY, 0)
                 != 0;
         return wasAndroidPermissionShown || wasRationaleShown;

@@ -147,6 +147,13 @@ struct StateValue {
 struct PopupsStateValue {
   uint64_t access_id;
   base::Time last_popup_time;
+  bool is_current_interaction;
+};
+
+struct PopupWithTime {
+  std::string opener_site;
+  std::string popup_site;
+  base::Time last_popup_time;
 };
 
 inline bool operator==(const StateValue& lhs, const StateValue& rhs) {

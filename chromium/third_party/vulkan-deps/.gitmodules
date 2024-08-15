@@ -1,0 +1,27 @@
+[submodule "glslang/src"]
+	path = glslang/src
+	url = ../external/github.com/KhronosGroup/glslang.git
+[submodule "spirv-cross/src"]
+	path = spirv-cross/src
+	url = ../external/github.com/KhronosGroup/SPIRV-Cross.git
+[submodule "spirv-headers/src"]
+	path = spirv-headers/src
+	url = ../external/github.com/KhronosGroup/SPIRV-Headers.git
+[submodule "spirv-tools/src"]
+	path = spirv-tools/src
+	url = ../external/github.com/KhronosGroup/SPIRV-Tools.git
+[submodule "vulkan-headers/src"]
+	path = vulkan-headers/src
+	url = ../external/github.com/KhronosGroup/Vulkan-Headers.git
+[submodule "vulkan-loader/src"]
+	path = vulkan-loader/src
+	url = ../external/github.com/KhronosGroup/Vulkan-Loader.git
+[submodule "vulkan-tools/src"]
+	path = vulkan-tools/src
+	url = ../external/github.com/KhronosGroup/Vulkan-Tools.git
+[submodule "vulkan-utility-libraries/src"]
+	path = vulkan-utility-libraries/src
+	url = ../external/github.com/KhronosGroup/Vulkan-Utility-Libraries.git
+[submodule "vulkan-validation-layers/src"]
+	path = vulkan-validation-layers/src
+	url = ../external/github.com/KhronosGroup/Vulkan-ValidationLayers.git

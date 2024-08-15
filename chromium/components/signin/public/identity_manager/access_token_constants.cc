@@ -76,9 +76,18 @@ const std::set<std::string> GetUnconsentedOAuth2Scopes() {
       // Required by k-Anonymity Server (FLEDGE)
       GaiaConstants::kKAnonymityServiceOAuth2Scope,
 
+      // Required by supervision features that verify parent password.
+      GaiaConstants::kAccountsReauthOAuth2Scope,
+
+      // Used by desktop Chrome to talk to passkey enclaves when using Google
+      // Password Manager.
+      GaiaConstants::kPasskeysEnclaveOAuth2Scope,
+
+      // Required by Optimization Guide.
+      GaiaConstants::kOptimizationGuideServiceGetHintsOAuth2Scope,
+
     // Required by ChromeOS only.
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-      GaiaConstants::kAccountsReauthOAuth2Scope,
       GaiaConstants::kAssistantOAuth2Scope,
       GaiaConstants::kAuditRecordingOAuth2Scope,
       GaiaConstants::kCalendarReadOnlyOAuth2Scope,

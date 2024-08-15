@@ -5,6 +5,8 @@
 #include "components/ml/webnn/graph_validation_utils.h"
 
 #include <algorithm>
+#include <numeric>
+#include <set>
 
 #include "base/check_op.h"
 #include "base/notreached.h"
@@ -15,25 +17,6 @@
 namespace webnn {
 
 namespace {
-
-bool IsFloatingPointType(Operand::DataType data_type) {
-  switch (data_type) {
-    case Operand::DataType::kFloat32:
-    case Operand::DataType::kFloat16:
-      return true;
-    case Operand::DataType::kInt32:
-    case Operand::DataType::kUint32:
-    case Operand::DataType::kInt8:
-    case Operand::DataType::kUint8:
-      return false;
-  }
-  NOTREACHED_NORETURN();
-}
-
-struct FloatSize2D {
-  double height;
-  double width;
-};
 
 // Calculate the output size for conv2d based on WebNN spec:
 // https://www.w3.org/TR/webnn/#api-mlgraphbuilder-conv2d
@@ -79,15 +62,15 @@ base::expected<double, std::string> CalculateConv2dOutputSize(
 // input sizes, filter sizes, padding, strides and dilations.
 // Return the calculated output sizes in double precision floating point number
 // if no errors.
-base::expected<FloatSize2D, std::string> ValidateAndCalculateConv2dOutputSizes(
-    const uint32_t input_height,
-    const uint32_t input_width,
-    const uint32_t filter_height,
-    const uint32_t filter_width,
-    const Padding2d& padding,
-    const Size2d& strides,
-    const Size2d& dilations,
-    const AutoPad auto_pad) {
+base::expected<Size2d<double>, std::string>
+ValidateAndCalculateConv2dOutputSizes(const uint32_t input_height,
+                                      const uint32_t input_width,
+                                      const uint32_t filter_height,
+                                      const uint32_t filter_width,
+                                      const Padding2d& padding,
+                                      const Size2d<uint32_t>& strides,
+                                      const Size2d<uint32_t>& dilations,
+                                      const AutoPad auto_pad) {
   uint32_t padding_beginning_height = padding.beginning.height;
   uint32_t padding_ending_height = padding.ending.height;
   uint32_t padding_beginning_width = padding.beginning.width;
@@ -145,8 +128,8 @@ base::expected<FloatSize2D, std::string> ValidateAndCalculateConv2dOutputSizes(
                             float_output_width.error());
   }
 
-  return FloatSize2D({.height = float_output_height.value(),
-                      .width = float_output_width.value()});
+  return Size2d<double>{.height = float_output_height.value(),
+                        .width = float_output_width.value()};
 }
 
 }  // namespace
@@ -189,6 +172,70 @@ base::expected<Operand, std::string> ValidateSoftmaxAndInferOutput(
   }
   // The output tensor of softmax is the same shape as the input tensor.
   return Operand(input.data_type, std::move(input.dimensions));
+}
+
+base::expected<std::vector<Operand>, std::string> ValidateSplitAndInferOutput(
+    const Operand& input,
+    const SplitAttribute& attributes) {
+  std::vector<Operand> outputs;
+
+  if (attributes.axis >= input.dimensions.size()) {
+    return base::unexpected(
+        "The axis must be in the range [0, N-1] where N is the rank of the "
+        "input tensor.");
+  }
+
+  static_assert(absl::variant_size<decltype(attributes.splits)>() == 2,
+                "When adding new variants update the branches below.");
+  if (absl::holds_alternative<uint32_t>(attributes.splits)) {
+    uint32_t splits = absl::get<uint32_t>(attributes.splits);
+    if (splits == 0) {
+      return base::unexpected("The splits must be greater than zero.");
+    }
+
+    if (input.dimensions[attributes.axis] % splits != 0) {
+      return base::unexpected(
+          "The dimension size of the input tensor along "
+          "options.axis must be divisible by splits.");
+    }
+
+    outputs.reserve(splits);
+    for (uint32_t i = 0; i < splits; ++i) {
+      // When splits is of type uint32_t, we create splits number of Operands.
+      // Each Operand will have the same new_dimensions shape.
+      std::vector<uint32_t> new_dimensions = input.dimensions;
+      new_dimensions[attributes.axis] /= splits;
+      outputs.emplace_back(input.data_type, std::move(new_dimensions));
+    }
+  } else if (absl::holds_alternative<base::span<const uint32_t>>(
+                 attributes.splits)) {
+    const auto& splits =
+        absl::get<base::span<const uint32_t>>(attributes.splits);
+    if (base::ranges::any_of(splits,
+                             [](uint32_t split) { return split == 0; })) {
+      return base::unexpected("All splits must be greater than zero.");
+    }
+
+    base::CheckedNumeric<uint32_t> sum = std::accumulate(
+        splits.begin(), splits.end(), base::MakeCheckedNum<uint32_t>(0));
+    if (!sum.IsValid() ||
+        sum.ValueOrDie() != input.dimensions[attributes.axis]) {
+      return base::unexpected(
+          "The sum of all sizes in splits must be equal to the dimension size "
+          "of the input tensor specified by options.axis.");
+    }
+
+    outputs.reserve(splits.size());
+    for (uint32_t split : splits) {
+      std::vector<uint32_t> new_dimensions = input.dimensions;
+      new_dimensions[attributes.axis] = split;
+      outputs.emplace_back(input.data_type, std::move(new_dimensions));
+    }
+  } else {
+    NOTREACHED_NORETURN();
+  }
+
+  return outputs;
 }
 
 Conv2dAttributes::Conv2dAttributes() = default;
@@ -317,6 +364,102 @@ base::expected<Operand, std::string> ValidateConv2dAndInferOutput(
   }
 
   return Operand(input.data_type, std::move(output_shape));
+}
+
+base::expected<Operand, std::string> ValidatePadAndInferOutput(
+    const Operand& input,
+    base::span<const uint32_t> beginning_padding,
+    base::span<const uint32_t> ending_padding) {
+  // Validate the beginning_padding and ending_padding.
+  const auto input_shape = input.dimensions;
+  auto input_rank = input_shape.size();
+  if (beginning_padding.size() != input_rank) {
+    return base::unexpected(
+        "The length of beginningPadding must be "
+        "equal to the rank of the input tensor.");
+  }
+  if (ending_padding.size() != input_rank) {
+    return base::unexpected(
+        "The length of endingPadding must be "
+        "equal to the rank of the input tensor.");
+  }
+
+  // Infer the output.
+  // Each dimension of the output tensor can be calculated as follow:
+  // input_size = input_shape[i];
+  // output_size = beginning_padding + input_size + ending_padding.
+  std::vector<uint32_t> output_shape(input_rank);
+  for (size_t i = 0; i < input_rank; ++i) {
+    auto checked_output_size = base::MakeCheckedNum<uint32_t>(input_shape[i]) +
+                               beginning_padding[i] + ending_padding[i];
+    if (!checked_output_size.AssignIfValid(&output_shape[i])) {
+      return base::unexpected(base::StringPrintf(
+          "The padding of dimension (%zu) is too large.", i));
+    }
+  }
+
+  return Operand(input.data_type, std::move(output_shape));
+}
+
+base::expected<Operand, std::string> ValidateMatmulAndInferOutput(
+    const Operand& a,
+    const Operand& b) {
+  if (a.data_type != b.data_type) {
+    return base::unexpected("The types of first two inputs don't match.");
+  }
+
+  std::vector<uint32_t> a_dimensions = a.dimensions;
+  std::vector<uint32_t> b_dimensions = b.dimensions;
+
+  // Based on the WG discussion:
+  // https://github.com/webmachinelearning/webnn/issues/470, prototype the
+  // matmul without 1-D input tensors support.
+  if (a_dimensions.size() < 2 || b_dimensions.size() < 2) {
+    return base::unexpected(
+        "The rank of input must be larger than or equal to 2.");
+  }
+
+  // The number of columns in the first matrix must be equal to the number of
+  // rows in the second matrix.
+  const uint32_t a_cols = a_dimensions[a_dimensions.size() - 1];
+  const uint32_t a_rows = a_dimensions[a_dimensions.size() - 2];
+  const uint32_t b_cols = b_dimensions[b_dimensions.size() - 1];
+  const uint32_t b_rows = b_dimensions[b_dimensions.size() - 2];
+  if (a_cols != b_rows) {
+    return base::unexpected(base::StringPrintf(
+        "The number of columns (%u) in the first matrix isn't equal to "
+        "the number of rows (%u) in the second matrix.",
+        a_cols, b_rows));
+  }
+
+  size_t output_rank = std::max(a_dimensions.size(), b_dimensions.size());
+  std::vector<uint32_t> output_dimensions;
+  // Figure out the output shape by broadcasting all the dimensions except the
+  // last two. The output is 2-D tensor of shape [M, N].
+  if (a_dimensions.size() > 2 && b_dimensions.size() > 2) {
+    std::vector<uint32_t> sliced_a_dimensions(a_dimensions.begin(),
+                                              a_dimensions.end() - 2);
+    std::vector<uint32_t> sliced_b_dimensions(b_dimensions.begin(),
+                                              b_dimensions.end() - 2);
+    absl::optional<std::vector<uint32_t>> optional_output_dimensions =
+        BroadcastShapes(sliced_a_dimensions, sliced_b_dimensions, true);
+    if (!optional_output_dimensions) {
+      return base::unexpected("The matmul input shapes are not broadcastable.");
+    }
+    output_dimensions = *optional_output_dimensions;
+    output_dimensions.push_back(a_rows);
+    output_dimensions.push_back(b_cols);
+  } else if (a_dimensions.size() == 2 && b_dimensions.size() == 2) {
+    output_dimensions.push_back(a_rows);
+    output_dimensions.push_back(b_cols);
+  } else {
+    output_dimensions =
+        a_dimensions.size() > b_dimensions.size() ? a_dimensions : b_dimensions;
+    output_dimensions[output_rank - 2] = a_rows;
+    output_dimensions[output_rank - 1] = b_cols;
+  }
+  CHECK_EQ(output_rank, output_dimensions.size());
+  return Operand(a.data_type, std::move(output_dimensions));
 }
 
 base::expected<Operand, std::string> ValidatePool2dAndInferOutput(
@@ -502,6 +645,174 @@ base::expected<Operand, std::string> ValidateGemmAndInferOutput(
   return Operand(a.data_type, std::move(output_shape));
 }
 
+base::expected<Operand, std::string> ValidateConcatAndInferOutput(
+    const std::vector<Operand>& inputs,
+    const uint32_t axis) {
+  if (inputs.empty()) {
+    return base::unexpected("The inputs should not be empty.");
+  }
+  const auto& first_input_shape = inputs[0].dimensions;
+  const auto first_input_rank = first_input_shape.size();
+  // According to WebNN spec:
+  // https://www.w3.org/TR/webnn/#dom-mlgraphbuilder-concat-inputs-axis-axis,
+  // the axis that the inputs concatenate along, with the value in the interval
+  // [0, N-1] where N is the rank of input tensors. We just check the first
+  // input rank here because we will check all inputs have same rank in the
+  // following loop.
+  if (axis >= first_input_rank) {
+    return base::unexpected(
+        "The axis must be in the range [0, N-1] where N is the rank of input "
+        "tensor.");
+  }
+  const auto output_type = inputs[0].data_type;
+  // The loop skips the first input to avoid repeated checks.
+  for (size_t i = 1; i < inputs.size(); ++i) {
+    if (inputs[i].data_type != output_type) {
+      return base::unexpected("The input types don't match.");
+    }
+    // According to WebNN spec:
+    // https://www.w3.org/TR/webnn/#api-mlgraphbuilder-concat, all input tensors
+    // must have the same dimension.
+    if (inputs[i].dimensions.size() != first_input_rank) {
+      return base::unexpected(
+          "All input tensors must have the same dimension.");
+    }
+    // According to WebNN spec:
+    // https://www.w3.org/TR/webnn/#api-mlgraphbuilder-concat, all input tensors
+    // must have the same shape, except for the size of the dimension to
+    // concatenate on.
+    for (size_t dim = 0; dim < first_input_rank; ++dim) {
+      if (dim == axis || inputs[i].dimensions[dim] == first_input_shape[dim]) {
+        continue;
+      }
+      return base::unexpected(
+          "All input tensors must have the same shape, except for the size of "
+          "the dimension to concatenate on.");
+    }
+  }
+  // Calculate the output shape according to WebNN spec:
+  // https://www.w3.org/TR/webnn/#api-mlgraphbuilder-concat, the output tensor
+  // has the same shape except on the dimension that all the inputs concatenated
+  // along. The size of that dimension is computed as the sum of all the input
+  // sizes of the same dimension.
+  auto axis_size = base::MakeCheckedNum<uint32_t>(0);
+  for (auto& input : inputs) {
+    axis_size += input.dimensions[axis];
+  }
+  auto output_shape = first_input_shape;
+  if (!axis_size.AssignIfValid(&output_shape[axis])) {
+    return base::unexpected("The concatenated dimension size is too large.");
+  }
+
+  return Operand(output_type, std::move(output_shape));
+}
+
+base::expected<Operand, std::string> ValidatePreluAndInferOutput(
+    const Operand& input,
+    const Operand& slope) {
+  if (input.data_type != slope.data_type) {
+    return base::unexpected(
+        "The type of slope doesn't match the type of input.");
+  }
+  if (!IsFloatingPointType(input.data_type)) {
+    return base::unexpected(
+        "The type of input and slope must be one of the floating point types.");
+  }
+  // BroadcastShape unidirectionally broadcasts slope.dimensions to
+  // input.dimensions.
+  if (!BroadcastShapes(slope.dimensions, input.dimensions, false)) {
+    return base::unexpected(
+        "The shape of slope is not broadcastable to the shape of input.");
+  }
+
+  return Operand(input.data_type, input.dimensions);
+}
+
+base::expected<Operand, std::string> ValidateTransposeAndInferOutput(
+    const Operand& input,
+    base::span<const uint32_t> permutation) {
+  auto input_dimensions = input.dimensions;
+  auto input_rank = input_dimensions.size();
+  if (permutation.size() != input_rank) {
+    return base::unexpected(
+        "The number of values in permutation must be the same as the rank of "
+        "the input tensor.");
+  }
+  auto validation_result = ValidateAxes(permutation, input_rank);
+  if (!validation_result.has_value()) {
+    return base::unexpected(validation_result.error());
+  }
+
+  std::vector<uint32_t> output_shape(input_rank);
+  for (size_t i = 0; i < input_rank; ++i) {
+    output_shape[i] = input_dimensions[permutation[i]];
+  }
+  return Operand(input.data_type, std::move(output_shape));
+}
+
+SliceAttributes::SliceAttributes() = default;
+SliceAttributes::~SliceAttributes() = default;
+
+SliceAttributes::SliceAttributes(SliceAttributes&& other) = default;
+SliceAttributes& SliceAttributes::operator=(SliceAttributes&& other) = default;
+
+base::expected<Operand, std::string> ValidateSliceAndInferOutput(
+    const Operand& input,
+    const SliceAttributes& attributes) {
+  if (!attributes.sizes.size()) {
+    return base::unexpected("The length of sizes must be not be zero.");
+  }
+
+  const auto input_rank = input.dimensions.size();
+  if (attributes.starts.size() != input_rank) {
+    return base::unexpected(
+        "The length of starts must be equal to the rank of the input tensor.");
+  }
+
+  if (attributes.sizes.size() != input_rank) {
+    return base::unexpected(
+        "The length of sizes must be equal to the rank of the input tensor.");
+  }
+
+  for (uint32_t i = 0; i < input_rank; ++i) {
+    if (attributes.starts[i] >= input.dimensions[i]) {
+      return base::unexpected(base::StringPrintf(
+          "For dimension (%u): the starting index to slice must "
+          "be less than input size (%u).",
+          i, input.dimensions[i]));
+    }
+
+    // WebNN plans to allow 0 size dimensions and an issue has been filed to
+    // track it: https://github.com/webmachinelearning/webnn/issues/391.
+    if (attributes.sizes[i] == 0) {
+      return base::unexpected(base::StringPrintf(
+          "For dimension (%u): the number of elements to slice "
+          "must not be 0.",
+          i));
+    }
+
+    auto checked_ending_index =
+        base::MakeCheckedNum<uint32_t>(attributes.starts[i]) +
+        attributes.sizes[i];
+    if (!checked_ending_index.IsValid<uint32_t>()) {
+      return base::unexpected(base::StringPrintf(
+          "For dimension (%u): the ending index to slice is too large.", i));
+    }
+
+    if (checked_ending_index.ValueOrDie() > input.dimensions[i]) {
+      return base::unexpected(
+          base::StringPrintf("For dimension (%u): the ending index to slice "
+                             "must not be greater than input size (%u).",
+                             i, input.dimensions[i]));
+    }
+  }
+
+  // The output is a tensor the same as the specified slice sizes.
+  std::vector<uint32_t> output_shape;
+  output_shape.assign(attributes.sizes.begin(), attributes.sizes.end());
+  return Operand(input.data_type, std::move(output_shape));
+}
+
 base::expected<size_t, std::string> ValidateAndCalculateElementsNumber(
     base::span<const uint32_t> dimensions) {
   if (dimensions.empty()) {
@@ -533,6 +844,24 @@ base::expected<size_t, std::string> ValidateAndCalculateByteLength(
     return base::unexpected("The byte length is too large.");
   }
   return checked_byte_length.ValueOrDie();
+}
+
+base::expected<void, std::string> ValidateAxes(base::span<const uint32_t> axes,
+                                               uint32_t rank) {
+  if (base::ranges::any_of(axes, [rank](uint32_t axis) {
+        return base::MakeStrictNum(axis) >= rank;
+      })) {
+    return base::unexpected(base::StringPrintf(
+        "The values in axes must be within the range from 0 to (%u).",
+        rank - 1));
+  }
+
+  if (axes.size() != std::set<uint32_t>(axes.begin(), axes.end()).size()) {
+    return base::unexpected(
+        "Two or more values are same in the axes sequence.");
+  }
+
+  return base::ok();
 }
 
 absl::optional<std::vector<uint32_t>> BroadcastShapes(
@@ -607,6 +936,20 @@ absl::optional<PaddingSizes> CalculateConv2dPadding(AutoPad auto_pad,
     return absl::nullopt;
   }
   return PaddingSizes({.begin = padding_begin, .end = padding_end});
+}
+
+bool IsFloatingPointType(Operand::DataType data_type) {
+  switch (data_type) {
+    case Operand::DataType::kFloat32:
+    case Operand::DataType::kFloat16:
+      return true;
+    case Operand::DataType::kInt32:
+    case Operand::DataType::kUint32:
+    case Operand::DataType::kInt8:
+    case Operand::DataType::kUint8:
+      return false;
+  }
+  NOTREACHED_NORETURN();
 }
 
 }  // namespace webnn

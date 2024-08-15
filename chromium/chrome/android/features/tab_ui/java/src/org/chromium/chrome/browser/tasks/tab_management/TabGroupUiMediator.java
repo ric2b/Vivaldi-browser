@@ -14,6 +14,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.CallbackController;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.base.supplier.LazyOneshotSupplier;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplier;
@@ -103,7 +104,7 @@ public class TabGroupUiMediator implements BackPressHandler {
     private final BottomControlsCoordinator
             .BottomControlsVisibilityController mVisibilityController;
     private final IncognitoStateProvider mIncognitoStateProvider;
-    private final OneshotSupplier<TabGridDialogMediator.DialogController>
+    private final LazyOneshotSupplier<TabGridDialogMediator.DialogController>
             mTabGridDialogControllerSupplier;
     private final IncognitoStateObserver mIncognitoStateObserver;
     private final TabModelSelectorObserver mTabModelSelectorObserver;
@@ -120,13 +121,18 @@ public class TabGroupUiMediator implements BackPressHandler {
     private boolean mIsTabGroupUiVisible;
     private boolean mIsShowingOverViewMode;
 
-    TabGroupUiMediator(Context context, BottomControlsVisibilityController visibilityController,
-            ResetHandler resetHandler, PropertyModel model, TabModelSelector tabModelSelector,
+    TabGroupUiMediator(
+            Context context,
+            BottomControlsVisibilityController visibilityController,
+            ResetHandler resetHandler,
+            PropertyModel model,
+            TabModelSelector tabModelSelector,
             TabCreatorManager tabCreatorManager,
             OneshotSupplier<LayoutStateProvider> layoutStateProviderSupplier,
             IncognitoStateProvider incognitoStateProvider,
-            @Nullable OneshotSupplier<TabGridDialogMediator.DialogController>
-                    dialogControllerSupplier,
+            @Nullable
+                    LazyOneshotSupplier<TabGridDialogMediator.DialogController>
+                            dialogControllerSupplier,
             ObservableSupplier<Boolean> omniboxFocusStateSupplier) {
         mContext = context;
         mResetHandler = resetHandler;
@@ -288,10 +294,10 @@ public class TabGroupUiMediator implements BackPressHandler {
         // TODO(995951): Add observer similar to TabModelSelectorTabModelObserver for
         // TabModelFilter.
         ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(
-                 false, true)) // Vivaldi
+                 false))
                 .addTabGroupObserver(mTabGroupModelFilterObserver);
         ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(
-                 true, true)) // Vivaldi
+                 true))
                 .addTabGroupObserver(mTabGroupModelFilterObserver);
 
         mOmniboxFocusObserver = isFocus -> {
@@ -458,10 +464,10 @@ public class TabGroupUiMediator implements BackPressHandler {
             mTabModelSelector.removeObserver(mTabModelSelectorObserver);
             if (mTabGroupModelFilterObserver != null) {
                 ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider()
-                                .getTabModelFilter(false, true)) // Vivaldi
+                                .getTabModelFilter(false))
                         .removeTabGroupObserver(mTabGroupModelFilterObserver);
                 ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider()
-                                .getTabModelFilter(true, true)) // Vivaldi
+                                .getTabModelFilter(true))
                         .removeTabGroupObserver(mTabGroupModelFilterObserver);
             }
         }

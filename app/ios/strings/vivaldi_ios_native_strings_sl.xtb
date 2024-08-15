@@ -2,7 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="sl">
 <translation id="1016495303386450659">Postavka posodobljena</translation>
+<translation id="1041637248958093184">Vivaldi pri uporabi zasebnih zavihkov ne bo shranil iskanj, obiskanih spletnih mest, piškotkov in začasnih datotek.</translation>
 <translation id="1066692930984703744">Omogočite sledilnike in blokiranje oglasov za hitrejše in varnejše brskanje</translation>
+<translation id="1076258485383101882">Sinhroniziraj vnesene URL-je</translation>
 <translation id="1116694919640316211">O tem</translation>
 <translation id="1123707809902612118">Blokiraj sledilce in oglase</translation>
 <translation id="1151972924205500581">Zahtevano je geslo</translation>
@@ -20,6 +22,7 @@
 <translation id="1315107593850379616">E-pošta za obnovitev</translation>
 <translation id="1325473901257014816">Z Vivaldijem ohranite vse zavihke v enem brskalniku in jih sinhronizirate v vseh napravah.</translation>
 <translation id="132683371494960526">Dvakrat tapnite, da spremenite nadrejeno mapo.</translation>
+<translation id="1354002567845495520">Sinhroniziraj Vivaldi Notes (priponk ni mogoče sinhronizirati)</translation>
 <translation id="1379470994139227452">Nastavite Vivaldi kot privzeto</translation>
 <translation id="1381484244248892686">Shranjena gesla lahko uporabite v kateri koli napravi. Shranjeni so v upravitelju gesel Vivaldi za <ph name="EMAIL" /></translation>
 <translation id="1383876407941801731">Iskanje</translation>
@@ -28,6 +31,7 @@
 <translation id="1430638949087011281">Brez blokiranja</translation>
 <translation id="1446108955355168157">Če želite šifrirati in zaščititi svoje podatke za sinhronizacijo (gesla, zaznamke, opombe in drugo), ustvarite geslo za šifriranje. To geslo nam ne bo nikoli poslano.</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> postavk</translation>
+<translation id="1468415711258933398">Standardni zavihek</translation>
 <translation id="1521731267649138856">vaš obnovitveni e-poštni naslov.</translation>
 <translation id="1573784689611551537">Upravljanje virov blokiranja oglasov</translation>
 <translation id="1577761519530347814">Sinhroniziraj shranjena gesla spletnih strani</translation>
@@ -48,7 +52,6 @@
 <translation id="1861262398884155592">Ta mapa je prazna</translation>
 <translation id="1887193815546011584">Nova hitra izbira</translation>
 <translation id="1929299157575856072">PRIVZETA STOPNJA BLOKIRANJA</translation>
-<translation id="1979539205367899613">Tapnite ikono plus spodaj, da ustvarite nov zasebni zavihek.</translation>
 <translation id="2030706494969937066">Vaših poverilnic ni bilo mogoče pridobiti. Prosimo, prijavite se znova.</translation>
 <translation id="2034405583989639424">Uredi Hitro izbiro</translation>
 <translation id="2048247880942380698">Arabščina (<ph name="ORIGIN" />)</translation>
@@ -56,7 +59,6 @@
 <translation id="2117093051794889870">Po vsebini</translation>
 <translation id="2129408066358825297">Starost</translation>
 <translation id="2148384276939959392">Izbrana sinhronizacija</translation>
-<translation id="21693288559538605">Povzetek blokatorja oglasov in sledilnika</translation>
 <translation id="2195713384412091023">S tem boste odstranili vse sinhronizacijske podatke, shranjene na našem strežniku, ponastavili vaše šifrirno geslo in se odjavili.</translation>
 <translation id="2243210264130642074">Opomba shranjena</translation>
 <translation id="2272338747456392228">Račun je bil zaklenjen</translation>
@@ -65,6 +67,7 @@
 <translation id="2336309953058658733">Izprazni smeti</translation>
 <translation id="2359808026110333948">Nadaljuj</translation>
 <translation id="2386793615875593361">1 izbran</translation>
+<translation id="2387049655823108978">Sinhroniziraj odprte zavihke iz drugih naprav</translation>
 <translation id="2388224692799337242">Ko začnete brskati, se tukaj prikaže vaša zgodovina</translation>
 <translation id="2391028308389203648">Turščina (<ph name="ORIGIN" />)</translation>
 <translation id="2392369802118427583">Aktiviraj</translation>
@@ -80,13 +83,13 @@ blokiran</translation>
 <translation id="2709516037105925701">Samodejno izpolnjevanje</translation>
 <translation id="271033894570825754">Novo</translation>
 <translation id="2745324713975967671">Geslo za šifriranje</translation>
+<translation id="276436995507680929">Sinhroniziraj bralni seznam</translation>
 <translation id="2765217105034171413">Majhno</translation>
 <translation id="2825232297853754349">Strinjati se morate s Pogoji in določili.</translation>
 <translation id="2842985007712546952">Nadrejena mapa</translation>
 <translation id="2843343418360315034">Madžarščina (<ph name="ORIGIN" />)</translation>
 <translation id="2850144663494818309">Inicializacija sinhronizacije...</translation>
 <translation id="2874111661876416905">Išči z Vivaldijem</translation>
-<translation id="2874121295511641364">Sinhroniziraj vnesene URL-je in odprte zavihke</translation>
 <translation id="2898963176829412617">Nova mapa…</translation>
 <translation id="2961573414320947355">Želite odpreti vse povezave v Vivaldiju? Bodite prepričani, da nas nastavite kot privzeto.</translation>
 <translation id="3006429105107822794">Tega gesla si ne bo treba zapomniti. Shranjeno bo v Vivaldi Password Manager.</translation>
@@ -95,8 +98,9 @@ blokiran</translation>
 <translation id="3073196329485613487">Prijavite se v svoj račun</translation>
 <translation id="307859903981308731">Če nadaljujete, se strinjate z Vivaldijem</translation>
 <translation id="3086746722712840547">opomba</translation>
-<translation id="3091563570137981919">Sledilec in blokiranje oglasov</translation>
-<translation id="313566647356924831">Upravljanje nastavitev blokatorja</translation>
+<translation id="3091563570137981919">Blokiranje oglasov in sledilcev</translation>
+<translation id="3134385238404760368">Ni nedavnih zavihkov</translation>
+<translation id="3157931365184549694">Obnovi</translation>
 <translation id="3177673846235066154">Strežnik je zavrnil vaše poverilnice.</translation>
 <translation id="3229182533910980085">Dodajte svoj prvi zaznamek tako, da tapnete ikono plus spodaj</translation>
 <translation id="3236835587712044564">Ste zadovoljni z Vivaldijem? Nastavite za privzeto.</translation>
@@ -131,6 +135,7 @@ blokiran</translation>
 <translation id="3897092660631435901">Meni</translation>
 <translation id="3953599441418463312">Japonščina (<ph name="ORIGIN" />)</translation>
 <translation id="395506590020066151">Sledilec blokiran</translation>
+<translation id="3958433364221339259">Išči z <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3997823869212225788">Vnesite 6-mestno kodo</translation>
 <translation id="4002066346123236978">Naslov</translation>
 <translation id="4032606071208172574">(Privzeto)</translation>
@@ -140,6 +145,7 @@ blokiran</translation>
 <translation id="414098425907666915">Zasebno iskanje</translation>
 <translation id="4141861385728508836">Nordijsko (<ph name="ORIGIN" />)</translation>
 <translation id="4145489350420416595">Nepričakovana napaka.</translation>
+<translation id="4151468644762710975">Obnovi privzete iskalnike</translation>
 <translation id="4152011295694446843">Tukaj boste našli svoje zaznamke</translation>
 <translation id="4152623049003960417">Podrobnosti sledilca</translation>
 <translation id="4176463684765177261">Onemogočeno</translation>
@@ -173,12 +179,14 @@ blokirani</translation>
 <translation id="4655510151391078468">Ta koda se ne ujema s tisto, ki smo vam jo poslali.
         Imate še <ph name="ATTEMPTS" /> poskusov.</translation>
 <translation id="466494460776294423">Zahtevana je potrditvena koda</translation>
+<translation id="4714431804859029826">Obnovi privzeto</translation>
 <translation id="4727698999970341158">Islandščina (<ph name="ORIGIN" />)</translation>
 <translation id="473775607612524610">Posodobi</translation>
 <translation id="4739712911308055817">Ni pridobljeno</translation>
 <translation id="4780953868408193639">Sledilec
 blokiran</translation>
 <translation id="4807415245238822255">Gesla se morajo ujemati.</translation>
+<translation id="4821701638681626529">Vivaldi med uporabo zasebnih zavihkov ne beleži zgodovine brskanja</translation>
 <translation id="4833044618885331665">Če želite uporabljati sinhronizacijo, morate nadgraditi Vivaldija.</translation>
 <translation id="4852383705713307704">Oglas blokiran</translation>
 <translation id="4871370605780490696">Dodaj zaznamek</translation>
@@ -262,6 +270,7 @@ blokiran</translation>
 <translation id="6937750621455385628">Za prijavo morate uporabiti Vivaldijev račun.</translation>
 <translation id="6945221475159498467">Izberite</translation>
 <translation id="6946395294519639514">S paneli imate lahko orodja za dostop do strani v brskalnikovi stranski vrstici.</translation>
+<translation id="6951435330868954105">Upravljanje privzetih nastavitev</translation>
 <translation id="6967884871145366229">Upravljanje nastavitev zasebnosti</translation>
 <translation id="6973630695168034713">Mape</translation>
 <translation id="7006864796794806241">Obnovi geslo</translation>
@@ -282,6 +291,7 @@ blokiran</translation>
 <translation id="7379938540614588640">Nizozemščina (<ph name="ORIGIN" />)</translation>
 <translation id="7388525939184421699">Dodaj nov vir</translation>
 <translation id="7400418766976504921">URL</translation>
+<translation id="7417521636956146248">Iskalniki bodo ponastavljeni na privzete nastavitve, kar bo ponastavilo tudi vaše iskalnike po meri.</translation>
 <translation id="7454640759045234067">Sledilci blokirani</translation>
 <translation id="7461899062138731833">VIRI</translation>
 <translation id="750493650310597496">0 izbranih</translation>
@@ -315,6 +325,8 @@ blokiran</translation>
 <translation id="8261506727792406068">Izbriši</translation>
 <translation id="8273666073173891138">Opomba shranjena v <ph name="FOLDER_TITLE" /></translation>
 <translation id="8275038454117074363">Uvozi</translation>
+<translation id="8284356787013856231">Dovoljenje za odpiranje datoteke zavrnjeno</translation>
+<translation id="8326104954595890674">Nov zasebni zavihek</translation>
 <translation id="8329813750766387010">Posodobljeno: <ph name="DATE" /></translation>
 <translation id="8347535536909603600">Odstrani opozorila o piškotkih (<ph name="TYPE" />)</translation>
 <translation id="8359194106448244241">Če želite videti zavihke iz drugih naprav, morate omogočiti sinhronizacijo.</translation>
@@ -355,6 +367,7 @@ blokirani</translation>
 <translation id="9212737146310746733">Farsi (<ph name="ORIGIN" />)</translation>
 <translation id="9218693288527810093">Blokiraj sledilce</translation>
 <translation id="937440209447114831">Ne blokiramo nobenih oglasov ali sledilcev.</translation>
+<translation id="958688202859970851">Tukaj bodo prikazani nedavno obiskani zavihki</translation>
 <translation id="984650419570014454">Aktivacijska koda mora biti sestavljena iz 6 števk.</translation>
 <translation id="992440609313570947">Ste novi pri Vivaldiju? <ph name="BEGIN_LINK" />Ustvarite račun ➔<ph name="END_LINK" /></translation>
 </translationbundle>

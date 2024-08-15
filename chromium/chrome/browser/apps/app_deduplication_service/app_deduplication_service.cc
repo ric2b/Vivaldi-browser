@@ -16,18 +16,18 @@
 #include "chrome/browser/apps/app_deduplication_service/app_deduplication_service.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
-#include "chrome/browser/apps/app_service/package_id.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_features.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/services/app_service/public/cpp/app_types.h"
+#include "components/services/app_service/public/cpp/package_id.h"
 #include "components/services/app_service/public/cpp/types_util.h"
 
 namespace {
-// Folder path to where the deduplication data will be stored on disk.
-constexpr char kAppDeduplicationFolderPath[] =
-    "app_deduplication_service/deduplication_data/";
+// Relative file path to where the deduplication data will be stored on disk.
+constexpr char kAppDeduplicationFilePath[] =
+    "app_deduplication_service/deduplication_data/deduplication_data.pb";
 
 // Converts PackageId strings to Entrys when the source is Website.
 absl::optional<apps::deduplication::Entry> GetEntryForWebsite(
@@ -73,8 +73,9 @@ AppDeduplicationService::AppDeduplicationService(Profile* profile)
 
   if (base::FeatureList::IsEnabled(features::kAppDeduplicationServiceFondue)) {
     base::FilePath path =
-        profile_->GetPath().AppendASCII(kAppDeduplicationFolderPath);
-    cache_ = std::make_unique<AppDeduplicationCache>(path);
+        profile_->GetPath().AppendASCII(kAppDeduplicationFilePath);
+    proto_file_manager_ =
+        std::make_unique<ProtoFileManager<proto::DeduplicateData>>(path);
     StartLoginFlow();
   }
 }
@@ -95,7 +96,7 @@ void AppDeduplicationService::StartLoginFlow() {
                        weak_ptr_factory_.GetWeakPtr()));
   } else {
     // Read most recent data from cache.
-    cache_->ReadDeduplicationCache(base::BindOnce(
+    proto_file_manager_->ReadProtoFromFile(base::BindOnce(
         &AppDeduplicationService::OnReadDeduplicationCacheCompleted,
         weak_ptr_factory_.GetWeakPtr()));
   }
@@ -230,13 +231,13 @@ void AppDeduplicationService::OnGetDeduplicateDataFromServerCompleted(
   if (response.has_value()) {
     profile_->GetPrefs()->SetTime(prefs::kLastGetDataFromServerTimestamp,
                                   base::Time::Now());
-    cache_->WriteDeduplicationCache(
+    proto_file_manager_->WriteProtoToFile(
         response.value(),
         base::BindOnce(
             &AppDeduplicationService::OnWriteDeduplicationCacheCompleted,
             weak_ptr_factory_.GetWeakPtr()));
   } else {
-    cache_->ReadDeduplicationCache(base::BindOnce(
+    proto_file_manager_->ReadProtoFromFile(base::BindOnce(
         &AppDeduplicationService::OnReadDeduplicationCacheCompleted,
         weak_ptr_factory_.GetWeakPtr()));
   }
@@ -252,7 +253,7 @@ void AppDeduplicationService::OnWriteDeduplicationCacheCompleted(bool result) {
     LOG(ERROR) << "Writing deduplication data to disk failed.";
     return;
   }
-  cache_->ReadDeduplicationCache(base::BindOnce(
+  proto_file_manager_->ReadProtoFromFile(base::BindOnce(
       &AppDeduplicationService::OnReadDeduplicationCacheCompleted,
       weak_ptr_factory_.GetWeakPtr()));
   return;

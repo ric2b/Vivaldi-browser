@@ -24,10 +24,9 @@ static_library("browser") {
 
     #"//vivaldi/base",
     "//base:base",
-    "//chrome/app:chromium_strings",
+    "//chrome/app:branded_strings",
     "//chrome/app:command_ids",
     "//chrome/app:generated_resources",
-    "//chrome/app:chromium_strings",
     "//chrome/browser:resources",
     "//chrome/browser:theme_properties",
     "//chrome/browser/devtools",
@@ -38,7 +37,7 @@ static_library("browser") {
     "//components/os_crypt/sync:os_crypt",
     "//components/renderer_context_menu",
     "//components/search_engines",
-    "//components/strings:components_chromium_strings",
+    "//components/strings:components_branded_strings",
     "//components/strings:components_strings",
    # "//content/browser",
     "//crypto:crypto",
@@ -168,6 +167,10 @@ source_set("init_sparkle") {
     "//base:i18n",
     "//base:base_static",
     "//url",
+  ]
+
+  configs += [
+    "//vivaldi/gn/config:release_kind"
   ]
 }
 

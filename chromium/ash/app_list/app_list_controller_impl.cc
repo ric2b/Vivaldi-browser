@@ -4,6 +4,7 @@
 
 #include "ash/app_list/app_list_controller_impl.h"
 
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -54,6 +55,7 @@
 #include "ash/wm/float/float_controller.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/overview_controller.h"
+#include "ash/wm/overview/overview_session.h"
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_state.h"
@@ -62,15 +64,14 @@
 #include "base/callback_list.h"
 #include "base/containers/adapters.h"
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
+#include "base/trace_event/trace_event.h"
 #include "chromeos/ash/services/assistant/public/cpp/assistant_enums.h"
-#include "chromeos/ui/wm/features.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "ui/compositor/compositor.h"
@@ -223,8 +224,7 @@ aura::Window* GetTopVisibleWindow() {
 
     // Floated windows can be tucked offscreen in tablet mode. Their target
     // visibility is true but the app list is fully visible under them.
-    if (chromeos::wm::features::IsWindowLayoutMenuEnabled() &&
-        WindowState::Get(window)->IsFloated() &&
+    if (WindowState::Get(window)->IsFloated() &&
         Shell::Get()->float_controller()->IsFloatedWindowTuckedForTablet(
             window)) {
       continue;
@@ -329,8 +329,6 @@ void AppListControllerImpl::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kLauncherUseLongContinueDelay, false);
 
   // The prefs for launcher search controls.
-  // TODO(crbug.com/1352636): Consider merging this to
-  // `search_notifier_controller` and rename it.
   registry->RegisterDictionaryPref(prefs::kLauncherSearchCategoryControlStatus);
 }
 
@@ -355,13 +353,6 @@ AppListControllerImpl::CreateLauncherSearchIphSession() {
     return nullptr;
   }
   return client_->CreateLauncherSearchIphSession();
-}
-
-void AppListControllerImpl::OpenSearchBoxIphUrl() {
-  if (!client_) {
-    return;
-  }
-  client_->OpenSearchBoxIphUrl();
 }
 
 void AppListControllerImpl::SetActiveModel(
@@ -423,6 +414,12 @@ bool AppListControllerImpl::IsVisible(
 
 bool AppListControllerImpl::IsVisible() {
   return IsVisible(absl::nullopt);
+}
+
+bool AppListControllerImpl::IsImageSearchToggleable() {
+  // Hide the image search from the category filter menu if the privacy notice
+  // hasn't been accepted or timeout yet.
+  return !SearchNotifierController::ShouldShowPrivacyNotice();
 }
 
 void AppListControllerImpl::OnActiveUserPrefServiceChanged(
@@ -1112,8 +1109,10 @@ void AppListControllerImpl::SetKeyboardTraversalMode(bool engaged) {
     // TODO(https://crbug.com/1262236): class name comparision and static cast
     // should be avoided in the production code. Find a better way to guarantee
     // the item's selection status.
-    if (focused_view->GetClassName() == AppListItemView::kViewClassName)
+    if (std::string_view(focused_view->GetClassName()) ==
+        std::string_view(AppListItemView::kViewClassName)) {
       static_cast<AppListItemView*>(focused_view)->EnsureSelected();
+    }
 
     focused_view->SchedulePaint();
   }
@@ -1149,6 +1148,14 @@ void AppListControllerImpl::RecordShelfAppLaunched() {
 void AppListControllerImpl::StartAssistant() {
   AssistantUiController::Get()->ShowUi(
       AssistantEntryPoint::kLauncherSearchBoxIcon);
+}
+
+std::vector<AppListSearchControlCategory>
+AppListControllerImpl::GetToggleableCategories() const {
+  if (client_) {
+    return client_->GetToggleableCategories();
+  }
+  return std::vector<AppListSearchControlCategory>();
 }
 
 void AppListControllerImpl::StartSearch(const std::u16string& raw_query) {
@@ -1426,9 +1433,23 @@ void AppListControllerImpl::SetHideContinueSection(bool hide) {
   bubble_presenter_->UpdateContinueSectionVisibility();
 }
 
-void AppListControllerImpl::CommitTemporarySortOrder() {
-  DCHECK(client_);
-  client_->CommitTemporarySortOrder();
+bool AppListControllerImpl::IsCategoryEnabled(
+    AppListSearchControlCategory category) {
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+  return prefs->GetDict(prefs::kLauncherSearchCategoryControlStatus)
+      .FindBool(GetAppListControlCategoryName(category))
+      .value_or(true);
+}
+
+void AppListControllerImpl::SetCategoryEnabled(
+    AppListSearchControlCategory category,
+    bool enabled) {
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+  ScopedDictPrefUpdate pref_update(prefs,
+                                   prefs::kLauncherSearchCategoryControlStatus);
+  pref_update->Set(GetAppListControlCategoryName(category), enabled);
 }
 
 void AppListControllerImpl::GetAppLaunchedMetricParams(
@@ -1480,7 +1501,7 @@ int AppListControllerImpl::GetShelfSize() {
 }
 
 int AppListControllerImpl::GetSystemShelfInsetsInTabletMode() {
-  return ShelfConfig::Get()->GetSystemShelfInsetsInTabletMode();
+  return ShelfConfig::Get()->GetTabletModeShelfInsetsAndRecordUMA();
 }
 
 bool AppListControllerImpl::IsInTabletMode() {

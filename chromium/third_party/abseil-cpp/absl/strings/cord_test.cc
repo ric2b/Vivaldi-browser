@@ -2110,8 +2110,6 @@ TEST_P(CordTest, DiabolicalGrowth) {
   // This test exercises a diabolical Append(<one char>) on a cord, making the
   // cord shared before each Append call resulting in a terribly fragmented
   // resulting cord.
-  // TODO(b/183983616): Apply some minimum compaction when copying a shared
-  // source cord into a mutable copy for updates in CordRepRing.
   RandomEngine rng(GTEST_FLAG_GET(random_seed));
   const std::string expected = RandomLowercaseString(&rng, 5000);
   absl::Cord cord;
@@ -2656,6 +2654,13 @@ TEST_P(CordTest, Format) {
   absl::Format(&c, "And %-3llx bad wolf!", 1);
   MaybeHarden(c);
   EXPECT_EQ(c, "There were 0003 little pigs.And 1   bad wolf!");
+}
+
+TEST_P(CordTest, Stringify) {
+  absl::Cord c =
+      absl::MakeFragmentedCord({"A ", "small ", "fragmented ", "Cord", "."});
+  MaybeHarden(c);
+  EXPECT_EQ(absl::StrCat(c), "A small fragmented Cord.");
 }
 
 TEST_P(CordTest, Hardening) {
@@ -3240,6 +3245,12 @@ TEST_P(CordTest, ChecksummedEmptyCord) {
   EXPECT_EQ(cc3.TryFlat(), "");
   EXPECT_EQ(absl::HashOf(c3), absl::HashOf(absl::Cord()));
   EXPECT_EQ(absl::HashOf(c3), absl::HashOf(absl::string_view()));
+}
+
+TEST(CrcCordTest, ChecksummedEmptyCordEstimateMemoryUsage) {
+  absl::Cord cord;
+  cord.SetExpectedChecksum(0);
+  EXPECT_NE(cord.EstimatedMemoryUsage(), 0);
 }
 
 #if defined(GTEST_HAS_DEATH_TEST) && defined(ABSL_INTERNAL_CORD_HAVE_SANITIZER)

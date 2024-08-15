@@ -98,6 +98,12 @@
         <message name="IDS_SUPPORT_TOOL_SELECT_DATA_COLLECTOR_ERROR" desc="The error message that user will see in a toast message when they don't select any data sources and wants to move to the next stage.">
             No data collector selected. Please select at least one data collector.
         </message>
+        <message name="IDS_SUPPORT_TOOL_SELECT_ALL" desc="The button label that will enable user to select all data collector checkboxes so everything will be included.">
+            Select all
+        </message>
+        <message name="IDS_SUPPORT_TOOL_SELECT_NONE" desc="The button label that will enable user to deselect all data collector checkboxes so nothing will be included.">
+            Select none
+        </message>
         <!-- DataCollector strings -->
         <message name="IDS_SUPPORT_TOOL_CHROME_SYSTEM_INFO" desc="This is a data source name for internal Chrome logs.">
             Chrome System Information
@@ -154,7 +160,7 @@
             ChromeOS Chrome User Logs
         </message>
         <message name="IDS_SUPPORT_TOOL_CHROMEOS_BLUETOOTH_FLOSS" desc="Bluetooth logs if Floss is enabled on the device. Floss is the project that works on converging on a single Bluetooth stack between Android and ChromeOS.">
-            ChromeOS Bluetooth Floss
+            ChromeOS Bluetooth
         </message>
         <message name="IDS_SUPPORT_TOOL_CHROMEOS_CONNECTED_INPUT_DEVICES" desc="Information about connected input devices to a ChromeOS device.">
             ChromeOS Connected Input Devices
@@ -173,6 +179,9 @@
         </message>
         <message name="IDS_SUPPORT_TOOL_SIGN_IN" desc="Sign In State.">
             Sign In State
+        </message>
+        <message name="IDS_SUPPORT_TOOL_CHROMEOS_APP_SERVICE" desc="ChromeOS App Service gathers information from app service about installed and running apps.">
+            ChromeOS App Service
         </message>
         <!-- PII type strings -->
         <message name="IDS_SUPPORT_TOOL_ANDROID_APP_INFO" desc="Android App informations on the device. Includes information like app storage paths etc.">

@@ -6,12 +6,8 @@
 #define CHROME_BROWSER_UI_AUTOFILL_AUTOFILL_POPUP_CONTROLLER_IMPL_H_
 
 #include <string>
-#include <type_traits>
 #include <vector>
 
-#include "base/functional/invoke.h"
-#include "base/gtest_prod_util.h"
-#include "base/i18n/rtl.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
@@ -38,10 +34,6 @@ namespace gfx {
 class RectF;
 }  // namespace gfx
 
-namespace password_manager {
-class ContentPasswordManagerDriver;
-}
-
 namespace ui {
 class AXPlatformNode;
 }
@@ -50,7 +42,6 @@ namespace autofill {
 
 class AutofillPopupDelegate;
 class AutofillPopupView;
-class ContentAutofillDriver;
 
 // Sub-popups and their parent popups are connected by providing children
 // with links to their parents. This interface defines the API exposed by
@@ -94,18 +85,16 @@ class AutofillPopupControllerImpl
 
   // Shows the popup, or updates the existing popup with the given values.
   virtual void Show(std::vector<Suggestion> suggestions,
-                    AutofillSuggestionTriggerSource trigger_source);
+                    AutofillSuggestionTriggerSource trigger_source,
+                    AutoselectFirstSuggestion autoselect_first_suggestion);
 
   // Updates the data list values currently shown with the popup.
-  virtual void UpdateDataListValues(const std::vector<std::u16string>& values,
-                                    const std::vector<std::u16string>& labels);
+  virtual void UpdateDataListValues(base::span<const SelectOption> options);
 
   // Informs the controller that the popup may not be hidden by stale data or
   // interactions with native Chrome UI. This state remains active until the
   // view is destroyed.
   void PinView();
-
-  void KeepPopupOpenForTesting() { keep_popup_open_for_testing_ = true; }
 
   // Hides the popup and destroys the controller. This also invalidates
   // `delegate_`.
@@ -124,16 +113,28 @@ class AutofillPopupControllerImpl
   bool ShouldIgnoreMouseObservedOutsideItemBoundsCheck() const override;
   base::WeakPtr<AutofillPopupController> OpenSubPopup(
       const gfx::RectF& anchor_bounds,
-      std::vector<Suggestion> suggestions) override;
+      std::vector<Suggestion> suggestions,
+      AutoselectFirstSuggestion autoselect_first_suggestion) override;
+  std::optional<AutofillClient::PopupScreenLocation> GetPopupScreenLocation()
+      const override;
   void HideSubPopup() override;
+
+  // PictureInPictureWindowManager::Observer
+  void OnEnterPictureInPicture() override;
+
+  void KeepPopupOpenForTesting() { keep_popup_open_for_testing_ = true; }
 
   // Disables show thresholds. See the documentation of the member for details.
   void DisableThresholdForTesting(bool disable_threshold) {
     disable_threshold_for_testing_ = disable_threshold;
   }
 
-  // PictureInPictureWindowManager::Observer
-  void OnEnterPictureInPicture() override;
+  void SetViewForTesting(base::WeakPtr<AutofillPopupView> view) {
+    view_ = std::move(view);
+    time_view_shown_ = base::TimeTicks::Now();
+  }
+
+  int GetLineCountForTesting() const { return GetLineCount(); }
 
  protected:
   FRIEND_TEST_ALL_PREFIXES(AutofillPopupControllerUnitTest,
@@ -164,7 +165,7 @@ class AutofillPopupControllerImpl
   void OnSuggestionsChanged() override;
   void SelectSuggestion(absl::optional<size_t> index) override;
   void AcceptSuggestion(int index, base::TimeTicks event_time) override;
-  void AcceptSuggestionWithoutThreshold(int index) override;
+  void PerformButtonActionForSuggestion(int index) override;
   bool RemoveSuggestion(int list_index) override;
   int GetLineCount() const override;
   const Suggestion& GetSuggestionAt(int row) const override;
@@ -201,47 +202,10 @@ class AutofillPopupControllerImpl
   virtual void HideViewAndDie();
 
  private:
-  // Wraps a raw AutofillPopupView pointer and checks for nullptr before any
-  // dereference. This is useful because AutofillPopupView may be synchronously
-  // deleted and set to nullptr by many calls in AutofillPopupControllerImpl,
-  // which easily leads to segfaults. See crbug.com/1277218 for the lifecycle
-  // management issue in AutofillPopupView.
-  class AutofillPopupViewPtr {
-   public:
-    AutofillPopupViewPtr();
-    AutofillPopupViewPtr(const AutofillPopupViewPtr&) = delete;
-    AutofillPopupViewPtr& operator=(const AutofillPopupViewPtr&) = delete;
-    ~AutofillPopupViewPtr();
-
-    AutofillPopupViewPtr& operator=(base::WeakPtr<AutofillPopupView> ptr) {
-      ptr_ = std::move(ptr);
-      return *this;
-    }
-
-    explicit operator bool() const { return !!ptr_; }
-
-    // If `ptr_ == nullptr`, returns something that converts to false.
-    // If `ptr_ != nullptr`, calls `ptr_->func(args...)` and, if that returns a
-    // value, returns this value wrapped in an `absl::optional`, otherwise
-    // returns true.
-    template <typename Func, typename... Args>
-    [[nodiscard]] auto Call(Func&& func, Args... args) {
-      using ReturnType = decltype(base::invoke(func, *ptr_, args...));
-      if constexpr (!std::is_void_v<ReturnType>) {
-        return ptr_ ? absl::optional<ReturnType>(
-                          base::invoke(func, *ptr_, args...))
-                    : absl::optional<ReturnType>();
-      } else {
-        return ptr_ ? base::invoke(func, *ptr_, args...), true : false;
-      }
-    }
-
-   private:
-    base::WeakPtr<AutofillPopupView> ptr_;
-  };
-
   // content::WebContentsObserver:
   void RenderFrameDeleted(content::RenderFrameHost* render_frame_host) override;
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
   void OnVisibilityChanged(content::Visibility visibility) override;
 
   // Clear the internal state of the controller. This is needed to ensure that
@@ -253,22 +217,15 @@ class AutofillPopupControllerImpl
   // a case, we should hide the popup.
   bool IsMouseLocked() const;
 
-  // Casts `delegate_->GetDriver()` to ContentAutofillDriver or
-  // ContentPasswordManagerDriver, respectively.
-  absl::variant<ContentAutofillDriver*,
-                password_manager::ContentPasswordManagerDriver*>
-  GetDriver();
-
-  // ExpandablePopupParentControllerImpl
+  // ExpandablePopupParentControllerImpl:
   base::WeakPtr<AutofillPopupView> CreateSubPopupView(
       base::WeakPtr<AutofillPopupController> controller) override;
 
-  friend class AutofillPopupControllerUnitTest;
-  friend class AutofillPopupControllerAccessibilityUnitTest;
-  void SetViewForTesting(base::WeakPtr<AutofillPopupView> view);
+  // Returns `true` if this popup has no parent, and `false` for sub-popups.
+  bool IsRootPopup() const;
 
   PopupControllerCommon controller_common_;
-  AutofillPopupViewPtr view_;
+  base::WeakPtr<AutofillPopupView> view_;
   base::WeakPtr<AutofillPopupDelegate> delegate_;
 
   struct {
@@ -326,7 +283,7 @@ class AutofillPopupControllerImpl
       parent_controller_;
 
   // The open sub-popup controller if any, `nullptr` otherwise.
-  base::WeakPtr<AutofillPopupController> sub_popup_controller_;
+  base::WeakPtr<AutofillPopupControllerImpl> sub_popup_controller_;
 
   // AutofillPopupControllerImpl deletes itself. To simplify memory management,
   // we delete the object asynchronously.

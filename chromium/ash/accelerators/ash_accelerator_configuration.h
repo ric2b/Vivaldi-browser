@@ -105,6 +105,7 @@ class ASH_EXPORT AshAcceleratorConfiguration : public AcceleratorConfiguration,
 
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
+  bool HasObserver(Observer* observer);
 
   const AcceleratorAction* FindAcceleratorAction(
       const ui::Accelerator& accelerator) const;
@@ -176,6 +177,9 @@ class ASH_EXPORT AshAcceleratorConfiguration : public AcceleratorConfiguration,
 
   // Resets all accelerator mappings to the the system default.
   void ResetAllAccelerators();
+
+  // Returns the total number of customizations for all accelerators.
+  int GetTotalNumberOfModifications();
 
   // A local copy of the pref overrides, allows modifying the overrides before
   // updating the override pref.

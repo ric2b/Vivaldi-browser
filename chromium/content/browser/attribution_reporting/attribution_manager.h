@@ -41,7 +41,8 @@ class CONTENT_EXPORT AttributionManager : public AttributionDataModel {
 
   static AttributionManager* FromBrowserContext(BrowserContext*);
 
-  static network::mojom::AttributionSupport GetSupport();
+  static network::mojom::AttributionSupport GetAttributionSupport(
+      WebContents* web_contents);
 
   ~AttributionManager() override = default;
 
@@ -62,9 +63,7 @@ class CONTENT_EXPORT AttributionManager : public AttributionDataModel {
   virtual void HandleTrigger(AttributionTrigger trigger,
                              GlobalRenderFrameHostId render_frame_id) = 0;
 
-  virtual void HandleOsRegistration(
-      OsRegistration,
-      GlobalRenderFrameHostId render_frame_id) = 0;
+  virtual void HandleOsRegistration(OsRegistration) = 0;
 
   // Get all sources that are currently stored in this partition. Used for
   // populating WebUI.

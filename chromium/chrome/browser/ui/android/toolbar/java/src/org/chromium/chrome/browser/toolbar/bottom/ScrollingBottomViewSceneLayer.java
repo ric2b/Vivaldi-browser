@@ -7,8 +7,9 @@ package org.chromium.chrome.browser.toolbar.bottom;
 import android.graphics.RectF;
 import android.view.View;
 
-import org.chromium.base.annotations.JNINamespace;
-import org.chromium.base.annotations.NativeMethods;
+import org.jni_zero.JNINamespace;
+import org.jni_zero.NativeMethods;
+
 import org.chromium.chrome.browser.layouts.EventFilter;
 import org.chromium.chrome.browser.layouts.SceneOverlay;
 import org.chromium.chrome.browser.layouts.components.VirtualView;
@@ -22,7 +23,7 @@ import java.util.List;
 // Vivaldi
 import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsSizer;
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
 /**
  * A composited view that sits at the bottom of the screen and listens to changes in the browser
@@ -145,7 +146,7 @@ public class ScrollingBottomViewSceneLayer extends SceneOverlayLayer implements 
     public boolean isSceneOverlayTreeShowing() {
         // (david@vivaldi.com): Scene overlay is only visible with toolbar at the top.
         if (BuildConfig.IS_VIVALDI)
-            return !SharedPreferencesManager.getInstance().readBoolean(
+            return !ChromeSharedPreferences.getInstance().readBoolean(
                     "address_bar_to_bottom", false);
         // If the offset is greater than the toolbar's height, don't draw the layer.
         return mIsVisible && mCurrentYOffsetPx < mBottomView.getHeight() - mTopShadowHeightPx;

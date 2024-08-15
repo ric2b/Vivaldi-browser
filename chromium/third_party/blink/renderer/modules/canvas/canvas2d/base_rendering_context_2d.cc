@@ -24,6 +24,8 @@
 #include "third_party/blink/renderer/core/css/parser/css_parser.h"
 #include "third_party/blink/renderer/core/css/properties/computed_style_utils.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
+#include "third_party/blink/renderer/core/dom/text_link_colors.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_context_creation_attributes_core.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_font_cache.h"
@@ -36,6 +38,7 @@
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_filter_operation_resolver.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_pattern.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d_state.h"
+#include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_style.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/path_2d.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/v8_canvas_style.h"
 #include "third_party/blink/renderer/modules/webcodecs/video_frame.h"
@@ -207,7 +210,8 @@ void BaseRenderingContext2D::beginLayer(ScriptState* script_state,
 
     FilterEffectBuilder filter_effect_builder(
         gfx::RectF(Width(), Height()),
-        1.0f);  // Deliberately ignore zoom on the canvas element.
+        1.0f,  // Deliberately ignore zoom on the canvas element.
+        Color::kBlack, mojom::blink::ColorScheme::kLight);
 
     // Save the layer's filter in the parent state, along with all the other
     // render states impacting the layer. Technically, this is only required so
@@ -575,6 +579,23 @@ ColorParseResult BaseRenderingContext2D::ParseColorOrCurrentColor(
   if (parse_result == ColorParseResult::kCurrentColor) {
     color = GetCurrentColor();
   }
+
+  if (parse_result == ColorParseResult::kColorMix) {
+    const CSSValue* color_mix_value = CSSParser::ParseSingleValue(
+        CSSPropertyID::kColor, color_string,
+        StrictCSSParserContext(SecureContextMode::kInsecureContext));
+
+    if (auto* window = DynamicTo<LocalDOMWindow>(GetTopExecutionContext())) {
+      color = window->document()->GetTextLinkColors().ColorFromCSSValue(
+          *color_mix_value, GetCurrentColor(), color_scheme_);
+    } else {
+      TextLinkColors text_link_colors = TextLinkColors();
+      color = text_link_colors.ColorFromCSSValue(
+          *color_mix_value, GetCurrentColor(), color_scheme_);
+    }
+
+    return ColorParseResult::kColor;
+  }
   return parse_result;
 }
 
@@ -608,8 +629,9 @@ void BaseRenderingContext2D::setFillStyle(v8::Isolate* isolate,
       GetState().SetFillPattern(v8_style.pattern);
       break;
     case V8CanvasStyleType::kString: {
-      if (v8_style.string == GetState().UnparsedFillColor())
+      if (v8_style.string == GetState().UnparsedFillColor()) {
         return;
+      }
       Color parsed_color = Color::kTransparent;
       if (!ExtractColorFromV8ValueAndUpdateCache(v8_style, parsed_color)) {
         return;
@@ -1588,8 +1610,8 @@ void BaseRenderingContext2D::DispatchContextLostEvent(TimerBase*) {
       (context_lost_mode_ == CanvasRenderingContext::kRealLostContext ||
        context_lost_mode_ == CanvasRenderingContext::kSyntheticLostContext)) {
     try_restore_context_attempt_count_ = 0;
-    try_restore_context_event_timer_.StartOneShot(kTryRestoreContextInterval,
-                                                  FROM_HERE);
+    try_restore_context_event_timer_.StartRepeating(kTryRestoreContextInterval,
+                                                    FROM_HERE);
   }
 }
 
@@ -1736,8 +1758,7 @@ void BaseRenderingContext2D::drawImage(CanvasImageSource* image_source,
   SourceImageStatus source_image_status = kInvalidSourceImageStatus;
   if (!image_source->IsVideoElement()) {
     image = image_source->GetSourceImageForCanvas(
-        CanvasResourceProvider::FlushReason::kDrawImage, &source_image_status,
-        default_object_size);
+        FlushReason::kDrawImage, &source_image_status, default_object_size);
     if (source_image_status == kUndecodableSourceImageStatus) {
       exception_state.ThrowDOMException(
           DOMExceptionCode::kInvalidStateError,
@@ -1933,9 +1954,8 @@ CanvasPattern* BaseRenderingContext2D::createPattern(
 
   gfx::SizeF default_object_size(Width(), Height());
   scoped_refptr<Image> image_for_rendering =
-      image_source->GetSourceImageForCanvas(
-          CanvasResourceProvider::FlushReason::kCreatePattern, &status,
-          default_object_size);
+      image_source->GetSourceImageForCanvas(FlushReason::kCreatePattern,
+                                            &status, default_object_size);
 
   switch (status) {
     case kNormalSourceImageStatus:
@@ -2100,7 +2120,7 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
   validate_and_create_params.default_color_space =
       GetDefaultImageDataColorSpace();
 
-  if (UNLIKELY(!CanCreateCanvas2dResourceProvider() || isContextLost())) {
+  if (UNLIKELY(isContextLost() || !CanCreateCanvas2dResourceProvider())) {
     return ImageData::ValidateAndCreate(
         sw, sh, absl::nullopt, image_data_settings, validate_and_create_params,
         exception_state);
@@ -2108,7 +2128,7 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
 
   // Deferred offscreen canvases might have recorded commands, make sure
   // that those get drawn here
-  FinalizeFrame(CanvasResourceProvider::FlushReason::kGetImageData);
+  FinalizeFrame(FlushReason::kGetImageData);
 
   num_readbacks_performed_++;
   CanvasContextCreationAttributesCore::WillReadFrequently
@@ -2153,7 +2173,7 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
   }
 
   scoped_refptr<StaticBitmapImage> snapshot =
-      GetImage(CanvasResourceProvider::FlushReason::kGetImageData);
+      GetImage(FlushReason::kGetImageData);
 
   // Determine if the array should be zero initialized, or if it will be
   // completely overwritten.
@@ -2216,6 +2236,13 @@ void BaseRenderingContext2D::putImageData(ImageData* data,
   if (data->IsBufferBaseDetached()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "The source data has been detached.");
+    return;
+  }
+
+  if (layer_count_ != 0) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "`putImageData()` cannot be called while layers are opened.");
     return;
   }
 
@@ -2520,12 +2547,12 @@ String BaseRenderingContext2D::font() const {
   StringBuilder serialized_font;
   const FontDescription& font_description = GetState().GetFontDescription();
 
-  if (font_description.Style() == ItalicSlopeValue()) {
+  if (font_description.Style() == kItalicSlopeValue) {
     serialized_font.Append("italic ");
   }
-  if (font_description.Weight() == BoldWeightValue()) {
+  if (font_description.Weight() == kBoldWeightValue) {
     serialized_font.Append("bold ");
-  } else if (font_description.Weight() != NormalWeightValue()) {
+  } else if (font_description.Weight() != kNormalWeightValue) {
     int weight_as_int = static_cast<int>((float)font_description.Weight());
     serialized_font.AppendNumber(weight_as_int);
     serialized_font.Append(" ");
@@ -3013,6 +3040,14 @@ void BaseRenderingContext2D::setFontVariantCaps(
 
 FontSelector* BaseRenderingContext2D::GetFontSelector() const {
   return nullptr;
+}
+
+bool BaseRenderingContext2D::IsAccelerated() const {
+  CanvasRenderingContextHost* host = GetCanvasRenderingContextHost();
+  if (host) {
+    return host->GetRasterMode() == RasterMode::kGPU;
+  }
+  return false;
 }
 
 }  // namespace blink

@@ -4,10 +4,9 @@
 
 #include "base/metrics/statistics_recorder.h"
 
-#include <memory>
-
 #include "base/at_exit.h"
 #include "base/barrier_closure.h"
+#include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/debug/leak_annotations.h"
 #include "base/json/string_escape.h"
@@ -18,13 +17,38 @@
 #include "base/metrics/metrics_hashes.h"
 #include "base/metrics/persistent_histogram_allocator.h"
 #include "base/metrics/record_histogram_checker.h"
+#include "base/rand_util.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
+#include "build/build_config.h"
 
 namespace base {
 namespace {
+
+// Whether a 50/50 trial for using a R/W lock should be run.
+// Restrict it to Windows for now as other platforms show poor results.
+#if BUILDFLAG(IS_WIN)
+constexpr bool kRunRwLockTrial = true;
+#else
+constexpr bool kRunRwLockTrial = false;
+#endif  // BUILDFLAG(IS_WIN)
+
+// Whether the R/W lock should be used when the trial is not active.
+// Only enabled on Windows for now, since other platforms show poor results.
+#if BUILDFLAG(IS_WIN)
+constexpr bool kUseRwLockByDefault = true;
+#else
+constexpr bool kUseRwLockByDefault = false;
+#endif  // BUILDFLAG(IS_WIN)
+
+bool EnableBenchmarking() {
+  // TODO(asvitkine): If this code ends up not being temporary, refactor it to
+  // not duplicate the constant name. (Right now it's at a different layer.)
+  return CommandLine::InitializedForCurrentProcess() &&
+         CommandLine::ForCurrentProcess()->HasSwitch("enable-benchmarking");
+}
 
 bool HistogramNameLesser(const base::HistogramBase* a,
                          const base::HistogramBase* b) {
@@ -107,33 +131,54 @@ void StatisticsRecorder::RegisterHistogramProvider(
 // static
 HistogramBase* StatisticsRecorder::RegisterOrDeleteDuplicate(
     HistogramBase* histogram) {
-  // Declared before |auto_lock| to ensure correct destruction order.
+  uint64_t hash = histogram->name_hash();
+
+  // Ensure that histograms use HashMetricName() to compute their hash, since
+  // that function is used to look up histograms.
+  DCHECK_EQ(hash, HashMetricName(histogram->histogram_name()));
+
+  // Declared before |auto_lock| so that the histogram is deleted after the lock
+  // is released (no point in holding the lock longer than needed).
   std::unique_ptr<HistogramBase> histogram_deleter;
   const SrAutoWriterLock auto_lock(GetLock());
   EnsureGlobalRecorderWhileLocked();
 
-  const char* const name = histogram->histogram_name();
-  HistogramBase*& registered = top_->histograms_[name];
+  HistogramBase*& registered = top_->histograms_[hash];
 
   if (!registered) {
-    // |name| is guaranteed to never change or be deallocated so long
-    // as the histogram is alive (which is forever).
     registered = histogram;
     ANNOTATE_LEAKING_OBJECT_PTR(histogram);  // see crbug.com/79322
     // If there are callbacks for this histogram, we set the kCallbackExists
     // flag.
-    if (base::Contains(top_->observers_, name))
+    if (base::Contains(top_->observers_, hash)) {
+      // Note: SetFlags() does not write to persistent memory, it only writes to
+      // an in-memory version of the flags.
       histogram->SetFlags(HistogramBase::kCallbackExists);
+    }
 
     return histogram;
   }
+
+  // Assert that there was no collision. Note that this is intentionally a
+  // DCHECK because 1) this is expensive to call repeatedly, and 2) this
+  // comparison may cause a read in persistent memory, which can cause I/O (this
+  // is bad because |lock_| is currently being held).
+  //
+  // If you are a developer adding a new histogram and this DCHECK is being hit,
+  // you are unluckily a victim of a hash collision. For now, the best solution
+  // is to rename the histogram. Reach out to chrome-metrics-team@google.com if
+  // you are unsure!
+  DCHECK_EQ(strcmp(histogram->histogram_name(), registered->histogram_name()),
+            0)
+      << "Histogram name hash collision between " << histogram->histogram_name()
+      << " and " << registered->histogram_name() << " (hash = " << hash << ")";
 
   if (histogram == registered) {
     // The histogram was registered before.
     return histogram;
   }
 
-  // We already have one histogram with this name.
+  // We already have a histogram with this name.
   histogram_deleter.reset(histogram);
   return registered;
 }
@@ -141,14 +186,20 @@ HistogramBase* StatisticsRecorder::RegisterOrDeleteDuplicate(
 // static
 const BucketRanges* StatisticsRecorder::RegisterOrDeleteDuplicateRanges(
     const BucketRanges* ranges) {
-  const SrAutoWriterLock auto_lock(GetLock());
-  EnsureGlobalRecorderWhileLocked();
+  const BucketRanges* registered;
+  {
+    const SrAutoWriterLock auto_lock(GetLock());
+    EnsureGlobalRecorderWhileLocked();
 
-  const BucketRanges* const registered =
-      top_->ranges_manager_.RegisterOrDeleteDuplicateRanges(ranges);
+    registered = top_->ranges_manager_.GetOrRegisterCanonicalRanges(ranges);
+  }
 
-  if (registered == ranges)
+  // Delete the duplicate ranges outside the lock to reduce contention.
+  if (registered != ranges) {
+    delete ranges;
+  } else {
     ANNOTATE_LEAKING_OBJECT_PTR(ranges);
+  }
 
   return registered;
 }
@@ -198,9 +249,11 @@ std::vector<const BucketRanges*> StatisticsRecorder::GetBucketRanges() {
 
 // static
 HistogramBase* StatisticsRecorder::FindHistogram(base::StringPiece name) {
-  // This must be called *before* the lock is acquired below because it may
-  // call back into StatisticsRecorder to register histograms. Those called
-  // methods will acquire the lock at that time.
+  uint64_t hash = HashMetricName(name);
+
+  // This must be called *before* the lock is acquired below because it may call
+  // back into StatisticsRecorder to register histograms. Those called methods
+  // will acquire the lock at that time.
   ImportGlobalPersistentHistograms();
 
   // Acquire the lock in "read" mode since we're only reading the data, not
@@ -214,8 +267,7 @@ HistogramBase* StatisticsRecorder::FindHistogram(base::StringPiece name) {
     return nullptr;
   }
 
-  const HistogramMap::const_iterator it = const_top->histograms_.find(name);
-  return it != const_top->histograms_.end() ? it->second : nullptr;
+  return const_top->FindHistogramByHashInternal(hash, name);
 }
 
 // static
@@ -293,24 +345,69 @@ void StatisticsRecorder::InitLogOnShutdown() {
 }
 
 // static
+StringPiece StatisticsRecorder::GetLockTrialGroup() {
+  if (kRunRwLockTrial && !EnableBenchmarking()) {
+    return lock_.Get().use_shared_mutex() ? "Enabled" : "Disabled";
+  }
+  return StringPiece();
+}
+
+// static
+bool StatisticsRecorder::SrLock::ShouldUseSharedMutex() {
+  // Force deterministic results for benchmarks.
+  if (kRunRwLockTrial && !EnableBenchmarking()) {
+    return RandInt(0, 1) == 1;
+  }
+  return kUseRwLockByDefault;
+}
+
+HistogramBase* StatisticsRecorder::FindHistogramByHashInternal(
+    uint64_t hash,
+    StringPiece name) const {
+  AssertLockHeld();
+  const HistogramMap::const_iterator it = histograms_.find(hash);
+  if (it == histograms_.end()) {
+    return nullptr;
+  }
+  // Assert that there was no collision. Note that this is intentionally a
+  // DCHECK because 1) this is expensive to call repeatedly, and 2) this
+  // comparison may cause a read in persistent memory, which can cause I/O (this
+  // is bad because |lock_| is currently being held).
+  //
+  // If you are a developer adding a new histogram and this DCHECK is being hit,
+  // you are unluckily a victim of a hash collision. For now, the best solution
+  // is to rename the histogram. Reach out to chrome-metrics-team@google.com if
+  // you are unsure!
+  DCHECK_EQ(name, it->second->histogram_name())
+      << "Histogram name hash collision between " << name << " and "
+      << it->second->histogram_name() << " (hash = " << hash << ")";
+  return it->second;
+}
+
+// static
 void StatisticsRecorder::AddHistogramSampleObserver(
     const std::string& name,
     StatisticsRecorder::ScopedHistogramSampleObserver* observer) {
   DCHECK(observer);
+  uint64_t hash = HashMetricName(name);
+
   const SrAutoWriterLock auto_lock(GetLock());
   EnsureGlobalRecorderWhileLocked();
 
-  auto iter = top_->observers_.find(name);
+  auto iter = top_->observers_.find(hash);
   if (iter == top_->observers_.end()) {
     top_->observers_.insert(
-        {name, base::MakeRefCounted<HistogramSampleObserverList>()});
+        {hash, base::MakeRefCounted<HistogramSampleObserverList>()});
   }
 
-  top_->observers_[name]->AddObserver(observer);
+  top_->observers_[hash]->AddObserver(observer);
 
-  const HistogramMap::const_iterator it = top_->histograms_.find(name);
-  if (it != top_->histograms_.end())
-    it->second->SetFlags(HistogramBase::kCallbackExists);
+  HistogramBase* histogram = top_->FindHistogramByHashInternal(hash, name);
+  if (histogram) {
+    // Note: SetFlags() does not write to persistent memory, it only writes to
+    // an in-memory version of the flags.
+    histogram->SetFlags(HistogramBase::kCallbackExists);
+  }
 
   have_active_callbacks_.store(
       global_sample_callback() || !top_->observers_.empty(),
@@ -321,21 +418,26 @@ void StatisticsRecorder::AddHistogramSampleObserver(
 void StatisticsRecorder::RemoveHistogramSampleObserver(
     const std::string& name,
     StatisticsRecorder::ScopedHistogramSampleObserver* observer) {
+  uint64_t hash = HashMetricName(name);
+
   const SrAutoWriterLock auto_lock(GetLock());
   EnsureGlobalRecorderWhileLocked();
 
-  auto iter = top_->observers_.find(name);
+  auto iter = top_->observers_.find(hash);
   DCHECK(iter != top_->observers_.end());
 
   auto result = iter->second->RemoveObserver(observer);
   if (result ==
       HistogramSampleObserverList::RemoveObserverResult::kWasOrBecameEmpty) {
-    top_->observers_.erase(name);
+    top_->observers_.erase(hash);
 
     // We also clear the flag from the histogram (if it exists).
-    const HistogramMap::const_iterator it = top_->histograms_.find(name);
-    if (it != top_->histograms_.end())
-      it->second->ClearFlags(HistogramBase::kCallbackExists);
+    HistogramBase* histogram = top_->FindHistogramByHashInternal(hash, name);
+    if (histogram) {
+      // Note: ClearFlags() does not write to persistent memory, it only writes
+      // to an in-memory version of the flags.
+      histogram->ClearFlags(HistogramBase::kCallbackExists);
+    }
   }
 
   have_active_callbacks_.store(
@@ -349,6 +451,8 @@ void StatisticsRecorder::FindAndRunHistogramCallbacks(
     const char* histogram_name,
     uint64_t name_hash,
     HistogramBase::Sample sample) {
+  DCHECK_EQ(name_hash, HashMetricName(histogram_name));
+
   const SrAutoReaderLock auto_lock(GetLock());
 
   // Manipulate |top_| through a const variable to ensure it is not mutated.
@@ -357,7 +461,7 @@ void StatisticsRecorder::FindAndRunHistogramCallbacks(
     return;
   }
 
-  auto it = const_top->observers_.find(histogram_name);
+  auto it = const_top->observers_.find(name_hash);
 
   // Ensure that this observer is still registered, as it might have been
   // unregistered before we acquired the lock.
@@ -400,20 +504,23 @@ void StatisticsRecorder::ForgetHistogramForTesting(base::StringPiece name) {
   const SrAutoWriterLock auto_lock(GetLock());
   EnsureGlobalRecorderWhileLocked();
 
-  const HistogramMap::iterator found = top_->histograms_.find(name);
-  if (found == top_->histograms_.end())
+  uint64_t hash = HashMetricName(name);
+  HistogramBase* base = top_->FindHistogramByHashInternal(hash, name);
+  if (!base) {
     return;
+  }
 
-  HistogramBase* const base = found->second;
   if (base->GetHistogramType() != SPARSE_HISTOGRAM) {
-    // When forgetting a histogram, it's likely that other information is
-    // also becoming invalid. Clear the persistent reference that may no
-    // longer be valid. There's no danger in this as, at worst, duplicates
-    // will be created in persistent memory.
+    // When forgetting a histogram, it's likely that other information is also
+    // becoming invalid. Clear the persistent reference that may no longer be
+    // valid. There's no danger in this as, at worst, duplicates will be created
+    // in persistent memory.
     static_cast<Histogram*>(base)->bucket_ranges()->set_persistent_reference(0);
   }
 
-  top_->histograms_.erase(found);
+  // This performs another lookup in the map, but this is fine since this is
+  // only used in tests.
+  top_->histograms_.erase(hash);
 }
 
 // static
@@ -465,9 +572,12 @@ StatisticsRecorder::Histograms StatisticsRecorder::GetHistograms(
 
   out.reserve(const_top->histograms_.size());
   for (const auto& entry : const_top->histograms_) {
+    // Note: HasFlags() does not read to persistent memory, it only reads an
+    // in-memory version of the flags.
     bool is_persistent = entry.second->HasFlags(HistogramBase::kIsPersistent);
-    if (!include_persistent && is_persistent)
+    if (!include_persistent && is_persistent) {
       continue;
+    }
     out.push_back(entry.second);
   }
 

@@ -16,7 +16,6 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
-#include "build/build_config.h"
 #include "components/webapps/browser/installable/installable_data.h"
 #include "components/webapps/browser/installable/installable_logging.h"
 #include "components/webapps/browser/installable/installable_page_data.h"
@@ -82,6 +81,7 @@ class InstallableManager
  private:
   friend class content::WebContentsUserData<InstallableManager>;
   friend class InstallableManagerBrowserTest;
+  friend class TestInstallableManager;
 
   FRIEND_TEST_ALL_PREFIXES(InstallableManagerBrowserTest,
                            ManagerBeginsInEmptyState);
@@ -105,9 +105,9 @@ class InstallableManager
   // Gets/sets parts of particular properties. Exposed for testing.
   InstallableStatusCode manifest_error() const;
   InstallableStatusCode worker_error() const;
-  InstallableStatusCode icon_error();
-  GURL& icon_url();
-  const SkBitmap* icon();
+  InstallableStatusCode icon_error() const;
+  GURL icon_url() const;
+  const SkBitmap* icon() const;
 
   // Returns the WebContents to which this object is attached, or nullptr if the
   // WebContents doesn't exist or is currently being destroyed.
@@ -134,7 +134,7 @@ class InstallableManager
 
   const GURL& manifest_url() const;
   const blink::mojom::Manifest& manifest() const;
-  bool has_worker();
+  bool has_worker() const;
 
   std::unique_ptr<InstallablePageData> page_data_;
   InstallableTaskQueue task_queue_;

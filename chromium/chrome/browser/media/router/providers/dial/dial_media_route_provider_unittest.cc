@@ -156,11 +156,9 @@ class DialMediaRouteProviderTest : public ::testing::Test {
     provider_->CreateRoute(
         source_id, sink_id, presentation_id, origin_, kFrameTreeNodeId,
         base::TimeDelta(),
-        /* off_the_record */ false,
         base::BindOnce(&DialMediaRouteProviderTest::ExpectRouteResult,
                        base::Unretained(this),
                        mojom::RouteRequestResultCode::OK));
-    task_environment_.RunUntilIdle();
   }
 
   void TestCreateRoute() {
@@ -168,7 +166,6 @@ class DialMediaRouteProviderTest : public ::testing::Test {
     CreateRoute(presentation_id);
     ASSERT_TRUE(route_);
     EXPECT_EQ(presentation_id, route_->presentation_id());
-    EXPECT_FALSE(route_->is_off_the_record());
 
     const MediaRoute::Id& route_id = route_->media_route_id();
     std::vector<RouteMessagePtr> received_messages;
@@ -177,7 +174,6 @@ class DialMediaRouteProviderTest : public ::testing::Test {
           for (auto& message : messages)
             received_messages.emplace_back(std::move(message));
         });
-    provider_->StartListeningForRouteMessages(route_->media_route_id());
     task_environment_.RunUntilIdle();
 
     // RECEIVER_ACTION and NEW_SESSION messages are sent from MRP to page when
@@ -193,8 +189,7 @@ class DialMediaRouteProviderTest : public ::testing::Test {
       mojom::RouteRequestResultCode expected_result,
       absl::optional<std::string> source_to_join = absl::nullopt,
       absl::optional<std::string> presentation_to_join = absl::nullopt,
-      absl::optional<url::Origin> client_origin = absl::nullopt,
-      absl::optional<bool> client_incognito = absl::nullopt) {
+      absl::optional<url::Origin> client_origin = absl::nullopt) {
     CreateRoute();
     ASSERT_TRUE(route_);
 
@@ -204,12 +199,8 @@ class DialMediaRouteProviderTest : public ::testing::Test {
                                           ? *presentation_to_join
                                           : route_->presentation_id();
     const url::Origin& origin = client_origin ? *client_origin : origin_;
-    const bool incognito =
-        client_incognito ? *client_incognito : route_->is_off_the_record();
-
     provider_->JoinRoute(
         source, presentation, origin, kFrameTreeNodeId, base::TimeDelta(),
-        incognito,
         base::BindOnce(&DialMediaRouteProviderTest::ExpectRouteResult,
                        base::Unretained(this), expected_result));
   }
@@ -583,46 +574,6 @@ TEST_F(DialMediaRouteProviderTest, AddSinkQueryDifferentApps) {
   task_environment_.RunUntilIdle();
 }
 
-TEST_F(DialMediaRouteProviderTest, ListenForRouteMessages) {
-  std::vector<RouteMessagePtr> messages1;
-  messages1.emplace_back(message_util::RouteMessageFromString("message1"));
-  MediaRoute::Id route_id = "route_id";
-  auto& message_sender = provider_->message_sender_;
-  EXPECT_CALL(mock_router_, OnRouteMessagesReceived(_, _)).Times(0);
-  message_sender->SendMessages(route_id, std::move(messages1));
-  task_environment_.RunUntilIdle();
-
-  EXPECT_CALL(mock_router_, OnRouteMessagesReceived(route_id, _))
-      .WillOnce([&](const auto& route_id, auto messages) {
-        EXPECT_EQ(1UL, messages.size());
-        EXPECT_EQ(message_util::RouteMessageFromString("message1"),
-                  messages[0]);
-      });
-
-  provider_->StartListeningForRouteMessages(route_id);
-  task_environment_.RunUntilIdle();
-
-  EXPECT_CALL(mock_router_, OnRouteMessagesReceived(route_id, _))
-      .WillOnce([&](const auto& route_id, auto messages) {
-        EXPECT_EQ(1UL, messages.size());
-        EXPECT_EQ(message_util::RouteMessageFromString("message2"),
-                  messages[0]);
-      });
-
-  std::vector<RouteMessagePtr> messages2;
-  messages2.emplace_back(message_util::RouteMessageFromString("message2"));
-  message_sender->SendMessages(route_id, std::move(messages2));
-  task_environment_.RunUntilIdle();
-
-  provider_->StopListeningForRouteMessages(route_id);
-  EXPECT_CALL(mock_router_, OnRouteMessagesReceived(_, _)).Times(0);
-
-  std::vector<RouteMessagePtr> messages3;
-  messages3.emplace_back(message_util::RouteMessageFromString("message3"));
-  message_sender->SendMessages(route_id, std::move(messages3));
-  task_environment_.RunUntilIdle();
-}
-
 TEST_F(DialMediaRouteProviderTest, CreateRoute) {
   TestCreateRoute();
   TestSendClientConnectMessage();
@@ -647,11 +598,6 @@ TEST_F(DialMediaRouteProviderTest, JoinRouteFailsForWrongOrigin) {
   TestJoinRoute(mojom::RouteRequestResultCode::ROUTE_NOT_FOUND, absl::nullopt,
                 absl::nullopt,
                 url::Origin::Create(GURL("https://wrong-origin.com")));
-}
-
-TEST_F(DialMediaRouteProviderTest, JoinRouteFailsForIncognitoMismatch) {
-  TestJoinRoute(mojom::RouteRequestResultCode::ROUTE_NOT_FOUND, absl::nullopt,
-                absl::nullopt, absl::nullopt, true);
 }
 
 TEST_F(DialMediaRouteProviderTest, TerminateRoute) {
@@ -679,13 +625,12 @@ TEST_F(DialMediaRouteProviderTest, CreateRouteTerminatesExistingRoute) {
   // Store route messages in `received_messages`.
   const MediaRoute::Id& route_id = route_->media_route_id();
   std::vector<RouteMessagePtr> received_messages;
-  EXPECT_CALL(mock_router_, OnRouteMessagesReceived(route_id, _))
+  EXPECT_CALL(mock_router_, OnRouteMessagesReceived(_, _))
       .WillRepeatedly([&](const auto& route_id, auto messages) {
         for (auto& message : messages) {
           received_messages.emplace_back(std::move(message));
         }
       });
-  provider_->StartListeningForRouteMessages(route_->media_route_id());
   task_environment_.RunUntilIdle();
 
   // Verify received route message.
@@ -708,7 +653,6 @@ TEST_F(DialMediaRouteProviderTest, CreateRouteTerminatesExistingRoute) {
   provider_->CreateRoute(
       source_id, sink_id, presentation_id_2, origin_, kFrameTreeNodeId,
       base::TimeDelta(),
-      /* off_the_record */ false,
       base::BindOnce(&DialMediaRouteProviderTest::ExpectRouteResult,
                      base::Unretained(this),
                      mojom::RouteRequestResultCode::OK));
@@ -718,7 +662,7 @@ TEST_F(DialMediaRouteProviderTest, CreateRouteTerminatesExistingRoute) {
   EXPECT_EQ(presentation_id_2, route_->presentation_id());
 
   // Verify that terminate route message is received.
-  ASSERT_EQ(3u, received_messages.size());
+  ASSERT_EQ(5u, received_messages.size());
   ExpectDialInternalMessageType(received_messages[2],
                                 DialInternalMessageType::kReceiverAction);
 }

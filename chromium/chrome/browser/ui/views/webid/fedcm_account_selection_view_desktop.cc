@@ -15,6 +15,8 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 
+#include "ui/vivaldi_browser_window.h"
+
 using DismissReason = content::IdentityRequestDialogController::DismissReason;
 
 // static
@@ -65,7 +67,7 @@ void FedCmAccountSelectionView::Show(
     bool show_auto_reauthn_checkbox) {
   // If IDP sign-in modal dialog is open, we delay the showing of the accounts
   // dialog until the modal dialog is destroyed.
-  if (idp_signin_modal_dialog_) {
+  if (popup_window_ && state_ == State::IDP_SIGNIN_STATUS_MISMATCH) {
     popup_window_state_ =
         PopupWindowResult::kAccountsReceivedAndPopupNotClosedByIdp;
     show_accounts_dialog_callback_ = base::BindOnce(
@@ -271,7 +273,8 @@ absl::optional<std::string> FedCmAccountSelectionView::GetSubtitle() const {
 void FedCmAccountSelectionView::OnVisibilityChanged(
     content::Visibility visibility) {
   is_web_contents_visible_ = visibility == content::Visibility::VISIBLE;
-  if (!bubble_widget_ || idp_signin_modal_dialog_) {
+  if (!bubble_widget_ || popup_window_ ||
+      is_modal_closed_but_accounts_fetch_pending_) {
     return;
   }
 
@@ -320,7 +323,7 @@ void FedCmAccountSelectionView::SetInputEventActivationProtectorForTesting(
 
 void FedCmAccountSelectionView::SetIdpSigninPopupWindowForTesting(
     std::unique_ptr<FedCmModalDialogView> idp_signin_popup_window) {
-  idp_signin_modal_dialog_ = std::move(idp_signin_popup_window);
+  popup_window_ = std::move(idp_signin_popup_window);
 }
 
 views::Widget* FedCmAccountSelectionView::CreateBubbleWithAccessibleTitle(
@@ -329,8 +332,7 @@ views::Widget* FedCmAccountSelectionView::CreateBubbleWithAccessibleTitle(
     const absl::optional<std::u16string>& idp_title,
     blink::mojom::RpContext rp_context,
     bool show_auto_reauthn_checkbox) {
-  Browser* browser =
-      chrome::FindBrowserWithWebContents(delegate_->GetWebContents());
+  Browser* browser = chrome::FindBrowserWithTab(delegate_->GetWebContents());
 
   // Reject the API if the browser is not found or its tab strip model does not
   // exist, as we require those to show UI. It is unclear why there are callers
@@ -341,8 +343,15 @@ views::Widget* FedCmAccountSelectionView::CreateBubbleWithAccessibleTitle(
 
   browser->tab_strip_model()->AddObserver(this);
 
+#ifdef VIVALDI_BUILD
+  // TODO (andre@vivaldi.com) : Implement a getbrowserviewforbrowser for
+  // Vivaldi. See VB-96376.
+  views::View* anchor_view =
+      static_cast<VivaldiBrowserWindow*>(browser->window())->GetWebView();
+#else //VIVALDI_BUILD
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
   views::View* anchor_view = browser_view->contents_web_view();
+#endif //VIVALDI_BUILD
 
   views::Widget* bubble_widget = views::BubbleDialogDelegateView::CreateBubble(
       new AccountSelectionBubbleView(
@@ -415,8 +424,7 @@ void FedCmAccountSelectionView::OnLinkClicked(LinkType link_type,
   if (input_protector_->IsPossiblyUnintendedInteraction(event)) {
     return;
   }
-  Browser* browser =
-      chrome::FindBrowserWithWebContents(delegate_->GetWebContents());
+  Browser* browser = chrome::FindBrowserWithTab(delegate_->GetWebContents());
   TabStripModel* tab_strip_model = browser->tab_strip_model();
 
   DCHECK(tab_strip_model);
@@ -456,7 +464,11 @@ void FedCmAccountSelectionView::OnCloseButtonClicked(const ui::Event& event) {
       views::Widget::ClosedReason::kCloseButtonClicked);
 }
 
-void FedCmAccountSelectionView::OnSigninToIdP() {
+void FedCmAccountSelectionView::OnSigninToIdP(const ui::Event& event) {
+  if (input_protector_->IsPossiblyUnintendedInteraction(event)) {
+    return;
+  }
+
   delegate_->OnSigninToIdP();
   is_mismatch_continue_clicked_ = true;
   popup_window_state_ =
@@ -465,27 +477,54 @@ void FedCmAccountSelectionView::OnSigninToIdP() {
                             MismatchDialogResult::kContinued);
 }
 
-content::WebContents* FedCmAccountSelectionView::ShowModalDialog(
-    const GURL& url) {
-  if (!idp_signin_modal_dialog_) {
-    idp_signin_modal_dialog_ = std::make_unique<FedCmModalDialogView>(
-        delegate_->GetWebContents(), this);
+void FedCmAccountSelectionView::OnGotIt(const ui::Event& event) {
+  if (input_protector_->IsPossiblyUnintendedInteraction(event)) {
+    return;
   }
 
+  delegate_->OnDismiss(DismissReason::kGotItButton);
+}
+
+void FedCmAccountSelectionView::OnMoreDetails(const ui::Event& event) {
+  if (input_protector_->IsPossiblyUnintendedInteraction(event)) {
+    return;
+  }
+
+  delegate_->OnMoreDetails();
+  delegate_->OnDismiss(DismissReason::kMoreDetailsButton);
+}
+
+content::WebContents* FedCmAccountSelectionView::ShowModalDialog(
+    const GURL& url) {
+  if (!popup_window_) {
+    popup_window_ = std::make_unique<FedCmModalDialogView>(
+        delegate_->GetWebContents(), this);
+  }
   input_protector_->VisibilityChanged(false);
-  bubble_widget_->Hide();
-  return idp_signin_modal_dialog_->ShowPopupWindow(url);
+  if (bubble_widget_) {
+    bubble_widget_->Hide();
+  }
+  return popup_window_->ShowPopupWindow(url);
 }
 
 void FedCmAccountSelectionView::CloseModalDialog() {
-  should_destroy_bubble_widget_ = false;
-  if (idp_signin_modal_dialog_) {
-    idp_signin_modal_dialog_->ClosePopupWindow();
-    idp_signin_modal_dialog_.reset();
-    is_modal_closed_but_accounts_fetch_pending_ = true;
-    idp_close_popup_time_ = base::TimeTicks::Now();
-    popup_window_state_ =
-        PopupWindowResult::kAccountsNotReceivedAndPopupClosedByIdp;
+  if (popup_window_) {
+    // If the pop-up window is for IDP sign-in status, we do not destroy the
+    // bubble widget and wait for the accounts fetch before displaying a dialog.
+    // Otherwise if the pop-up window is for AuthZ or error, we destroy the
+    // bubble widget and any incoming accounts fetches would not display any
+    // dialog.
+    // TODO(crbug.com/1479978): Verify if the current behaviour is what we want
+    // for AuthZ/error.
+    if (state_ == State::IDP_SIGNIN_STATUS_MISMATCH) {
+      should_destroy_bubble_widget_ = false;
+      is_modal_closed_but_accounts_fetch_pending_ = true;
+      idp_close_popup_time_ = base::TimeTicks::Now();
+      popup_window_state_ =
+          PopupWindowResult::kAccountsNotReceivedAndPopupClosedByIdp;
+    }
+    popup_window_->ClosePopupWindow();
+    popup_window_.reset();
   }
 
   if (show_accounts_dialog_callback_) {

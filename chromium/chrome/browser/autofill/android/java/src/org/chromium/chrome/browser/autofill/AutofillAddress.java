@@ -21,7 +21,6 @@ import org.chromium.payments.mojom.PaymentAddress;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.List;
-import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
@@ -148,23 +147,6 @@ public class AutofillAddress extends EditableOption {
         updateSublabel(mProfile.getLabel());
     }
 
-    /*
-     * Gets the billing address label for the profile associated with this address and sets it as
-     * sublabel for this EditableOption.
-     */
-    public void setBillingAddressLabel() {
-        assert mProfile != null;
-
-        if (mBillingLabel == null) {
-            mBillingLabel =
-                    PersonalDataManager.getInstance().getBillingAddressLabelForPaymentRequest(
-                            mProfile);
-        }
-
-        mProfile.setLabel(mBillingLabel);
-        updateSublabel(mProfile.getLabel());
-    }
-
     /**
      * Checks whether this address is complete and updates edit message, edit title and complete
      * status.
@@ -270,11 +252,11 @@ public class AutofillAddress extends EditableOption {
             sRegionCodePattern = Pattern.compile(REGION_CODE_PATTERN);
         }
         if (profile == null) {
-            return Locale.getDefault().getCountry();
+            return PersonalDataManager.getInstance().getDefaultCountryCodeForNewAddress();
         }
         final String countryCode = profile.getInfo(ServerFieldType.ADDRESS_HOME_COUNTRY);
         return TextUtils.isEmpty(countryCode) || !sRegionCodePattern.matcher(countryCode).matches()
-                ? Locale.getDefault().getCountry()
+                ? PersonalDataManager.getInstance().getDefaultCountryCodeForNewAddress()
                 : countryCode;
     }
 

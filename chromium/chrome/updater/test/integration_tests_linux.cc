@@ -10,6 +10,7 @@
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/notreached.h"
 #include "base/path_service.h"
 #include "base/process/process_iterator.h"
@@ -23,6 +24,8 @@
 #include "chrome/updater/constants.h"
 #include "chrome/updater/external_constants_builder.h"
 #include "chrome/updater/linux/systemd_util.h"
+#include "chrome/updater/persisted_data.h"
+#include "chrome/updater/prefs.h"
 #include "chrome/updater/service_proxy_factory.h"
 #include "chrome/updater/test/integration_tests_impl.h"
 #include "chrome/updater/update_service.h"
@@ -113,23 +116,31 @@ void Clean(UpdaterScope scope) {
   EXPECT_TRUE(UninstallSystemdUnits(scope));
 }
 
-void ExpectClean(UpdaterScope scope) {
-  ExpectCleanProcesses();
-
-  absl::optional<base::FilePath> path = GetInstallDirectory(scope);
+// The uninstaller cannot reliably completely remove the installer directory
+// itself, because it uses the prefs file and writes the log file while it
+// is operating. If the provided path exists, it must be a directory with
+// only these residual files present to be considered "clean".
+void ExpectMostlyClean(const absl::optional<base::FilePath>& path) {
   EXPECT_TRUE(path);
-  if (path && base::PathExists(*path)) {
-    // If the path exists, then expect only the log file to be present.
-    int count = CountDirectoryFiles(*path);
-    EXPECT_LE(count, 2);
-    if (count >= 1) {
-      EXPECT_TRUE(base::PathExists(path->AppendASCII("updater.log")));
-    }
-    if (count == 2) {
-      EXPECT_TRUE(base::PathExists(path->AppendASCII("prefs.json")));
-    }
+  if (!path || !base::PathExists(*path)) {
+    return;
   }
 
+  // If the path exists, expect only the log and prefs files to be present.
+  int count = CountDirectoryFiles(*path);
+  EXPECT_LE(count, 2);
+  if (count >= 1) {
+    EXPECT_TRUE(base::PathExists(path->AppendASCII("updater.log")));
+  }
+  if (count == 2) {
+    EXPECT_TRUE(base::PathExists(path->AppendASCII("prefs.json")));
+  }
+}
+
+void ExpectClean(UpdaterScope scope) {
+  ExpectCleanProcesses();
+  ExpectMostlyClean(GetInstallDirectory(scope));
+  ExpectMostlyClean(GetCacheBaseDirectory(scope));
   EXPECT_FALSE(SystemdUnitsInstalled(scope));
 }
 
@@ -212,6 +223,12 @@ void InstallApp(UpdaterScope scope,
 
 void UninstallApp(UpdaterScope scope, const std::string& app_id) {
   // This can probably be combined with mac into integration_tests_posix.cc.
+  const base::FilePath& install_path =
+      base::MakeRefCounted<PersistedData>(
+          scope, CreateGlobalPrefs(scope)->GetPrefService())
+          ->GetExistenceCheckerPath(app_id);
+  VLOG(1) << "Deleting app install path: " << install_path;
+  base::DeletePathRecursively(install_path);
   SetExistenceCheckerPath(scope, app_id,
                           base::FilePath(FILE_PATH_LITERAL("NONE")));
 }

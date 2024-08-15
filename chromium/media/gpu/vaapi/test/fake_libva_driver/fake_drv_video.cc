@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <va/va.h>
 #include <va/va_backend.h>
+#include <va/va_drmcommon.h>
 
 #include <set>
 
@@ -454,8 +455,9 @@ VAStatus FakeBeginPicture(VADriverContextP ctx,
       static_cast<media::internal::FakeDriver*>(ctx->pDriverData);
 
   CHECK(fdrv->SurfaceExists(render_target));
-
   CHECK(fdrv->ContextExists(context));
+
+  fdrv->GetContext(context).BeginPicture(fdrv->GetSurface(render_target));
 
   return VA_STATUS_SUCCESS;
 }
@@ -469,6 +471,14 @@ VAStatus FakeRenderPicture(VADriverContextP ctx,
 
   CHECK(fdrv->ContextExists(context));
 
+  std::vector<raw_ptr<const media::internal::FakeBuffer>> buffer_list;
+  for (int i = 0; i < num_buffers; i++) {
+    CHECK(fdrv->BufferExists(buffers[i]));
+    buffer_list.push_back(&(fdrv->GetBuffer(buffers[i])));
+  }
+
+  fdrv->GetContext(context).RenderPicture(buffer_list);
+
   return VA_STATUS_SUCCESS;
 }
 
@@ -478,7 +488,11 @@ VAStatus FakeEndPicture(VADriverContextP ctx, VAContextID context) {
 
   CHECK(fdrv->ContextExists(context));
 
-  return VA_STATUS_SUCCESS;
+  fdrv->GetContext(context).EndPicture();
+
+  // TODO(bchoobineh): Replace with |VA_STATUS_SUCCESS| when decoded
+  // frame is written properly to the surfaces.
+  return VA_STATUS_ERROR_ATTR_NOT_SUPPORTED;
 }
 
 VAStatus FakeSyncSurface(VADriverContextP ctx, VASurfaceID render_target) {
@@ -777,8 +791,11 @@ extern "C" VAStatus DLL_EXPORT __vaDriverInit_1_0(VADriverContextP ctx) {
 
   ctx->version_major = VA_MAJOR_VERSION;
   ctx->version_minor = VA_MINOR_VERSION;
-  ctx->str_vendor = "libfake";
-  ctx->pDriverData = new media::internal::FakeDriver();
+  ctx->str_vendor = "Chromium fake libva driver";
+  CHECK(ctx->drm_state);
+
+  ctx->pDriverData = new media::internal::FakeDriver(
+      (static_cast<drm_state*>(ctx->drm_state))->fd);
 
   ctx->max_profiles = MAX_PROFILES;
   ctx->max_entrypoints = MAX_ENTRYPOINTS;

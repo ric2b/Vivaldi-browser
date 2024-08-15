@@ -5,6 +5,7 @@
 #ifndef EXTENSIONS_API_SESSIONS_VIVALDI_SESSIONS_API_H_
 #define EXTENSIONS_API_SESSIONS_VIVALDI_SESSIONS_API_H_
 
+#include "browser/sessions/vivaldi_session_utils.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/schema/vivaldi_sessions.h"
@@ -66,13 +67,16 @@ class SessionsPrivateAPI : public BrowserContextKeyedAPI,
 class SessionsPrivateAddFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sessionsPrivate.add", SESSIONS_ADD)
-  SessionsPrivateAddFunction() = default;
+  SessionsPrivateAddFunction();
 
  private:
-  ~SessionsPrivateAddFunction() override = default;
+  ~SessionsPrivateAddFunction() override;
 
   // ExtensionFunction:
   ResponseAction Run() override;
+
+  absl::optional<vivaldi::sessions_private::Add::Params> params;
+  sessions::WriteSessionOptions ctl_;
 };
 
 class SessionsPrivateGetAllFunction : public ExtensionFunction,

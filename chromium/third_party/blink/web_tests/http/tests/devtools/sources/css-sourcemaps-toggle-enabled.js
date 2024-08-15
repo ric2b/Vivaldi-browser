@@ -6,14 +6,15 @@ import {TestRunner} from 'test_runner';
 import {SourcesTestRunner} from 'sources_test_runner';
 
 import * as Common from 'devtools/core/common/common.js';
+import * as Sources from 'devtools/panels/sources/sources.js';
+import * as UI from 'devtools/ui/legacy/legacy.js';
 
 (async function() {
   TestRunner.addResult(`Verify that CSS sourcemap enabling and disabling adds/removes sourcemap sources.\n`);
-  await TestRunner.loadLegacyModule('sources');
   await TestRunner.showPanel('sources');
 
-  var sourcesNavigator = new Sources.NetworkNavigatorView();
-  sourcesNavigator.show(UI.inspectorView.element);
+  var sourcesNavigator = new Sources.SourcesNavigator.NetworkNavigatorView();
+  sourcesNavigator.show(UI.InspectorView.InspectorView.instance().element);
 
   Common.Settings.moduleSetting('cssSourceMapsEnabled').set(true);
   await TestRunner.addStylesheetTag('resources/sourcemap-style-1.css');

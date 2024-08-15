@@ -209,8 +209,7 @@ std::unique_ptr<content::WebContents>
 GuestViewManager::CreateGuestWithWebContentsParams(
     const std::string& view_type,
     content::RenderFrameHost* owner_rfh,
-    const content::WebContents::CreateParams& create_params,
-    int disposition) {
+    const content::WebContents::CreateParams& create_params) {
   std::unique_ptr<GuestViewBase> guest =
       CreateGuestInternal(owner_rfh, view_type);
   if (!guest)
@@ -223,14 +222,7 @@ GuestViewManager::CreateGuestWithWebContentsParams(
 
   std::unique_ptr<content::WebContents> guest_web_contents =
       WebContents::Create(guest_create_params);
-  base::Value::Dict guest_params = base::Value::Dict();
-
-  // Vivaldi
-  guest_params.Set("opener_process_id", create_params.opener_render_process_id);
-  guest_params.Set("opener_render_frame_id", create_params.opener_render_frame_id);
-  guest_params.Set("disposition", disposition);
-  // End Vivaldi
-
+  const base::Value::Dict guest_params = base::Value::Dict();
   guest->SetCreateParams(guest_params, guest_create_params);
   guest->InitWithWebContents(guest_params, guest_web_contents.get());
   ManageOwnership(std::move(guest));

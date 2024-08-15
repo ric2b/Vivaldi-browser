@@ -31,6 +31,10 @@ enum class SadTabViewMode {
 // Instructs the delegate to reload this page.
 - (void)sadTabViewReload:(SadTabView*)sadTabView;
 
+// Vivaldi
+- (void)vivaldiReportAnIssue:(const GURL&)URL;
+// End Vivaldi
+
 @end
 
 // The view used to show "sad tab" content to the user when WebState's renderer

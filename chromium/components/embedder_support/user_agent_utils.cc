@@ -169,9 +169,14 @@ bool ShouldReduceUserAgentMinorVersion(
 bool ShouldSendUserAgentUnifiedPlatform(
     UserAgentReductionEnterprisePolicyState user_agent_reduction) {
 #if BUILDFLAG(IS_ANDROID)
+// Vivaldi, ref. VAB-8080.
+#if defined (OEM_AUTOMOTIVE_BUILD)
+  return false;
+#else
   return ShouldReduceUserAgentMinorVersion(user_agent_reduction) &&
          base::FeatureList::IsEnabled(
              blink::features::kReduceUserAgentAndroidVersionDeviceModel);
+#endif // OEM_AUTOMOTIVE_BUILD
 #else
   return ShouldReduceUserAgentMinorVersion(user_agent_reduction) &&
          base::FeatureList::IsEnabled(

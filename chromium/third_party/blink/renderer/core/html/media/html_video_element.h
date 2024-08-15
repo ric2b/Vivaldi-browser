@@ -113,7 +113,7 @@ class CORE_EXPORT HTMLVideoElement final
 
   // CanvasImageSource implementation
   scoped_refptr<Image> GetSourceImageForCanvas(
-      CanvasResourceProvider::FlushReason,
+      FlushReason,
       SourceImageStatus*,
       const gfx::SizeF&,
       const AlphaDisposition alpha_disposition = kPremultiplyAlpha) override;
@@ -159,7 +159,7 @@ class CORE_EXPORT HTMLVideoElement final
 
   bool IsRichlyEditableForAccessibility() const override { return false; }
 
-  VideoWakeLock* wake_lock_for_tests() const { return wake_lock_; }
+  VideoWakeLock* wake_lock_for_tests() const { return wake_lock_.Get(); }
 
  protected:
   // EventTarget overrides.

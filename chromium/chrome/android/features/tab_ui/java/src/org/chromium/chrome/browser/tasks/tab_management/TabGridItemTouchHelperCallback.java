@@ -181,7 +181,12 @@ public class TabGridItemTouchHelperCallback extends ItemTouchHelper.SimpleCallba
         TabModelFilter filter =
                 mTabModelSelector.getTabModelFilterProvider().getCurrentTabModelFilter();
         TabModel tabModel = mTabModelSelector.getCurrentModel();
-        if (!mActionsOnAllRelatedTabs) {
+        // Vivaldi: This is needed when turning off tab stacks.
+        if (!VivaldiPreferences.getSharedPreferencesManager().readBoolean(VivaldiPreferences.ENABLE_TAB_STACK,true)) {
+            tabModel.moveTab(currentTabId,
+                    mModel.getTabCardCountsBefore(mModel.indexFromId(currentTabId)
+                            + (distance > 0 ? distance + 1 : distance)));
+        } else if (!mActionsOnAllRelatedTabs) {
             int destinationIndex = tabModel.indexOf(mTabModelSelector.getTabById(destinationTabId));
             tabModel.moveTab(currentTabId, distance > 0 ? destinationIndex + 1 : destinationIndex);
         } else {
@@ -225,6 +230,9 @@ public class TabGridItemTouchHelperCallback extends ItemTouchHelper.SimpleCallba
             RecordUserAction.record("TabGrid.Drag.Start." + mComponentName);
         } else if (actionState == ItemTouchHelper.ACTION_STATE_IDLE) {
             mIsSwipingToDismiss = false;
+            // Vivaldi: This is needed when turning off tab stacks.
+            if (!TabUiFeatureUtilities.isTabGroupsAndroidEnabled())
+                mHoveredTabIndex = TabModel.INVALID_TAB_INDEX;
 
             RecyclerView.ViewHolder hoveredViewHolder =
                     mRecyclerView.findViewHolderForAdapterPosition(mHoveredTabIndex);
@@ -382,6 +390,8 @@ public class TabGridItemTouchHelperCallback extends ItemTouchHelper.SimpleCallba
         }
         mCurrentActionState = actionState;
         if (actionState == ItemTouchHelper.ACTION_STATE_DRAG && mActionsOnAllRelatedTabs) {
+            // Vivaldi: This is needed when turning off tab stacks.
+            if (!TabUiFeatureUtilities.isTabGroupsAndroidEnabled()) return;
             int prev_hovered = mHoveredTabIndex;
             mHoveredTabIndex = TabListRecyclerView.getHoveredTabIndex(
                     recyclerView, viewHolder.itemView, dX, dY, mMergeThreshold);

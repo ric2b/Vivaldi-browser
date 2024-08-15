@@ -1,0 +1,15 @@
+[submodule "third_party/dxc"]
+	path = third_party/dxc
+	url = ../../external/github.com/microsoft/DirectXShaderCompiler.git
+[submodule "third_party/dxheaders"]
+	path = third_party/dxheaders
+	url = ../../external/github.com/microsoft/DirectX-Headers.git
+[submodule "third_party/khronos/OpenGL-Registry"]
+	path = third_party/khronos/OpenGL-Registry
+	url = ../../external/github.com/KhronosGroup/OpenGL-Registry.git
+[submodule "third_party/khronos/EGL-Registry"]
+	path = third_party/khronos/EGL-Registry
+	url = ../../external/github.com/KhronosGroup/EGL-Registry.git
+[submodule "third_party/webgpu-cts"]
+	path = third_party/webgpu-cts
+	url = ../../external/github.com/gpuweb/cts.git

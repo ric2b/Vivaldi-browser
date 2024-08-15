@@ -118,6 +118,21 @@
         Bookmarks
       </message>
       <part file="document_blocked_interstitial_strings.grdp" />
+      <if expr="is_macosx">
+        <message name="IDS_SAD_TAB_RELOAD_INCOGNITO" desc="One of the bullet points displayed on the web page if a reload failed to fix the issue, advising the user to open the web page in Chrome's Incognito mode.">
+          Open page in a new Private window (⇧⌘N)
+        </message>
+      </if>
+      <if expr="not is_macosx and not is_android and not is_ios">
+        <message name="IDS_SAD_TAB_RELOAD_INCOGNITO" desc="One of the bullet points displayed on the web page if a reload failed to fix the issue, advising the user to open the web page in Chrome's Incognito mode.">
+          Open page in a new Private window (Ctrl-Shift-N)
+        </message>
+      </if>
+      <if expr="is_android or is_ios">
+        <message name="IDS_SAD_TAB_RELOAD_INCOGNITO" desc="One of the bullet points displayed on the web page if a reload failed to fix the issue, advising the user to open the web page in Chrome's Incognito mode." formatter_data="android_java">
+          Open page in a new Private tab
+        </message>
+      </if>
     </messages>
   </release>
 </grit>

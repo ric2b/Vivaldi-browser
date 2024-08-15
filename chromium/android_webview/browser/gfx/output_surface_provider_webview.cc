@@ -11,6 +11,7 @@
 #include "android_webview/browser/gfx/gpu_service_webview.h"
 #include "android_webview/browser/gfx/skia_output_surface_dependency_webview.h"
 #include "android_webview/browser/gfx/task_queue_webview.h"
+#include "android_webview/common/crash_reporter/crash_keys.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/functional/callback_helpers.h"
@@ -84,7 +85,8 @@ void OnContextLost(std::unique_ptr<bool> expect_loss,
   if (expect_loss && *expect_loss)
     return;
 
-  static ::crash_reporter::CrashKeyString<10> reason_key("context-loss-reason");
+  static ::crash_reporter::CrashKeyString<10> reason_key(
+      crash_keys::kContextLossReason);
   reason_key.Set(base::NumberToString(static_cast<int>(context_lost_reason)));
 
   // TODO(https://crbug.com/1112841): Debugging contexts losts. WebView will
@@ -131,6 +133,13 @@ OutputSurfaceProviderWebView::~OutputSurfaceProviderWebView() {
   if (gl_surface_->is_angle()) {
     shared_context_state_->MakeCurrent(nullptr);
   }
+  // Given this surface is held by gl::GLContext as a default surface, releasing
+  // it here doesn't result in destruction of the GL objects (namely the stencil
+  // buffer) when it's released. As a result, when the surface is finally
+  // destroyed (happens when the context that also holds that is destroyed), the
+  // stencil buffer is destroyed on a wrong context resulting in a no context
+  // crash. Thus, explicitly ask to destroy the fb here.
+  gl_surface_->DestroyExternalStencilFramebuffer();
   gl_surface_.reset();
 }
 

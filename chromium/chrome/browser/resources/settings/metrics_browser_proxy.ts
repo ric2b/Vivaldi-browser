@@ -37,8 +37,27 @@ export enum PrivacyElementInteractions {
   THIRD_PARTY_COOKIES_ALLOW = 20,
   THIRD_PARTY_COOKIES_BLOCK_IN_INCOGNITO = 21,
   THIRD_PARTY_COOKIES_BLOCK = 22,
+  BLOCK_ALL_THIRD_PARTY_COOKIES = 23,
   // Max value should be updated whenever new entries are added.
-  MAX_VALUE = 23,
+  MAX_VALUE = 24,
+}
+
+/**
+ * Contains all Safety Hub card states.
+ *
+ * These values are persisted to logs. Entries should not be renumbered and
+ * numeric values should never be reused.
+ *
+ * Must be kept in sync with SafetyHubCardState in
+ * histograms/enums.xml and CardState in safety_hub/safety_hub_browser_proxy.ts.
+ */
+export enum SafetyHubCardState {
+  WARNING = 0,
+  WEAK = 1,
+  INFO = 2,
+  SAFE = 3,
+  // Max value should be updated whenever new entries are added.
+  MAX_VALUE = 4,
 }
 
 /**
@@ -206,7 +225,7 @@ export enum PrivacyGuideSettingsStates {
  * numeric values should never be reused.
  *
  * Must be kept in sync with SettingsPrivacyGuideStepsEligibleAndReached in
- * emus.xml and PrivacyGuideStepsEligibleAndReached in
+ * enums.xml and PrivacyGuideStepsEligibleAndReached in
  * privacy_guide/privacy_guide.h.
  */
 export enum PrivacyGuideStepsEligibleAndReached {
@@ -241,6 +260,20 @@ export enum DeleteBrowsingDataAction {
   QUICK_DELETE = 6,
   PAGE_INFO_RESET_PERMISSIONS = 7,
   MAX_VALUE = 8,
+}
+
+/**
+ * This enum contains the different surfaces of Safety Hub that users can
+ * interact with, or on which they can observe a Safety Hub feature.
+ *
+ * Must be kept in sync with the `safety_hub::SafetyHubSurfaces` enum in
+ * chrome/browser/ui/safety_hub/safety_hub_constants.h and `SafetyHubSurfaces`
+ * in enums.xml
+ */
+export enum SafetyHubSurfaces {
+  THREE_DOT_MENU = 0,
+  SAFETY_HUB_PAGE = 1,
+  MAX_VALUE = 2,
 }
 
 export interface MetricsBrowserProxy {
@@ -299,6 +332,14 @@ export interface MetricsBrowserProxy {
 
   /**
    * Helper function that calls recordHistogram for the
+   * Settings.SafetyHub.[card_name].StatusOnClick histogram
+   */
+  recordSafetyHubCardStateClicked(
+      histogramName: string, state: SafetyHubCardState): void;
+
+
+  /**
+   * Helper function that calls recordHistogram for the
    * SettingsPage.PrivacyElementInteractions histogram
    */
   recordSettingsPageHistogram(interaction: PrivacyElementInteractions): void;
@@ -349,6 +390,18 @@ export interface MetricsBrowserProxy {
    * recordDeleteBrowsingDataAction backend function.
    */
   recordDeleteBrowsingDataAction(action: DeleteBrowsingDataAction): void;
+
+  /**
+   * Helper function that calls records an impression of the provided Safety Hub
+   * surface.
+   */
+  recordSafetyHubImpression(surface: SafetyHubSurfaces): void;
+
+  /**
+   * Helper function that calls records an interaction of the provided Safety
+   * Hub surface.
+   */
+  recordSafetyHubInteraction(surface: SafetyHubSurfaces): void;
 }
 
 export class MetricsBrowserProxyImpl implements MetricsBrowserProxy {
@@ -367,7 +420,8 @@ export class MetricsBrowserProxyImpl implements MetricsBrowserProxy {
   recordSafetyCheckNotificationsListCountHistogram(suggestions: number) {
     chrome.send('metricsHandler:recordInHistogram', [
       'Settings.SafetyCheck.NotificationsListCount',
-      suggestions, 99 /*max value for Notification suggestions*/,
+      suggestions,
+      99 /*max value for Notification suggestions*/,
     ]);
   }
 
@@ -411,6 +465,13 @@ export class MetricsBrowserProxyImpl implements MetricsBrowserProxy {
       'Settings.SafetyCheck.UnusedSitePermissionsModuleEntryPointShown',
       visible,
     ]);
+  }
+
+  recordSafetyHubCardStateClicked(
+      histogramName: string, state: SafetyHubCardState) {
+    chrome.send(
+        'metricsHandler:recordInHistogram',
+        [histogramName, state, SafetyHubCardState.MAX_VALUE]);
   }
 
   recordSettingsPageHistogram(interaction: PrivacyElementInteractions) {
@@ -478,6 +539,22 @@ export class MetricsBrowserProxyImpl implements MetricsBrowserProxy {
       'Privacy.DeleteBrowsingData.Action',
       action,
       DeleteBrowsingDataAction.MAX_VALUE,
+    ]);
+  }
+
+  recordSafetyHubImpression(surface: SafetyHubSurfaces): void {
+    chrome.send('metricsHandler:recordInHistogram', [
+      'Settings.SafetyHub.Impression',
+      surface,
+      SafetyHubSurfaces.MAX_VALUE,
+    ]);
+  }
+
+  recordSafetyHubInteraction(surface: SafetyHubSurfaces): void {
+    chrome.send('metricsHandler:recordInHistogram', [
+      'Settings.SafetyHub.Interaction',
+      surface,
+      SafetyHubSurfaces.MAX_VALUE,
     ]);
   }
 

@@ -93,6 +93,13 @@ using l10n_util::GetNSStringF;
                     @"lists/abp/abp-filters-anti-cv-current.txt"]];
 
   [map setObject:[VivaldiATBManagerHelper
+                  createEntryWithTitle:@"AdBlock Warning Removal List"
+                    stringId:-1]
+          forKey:[@"https://downloads.vivaldi.com/"
+                    stringByAppendingString:
+                    @"lists/abp/antiadblockfilters-current.txt"]];
+
+  [map setObject:[VivaldiATBManagerHelper
                   createEntryWithTitle:@""
                     stringId:
                     IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_ALLOW_VIVALDI_PARTNERS]
@@ -109,6 +116,11 @@ using l10n_util::GetNSStringF;
                   createEntryWithTitle:@"Easylist Cookie List"
                     stringId:IDS_VIVALDI_IOS_SOURCE_MAP_TYPE_COOKIE_WARNING]
           forKey:@"https://secure.fanboy.co.nz/fanboy-cookiemonster.txt"];
+
+  [map setObject:[VivaldiATBManagerHelper
+                  createEntryWithTitle:@"Fanboy's Annoyance List"
+                    stringId:IDS_VIVALDI_IOS_SOURCE_MAP_TYPE_ANNOYANCES]
+          forKey:@"https://secure.fanboy.co.nz/fanboy-annoyance.txt"];
 
   [map setObject:[VivaldiATBManagerHelper
                   createEntryWithTitle:@"Liste AR"

@@ -89,21 +89,6 @@ constexpr const char* kDeniedSchemes[] = {
     "vnd.ms.radio",
 };
 
-// Additional entries should not be added to this list. The BlockStateMetric
-// assumees that the only default-allowed scheme is mailto.
-// TODO(rsesek): Remove this list once PromptForExternalNewsSchemes is
-// launched.
-constexpr const char* kAllowedSchemes[] = {
-    "mailto",
-};
-
-// These schemes are considered part of `kAllowedSchemes` when the
-// PromptForExternalNewsSchemes feature is disabled.
-constexpr const char* kNewsSchemes[] = {
-    "news",
-    "snews",
-};
-
 void AddMessageToConsole(const content::WeakDocumentPtr& document,
                          blink::mojom::ConsoleMessageLevel level,
                          const std::string& message) {
@@ -203,7 +188,7 @@ void LaunchUrlWithoutSecurityCheckWithDelegate(
   // Avoid calling CloseContents if the tab is not in this browser's tab strip
   // model; this can happen if the protocol was initiated by something
   // internal to Chrome.
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+  Browser* browser = chrome::FindBrowserWithTab(web_contents);
   if (browser && web_contents->GetController().IsInitialNavigation() &&
       browser->tab_strip_model()->count() > 1 &&
       browser->tab_strip_model()->GetIndexOfWebContents(web_contents) !=
@@ -323,13 +308,6 @@ bool IsSchemeOriginPairAllowedByPolicy(const std::string& scheme,
 
 }  // namespace
 
-// Treat the news: and snews: schemes as arbitrary, non-default schemes. This
-// means if a handler is present for those, the external protocol handler
-// dialog will be shown.
-BASE_FEATURE(kPromptForExternalNewsSchemes,
-             "PromptForExternalNewsSchemes",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 const char ExternalProtocolHandler::kBlockStateMetric[] =
     "BrowserDialogs.ExternalProtocol.BlockState";
 const char ExternalProtocolHandler::kHandleStateMetric[] =
@@ -373,25 +351,12 @@ ExternalProtocolHandler::BlockState ExternalProtocolHandler::GetBlockState(
     }
   }
 
-  // Always allow the hard-coded allowed schemes.
-  for (const auto* candidate : kAllowedSchemes) {
-    if (candidate == scheme) {
-      base::UmaHistogramEnumeration(kBlockStateMetric,
-                                    BlockStateMetric::kAllowedDefaultMail);
-      return DONT_BLOCK;
-    }
-  }
-  for (const auto* candidate : kNewsSchemes) {
-    if (candidate == scheme) {
-      if (base::FeatureList::IsEnabled(kPromptForExternalNewsSchemes)) {
-        base::UmaHistogramEnumeration(kBlockStateMetric,
-                                      BlockStateMetric::kNewsNotDefault);
-      } else {
-        base::UmaHistogramEnumeration(kBlockStateMetric,
-                                      BlockStateMetric::kAllowedDefaultNews);
-        return DONT_BLOCK;
-      }
-    }
+  // The mailto scheme is allowed explicitly because of its ubiquity on the web
+  // and because every platform provides a default handler for it.
+  if (scheme == "mailto") {
+    base::UmaHistogramEnumeration(kBlockStateMetric,
+                                  BlockStateMetric::kAllowedDefaultMail);
+    return DONT_BLOCK;
   }
 
   PrefService* profile_prefs = profile->GetPrefs();

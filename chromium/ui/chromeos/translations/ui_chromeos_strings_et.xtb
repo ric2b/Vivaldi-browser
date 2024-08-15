@@ -8,6 +8,7 @@
 <translation id="1056898198331236512">Hoiatus</translation>
 <translation id="1060368002126861100">Failide avamiseks rakendusega <ph name="APP_NAME" /> teisaldage need esmalt Windowsi failide kausta.</translation>
 <translation id="1062407476771304334">Asenda</translation>
+<translation id="1119383441774809183">Kuva tekstisõnumid</translation>
 <translation id="1119447706177454957">Sisemine viga</translation>
 <translation id="1120073797882051782">Hanguli romaja</translation>
 <translation id="112387589102719461">inglise (USA), programmeerijate Dvoraki klaviatuuriga</translation>
@@ -328,6 +329,7 @@
 <translation id="3619115746895587757">Cappuccino</translation>
 <translation id="3619593063686672873">Hiljutisi videoid pole</translation>
 <translation id="3634507049637220048"><ph name="NETWORK_INDEX" />. võrk <ph name="NETWORK_COUNT" />-st, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, võrku haldab teie administraator, üksikasjad</translation>
+<translation id="36451918667380448">Mobiilsidevõrguteenuse pakkuja on lukus. Toe saamiseks võtke ühendust oma teenusepakkujaga.</translation>
 <translation id="3645233063072417428"><ph name="NUMBER_OF_ITEMS" /> üksust on teisaldatud.</translation>
 <translation id="3658269352872031728">Valitud on <ph name="SELECTED_FILE_COUNT" /> faili</translation>
 <translation id="3685122418104378273">Google Drive'i sünkroonimine on mobiilse andmeside kasutamisel vaikimisi keelatud.</translation>
@@ -556,7 +558,6 @@
 <translation id="5283101102242354279">Lülitage inkognito režiimis sisse laiendus:</translation>
 <translation id="5286194356314741248">Skaneering</translation>
 <translation id="5288441970121584418">Burger</translation>
-<translation id="5288481194217812690"><ph name="FILENAME" /></translation>
 <translation id="5293615890992542006">Selle faili teisaldamine on administraatori reegliga blokeeritud</translation>
 <translation id="5305688511332277257">Pole ühtegi installitud</translation>
 <translation id="5317780077021120954">Salvesta</translation>
@@ -1014,6 +1015,7 @@
 <translation id="8698877009525468705">See fail on konfidentsiaalne ja sellele kehtivad administraatori reegli piirangud.</translation>
 <translation id="8712637175834984815">Selge</translation>
 <translation id="8713112442029511308">malta</translation>
+<translation id="8714138378966541668">Teenusepakkuja lukustatud</translation>
 <translation id="8714406895390098252">Jalgratas</translation>
 <translation id="8719721339511222681">Valiti <ph name="ENTRY_NAME" />.</translation>
 <translation id="872537912056138402">horvaatia keel</translation>

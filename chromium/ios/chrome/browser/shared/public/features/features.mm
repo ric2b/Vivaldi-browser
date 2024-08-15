@@ -84,7 +84,7 @@ const base::FeatureParam<DefaultBrowserPromoGenericTailoredArm>
 
 BASE_FEATURE(kDefaultBrowserRefactoringPromoManager,
              "DefaultBrowserRefactoringPromoManager",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kDefaultBrowserVideoPromo,
              "DefaultBrowserVideoPromo",
@@ -110,7 +110,7 @@ bool ShouldShowPartialTranslateInIncognito() {
   }
   return !base::GetFieldTrialParamByFeatureAsBool(
       kIOSEditMenuPartialTranslate,
-      kIOSEditMenuPartialTranslateNoIncognitoParam, true);
+      kIOSEditMenuPartialTranslateNoIncognitoParam, false);
 }
 
 const char kIOSEditMenuSearchWithTitleParamTitle[] =
@@ -120,7 +120,7 @@ const char kIOSEditMenuSearchWithTitleSearchWithParam[] = "SearchWith";
 const char kIOSEditMenuSearchWithTitleWebSearchParam[] = "WebSearch";
 BASE_FEATURE(kIOSEditMenuSearchWith,
              "IOSEditMenuSearchWith",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsSearchWithEnabled() {
   if (@available(iOS 16, *)) {
@@ -131,7 +131,7 @@ bool IsSearchWithEnabled() {
 
 BASE_FEATURE(kIOSEditMenuHideSearchWeb,
              "IOSEditMenuHideSearchWeb",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kIOSNewOmniboxImplementation,
              "kIOSNewOmniboxImplementation",
@@ -152,10 +152,6 @@ BASE_FEATURE(kEnableLensInKeyboard,
 BASE_FEATURE(kEnableLensInNTP,
              "EnableLensInNTP",
              base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kEnableLensContextMenuAltText,
-             "EnableLensContextMenuAltText",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableLensInOmniboxCopiedImage,
              "EnableLensInOmniboxCopiedImage",
@@ -185,6 +181,10 @@ BASE_FEATURE(kEnableExpKitAppleCalendar,
              "EnableExpKitAppleCalendar",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kTCRexKillSwitch,
+             "kTCRexKillSwitch",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kTabGridNewTransitions,
              "TabGridNewTransitions",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -192,10 +192,6 @@ BASE_FEATURE(kTabGridNewTransitions,
 bool IsNewTabGridTransitionsEnabled() {
   return base::FeatureList::IsEnabled(kTabGridNewTransitions);
 }
-
-BASE_FEATURE(kMultilineFadeTruncatingLabel,
-             "MultilineFadeTruncatingLabel",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kNonModalDefaultBrowserPromoImpressionLimit,
              "NonModalDefaultBrowserPromoImpressionLimit",
@@ -218,6 +214,10 @@ BASE_FEATURE(kSpotlightReadingListSource,
              "SpotlightReadingListSource",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kSpotlightDonateNewIntents,
+             "SpotlightDonateNewIntents",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kConsistencyNewAccountInterface,
              "ConsistencyNewAccountInterface",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -232,7 +232,7 @@ BASE_FEATURE(kNewNTPOmniboxLayout,
 
 BASE_FEATURE(kBottomOmniboxSteadyState,
              "BottomOmniboxSteadyState",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const char kBottomOmniboxDefaultSettingParam[] =
     "BottomOmniboxDefaultSettingParam";
@@ -243,6 +243,10 @@ const char kBottomOmniboxDefaultSettingParamSafariSwitcher[] =
 BASE_FEATURE(kBottomOmniboxDefaultSetting,
              "BottomOmniboxDefaultSetting",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kBottomOmniboxDeviceSwitcherResults,
+             "BottomOmniboxDeviceSwitcherResults",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsBottomOmniboxSteadyStateEnabled() {
 
@@ -258,14 +262,17 @@ bool IsBottomOmniboxSteadyStateEnabled() {
   return base::FeatureList::IsEnabled(kBottomOmniboxSteadyState);
 }
 
+bool IsBottomOmniboxDeviceSwitcherResultsEnabled() {
+  return IsBottomOmniboxSteadyStateEnabled() &&
+         base::FeatureList::IsEnabled(kBottomOmniboxDeviceSwitcherResults);
+}
+
 BASE_FEATURE(kOnlyAccessClipboardAsync,
              "OnlyAccessClipboardAsync",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kHideSettingsSyncPromo,
-             "HideSettingsSyncPromo",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
+BASE_FEATURE(kDefaultBrowserVideoInSettings,
+             "DefaultBrowserVideoInSettings",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kDefaultBrowserTriggerCriteriaExperiment,
              "DefaultBrowserTriggerCriteriaExperiment",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -274,13 +281,19 @@ BASE_FEATURE(kFullScreenPromoOnOmniboxCopyPaste,
              "FullScreenPromoOnOmniboxCopyPaste",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kThemeColorInToolbar,
-             "ThemeColorInToolbar",
+BASE_FEATURE(kThemeColorInTopToolbar,
+             "ThemeColorInTopToolbar",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kDynamicThemeColor,
+             "DynamicThemeColor",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kDynamicBackgroundColor,
+             "DynamicBackgroundColor",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kTabGridRefactoring,
              "TabGridRefactoring",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsSafetyCheckMagicStackEnabled() {
   return base::FeatureList::IsEnabled(kSafetyCheckMagicStack);
@@ -290,6 +303,10 @@ BASE_FEATURE(kBlockSimultaneousCellSelectionKillSwitch,
              "BlockSimultaneousCellSelectionKillSwitch",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kIOSSaveToDrive,
+             "IOSSaveToDrive",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kIOSSaveToPhotos,
              "IOSSaveToPhotos",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -297,3 +314,11 @@ BASE_FEATURE(kIOSSaveToPhotos,
 BASE_FEATURE(kSettingsWillBeDismissedBugFixKillSwitch,
              "SettingsWillBeDismissedBugFixKillSwitch",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kEnableUIEditMenuInteraction,
+             "EnableUIEditMenuInteraction",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kHistoryOptInForRestoreShortyAndReSignin,
+             "HistoryOptInForRestoreShortyAndReSignin",
+             base::FEATURE_DISABLED_BY_DEFAULT);

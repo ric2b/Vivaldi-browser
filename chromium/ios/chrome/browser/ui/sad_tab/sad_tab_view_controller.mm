@@ -103,6 +103,13 @@
   [self.delegate sadTabViewControllerReload:self];
 }
 
+// Vivaldi
+- (void)vivaldiReportAnIssue:(const GURL&)URL {
+ [self.delegate vivaldiReportAnIssue:URL];
+}
+// End Vivaldi
+
+
 #pragma mark - Private
 
 // Enables or disables overscroll actions.

@@ -10,6 +10,7 @@ mojom("mojom") {
     "registration_eligibility.mojom",
     "source_registration_error.mojom",
     "source_registration_time_config.mojom",
+    "trigger_data_matching.mojom",
     "trigger_registration_error.mojom",
   ]
   webui_module_path = "/"
@@ -20,6 +21,19 @@ mojom("mojom") {
   generate_java = true
 
   disallow_interfaces = true
+}
+
+component("features") {
+  sources = [
+    "features.cc",
+    "features.h",
+  ]
+
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
+
+  public_deps = [ "//base" ]
+
+  defines = [ "IS_ATTRIBUTION_REPORTING_FEATURES_IMPL" ]
 }
 
 component("attribution_reporting") {
@@ -39,8 +53,6 @@ component("attribution_reporting") {
     "event_report_windows.h",
     "event_trigger_data.cc",
     "event_trigger_data.h",
-    "features.cc",
-    "features.h",
     "filters.cc",
     "filters.h",
     "os_registration.cc",
@@ -53,6 +65,8 @@ component("attribution_reporting") {
     "source_type.h",
     "suitable_origin.cc",
     "suitable_origin.h",
+    "trigger_config.cc",
+    "trigger_config.h",
     "trigger_registration.cc",
     "trigger_registration.h",
   ]
@@ -60,6 +74,7 @@ component("attribution_reporting") {
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
   public_deps = [
+    ":features",
     ":mojom",
     ":source_type_mojom",
     "//base",
@@ -105,6 +120,7 @@ source_set("unit_tests") {
     "parsing_utils_unittest.cc",
     "source_registration_unittest.cc",
     "suitable_origin_unittest.cc",
+    "trigger_config_unittest.cc",
     "trigger_registration_unittest.cc",
   ]
 
@@ -200,14 +216,6 @@ mojom("registration_mojom") {
     {
       types = [
         {
-          mojom = "attribution_reporting.mojom.DebugKey"
-          cpp = "uint64_t"
-        },
-        {
-          mojom = "attribution_reporting.mojom.TriggerDedupKey"
-          cpp = "uint64_t"
-        },
-        {
           mojom = "attribution_reporting.mojom.SuitableOrigin"
           cpp = "::attribution_reporting::SuitableOrigin"
           forward_declaration =
@@ -297,6 +305,12 @@ mojom("registration_mojom") {
           cpp = "::attribution_reporting::EventReportWindows"
           forward_declaration =
               "namespace attribution_reporting { class EventReportWindows; }"
+        },
+        {
+          mojom = "attribution_reporting.mojom.TriggerConfig"
+          cpp = "::attribution_reporting::TriggerConfig"
+          forward_declaration =
+              "namespace attribution_reporting { class TriggerConfig; }"
         },
       ]
       traits_headers = [ "registration_mojom_traits.h" ]

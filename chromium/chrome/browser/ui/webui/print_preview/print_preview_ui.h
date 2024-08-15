@@ -23,6 +23,8 @@
 #include "chrome/services/printing/public/mojom/pdf_nup_converter.mojom.h"
 #include "components/printing/common/print.mojom.h"
 #include "components/services/print_compositor/public/mojom/print_compositor.mojom.h"
+#include "content/public/browser/web_ui_controller.h"
+#include "content/public/browser/webui_config.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "printing/buildflags/buildflags.h"
 #include "printing/mojom/print.mojom-forward.h"
@@ -35,14 +37,33 @@
 #include "chrome/browser/printing/print_backend_service_manager.h"
 #endif
 
+class GURL;
+
 namespace base {
 class FilePath;
 class RefCountedMemory;
 }  // namespace base
 
+namespace content {
+class BrowserContext;
+}  // namespace content
+
 namespace printing {
 
 class PrintPreviewHandler;
+
+class PrintPreviewUIConfig : public content::WebUIConfig {
+ public:
+  PrintPreviewUIConfig();
+  ~PrintPreviewUIConfig() override;
+
+  // content::WebUIConfig:
+  bool IsWebUIEnabled(content::BrowserContext* browser_context) override;
+  bool ShouldHandleURL(const GURL& url) override;
+  std::unique_ptr<content::WebUIController> CreateWebUIController(
+      content::WebUI* web_ui,
+      const GURL& url) override;
+};
 
 // PrintPreviewUI lives on the UI thread.
 class PrintPreviewUI : public ConstrainedWebDialogUI,
@@ -92,16 +113,6 @@ class PrintPreviewUI : public ConstrainedWebDialogUI,
 
   const std::u16string& initiator_title() const { return initiator_title_; }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  bool source_is_arc() const { return source_is_arc_; }
-#endif
-
-  bool source_is_modifiable() const { return source_is_modifiable_; }
-
-  bool source_has_selection() const { return source_has_selection_; }
-
-  bool print_selection_only() const { return print_selection_only_; }
-
   int pages_per_sheet() const { return pages_per_sheet_; }
 
   const gfx::Rect& printable_area() const { return printable_area_; }
@@ -122,10 +133,6 @@ class PrintPreviewUI : public ConstrainedWebDialogUI,
 
   // Save pdf pages temporarily before ready to do N-up conversion.
   void AddPdfPageForNupConversion(base::ReadOnlySharedMemoryRegion pdf_page);
-
-  // Set initial settings for PrintPreviewUI.
-  static void SetInitialParams(content::WebContents* print_preview_dialog,
-                               const mojom::RequestPrintPreviewParams& params);
 
   // Determines whether to cancel a print preview request based on the request
   // id.
@@ -240,6 +247,8 @@ class PrintPreviewUI : public ConstrainedWebDialogUI,
       int request_id,
       scoped_refptr<base::RefCountedMemory> data_bytes);
 
+  bool ShouldUseCompositor() const;
+
   // Callbacks for print compositor client.
   void OnPrepareForDocumentToPdfDone(int32_t request_id,
                                      mojom::PrintCompositor::Status status);
@@ -284,20 +293,6 @@ class PrintPreviewUI : public ConstrainedWebDialogUI,
 
   // Weak pointer to the WebUI handler.
   const raw_ptr<PrintPreviewHandler> handler_;
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  // Indicates whether the source document is from ARC.
-  bool source_is_arc_ = false;
-#endif
-
-  // Indicates whether the source document can be modified.
-  bool source_is_modifiable_ = true;
-
-  // Indicates whether the source document has selection.
-  bool source_has_selection_ = false;
-
-  // Indicates whether only the selection should be printed.
-  bool print_selection_only_ = false;
 
   // Keeps track of whether OnClosePrintPreviewDialog() has been called or not.
   bool dialog_closed_ = false;

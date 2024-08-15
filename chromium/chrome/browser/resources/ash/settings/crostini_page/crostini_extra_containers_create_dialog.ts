@@ -23,7 +23,7 @@ import {ContainerInfo} from '../guest_os/guest_os_browser_proxy.js';
 import {CrostiniBrowserProxy, CrostiniBrowserProxyImpl, DEFAULT_CROSTINI_CONTAINER, DEFAULT_CROSTINI_VM} from './crostini_browser_proxy.js';
 import {getTemplate} from './crostini_extra_containers_create_dialog.html.js';
 
-interface ExtraContainersCreateDialog {
+export interface ExtraContainersCreateDialog {
   $: {
     dialog: CrDialogElement,
     containerFileInput: CrInputElement,
@@ -34,7 +34,7 @@ interface ExtraContainersCreateDialog {
   };
 }
 
-class ExtraContainersCreateDialog extends PolymerElement {
+export class ExtraContainersCreateDialog extends PolymerElement {
   static get is() {
     return 'settings-crostini-create-container-dialog';
   }
@@ -118,7 +118,7 @@ class ExtraContainersCreateDialog extends PolymerElement {
     this.browserProxy_ = CrostiniBrowserProxyImpl.getInstance();
   }
 
-  override connectedCallback() {
+  override connectedCallback(): void {
     super.connectedCallback();
     this.$.dialog.showModal();
     this.$.vmNameInput.value = this.inputVmName_;
@@ -137,7 +137,7 @@ class ExtraContainersCreateDialog extends PolymerElement {
     return true;
   }
 
-  private validateNames_() {
+  private validateNames_(): void {
     this.inputVmName_ = this.$.vmNameInput.value.length === 0 ?
         DEFAULT_CROSTINI_VM :
         this.$.vmNameInput.value;
@@ -161,11 +161,11 @@ class ExtraContainersCreateDialog extends PolymerElement {
         !this.validContainerName_ || !this.isValidVmName(this.inputVmName_);
   }
 
-  private onCancelClick_() {
+  private onCancelClick_(): void {
     this.$.dialog.close();
   }
 
-  private onCreateClick_() {
+  private onCreateClick_(): void {
     if (this.advancedToggleExpanded_) {
       // These elements are part of a dom-if on |advancedToggleExpanded_|
       this.inputImageServer_ = this.$.imageServerInput.value;
@@ -180,12 +180,12 @@ class ExtraContainersCreateDialog extends PolymerElement {
     this.$.dialog.close();
   }
 
-  private async onSelectContainerFileClick_() {
+  private async onSelectContainerFileClick_(): Promise<void> {
     this.$.containerFileInput.value =
         await this.browserProxy_.openContainerFileSelector();
   }
 
-  private advancedToggleClicked_() {
+  private advancedToggleClicked_(): void {
     this.advancedToggleExpanded_ = !this.advancedToggleExpanded_;
     // Force repaint.
     this.$.dialog.getBoundingClientRect();

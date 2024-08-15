@@ -21,6 +21,7 @@
 #include "chrome/browser/ash/arc/fileapi/arc_media_view_util.h"
 #include "chrome/browser/ash/arc/session/arc_session_manager.h"
 #include "chrome/browser/ash/crostini/crostini_manager.h"
+#include "chrome/browser/ash/drive/drive_integration_service.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/ash/file_manager/snapshot_manager.h"
 #include "chrome/browser/ash/file_manager/volume_manager_factory.h"
@@ -246,7 +247,7 @@ void VolumeManager::Initialize() {
       base::BindOnce(&RecordDownloadsDiskUsageStats, std::move(localVolume)));
 
   // Subscribe to DriveIntegrationService.
-  drive_integration_service_->AddObserver(this);
+  Observe(drive_integration_service_);
   if (drive_integration_service_->IsMounted()) {
     DoMountEvent(Volume::CreateForDrive(GetDriveMountPointPath()));
   }
@@ -333,9 +334,7 @@ void VolumeManager::Shutdown() {
     p->RemoveObserver(this);
   }
 
-  if (drive_integration_service_) {
-    drive_integration_service_->RemoveObserver(this);
-  }
+  drive::DriveIntegrationService::Observer::Reset();
 
   if (file_system_provider_service_) {
     file_system_provider_service_->RemoveObserver(this);

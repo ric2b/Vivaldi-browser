@@ -32,7 +32,6 @@
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "content/public/browser/media_session.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/browser/overlay_window.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -105,6 +104,7 @@ class MockVideoPictureInPictureWindowController
   MOCK_METHOD0(NextSlide, void());
   MOCK_CONST_METHOD0(GetSourceBounds, const gfx::Rect&());
   MOCK_METHOD0(GetWindowBounds, absl::optional<gfx::Rect>());
+  MOCK_METHOD0(GetOrigin, absl::optional<url::Origin>());
 };
 
 const base::FilePath::CharType kPictureInPictureWindowSizePage[] =
@@ -404,7 +404,7 @@ class PictureInPicturePixelComparisonBrowserTest
 
   base::FilePath GetFilePath(base::FilePath::StringPieceType relative_path) {
     base::FilePath base_dir;
-    CHECK(base::PathService::Get(base::DIR_SOURCE_ROOT, &base_dir));
+    CHECK(base::PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, &base_dir));
     // The path relative to <chromium src> for pixel test data.
     const base::FilePath::StringPieceType kTestDataPath =
         FILE_PATH_LITERAL("chrome/test/data/media/picture-in-picture/");
@@ -1259,12 +1259,21 @@ IN_PROC_BROWSER_TEST_F(VideoPictureInPictureWindowControllerBrowserTest,
       .WillOnce(testing::Return(nullptr));
   EXPECT_CALL(mock_controller(), Show());
   pip_window_manager->EnterPictureInPictureWithController(&mock_controller());
+  EXPECT_TRUE(pip_window_manager->GetActiveSessionOrigins().empty());
 
   // Now show the WebContents based Picture-in-Picture window controller.
   // This should close the existing window and show the new one.
   EXPECT_CALL(mock_controller(), Close(_));
   LoadTabAndEnterPictureInPicture(
       browser(), base::FilePath(kPictureInPictureWindowSizePage));
+
+  ASSERT_EQ(pip_window_manager->GetActiveSessionOrigins().size(), 1u);
+  const GURL& url = browser()
+                        ->tab_strip_model()
+                        ->GetActiveWebContents()
+                        ->GetLastCommittedURL();
+  EXPECT_TRUE(
+      pip_window_manager->GetActiveSessionOrigins()[0].IsSameOriginWith(url));
 
   ASSERT_TRUE(GetOverlayWindow());
   EXPECT_TRUE(GetOverlayWindow()->IsVisible());

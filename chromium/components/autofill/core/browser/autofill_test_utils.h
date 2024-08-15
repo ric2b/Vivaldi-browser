@@ -141,15 +141,16 @@ void SetProfileCategory(
 // the given `value`.
 std::string GetStrippedValue(const char* value);
 
-// Returns an IBAN full of dummy info.
-Iban GetIban();
+// Returns a local IBAN full of dummy info.
+Iban GetLocalIban();
 
-// Returns an IBAN full of dummy info, different to the above.
-Iban GetIban2();
+// Returns a local IBAN full of dummy info, different from the above.
+Iban GetLocalIban2();
 
-// Returns an IBAN full of dummy info, different to the above and without
-// nickname.
-Iban GetIbanWithoutNickname();
+// Returns server-based IBANs full of dummy info.
+Iban GetServerIban();
+Iban GetServerIban2();
+Iban GetServerIban3();
 
 // Returns a credit card full of dummy info.
 CreditCard GetCreditCard();
@@ -167,7 +168,6 @@ CreditCard GetIncompleteCreditCard();
 // Returns a masked server card full of dummy info.
 CreditCard GetMaskedServerCard();
 CreditCard GetMaskedServerCard2();
-CreditCard GetMaskedServerCardWithCvc();
 CreditCard GetMaskedServerCardWithNonLegacyId();
 CreditCard GetMaskedServerCardWithLegacyId();
 CreditCard GetMaskedServerCardVisa();
@@ -184,6 +184,9 @@ CreditCard GetVirtualCard();
 // Returns a randomly generated credit card of |record_type|. Note that the
 // card is not guaranteed to be valid/sane from a card validation standpoint.
 CreditCard GetRandomCreditCard(CreditCard::RecordType record_Type);
+
+// Returns a copy of `credit_card` with `cvc` set as specified.
+CreditCard WithCvc(CreditCard credit_card, std::u16string cvc = u"123");
 
 // Returns a credit card cloud token data full of dummy info.
 CreditCardCloudTokenData GetCreditCardCloudTokenData1();
@@ -306,30 +309,19 @@ void InitializePossibleTypesAndValidities(
     const std::vector<ServerFieldType>& possible_type,
     const std::vector<AutofillDataModel::ValidityState>& validity_state = {});
 
-// Fills the upload |field| with the information passed by parameter. If the
-// value of a const char* parameter is NULL, the corresponding attribute won't
-// be set at all, as opposed to being set to empty string.
+// Fills the upload |field| with the information passed by parameter.
 void FillUploadField(AutofillUploadContents::Field* field,
                      unsigned signature,
-                     const char* name,
-                     const char* control_type,
-                     const char* autocomplete,
                      unsigned autofill_type,
                      unsigned validity_state = 0);
 
 void FillUploadField(AutofillUploadContents::Field* field,
                      unsigned signature,
-                     const char* name,
-                     const char* control_type,
-                     const char* autocomplete,
                      const std::vector<unsigned>& autofill_type,
                      const std::vector<unsigned>& validity_state = {});
 
 void FillUploadField(AutofillUploadContents::Field* field,
                      unsigned signature,
-                     const char* name,
-                     const char* control_type,
-                     const char* autocomplete,
                      unsigned autofill_type,
                      const std::vector<unsigned>& validity_states);
 
@@ -341,6 +333,11 @@ void FillUploadField(AutofillUploadContents::Field* field,
 // Perhaps a neater way would be to move this to TestFormStructure.
 std::vector<FormSignature> GetEncodedSignatures(const FormStructure& form);
 std::vector<FormSignature> GetEncodedSignatures(
+    const std::vector<FormStructure*>& forms);
+
+std::vector<FormSignature> GetEncodedAlternativeSignatures(
+    const FormStructure& form);
+std::vector<FormSignature> GetEncodedAlternativeSignatures(
     const std::vector<FormStructure*>& forms);
 
 // Calls the required functions on the given external delegate to cause the

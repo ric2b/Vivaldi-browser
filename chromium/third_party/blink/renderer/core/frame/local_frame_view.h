@@ -295,26 +295,16 @@ class CORE_EXPORT LocalFrameView final
 
   void DidChangeScrollOffset();
 
-  void ViewportSizeChanged(bool width_changed, bool height_changed);
-  void MarkFixedPositionObjectsForLayout(bool width_changed,
-                                         bool height_changed);
+  void ViewportSizeChanged();
+  void InvalidateLayoutForViewportConstrainedObjects();
   void DynamicViewportUnitsChanged();
 
   AtomicString MediaType() const;
   void SetMediaType(const AtomicString&);
   void AdjustMediaTypeForPrinting(bool printing);
 
-  typedef HeapHashSet<Member<LayoutObject>> ObjectSet;
-  void AddFixedPositionObject(LayoutObject&);
-  void RemoveFixedPositionObject(LayoutObject&);
-  const ObjectSet* FixedPositionObjects() const {
-    return fixed_position_objects_;
-  }
-  bool HasFixedPositionObjects() const {
-    return fixed_position_objects_ && fixed_position_objects_->size() > 0;
-  }
-
   // Objects with background-attachment:fixed.
+  typedef HeapHashSet<Member<LayoutObject>> ObjectSet;
   void AddBackgroundAttachmentFixedObject(LayoutObject*);
   void RemoveBackgroundAttachmentFixedObject(LayoutObject*);
   bool RequiresMainThreadScrollingForBackgroundAttachmentFixed() const;
@@ -433,7 +423,7 @@ class CORE_EXPORT LocalFrameView final
   void ProcessUrlFragment(const KURL&,
                           bool same_document_navigation,
                           bool should_scroll = true);
-  FragmentAnchor* GetFragmentAnchor() { return fragment_anchor_; }
+  FragmentAnchor* GetFragmentAnchor() { return fragment_anchor_.Get(); }
   void InvokeFragmentAnchor();
   void ClearFragmentAnchor();
 
@@ -701,7 +691,7 @@ class CORE_EXPORT LocalFrameView final
   }
 
   MobileFriendlinessChecker* GetMobileFriendlinessChecker() const {
-    return mobile_friendliness_checker_;
+    return mobile_friendliness_checker_.Get();
   }
   void RegisterTapEvent(Element* target);
 
@@ -968,8 +958,6 @@ class CORE_EXPORT LocalFrameView final
 
   bool RunScrollSnapshotClientSteps();
 
-  bool RunCSSToggleSteps();
-
   bool NotifyResizeObservers();
   bool RunResizeObserverSteps(DocumentLifecycle::LifecycleState target_state);
   void ClearResizeObserverLimit();
@@ -1002,9 +990,6 @@ class CORE_EXPORT LocalFrameView final
 
   void GetUserScrollTranslationNodes(
       Vector<const TransformPaintPropertyNode*>& scroll_translation_nodes);
-
-  void GetAnchorPositionScrollerIds(
-      Vector<const TransformPaintPropertyNode*>& anchor_position_scrollers);
 
   // Return the sticky-ad detector for this frame, creating it if necessary.
   StickyAdDetector& EnsureStickyAdDetector();
@@ -1066,7 +1051,6 @@ class CORE_EXPORT LocalFrameView final
   Member<ScrollableAreaSet> animating_scrollable_areas_;
   // Scrollable areas which are user-scrollable, whether they overflow or not.
   Member<ScrollableAreaSet> user_scrollable_areas_;
-  Member<ObjectSet> fixed_position_objects_;
   ObjectSet background_attachment_fixed_objects_;
   Member<FrameViewAutoSizeInfo> auto_size_info_;
 

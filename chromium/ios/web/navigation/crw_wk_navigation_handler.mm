@@ -83,6 +83,36 @@ web::HttpsUpgradeType GetFailedHttpsUpgradeType(
   return web::HttpsUpgradeType::kNone;
 }
 
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class ErrorPagePresentationFailed {
+  kUnknown,
+  kWebViewReleased,
+  kJavaScriptExceptionOccurred,
+  kOtherWKErrorDomain,
+  kMaxValue = kOtherWKErrorDomain
+};
+
+void LogPresentingErrorPageFailedWithError(NSError* error) {
+  ErrorPagePresentationFailed failure_type =
+      ErrorPagePresentationFailed::kUnknown;
+
+  if ([WKErrorDomain isEqualToString:error.domain]) {
+    if (error.code == WKErrorWebViewInvalidated ||
+        error.code == WKErrorWebContentProcessTerminated ||
+        error.code == WKErrorJavaScriptResultTypeIsUnsupported) {
+      failure_type = ErrorPagePresentationFailed::kWebViewReleased;
+    } else if (error.code == WKErrorJavaScriptExceptionOccurred) {
+      failure_type = ErrorPagePresentationFailed::kJavaScriptExceptionOccurred;
+    } else {
+      failure_type = ErrorPagePresentationFailed::kOtherWKErrorDomain;
+    }
+  }
+
+  base::UmaHistogramEnumeration("IOS.Web.ErrorPagePresentationFailed",
+                                failure_type);
+}
+
 }  // namespace
 
 @interface CRWWKNavigationHandler () <DownloadNativeTaskBridgeDelegate> {
@@ -398,12 +428,8 @@ web::HttpsUpgradeType GetFailedHttpsUpgradeType(
     return;
   }
 
-  BOOL hasTappedRecently =
-      self.userInteractionState->HasUserTappedRecently(webView);
-  BOOL userInteractedWithRequestMainFrame =
-      hasTappedRecently &&
-      net::GURLWithNSURL(action.request.mainDocumentURL) ==
-          self.userInteractionState->LastUserInteraction()->main_document_url;
+  BOOL isUserInitiated = [self.delegate isUserInitiatedAction:action];
+
   BOOL isCrossOriginTargetFrame = NO;
   if (action.sourceFrame && action.targetFrame &&
       action.sourceFrame.webView == action.targetFrame.webView &&
@@ -417,14 +443,14 @@ web::HttpsUpgradeType GetFailedHttpsUpgradeType(
   if (base::FeatureList::IsEnabled(
           web::features::kPreventNavigationWithoutUserInteraction) &&
       isMainFrameNavigationAction && isCrossOriginTargetFrame &&
-      !hasTappedRecently) {
+      !isUserInitiated) {
     decisionHandler(WKNavigationActionPolicyCancel);
     return;
   }
 
   const web::WebStatePolicyDecider::RequestInfo requestInfo(
       transition, isMainFrameNavigationAction, isCrossOriginTargetFrame,
-      userInteractedWithRequestMainFrame);
+      isUserInitiated);
 
   self.webStateImpl->ShouldAllowRequest(action.request, requestInfo,
                                         std::move(callback));
@@ -989,6 +1015,19 @@ web::HttpsUpgradeType GetFailedHttpsUpgradeType(
   if (self.navigationState == web::WKNavigationState::FINISHED &&
       error.code == NSURLErrorCancelled &&
       [error.domain isEqualToString:NSURLErrorDomain]) {
+    _certVerificationErrors->Clear();
+    return;
+  }
+
+  // `webView:didFailNavigation:withError:` may be called when rendering an
+  // office document which should be ignored because the `webView` will already
+  // be displaying its own error. Additionally, in these cases, JavaScript can
+  // not be run on these pages (in order to display our own error message). See
+  // crbug.com/1489167 for more details.
+  if ([error.domain isEqualToString:@"OfficeImportErrorDomain"]) {
+    [self.navigationStates setState:web::WKNavigationState::FINISHED
+                      forNavigation:navigation];
+    self.webStateImpl->RemoveAllWebFrames();
     _certVerificationErrors->Clear();
     return;
   }
@@ -2082,6 +2121,7 @@ web::HttpsUpgradeType GetFailedHttpsUpgradeType(
                                          addAutomaticReload:YES]
                completionHandler:^(id result, NSError* nserror) {
                  if (nserror) {
+                   LogPresentingErrorPageFailedWithError(nserror);
                    // WKErrorJavaScriptResultTypeIsUnsupported can be received
                    // if the WKWebView is released during this call.
                    DCHECK(nserror.code == WKErrorWebViewInvalidated ||

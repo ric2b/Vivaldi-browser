@@ -13,6 +13,7 @@
 
 #include "base/base64.h"
 #include "base/base64url.h"
+#include "base/command_line.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
@@ -21,8 +22,9 @@
 #include "base/i18n/time_formatting.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/singleton.h"
+#include "base/no_destructor.h"
 #include "base/notreached.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -75,7 +77,13 @@ WebUIInfoSingleton::~WebUIInfoSingleton() = default;
 
 // static
 WebUIInfoSingleton* WebUIInfoSingleton::GetInstance() {
-  return base::Singleton<WebUIInfoSingleton>::get();
+  CHECK(base::CommandLine::ForCurrentProcess()
+            ->GetSwitchValueASCII("type")
+            .empty())
+      << "chrome://safe-browsing WebUI is only available in the browser "
+         "process";
+  static base::NoDestructor<WebUIInfoSingleton> instance;
+  return instance.get();
 }
 
 // static
@@ -378,6 +386,7 @@ void WebUIInfoSingleton::ClearReportingEvents() {
 #if BUILDFLAG(FULL_SAFE_BROWSING)
 void WebUIInfoSingleton::AddToDeepScanRequests(
     bool per_profile_request,
+    const std::string& access_token,
     const enterprise_connectors::ContentAnalysisRequest& request) {
   if (!HasListener())
     return;
@@ -389,9 +398,19 @@ void WebUIInfoSingleton::AddToDeepScanRequests(
         base::Time::Now();
   }
 
-  deep_scan_requests_[request.request_token()].per_profile_request =
-      per_profile_request;
-  deep_scan_requests_[request.request_token()].request = request;
+  auto& deep_scan_request = deep_scan_requests_[request.request_token()];
+  deep_scan_request.per_profile_request = per_profile_request;
+  deep_scan_request.request = request;
+
+  if (access_token.empty()) {
+    deep_scan_request.access_token_truncated = "NONE";
+  } else {
+    // Only show the first few bytes of `access_token` as it's sensitive.
+    deep_scan_request.access_token_truncated =
+        base::StrCat({access_token.substr(0, std::min(access_token.size(),
+                                                      static_cast<size_t>(6))),
+                      "..."});
+  }
 
   for (auto* webui_listener : webui_instances_)
     webui_listener->NotifyDeepScanJsListener(
@@ -1321,6 +1340,9 @@ base::Value::Dict SerializeSafeBrowsingClientProperties(
     case ClientSafeBrowsingReportRequest::ANDROID_SAFEBROWSING_REAL_TIME:
       url_api_type = "ANDROID_SAFEBROWSING_REAL_TIME";
       break;
+    case ClientSafeBrowsingReportRequest::ANDROID_SAFEBROWSING:
+      url_api_type = "ANDROID_SAFEBROWSING";
+      break;
     case ClientSafeBrowsingReportRequest::PVER3_NATIVE:
     case ClientSafeBrowsingReportRequest::FLYWHEEL:
       NOTREACHED();
@@ -1704,6 +1726,9 @@ std::string SerializeHitReport(const HitReport& hit_report) {
     case ThreatSource::ANDROID_SAFEBROWSING_REAL_TIME:
       threat_source = "ANDROID_SAFEBROWSING_REAL_TIME";
       break;
+    case ThreatSource::ANDROID_SAFEBROWSING:
+      threat_source = "ANDROID_SAFEBROWSING";
+      break;
     case ThreatSource::UNKNOWN:
       threat_source = "UNKNOWN";
       break;
@@ -1790,7 +1815,7 @@ base::Value::Dict SerializePGEvent(const sync_pb::UserEventSpecifics& event) {
 
   base::Time timestamp = base::Time::FromDeltaSinceWindowsEpoch(
       base::Microseconds(event.event_time_usec()));
-  result.Set("time", timestamp.ToJsTime());
+  result.Set("time", timestamp.InMillisecondsFSinceUnixEpoch());
 
   base::Value::Dict event_dict;
 
@@ -2474,7 +2499,7 @@ std::string SerializeHPRTLookupResponse(
 base::Value::Dict SerializeLogMessage(const base::Time& timestamp,
                                       const std::string& message) {
   base::Value::Dict result;
-  result.Set("time", timestamp.ToJsTime());
+  result.Set("time", timestamp.InMillisecondsFSinceUnixEpoch());
   result.Set("message", message);
   return result;
 }
@@ -2495,6 +2520,7 @@ base::Value::Dict SerializeReportingEvent(const base::Value::Dict& event) {
 #if BUILDFLAG(FULL_SAFE_BROWSING)
 std::string SerializeContentAnalysisRequest(
     bool per_profile_request,
+    const std::string& access_token_truncated,
     const enterprise_connectors::ContentAnalysisRequest& request) {
   base::Value::Dict request_dict;
 
@@ -2608,6 +2634,7 @@ std::string SerializeContentAnalysisRequest(
     tags.Append(tag);
   request_dict.Set("tags", std::move(tags));
   request_dict.Set("request_token", request.request_token());
+  request_dict.Set("access_token", access_token_truncated);
 
   std::string request_serialized;
   JSONStringValueSerializer serializer(&request_serialized);
@@ -2681,16 +2708,20 @@ base::Value::Dict SerializeDeepScanDebugData(const std::string& token,
   value.Set("token", token);
 
   if (!data.request_time.is_null()) {
-    value.Set("request_time", data.request_time.ToJsTime());
+    value.Set("request_time",
+              data.request_time.InMillisecondsFSinceUnixEpoch());
   }
 
   if (data.request.has_value()) {
-    value.Set("request", SerializeContentAnalysisRequest(
-                             data.per_profile_request, data.request.value()));
+    value.Set("request",
+              SerializeContentAnalysisRequest(data.per_profile_request,
+                                              data.access_token_truncated,
+                                              data.request.value()));
   }
 
   if (!data.response_time.is_null()) {
-    value.Set("response_time", data.response_time.ToJsTime());
+    value.Set("response_time",
+              data.response_time.InMillisecondsFSinceUnixEpoch());
   }
 
   if (!data.response_status.empty()) {
@@ -2801,7 +2832,7 @@ void SafeBrowsingUIHandler::OnGetCookie(
   double time = 0.0;
   if (!cookies.empty()) {
     cookie = cookies[0].Value();
-    time = cookies[0].CreationDate().ToJsTime();
+    time = cookies[0].CreationDate().InMillisecondsFSinceUnixEpoch();
   }
 
   base::Value::List response;
@@ -2924,6 +2955,9 @@ std::string SerializeDownloadUrlChecked(const std::vector<GURL>& urls,
       break;
     case DownloadCheckResult::DEEP_SCANNED_FAILED:
       url_and_result.Set("result", "DEEP_SCANNED_FAILED");
+      break;
+    case DownloadCheckResult::PROMPT_FOR_LOCAL_PASSWORD_SCANNING:
+      url_and_result.Set("result", "PROMPT_FOR_LOCAL_PASSWORD_SCANNING");
       break;
   }
 

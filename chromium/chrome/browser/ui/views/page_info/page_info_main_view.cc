@@ -25,17 +25,19 @@
 #include "chrome/browser/ui/views/page_info/permission_toggle_row_view.h"
 #include "chrome/browser/vr/vr_tab_helper.h"
 #include "chrome/common/url_constants.h"
+#include "components/content_settings/core/common/cookie_blocking_3pcd_status.h"
 #include "components/page_info/core/about_this_site_service.h"
 #include "components/page_info/core/features.h"
 #include "components/page_info/page_info_ui_delegate.h"
 #include "components/permissions/permission_util.h"
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
-#include "components/strings/grit/components_chromium_strings.h"
+#include "components/strings/grit/components_branded_strings.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/compositor/layer.h"
@@ -80,6 +82,9 @@ PageInfoMainView::ContainerView::ContainerView() {
 void PageInfoMainView::ContainerView::Update() {
   PreferredSizeChanged();
 }
+
+BEGIN_METADATA(PageInfoMainView, ContainerView, views::View)
+END_METADATA
 
 PageInfoMainView::PageInfoMainView(
     PageInfo* presenter,
@@ -152,34 +157,56 @@ PageInfoMainView::PageInfoMainView(
 
 PageInfoMainView::~PageInfoMainView() = default;
 
-void PageInfoMainView::EnsureCookieInfo() {
+void PageInfoMainView::SetCookieInfo(const CookiesNewInfo& cookie_info) {
+  // Ensure we don't add this button multiple times in error.
   if (cookie_button_ != nullptr) {
     return;
   }
-  // Get the icon.
   PageInfo::PermissionInfo info;
   info.type = ContentSettingsType::COOKIES;
   info.setting = CONTENT_SETTING_ALLOW;
-  const ui::ImageModel icon = PageInfoViewFactory::GetPermissionIcon(info);
 
-  const std::u16string& tooltip =
-      l10n_util::GetStringUTF16(IDS_PAGE_INFO_COOKIES_TOOLTIP);
+  ui::ImageModel icon;
+  std::u16string tooltip, title, label = std::u16string();
 
-  // Create a cookie button that opens a cookies subpage.
+  // Check if 3PCD blocking status is initialized.
+  if (cookie_info.blocking_status != CookieBlocking3pcdStatus::kNotIn3pcd) {
+    icon = PageInfoViewFactory::GetBlockingThirdPartyCookiesIcon();
+    title = l10n_util::GetStringUTF16(
+        IDS_PAGE_INFO_TRACKING_PROTECTION_SITE_INFO_BUTTON_NAME);
+    tooltip = l10n_util::GetStringUTF16(
+        IDS_PAGE_INFO_TRACKING_PROTECTION_COOKIES_TOOLTIP);
+
+    if (cookie_info.status == CookieControlsStatus::kDisabledForSite) {
+      label = l10n_util::GetStringUTF16(
+          IDS_PAGE_INFO_TRACKING_PROTECTION_SITE_INFO_BUTTON_LABEL_ALLOWED);
+    } else if (cookie_info.blocking_status == CookieBlocking3pcdStatus::kAll) {
+      label = l10n_util::GetStringUTF16(
+          IDS_PAGE_INFO_TRACKING_PROTECTION_SITE_INFO_BUTTON_LABEL_BLOCKED);
+    } else if (cookie_info.blocking_status ==
+               CookieBlocking3pcdStatus::kLimited) {
+      label = l10n_util::GetStringUTF16(
+          IDS_PAGE_INFO_TRACKING_PROTECTION_SITE_INFO_BUTTON_LABEL_LIMITED);
+    }
+  } else {
+    icon = PageInfoViewFactory::GetCookiesAndSiteDataIcon();
+    title = l10n_util::GetStringUTF16(IDS_PAGE_INFO_COOKIES_HEADER);
+    tooltip = l10n_util::GetStringUTF16(IDS_PAGE_INFO_COOKIES_TOOLTIP);
+  }
+
+  // Create a cookie button that opens a cookies subpage (or Tracking Protection
+  // subpage in the case of 3PCD).
   cookie_button_ =
       site_settings_view_->AddChildView(std::make_unique<RichHoverButton>(
           base::BindRepeating(&PageInfoNavigationHandler::OpenCookiesPage,
                               base::Unretained(navigation_handler_)),
-          icon, l10n_util::GetStringUTF16(IDS_PAGE_INFO_COOKIES_HEADER),
-          std::u16string(), tooltip, std::u16string(),
+          icon, title,
+          /*secondary_text=*/std::u16string(), tooltip, label,
           PageInfoViewFactory::GetOpenSubpageIcon()));
   cookie_button_->SetID(
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_COOKIES_SUBPAGE);
-
   cookie_button_->SetProperty(views::kElementIdentifierKey,
                               kCookieButtonElementId);
-  ads_personalization_section_ =
-      site_settings_view_->AddChildView(CreateContainerView());
 }
 
 void PageInfoMainView::SetPermissionInfo(
@@ -444,9 +471,8 @@ void PageInfoMainView::SetPageFeatureInfo(const PageFeatureInfo& info) {
 
 void PageInfoMainView::SetAdPersonalizationInfo(
     const AdPersonalizationInfo& info) {
-  EnsureCookieInfo();
-  if (!ads_personalization_section_)
-    return;
+  ads_personalization_section_ =
+      site_settings_view_->AddChildView(CreateContainerView());
 
   ads_personalization_section_->RemoveAllChildViews();
 
@@ -633,3 +659,6 @@ PageInfoMainView::CreateAdPersonalizationSection() {
 
   return ads_personalization_section;
 }
+
+BEGIN_METADATA(PageInfoMainView, views::View)
+END_METADATA

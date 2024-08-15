@@ -9,6 +9,7 @@
 
 #include "ash/components/arc/arc_features.h"
 #include "ash/constants/ash_features.h"
+#include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/quick_pair/keyed_service/quick_pair_mediator.h"
@@ -24,10 +25,10 @@
 #include "chrome/browser/ash/app_list/app_list_client_impl.h"
 #include "chrome/browser/ash/arc/util/arc_window_watcher.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
+#include "chrome/browser/ash/display/refresh_rate_controller.h"
 #include "chrome/browser/ash/game_mode/game_mode_controller.h"
 #include "chrome/browser/ash/geolocation/system_geolocation_source.h"
 #include "chrome/browser/ash/login/signin/signin_error_notifier_factory.h"
-#include "chrome/browser/ash/night_light/night_light_client_impl.h"
 #include "chrome/browser/ash/policy/display/display_resolution_handler.h"
 #include "chrome/browser/ash/policy/display/display_rotation_default_handler.h"
 #include "chrome/browser/ash/policy/display/display_settings_handler.h"
@@ -66,13 +67,11 @@
 #include "chrome/browser/ui/ash/session_controller_client_impl.h"
 #include "chrome/browser/ui/ash/shelf/app_service/exo_app_type_resolver.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
-#include "chrome/browser/ui/ash/shelf/chrome_shelf_item_factory.h"
 #include "chrome/browser/ui/ash/system_tray_client_impl.h"
 #include "chrome/browser/ui/ash/tab_cluster_ui_client.h"
 #include "chrome/browser/ui/ash/vpn_list_forwarder.h"
 #include "chrome/browser/ui/ash/wallpaper_controller_client_impl.h"
-#include "chrome/browser/ui/quick_answers/quick_answers_controller_impl.h"
-#include "chrome/browser/ui/views/editor_menu/editor_menu_controller_impl.h"
+#include "chrome/browser/ui/quick_answers/read_write_cards_manager_impl.h"
 #include "chrome/browser/ui/views/select_file_dialog_extension.h"
 #include "chrome/browser/ui/views/select_file_dialog_extension_factory.h"
 #include "chrome/browser/ui/views/tabs/tab_scrubber_chromeos.h"
@@ -82,9 +81,6 @@
 #include "chromeos/ash/components/network/portal_detector/network_portal_detector.h"
 #include "chromeos/ash/services/bluetooth_config/fast_pair_delegate.h"
 #include "chromeos/ash/services/bluetooth_config/in_process_instance.h"
-#include "chromeos/components/quick_answers/public/cpp/controller/quick_answers_controller.h"
-#include "chromeos/components/quick_answers/quick_answers_client.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/session_manager/core/session_manager_observer.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
@@ -123,8 +119,6 @@ class ChromeShelfControllerInitializer
   ~ChromeShelfControllerInitializer() override {
     if (!chrome_shelf_controller_)
       session_manager::SessionManager::Get()->RemoveObserver(this);
-    if (chrome_shelf_item_factory_)
-      ash::ShelfModel::Get()->SetShelfItemFactory(nullptr);
   }
 
   // session_manager::SessionManagerObserver:
@@ -136,11 +130,8 @@ class ChromeShelfControllerInitializer
 
     if (session_manager::SessionManager::Get()->session_state() ==
         session_manager::SessionState::ACTIVE) {
-      chrome_shelf_item_factory_ = std::make_unique<ChromeShelfItemFactory>();
-      ash::ShelfModel::Get()->SetShelfItemFactory(
-          chrome_shelf_item_factory_.get());
       chrome_shelf_controller_ = std::make_unique<ChromeShelfController>(
-          nullptr, ash::ShelfModel::Get(), chrome_shelf_item_factory_.get());
+          nullptr, ash::ShelfModel::Get());
       chrome_shelf_controller_->Init();
 
       session_manager::SessionManager::Get()->RemoveObserver(this);
@@ -148,7 +139,6 @@ class ChromeShelfControllerInitializer
   }
 
  private:
-  std::unique_ptr<ChromeShelfItemFactory> chrome_shelf_item_factory_;
   std::unique_ptr<ChromeShelfController> chrome_shelf_controller_;
 };
 
@@ -284,10 +274,9 @@ void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
   }
 #endif
 
-  night_light_client_ = std::make_unique<ash::NightLightClientImpl>(
-      g_browser_process->platform_part()->GetTimezoneResolverManager(),
-      g_browser_process->shared_url_loader_factory());
-  night_light_client_->Start();
+  // Result is unused, but `TimezoneResolverManager` must be created here for
+  // its internal initialization to succeed.
+  g_browser_process->platform_part()->GetTimezoneResolverManager();
 
   projector_app_client_ = std::make_unique<ProjectorAppClientImpl>();
   projector_client_ = std::make_unique<ProjectorClientImpl>();
@@ -351,21 +340,19 @@ void ChromeBrowserMainExtraPartsAsh::PostProfileInit(Profile* profile,
   }
 
   ash_web_view_factory_ = std::make_unique<AshWebViewFactoryImpl>();
+  bool force_throttle = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      ash::switches::kForceRefreshRateThrottle);
 
-  quick_answers_controller_ = std::make_unique<QuickAnswersControllerImpl>();
-  QuickAnswersController::Get()->SetClient(
-      std::make_unique<quick_answers::QuickAnswersClient>(
-          g_browser_process->shared_url_loader_factory(),
-          QuickAnswersController::Get()->GetQuickAnswersDelegate()));
   game_mode_controller_ = std::make_unique<game_mode::GameModeController>();
+  refresh_rate_controller_ = std::make_unique<ash::RefreshRateController>(
+      ash::Shell::Get()->display_configurator(), ash::PowerStatus::Get(),
+      game_mode_controller_.get(), force_throttle);
 
   // Initialize TabScrubberChromeOS after the Ash Shell has been initialized.
   TabScrubberChromeOS::GetInstance();
 
-  if (chromeos::features::IsOrcaEnabled()) {
-    editor_menu_controller_ =
-        std::make_unique<chromeos::editor_menu::EditorMenuControllerImpl>();
-  }
+  read_write_cards_manager_ =
+      std::make_unique<chromeos::ReadWriteCardsManagerImpl>();
 }
 
 void ChromeBrowserMainExtraPartsAsh::PostBrowserStart() {
@@ -391,9 +378,7 @@ void ChromeBrowserMainExtraPartsAsh::PostMainMessageLoopRun() {
   exo_parts_.reset();
 #endif
 
-  night_light_client_.reset();
   mobile_data_notifications_.reset();
-  editor_menu_controller_.reset();
   chrome_shelf_controller_initializer_.reset();
   attestation_cleanup_manager_.reset();
   desks_client_.reset();
@@ -407,8 +392,8 @@ void ChromeBrowserMainExtraPartsAsh::PostMainMessageLoopRun() {
   tab_cluster_ui_client_.reset();
 
   // Initialized in PostProfileInit (which may not get called in some tests).
+  refresh_rate_controller_.reset();
   game_mode_controller_.reset();
-  quick_answers_controller_.reset();
   ash_web_view_factory_.reset();
   network_portal_notification_controller_.reset();
   display_settings_handler_.reset();
@@ -432,8 +417,9 @@ void ChromeBrowserMainExtraPartsAsh::PostMainMessageLoopRun() {
   app_list_client_.reset();
   ash_shell_init_.reset();
 
-  // This instance must be destructed after `ash_shell_init_`.
+  // These instances must be destructed after `ash_shell_init_`.
   video_conference_tray_controller_.reset();
+  read_write_cards_manager_.reset();
 
   ambient_client_.reset();
 

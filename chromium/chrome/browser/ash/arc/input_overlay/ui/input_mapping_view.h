@@ -18,6 +18,7 @@ class DisplayOverlayController;
 // InputMappingView shows all the input mappings.
 class InputMappingView : public views::View, public TouchInjectorObserver {
  public:
+  METADATA_HEADER(InputMappingView);
   explicit InputMappingView(
       DisplayOverlayController* display_overlay_controller);
   InputMappingView(const InputMappingView&) = delete;
@@ -50,6 +51,7 @@ class InputMappingView : public views::View, public TouchInjectorObserver {
   void OnActionTypeChanged(Action* action, Action* new_action) override;
   void OnActionInputBindingUpdated(const Action& action) override;
   void OnContentBoundsSizeChanged() override;
+  void OnActionNewStateRemoved(const Action& action) override;
 
   const raw_ptr<DisplayOverlayController> controller_ = nullptr;
   DisplayMode current_display_mode_ = DisplayMode::kNone;

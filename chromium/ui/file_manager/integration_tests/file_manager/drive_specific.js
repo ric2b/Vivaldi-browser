@@ -2,22 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {addEntries, createTestFile, ENTRIES, EntryType, expectHistogramTotalCount, getCaller, getUserActionCount, pending, repeatUntil, RootPath, sendTestMessage, TestEntryInfo} from '../test_util.js';
+import {createTestFile, ENTRIES, EntryType, getCaller, getUserActionCount, pending, repeatUntil, RootPath, sendTestMessage, TestEntryInfo} from '../test_util.js';
 import {testcase} from '../testcase.js';
 
-import {navigateWithDirectoryTree, remoteCall, setupAndWaitUntilReady, waitForMediaApp} from './background.js';
+import {remoteCall, setupAndWaitUntilReady, waitForMediaApp} from './background.js';
+import {DirectoryTreePageObject} from './page_objects/directory_tree.js';
 import {FakeTask} from './tasks.js';
 import {BASIC_DRIVE_ENTRY_SET, FILE_MANAGER_EXTENSIONS_ID, OFFLINE_ENTRY_SET, SHARED_WITH_ME_ENTRY_SET} from './test_data.js';
-
-/**
- * Expected autocomplete results for 'hello'.
- * @type {Array<string>}
- * @const
- */
-const EXPECTED_AUTOCOMPLETE_LIST = [
-  '\'hello\' - search Drive',
-  'hello.txt',
-];
 
 /**
  * Expected files shown in the search results for 'hello'
@@ -39,45 +30,10 @@ const ENABLE_DOCS_OFFLINE_MESSAGE =
     'Enable Google Docs Offline to make Docs, Sheets and Slides ' +
     'available offline.';
 
-/** The query selector for the search box input field. */
-const searchBox = '#search-box cr-input';
-
 /** The id attribute of the dismiss button in the educational banner. */
 async function getDismissButtonId(appId) {
   return await remoteCall.isCrosComponents(appId) ? '#dismiss-button' :
                                                     '#dismiss-button-old';
-}
-
-/**
- * Returns the steps to start a search for 'hello' and wait for the
- * autocomplete results to appear.
- */
-async function startDriveSearchWithAutoComplete() {
-  // Open Files app on Drive.
-  const appId = await setupAndWaitUntilReady(RootPath.DRIVE);
-
-  // Focus the search box.
-  chrome.test.assertTrue(await remoteCall.callRemoteTestUtil(
-      'fakeEvent', appId, ['#search-box cr-input', 'focus']));
-
-  // Input a text.
-  await remoteCall.inputText(appId, '#search-box cr-input', 'hello');
-
-  // Notify the element of the input.
-  chrome.test.assertTrue(await remoteCall.callRemoteTestUtil(
-      'fakeEvent', appId, ['#search-box cr-input', 'input']));
-
-  // Wait for the auto complete list getting the expected contents.
-  const caller = getCaller();
-  await repeatUntil(async () => {
-    const elements = await remoteCall.callRemoteTestUtil(
-        'queryAllElements', appId, ['#autocomplete-list li']);
-    const list = elements.map((element) => element.text);
-    return chrome.test.checkDeepEq(EXPECTED_AUTOCOMPLETE_LIST, list) ?
-        undefined :
-        pending(caller, 'Current auto complete list: %j.', list);
-  });
-  return appId;
 }
 
 /**
@@ -143,8 +99,8 @@ testcase.driveOpenSidebarOffline = async () => {
   const appId = await setupAndWaitUntilReady(RootPath.DRIVE);
 
   // Click the icon of the Offline volume.
-  chrome.test.assertFalse(!await remoteCall.callRemoteTestUtil(
-      'selectVolume', appId, ['drive_offline']));
+  const directoryTree = await DirectoryTreePageObject.create(appId, remoteCall);
+  await directoryTree.selectItemByLabel('Offline');
 
   // Check: the file list should display the offline file set.
   await remoteCall.waitForFiles(
@@ -166,8 +122,8 @@ testcase.driveOpenSidebarSharedWithMe = async () => {
 
   // Click the icon of the Shared With Me volume.
   // Use the icon for a click target.
-  chrome.test.assertFalse(!await remoteCall.callRemoteTestUtil(
-      'selectVolume', appId, ['drive_shared_with_me']));
+  const directoryTree = await DirectoryTreePageObject.create(appId, remoteCall);
+  await directoryTree.selectItemByLabel('Shared with me');
 
   // Wait until the breadcrumb path is updated.
   await remoteCall.waitUntilCurrentDirectoryIsChanged(appId, '/Shared with me');
@@ -193,42 +149,15 @@ testcase.driveOpenSidebarSharedWithMe = async () => {
 };
 
 /**
- * Tests autocomplete with a query 'hello'.
- */
-testcase.driveAutoCompleteQuery = async () => {
-  return startDriveSearchWithAutoComplete();
-};
-
-/**
- * Tests that clicking the first option in the autocomplete box shows all of
- * the results for that query.
- */
-testcase.driveClickFirstSearchResult = async () => {
-  const appId = await startDriveSearchWithAutoComplete();
-  chrome.test.assertTrue(!!await remoteCall.callRemoteTestUtil(
-      'fakeKeyDown', appId,
-      ['#autocomplete-list', 'ArrowDown', false, false, false]));
-
-  await remoteCall.waitForElement(appId, ['#autocomplete-list li[selected]']);
-  chrome.test.assertTrue(!!await remoteCall.callRemoteTestUtil(
-      'fakeMouseDown', appId, ['#autocomplete-list li[selected]']));
-
-  await remoteCall.waitForFiles(
-      appId, TestEntryInfo.getExpectedRows(SEARCH_RESULTS_ENTRY_SET));
-
-  // Fetch A11y messages.
-  const a11yMessages =
-      await remoteCall.callRemoteTestUtil('getA11yAnnounces', appId, []);
-  chrome.test.assertEq(1, a11yMessages.length, 'Missing a11y message');
-  chrome.test.assertEq('Showing results for hello.', a11yMessages[0]);
-};
-
-/**
  * Tests that pressing enter after typing a search shows all of
  * the results for that query.
  */
 testcase.drivePressEnterToSearch = async () => {
-  const appId = await startDriveSearchWithAutoComplete();
+  // Open Files app on Drive.
+  const appId = await setupAndWaitUntilReady(RootPath.DRIVE);
+
+  remoteCall.typeSearchText(appId, 'hello');
+
   chrome.test.assertTrue(!!await remoteCall.callRemoteTestUtil(
       'fakeEvent', appId, ['#search-box cr-input', 'focus']));
   chrome.test.assertTrue(!!await remoteCall.callRemoteTestUtil(
@@ -247,44 +176,24 @@ testcase.drivePressEnterToSearch = async () => {
 };
 
 /**
- * Tests that the breadcrumbs always shows "My Drive" when searching inside any
- * folder in Drive.
+ * Tests that pressing the clear search button announces an a11y message and
+ * shows all files/folders.
  */
-testcase.driveSearchAlwaysDisplaysMyDrive = async () => {
+testcase.drivePressClearSearch = async () => {
   // Open Files app on Drive.
   const appId =
       await setupAndWaitUntilReady(RootPath.DRIVE, [], BASIC_DRIVE_ENTRY_SET);
 
   // Start the search from a sub-folder.
-  await navigateWithDirectoryTree(appId, '/My Drive/photos');
+  const directoryTree = await DirectoryTreePageObject.create(appId, remoteCall);
+  await directoryTree.navigateToPath('/My Drive/photos');
 
   // Search the text.
   remoteCall.typeSearchText(appId, 'hello');
 
-  // Wait for the auto complete list to appear;
-  await remoteCall.waitForSearchAutoComplete(appId);
-
-  // Send Enter to perform the search.
-  const enterKey = ['Enter', false, false, false];
-  await remoteCall.fakeKeyDown(appId, searchBox, ...enterKey);
-
   // Wait for the result in the file list.
   await remoteCall.waitForFiles(
       appId, TestEntryInfo.getExpectedRows(SEARCH_RESULTS_ENTRY_SET));
-
-  // When displaying the search result the breadcrumbs should always display "My
-  // drive".
-  await remoteCall.waitUntilCurrentDirectoryIsChanged(appId, '/My Drive');
-
-  return appId;
-};
-
-/**
- * Tests that pressing the clear search button announces an a11y message and
- * shows all files/folders.
- */
-testcase.drivePressClearSearch = async () => {
-  const appId = await testcase.driveSearchAlwaysDisplaysMyDrive();
 
   // Click on the clear search button.
   await remoteCall.waitAndClickElement(appId, '#search-box cr-input .clear');
@@ -501,7 +410,8 @@ testcase.drivePinToggleUpdatesInFakeEntries = async () => {
   const appId = await setupAndWaitUntilReady(RootPath.DRIVE);
 
   // Navigate to the Offline fake entry.
-  await navigateWithDirectoryTree(appId, '/Offline');
+  const directoryTree = await DirectoryTreePageObject.create(appId, remoteCall);
+  await directoryTree.navigateToPath('/Offline');
 
   // Bring up the context menu for test.txt.
   await remoteCall.waitAndRightClick(
@@ -523,7 +433,7 @@ testcase.drivePinToggleUpdatesInFakeEntries = async () => {
       '#pinned-toggle:not([checked])');
 
   // Navigate to the Shared with me fake entry.
-  await navigateWithDirectoryTree(appId, '/Shared with me');
+  await directoryTree.navigateToPath('/Shared with me');
 
   // Bring up the context menu for test.txt.
   await remoteCall.waitAndRightClick(
@@ -744,7 +654,8 @@ testcase.driveAvailableOfflineActionBar = async () => {
           '#pinned-toggle[checked]:not([disabled])');
 
   // Focus on the directory tree.
-  await remoteCall.focus(appId, ['#directory-tree']);
+  const directoryTree = await DirectoryTreePageObject.create(appId, remoteCall);
+  await directoryTree.focusTree();
 
   // Check the "Available Offline" toggle is still available in the action bar.
   await remoteCall.waitForElementJelly(
@@ -866,9 +777,9 @@ testcase.driveWelcomeBanner = async () => {
     await getDismissButtonId(appId),
   ];
 
-  // Open the Drive volume in the files-list.
-  chrome.test.assertTrue(await remoteCall.callRemoteTestUtil(
-      'fakeMouseClick', appId, ['.drive-volume']));
+  // Open the Drive volume in the directory tree.
+  const directoryTree = await DirectoryTreePageObject.create(appId, remoteCall);
+  await directoryTree.selectItemByLabel('Google Drive');
 
   // Check: the Drive welcome banner should appear.
   await remoteCall.waitForElement(appId, driveWelcomeBannerQuery);
@@ -908,7 +819,8 @@ testcase.driveOfflineInfoBanner = async () => {
   await remoteCall.waitForElement(appId, driveOfflineBannerHiddenQuery);
 
   // Navigate to a different directory within Drive.
-  await navigateWithDirectoryTree(appId, '/My Drive/photos');
+  const directoryTree = await DirectoryTreePageObject.create(appId, remoteCall);
+  await directoryTree.navigateToPath('/My Drive/photos');
 
   // Check: the Drive offline info banner should stay hidden.
   await remoteCall.waitForElement(appId, driveOfflineBannerHiddenQuery);
@@ -930,6 +842,22 @@ testcase.driveEncryptionBadge = async () => {
   chrome.test.assertNe('none', encrypted.styles.display);
   chrome.test.assertEq('visible', encrypted.styles.visibility);
 
+  // Check: the badge is included in accessibility labels.
+  const row = await remoteCall.waitForElementStyles(
+      appId, '#file-list [file-name="test-encrypted.txt"]',
+      ['aria-labelledby', 'display', 'visibility']);
+  const ariaLabelledBy = row.attributes['aria-labelledby'];
+  const encryptedBadgeId = ariaLabelledBy.split(/ +/).filter(
+      (id) => id.indexOf('encrypted') != -1)[0];
+  chrome.test.assertTrue(
+      encryptedBadgeId !== undefined,
+      'no encrypted label found in aria for the encrypted file');
+  const encryptedBadgeElements = await remoteCall.callRemoteTestUtil(
+      'deepQueryAllElements', appId, [`#${encryptedBadgeId}`, []]);
+  chrome.test.assertEq(
+      1, encryptedBadgeElements.length,
+      'no referenced encrypted label element found');
+
   // Check: non-encrypted file doesn't have a badge.
   const plain = await remoteCall.callRemoteTestUtil(
       'deepQueryAllElements', appId,
@@ -950,7 +878,7 @@ testcase.driveInlineSyncStatusSingleFile = async () => {
     mimeType: 'video/ogg',
     lastModifiedTime: 'Jul 4, 2012, 10:35 AM',
     nameText: 'toBeUploaded.ogv',
-    sizeText: '59 KB',
+    sizeText: '56 KB',
     typeText: 'OGG video',
     availableOffline: true,
   });
@@ -1017,7 +945,7 @@ testcase.driveInlineSyncStatusParentFolder = async () => {
     mimeType: 'video/ogg',
     lastModifiedTime: 'Jul 4, 2012, 10:35 AM',
     nameText: 'toBeUploaded.ogv',
-    sizeText: '59 KB',
+    sizeText: '56 KB',
     typeText: 'OGG video',
     availableOffline: true,
   });
@@ -1030,7 +958,7 @@ testcase.driveInlineSyncStatusParentFolder = async () => {
     mimeType: 'video/ogg',
     lastModifiedTime: 'Jul 4, 2012, 10:35 AM',
     nameText: 'toFailUploading.ogv',
-    sizeText: '59 KB',
+    sizeText: '56 KB',
     typeText: 'OGG video',
     availableOffline: true,
   });
@@ -1105,7 +1033,7 @@ testcase.driveInlineSyncStatusSingleFileProgressEvents = async () => {
     mimeType: 'video/ogg',
     lastModifiedTime: 'Jul 4, 2012, 10:35 AM',
     nameText: 'toBeUploaded.ogv',
-    sizeText: '59 KB',
+    sizeText: '56 KB',
     typeText: 'OGG video',
     availableOffline: true,
   });
@@ -1162,7 +1090,7 @@ testcase.driveInlineSyncStatusParentFolderProgressEvents = async () => {
     mimeType: 'video/ogg',
     lastModifiedTime: 'Jul 4, 2012, 10:35 AM',
     nameText: 'toBeUploaded.ogv',
-    sizeText: '59 KB',
+    sizeText: '56 KB',
     typeText: 'OGG video',
     availableOffline: true,
   });
@@ -1175,7 +1103,7 @@ testcase.driveInlineSyncStatusParentFolderProgressEvents = async () => {
     mimeType: 'video/ogg',
     lastModifiedTime: 'Jul 4, 2012, 10:35 AM',
     nameText: 'toFailUploading.ogv',
-    sizeText: '59 KB',
+    sizeText: '56 KB',
     typeText: 'OGG video',
     availableOffline: true,
   });
@@ -1213,7 +1141,8 @@ testcase.driveInlineSyncStatusParentFolderProgressEvents = async () => {
   await remoteCall.waitForElement(appId, syncInProgressQuery);
 
   // Go inside the some_folder folder.
-  await navigateWithDirectoryTree(appId, '/My Drive/some_folder');
+  const directoryTree = await DirectoryTreePageObject.create(appId, remoteCall);
+  await directoryTree.navigateToPath('/My Drive/some_folder');
 
   // Fake toFailUploading.ogv failing to sync to Drive.
   await sendTestMessage({
@@ -1559,7 +1488,8 @@ testcase.driveFoldersRetainPinnedPropertyWhenBulkPinningEnabled = async () => {
 
   // Navigate to the shared with me directory and assert that the pinned
   // property is not set on the directory.
-  await navigateWithDirectoryTree(appId, '/Shared with me');
+  const directoryTree = await DirectoryTreePageObject.create(appId, remoteCall);
+  await directoryTree.navigateToPath('/Shared with me');
   await remoteCall.waitForElement(
       appId, '#file-list [file-name="Shared Directory"]:not(.pinned)');
 
@@ -1607,8 +1537,8 @@ testcase.drivePinToggleIsEnabledInSharedWithMeWhenBulkPinningEnabled =
 
   // Click the Shared with me volume, it has no children so navigating using the
   // directory tree doesn't work.
-  chrome.test.assertFalse(!await remoteCall.callRemoteTestUtil(
-      'selectVolume', appId, ['drive_shared_with_me']));
+  const directoryTree = await DirectoryTreePageObject.create(appId, remoteCall);
+  await directoryTree.selectItemByLabel('Shared with me');
 
   // Wait until the breadcrumb path is updated.
   await remoteCall.waitUntilCurrentDirectoryIsChanged(appId, '/Shared with me');
@@ -1781,10 +1711,10 @@ testcase.driveItemsOutOfViewportShouldUpdateTheirSyncStatus = async () => {
 
 /**
  * Tests that when bulk pinning is enabled the queued state is shown for all
- * files that the PinManager is tracking but has not yet pinned.
+ * files that the PinningManager is tracking but has not yet pinned.
  */
-testcase.driveAllItemsShouldBeQueuedIfTrackedByPinManager = async () => {
-  // Stop the PinManager from pinning files.
+testcase.driveAllItemsShouldBeQueuedIfTrackedByPinningManager = async () => {
+  // Stop the PinningManager from pinning files.
   await sendTestMessage({name: 'setBulkPinningShouldPinFiles', enabled: false});
 
   // Add a single empty file and load Files app up at the Drive root.

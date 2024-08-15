@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include <stddef.h>
-#include "build/build_config.h"
 
 #include <map>
 #include <string>
@@ -21,6 +20,7 @@
 #include "base/test/test_future.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/branding_buildflags.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/accessibility/accessibility_state_utils.h"
 #include "chrome/browser/pdf/pdf_extension_test_base.h"
@@ -74,6 +74,13 @@ std::string DumpPdfAccessibilityTree(const ui::AXTreeUpdate& ax_tree) {
       found_pdf_root = true;
     }
     if (!found_pdf_root) {
+      continue;
+    }
+
+    // Exclude the status node and its wrapper node from `ax_tree_dump` if they
+    // exist in the tree. Tests don't expect them to be included in the dump.
+    if (node.role == ax::mojom::Role::kBanner ||
+        node.role == ax::mojom::Role::kStatus) {
       continue;
     }
 
@@ -154,6 +161,16 @@ class PDFExtensionAccessibilityTest : public PDFExtensionTestBase {
   ~PDFExtensionAccessibilityTest() override = default;
 
  protected:
+  std::vector<base::test::FeatureRef> GetDisabledFeatures() const override {
+    auto disabled = PDFExtensionTestBase::GetDisabledFeatures();
+    // PDF OCR should not be enabled in `PDFExtensionAccessibilityTest`. If a
+    // new test class is derived from this class and needs to test PDF OCR,
+    // make sure that `GetDisabledFeatures()` is overridden to exclude
+    // `::features::kPdfOcr` from a list of disabled features.
+    disabled.push_back(::features::kPdfOcr);
+    return disabled;
+  }
+
   ui::AXTreeUpdate GetAccessibilityTreeSnapshotForPdf(
       content::WebContents* web_contents) {
     content::FindAccessibilityNodeCriteria find_criteria;
@@ -237,8 +254,15 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTest, PdfAccessibilityInOOPIF) {
   ASSERT_MULTILINE_STREQ(kExpectedPDFAXTree, ax_tree_dump);
 }
 
+// Flaky on ChromiumOS MSan. See https://crbug.com/1484869
+#if BUILDFLAG(IS_CHROMEOS) && defined(MEMORY_SANITIZER)
+#define MAYBE_PdfAccessibilityWordBoundaries \
+  DISABLED_PdfAccessibilityWordBoundaries
+#else
+#define MAYBE_PdfAccessibilityWordBoundaries PdfAccessibilityWordBoundaries
+#endif
 IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTest,
-                       PdfAccessibilityWordBoundaries) {
+                       MAYBE_PdfAccessibilityWordBoundaries) {
   content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
   MimeHandlerViewGuest* guest = LoadPdfGetMimeHandlerView(
       embedded_test_server()->GetURL("/pdf/test-bookmarks.pdf"));
@@ -379,9 +403,8 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTest,
 }
 
 // Flaky, see crbug.com/1477361
-IN_PROC_BROWSER_TEST_F(
-    PDFExtensionAccessibilityTest,
-    DISABLED_MAYBE_RecordHasAccessibleTextToUmaWithAccessiblePdf) {
+IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTest,
+                       DISABLED_RecordHasAccessibleTextToUmaWithAccessiblePdf) {
   MimeHandlerViewGuest* guest_view = LoadPdfGetMimeHandlerView(
       embedded_test_server()->GetURL("/pdf/test-bookmarks.pdf"));
   ASSERT_TRUE(guest_view);
@@ -726,13 +749,6 @@ class PDFExtensionAccessibilityTreeDumpTest
     return enabled;
   }
 
-  std::vector<base::test::FeatureRef> GetDisabledFeatures() const override {
-    auto disabled = PDFExtensionAccessibilityTest::GetDisabledFeatures();
-    // PDF OCR should not modify the dump.
-    disabled.push_back(::features::kPdfOcr);
-    return disabled;
-  }
-
   void RunPDFTest(const base::FilePath::CharType* pdf_file) {
     base::FilePath test_path = ui_test_utils::GetTestFilePath(
         base::FilePath(FILE_PATH_LITERAL("pdf")),
@@ -822,6 +838,10 @@ class PDFExtensionAccessibilityTreeDumpTest
     std::vector<std::string> actual_lines =
         base::SplitString(actual_contents, "\n", base::KEEP_WHITESPACE,
                           base::SPLIT_WANT_NONEMPTY);
+    // TODO(b/1473176): Either keep the banner and status node in the output or
+    // modify `pdf_root` above to remove the banner and status nodes from the
+    // tree so that they are not in the format output.
+    RemoveBannerAndStatusNodesFromFormatOutput(actual_lines, GetParam());
 
     // Validate the dump against the expectation file.
     EXPECT_TRUE(test_helper_.ValidateAgainstExpectation(
@@ -856,6 +876,53 @@ class PDFExtensionAccessibilityTreeDumpTest
     property_filters.emplace_back("name=*", AXPropertyFilter::ALLOW_EMPTY);
 
     return property_filters;
+  }
+
+  void RemoveBannerAndStatusNodesFromFormatOutput(
+      std::vector<std::string>& output_lines,
+      const ui::AXApiType::Type& platform_type) {
+    // The banner and status nodes will be in the second and third lines in the
+    // tree output, respectively. These two nodes are always added to the PDF
+    // accessibility tree after the PDF root node and don't get deleted. So,
+    // it is safe to assume that they are always there in the format output.
+    // Thus, delete the second and third lines from the tree format output.
+    ASSERT_GT(output_lines.size(), 3u);
+    std::string banner_role;
+    std::string status_role;
+    switch (platform_type) {
+      case ui::AXApiType::kBlink:
+        banner_role = "banner";
+        status_role = "status";
+        break;
+      case ui::AXApiType::kLinux:
+        banner_role = "landmark";
+        status_role = "statusbar";
+        break;
+      case ui::AXApiType::kMac:
+        banner_role = "AXLandmarkBanner";
+        status_role = "AXApplicationStatus";
+        break;
+      case ui::AXApiType::kWinIA2:
+        banner_role = "IA2_ROLE_LANDMARK";
+        status_role = "ROLE_SYSTEM_STATUSBAR";
+        break;
+      case ui::AXApiType::kWinUIA:
+        banner_role = "Group";
+        status_role = "StatusBar";
+        break;
+      case ui::AXApiType::kNone:
+        [[fallthrough]];
+      case ui::AXApiType::kAndroid:
+        [[fallthrough]];
+      case ui::AXApiType::kAndroidExternal:
+        [[fallthrough]];
+      case ui::AXApiType::kFuchsia:
+        return;
+    }
+    EXPECT_TRUE(base::Contains(output_lines[1], banner_role));
+    EXPECT_TRUE(base::Contains(output_lines[2], status_role));
+
+    output_lines.erase(output_lines.begin() + 1, output_lines.begin() + 3);
   }
 
   ui::AXInspectTestHelper test_helper_;
@@ -996,6 +1063,13 @@ class PDFExtensionAccessibilityPdfOcrTest
     return enabled;
   }
 
+  std::vector<base::test::FeatureRef> GetDisabledFeatures() const override {
+    // `PDFExtensionAccessibilityTest` has `::features::kPdfOcr` in a list of
+    // disabled features. Now that `::features::kPdfOcr` is used in this test,
+    // just return an empty list to exclude the feature from the list.
+    return {};
+  }
+
   void ClickPdfOcrToggleButton(MimeHandlerViewGuest* guest_view) {
     content::RenderFrameHost* guest_main_frame =
         guest_view->GetGuestMainFrame();
@@ -1009,7 +1083,7 @@ class PDFExtensionAccessibilityPdfOcrTest
   }
 };
 
-// TODO(crbug.com/1444895): Re-enable it when integrating PDF OCR with
+// TODO(b/289010799): Re-enable it when integrating PDF OCR with
 // Select-to-Speak.
 IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityPdfOcrTest,
                        DISABLED_CheckUmaWhenTurnOnPdfOcrFromMoreActions) {
@@ -1028,7 +1102,7 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityPdfOcrTest,
       /*expected_bucket_count=*/1);
 }
 
-// TODO(crbug.com/1444895): Re-enable it when integrating PDF OCR with
+// TODO(b/289010799): Re-enable it when integrating PDF OCR with
 // Select-to-Speak.
 IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityPdfOcrTest,
                        DISABLED_CheckUmaWhenTurnOffPdfOcrFromMoreActions) {

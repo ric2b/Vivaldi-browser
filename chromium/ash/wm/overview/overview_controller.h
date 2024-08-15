@@ -13,22 +13,23 @@
 #include "ash/wm/overview/overview_delegate.h"
 #include "ash/wm/overview/overview_metrics.h"
 #include "ash/wm/overview/overview_observer.h"
-#include "ash/wm/overview/overview_session.h"
 #include "ash/wm/overview/overview_types.h"
+#include "base/cancelable_callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "ui/aura/window_occlusion_tracker.h"
 #include "ui/views/widget/widget.h"
+#include "ui/wm/public/activation_change_observer.h"
 
 namespace ash {
 
-class OverviewWallpaperController;
+class OverviewSession;
 
 // Manages a overview session which displays an overview of all windows and
 // allows selecting a window to activate it.
 class ASH_EXPORT OverviewController : public OverviewDelegate,
-                                      public ::wm::ActivationChangeObserver {
+                                      public wm::ActivationChangeObserver {
  public:
   OverviewController();
 
@@ -36,6 +37,10 @@ class ASH_EXPORT OverviewController : public OverviewDelegate,
   OverviewController& operator=(const OverviewController&) = delete;
 
   ~OverviewController() override;
+
+  // Convenience function to get the overview controller instance, which is
+  // created and owned by Shell.
+  static OverviewController* Get();
 
   // Starts/Ends overview with `type`. Returns true if enter or exit overview
   // successful. Depending on `type` the enter/exit animation will look
@@ -171,10 +176,6 @@ class ASH_EXPORT OverviewController : public OverviewDelegate,
   base::Time last_overview_session_time_;
 
   base::TimeDelta occlusion_pause_duration_for_end_;
-
-  // Handles blurring and dimming of the wallpaper when entering or exiting
-  // overview mode. Animates the blurring and dimming if necessary.
-  std::unique_ptr<OverviewWallpaperController> overview_wallpaper_controller_;
 
   base::CancelableOnceClosure reset_pauser_task_;
 

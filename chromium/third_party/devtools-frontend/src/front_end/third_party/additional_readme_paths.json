@@ -1,0 +1,16 @@
+[
+  "acorn",
+  "codemirror",
+  "codemirror.next",
+  "chromium",
+  "csp_evaluator",
+  "diff",
+  "i18n",
+  "intl-messageformat",
+  "lighthouse",
+  "lit",
+  "marked",
+  "puppeteer",
+  "puppeteer-replay",
+  "wasmparser"
+]

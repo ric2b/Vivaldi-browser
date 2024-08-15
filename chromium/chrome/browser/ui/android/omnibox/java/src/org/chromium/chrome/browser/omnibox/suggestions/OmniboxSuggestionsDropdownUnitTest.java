@@ -58,9 +58,7 @@ import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.ui.base.WindowDelegate;
 
-/**
- * Unit tests for {@link OmniboxSuggestionsDropdown}.
- */
+/** Unit tests for {@link OmniboxSuggestionsDropdown}. */
 @RunWith(BaseRobolectricTestRunner.class)
 public class OmniboxSuggestionsDropdownUnitTest {
     public @Rule TestRule mProcessor = new Features.JUnitProcessor();
@@ -122,8 +120,10 @@ public class OmniboxSuggestionsDropdownUnitTest {
 
     @Before
     public void setUp() {
-        mContext = new ContextThemeWrapper(
-                ApplicationProvider.getApplicationContext(), R.style.Theme_BrowserUI_DayNight);
+        mContext =
+                new ContextThemeWrapper(
+                        ApplicationProvider.getApplicationContext(),
+                        R.style.Theme_BrowserUI_DayNight);
         mDropdown = new OmniboxSuggestionsDropdown(mContext, mPool);
         mDropdown.setAdapter(mAdapter);
         mListener = mDropdown.getLayoutScrollListener();
@@ -138,16 +138,18 @@ public class OmniboxSuggestionsDropdownUnitTest {
     @SmallTest
     @Feature("Omnibox")
     @EnableFeatures(ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE)
-    @CommandLineFlags.
-    Add({"enable-features=" + ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE + "<Study",
-            "force-fieldtrials=Study/Group",
-            "force-fieldtrial-params=Study.Group:enable_modernize_visual_update_on_tablet/true"})
-    public void
-    testBackgroundColor_withOmniboxModernizeVisualUpdateFlags() {
-        assertEquals(mDropdown.getStandardBgColor(),
+    @CommandLineFlags.Add({
+        "enable-features=" + ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE + "<Study",
+        "force-fieldtrials=Study/Group",
+        "force-fieldtrial-params=Study.Group:enable_modernize_visual_update_on_tablet/true"
+    })
+    public void testBackgroundColor_withOmniboxModernizeVisualUpdateFlags() {
+        assertEquals(
+                mDropdown.getStandardBgColor(),
                 ChromeColors.getSurfaceColor(
                         mContext, R.dimen.omnibox_suggestion_dropdown_bg_elevation));
-        assertEquals(mDropdown.getIncognitoBgColor(),
+        assertEquals(
+                mDropdown.getIncognitoBgColor(),
                 mContext.getColor(R.color.omnibox_dropdown_bg_incognito));
     }
 
@@ -209,7 +211,13 @@ public class OmniboxSuggestionsDropdownUnitTest {
         assertEquals(-5, mListener.updateKeyboardVisibilityAndScroll(-5, -5));
         verifyNoMoreInteractions(mDropdownScrollListener);
 
-        // Overscroll to top. Expect the keyboard to be called in.
+        // Overscroll to top. This is part of the same gesture.
+        // Expect to see keyboard state unchanged.
+        assertEquals(-5, mListener.updateKeyboardVisibilityAndScroll(-5, -10));
+        verifyNoMoreInteractions(mDropdownScrollToTopListener);
+
+        // Overscroll to top again, but this time as a new gesture.
+        mListener.onNewGesture();
         assertEquals(-5, mListener.updateKeyboardVisibilityAndScroll(-5, -10));
         verify(mDropdownScrollToTopListener, times(1)).run();
         verifyNoMoreInteractions(mDropdownScrollToTopListener);
@@ -232,7 +240,13 @@ public class OmniboxSuggestionsDropdownUnitTest {
         // Confirm that we're hiding the keyboard.
         verify(mDropdownScrollListener).run();
 
+        // Simulate scroll up as part of the same gesture. Observe that no events are emitted.
+        assertEquals(0, mListener.updateKeyboardVisibilityAndScroll(0, -10));
+        verifyNoMoreInteractions(mDropdownScrollToTopListener);
+
+        // Begin a new gesture.
         // Pretend we're scrolling up now (delta=-10) but we're already on top and can't move.
+        mListener.onNewGesture();
         assertEquals(0, mListener.updateKeyboardVisibilityAndScroll(0, -10));
         // Confirm that we're not trying to show the keyboard.
         verify(mDropdownScrollToTopListener).run();
@@ -251,7 +265,12 @@ public class OmniboxSuggestionsDropdownUnitTest {
         assertEquals(0, mListener.updateKeyboardVisibilityAndScroll(1, 10));
         verify(mDropdownScrollListener).run();
 
-        // Reset keyboard state.
+        // Expect no more events emitted during the same gesture.
+        assertEquals(-9, mListener.updateKeyboardVisibilityAndScroll(-9, -10));
+        verifyNoMoreInteractions(mDropdownScrollToTopListener);
+
+        // Reset keyboard state as part of the new gesture.
+        mListener.onNewGesture();
         assertEquals(-9, mListener.updateKeyboardVisibilityAndScroll(-9, -10));
         verify(mDropdownScrollToTopListener).run();
 
@@ -310,6 +329,7 @@ public class OmniboxSuggestionsDropdownUnitTest {
 
     @Test
     @SmallTest
+    @DisableFeatures(ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE)
     public void testAlignmentProvider_paddingChange() {
         assertEquals(0, mDropdown.getMeasuredWidth());
 
@@ -355,8 +375,9 @@ public class OmniboxSuggestionsDropdownUnitTest {
     public void testAlignmentProvider_topChange() {
         mDropdown.setEmbedder(mEmbedder);
         mDropdown.onAttachedToWindow();
-        mDropdown.setLayoutParams(new LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        mDropdown.setLayoutParams(
+                new LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         int marginTop = 100;
         int height = 800 - marginTop;
         mOmniboxAlignment = new OmniboxAlignment(0, 100, 600, height, 10, 10);
@@ -381,8 +402,9 @@ public class OmniboxSuggestionsDropdownUnitTest {
     public void testAlignmentProvider_heightChange() {
         mDropdown.setEmbedder(mEmbedder);
         mDropdown.onAttachedToWindow();
-        mDropdown.setLayoutParams(new LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        mDropdown.setLayoutParams(
+                new LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         int height = 400;
         mOmniboxAlignment = new OmniboxAlignment(0, 80, 600, height, 10, 10);
         mOmniboxAlignmentSupplier.set(mOmniboxAlignment);
@@ -421,11 +443,12 @@ public class OmniboxSuggestionsDropdownUnitTest {
     }
 
     private void layoutDropdown(int width, int height) {
-        doAnswer((invocation) -> {
-            Rect r = invocation.getArgument(0);
-            r.set(0, 0, 0, height);
-            return true;
-        })
+        doAnswer(
+                        (invocation) -> {
+                            Rect r = invocation.getArgument(0);
+                            r.set(0, 0, 0, height);
+                            return true;
+                        })
                 .when(mWindowDelegate)
                 .getWindowVisibleDisplayFrame(any(Rect.class));
         int widthSpec = MeasureSpec.makeMeasureSpec(width, MeasureSpec.AT_MOST);

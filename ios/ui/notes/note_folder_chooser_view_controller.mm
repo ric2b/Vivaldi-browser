@@ -9,6 +9,8 @@
 #import "base/check.h"
 #import "base/notreached.h"
 #import "base/strings/sys_string_conversions.h"
+#import "components/notes/note_node.h"
+#import "components/notes/notes_model.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
@@ -26,8 +28,6 @@
 #import "ios/ui/notes/note_ui_constants.h"
 #import "ios/ui/notes/note_utils_ios.h"
 #import "ios/ui/notes/cells/note_folder_item.h"
-#import "notes/note_node.h"
-#import "notes/notes_model.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
@@ -486,16 +486,10 @@ using vivaldi::NoteNode;
       addSectionWithIdentifier:NoteHomeSectionIdentifierMessages];
 
   std::vector<const NoteNode*> nodes;
-  std::vector<std::pair<int, NoteNode::Type>> results;
   self.noteModel->GetNotesFoldersMatching(
         base::SysNSStringToUTF16(searchText),
         kMaxNotesSearchResults,
-        &results);
-  for (const std::pair<int, NoteNode::Type>& node : results) {
-      const NoteNode* noteNode = self.noteModel->GetNoteNodeByID(
-            static_cast<int64_t>(node.first));
-      nodes.push_back(noteNode);
-  }
+        nodes);
   int count = 0;
   for (const NoteNode* node : nodes) {
   // When search result is visible ignore the folder indentation and

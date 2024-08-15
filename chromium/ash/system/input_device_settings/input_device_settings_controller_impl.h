@@ -10,7 +10,9 @@
 #include "ash/ash_export.h"
 #include "ash/public/cpp/input_device_settings_controller.h"
 #include "ash/public/cpp/session/session_observer.h"
+#include "ash/public/mojom/input_device_settings.mojom-forward.h"
 #include "ash/public/mojom/input_device_settings.mojom.h"
+#include "ash/system/input_device_settings/input_device_duplicate_id_finder.h"
 #include "ash/system/input_device_settings/input_device_notifier.h"
 #include "ash/system/input_device_settings/input_device_settings_metrics_manager.h"
 #include "ash/system/input_device_settings/input_device_settings_policy_handler.h"
@@ -26,6 +28,7 @@
 #include "ui/events/devices/keyboard_device.h"
 
 class AccountId;
+class PrefChangeRegistrar;
 class PrefRegistrySimple;
 
 namespace ash {
@@ -63,20 +66,28 @@ class ASH_EXPORT InputDeviceSettingsControllerImpl
   const mojom::TouchpadSettings* GetTouchpadSettings(DeviceId id) override;
   const mojom::PointingStickSettings* GetPointingStickSettings(
       DeviceId id) override;
+  const mojom::GraphicsTabletSettings* GetGraphicsTabletSettings(
+      DeviceId id) override;
   const mojom::KeyboardPolicies& GetKeyboardPolicies() override;
   const mojom::MousePolicies& GetMousePolicies() override;
-  void SetKeyboardSettings(DeviceId id,
+  bool SetKeyboardSettings(DeviceId id,
                            mojom::KeyboardSettingsPtr settings) override;
-  void SetTouchpadSettings(DeviceId id,
+  bool SetTouchpadSettings(DeviceId id,
                            mojom::TouchpadSettingsPtr settings) override;
-  void SetMouseSettings(DeviceId id, mojom::MouseSettingsPtr settings) override;
-  void SetPointingStickSettings(
+  bool SetMouseSettings(DeviceId id, mojom::MouseSettingsPtr settings) override;
+  bool SetPointingStickSettings(
       DeviceId id,
       mojom::PointingStickSettingsPtr settings) override;
-  void SetGraphicsTabletSettings(
+  bool SetGraphicsTabletSettings(
       DeviceId id,
       mojom::GraphicsTabletSettingsPtr settings) override;
   void OnLoginScreenFocusedPodChanged(const AccountId& account_id) override;
+  void StartObservingButtons(DeviceId id) override;
+  void StopObservingButtons() override;
+  void OnMouseButtonPressed(DeviceId device_id,
+                            const mojom::Button& button) override;
+  void OnGraphicsTabletButtonPressed(DeviceId device_id,
+                                     const mojom::Button& button) override;
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
 
@@ -127,12 +138,22 @@ class ASH_EXPORT InputDeviceSettingsControllerImpl
   void DispatchGraphicsTabletDisconnectedAndEraseFromList(DeviceId id);
   void DispatchGraphicsTabletSettingsChanged(DeviceId id);
 
+  void DispatchCustomizableMouseButtonPressed(const mojom::Mouse& mouse,
+                                              const mojom::Button& button);
+  void DispatchCustomizableTabletButtonPressed(
+      const mojom::GraphicsTablet& graphics_tablet,
+      const mojom::Button& button);
+  void DispatchCustomizablePenButtonPressed(
+      const mojom::GraphicsTablet& graphics_tablet,
+      const mojom::Button& button);
+
   void InitializePolicyHandler();
   void OnKeyboardPoliciesChanged();
   void OnMousePoliciesChanged();
 
   // Correctly initializes settings depending on whether we have an active
   // user session or not.
+  void InitializeGraphicsTabletSettings(mojom::GraphicsTablet* graphics_tablet);
   void InitializeKeyboardSettings(mojom::Keyboard* keyboard);
   void InitializeMouseSettings(mojom::Mouse* mouse);
   void InitializePointingStickSettings(mojom::PointingStick* pointing_stick);
@@ -145,12 +166,49 @@ class ASH_EXPORT InputDeviceSettingsControllerImpl
   // - A device is connected/disconnected.
   // - A user makes an update to a device setting.
   // - The active pref service changes.
+  void RefreshStoredLoginScreenGraphicsTabletSettings();
   void RefreshStoredLoginScreenKeyboardSettings();
   void RefreshStoredLoginScreenMouseSettings();
   void RefreshStoredLoginScreenPointingStickSettings();
   void RefreshStoredLoginScreenTouchpadSettings();
 
-  base::ObserverList<InputDeviceSettingsController::Observer> observers_;
+  // Refreshes all internal settings. Called whenever prefs are updated.
+  void RefreshInternalPointingStickSettings();
+  void RefreshInternalTouchpadSettings();
+
+  // Updates the default settings based on the most recently connected device.
+  // This is called whenever a device is connected/disconnected or if settings
+  // are updated.
+  void RefreshMouseDefaultSettings();
+  void RefreshKeyboardDefaultSettings();
+  void RefreshTouchpadDefaultSettings();
+
+  // Refreshes all cached settings which includes defaults and login screen
+  // settings.
+  void RefreshCachedMouseSettings();
+  void RefreshCachedKeyboardSettings();
+  void RefreshCachedTouchpadSettings();
+
+  // Get the mouse customization restriction. There are three different cases:
+  // 1. If the mouse is customizable and there is no duplicate ids in the
+  // keyboards, return kAllowCustomizations.
+  // 2. If the mouse is customizable but there exists
+  // duplicate ids in the keyboards, return kDisableKeyEventRewrites.
+  // 3. If the mouse is not customizable, return kDisallowCustomizations.
+  mojom::CustomizationRestriction GetMouseCustomizationRestriction(
+      const ui::InputDevice& mouse);
+
+  // Update the restriction for currently connected mice once a keyboard with
+  // the same id connects to disable the key event rewrite for the mice.
+  void ApplyCustomizationRestrictionFromKeyboard(DeviceId keyboard_id);
+
+  mojom::Mouse* FindMouse(DeviceId id);
+  mojom::Touchpad* FindTouchpad(DeviceId id);
+  mojom::Keyboard* FindKeyboard(DeviceId id);
+  mojom::GraphicsTablet* FindGraphicsTablet(DeviceId id);
+  mojom::PointingStick* FindPointingStick(DeviceId id);
+
+  base::ObserverList<Observer> observers_;
 
   std::unique_ptr<InputDeviceSettingsPolicyHandler> policy_handler_;
 
@@ -183,8 +241,11 @@ class ASH_EXPORT InputDeviceSettingsControllerImpl
       graphics_tablet_notifier_;
   std::unique_ptr<InputDeviceSettingsMetricsManager> metrics_manager_;
 
+  std::unique_ptr<InputDeviceDuplicateIdFinder> duplicate_id_finder_;
+
   raw_ptr<PrefService> active_pref_service_ = nullptr;  // Not owned.
   absl::optional<AccountId> active_account_id_;
+  std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;
 
   // Boolean which notes whether or not there is a settings update in progress.
   bool settings_refresh_pending_ = false;

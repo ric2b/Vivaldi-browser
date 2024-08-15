@@ -112,7 +112,7 @@ const char* GmbTypeToString(gfx::GpuMemoryBufferType type) {
 // numeric values should never be reused.
 enum FormatPixmapSupport { kNone = 0, kNV12 = 1, kYV12 = 2, kMaxValue = kYV12 };
 
-// Return the supported format in order of fallback support.
+// Return the supported multiplanar format in order of fallback support.
 FormatPixmapSupport GetFormatPixmapSupport(
     std::vector<gfx::BufferFormat> supported_formats) {
   FormatPixmapSupport val = FormatPixmapSupport::kNone;
@@ -198,7 +198,9 @@ SharedImageFactory::SharedImageFactory(
       memory_tracker_(std::make_unique<MemoryTypeTracker>(memory_tracker)),
       is_for_display_compositor_(is_for_display_compositor),
       gr_context_type_(context_state ? context_state->gr_context_type()
-                                     : GrContextType::kGL) {
+                                     : GrContextType::kGL),
+      gpu_preferences_(gpu_preferences),
+      workarounds_(workarounds) {
 #if defined(USE_OZONE)
   if (!set_format_supported_metric) {
     bool is_pixmap_supported = ui::OzonePlatform::GetInstance()
@@ -212,9 +214,15 @@ SharedImageFactory::SharedImageFactory(
       if (factory) {
         // Get all formats that are supported by platform.
         auto supported_formats = factory->GetSupportedFormatsForTexturing();
-        auto format = GetFormatPixmapSupport(supported_formats);
+        auto supported_format = GetFormatPixmapSupport(supported_formats);
         base::UmaHistogramEnumeration("GPU.SharedImage.FormatPixmapSupport",
-                                      format);
+                                      supported_format);
+
+        // Check if hardware GMBs with RG88 format are ever created.
+        bool is_rg88_supported =
+            base::Contains(supported_formats, gfx::BufferFormat::RG_88);
+        base::UmaHistogramBoolean("GPU.SharedImage.IsRG88HardwareGMBSupported",
+                                  is_rg88_supported);
       }
     }
     set_format_supported_metric = true;
@@ -849,6 +857,34 @@ bool SharedImageFactory::GetGpuMemoryBufferHandleInfo(
 void SharedImageFactory::RegisterSharedImageBackingFactoryForTesting(
     SharedImageBackingFactory* factory) {
   backing_factory_for_testing_ = factory;
+}
+
+gpu::SharedImageCapabilities SharedImageFactory::MakeCapabilities() {
+  gpu::SharedImageCapabilities shared_image_caps;
+  shared_image_caps.supports_scanout_shared_images =
+      SharedImageManager::SupportsScanoutImages();
+  const bool is_angle_metal =
+      gl::GetGLImplementation() == gl::kGLImplementationEGLANGLE &&
+      gl::GetANGLEImplementation() == gl::ANGLEImplementation::kMetal;
+  const bool is_skia_graphite =
+      gr_context_type_ == GrContextType::kGraphiteDawn ||
+      gr_context_type_ == GrContextType::kGraphiteMetal;
+  shared_image_caps.supports_luminance_shared_images =
+      !is_angle_metal && !is_skia_graphite;
+  shared_image_caps.supports_r16_shared_images =
+      is_angle_metal || is_skia_graphite;
+  shared_image_caps.disable_r8_shared_images =
+      workarounds_.r8_egl_images_broken;
+
+#if BUILDFLAG(IS_WIN)
+  shared_image_caps.shared_image_d3d =
+      D3DImageBackingFactory::IsD3DSharedImageSupported(gpu_preferences_);
+  shared_image_caps.shared_image_swap_chain =
+      shared_image_caps.shared_image_d3d &&
+      D3DImageBackingFactory::IsSwapChainSupported();
+#endif  // BUILDFLAG(IS_WIN)
+
+  return shared_image_caps;
 }
 
 void SharedImageFactory::SetGpuExtraInfo(

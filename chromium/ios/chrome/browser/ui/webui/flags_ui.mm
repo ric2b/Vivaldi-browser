@@ -21,7 +21,7 @@
 #import "components/grit/flags_ui_resources_map.h"
 #import "components/prefs/pref_registry_simple.h"
 #import "components/prefs/pref_service.h"
-#import "components/strings/grit/components_chromium_strings.h"
+#import "components/strings/grit/components_branded_strings.h"
 #import "components/strings/grit/components_strings.h"
 #import "components/version_info/version_info.h"
 #import "ios/chrome/browser/flags/about_flags.h"
@@ -48,6 +48,7 @@ web::WebUIIOSDataSource* CreateFlagsUIHTMLSource() {
       base::make_span(kFlagsUiResources, kFlagsUiResourcesSize));
   source->SetDefaultResource(IDR_FLAGS_UI_FLAGS_HTML);
   source->UseStringsJs();
+  source->EnableReplaceI18nInJS();
   return source;
 }
 

@@ -15,6 +15,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
+#include "third_party/blink/renderer/modules/webgl/ext_blend_func_extended.h"
 #include "third_party/blink/renderer/modules/webgl/ext_clip_control.h"
 #include "third_party/blink/renderer/modules/webgl/ext_color_buffer_float.h"
 #include "third_party/blink/renderer/modules/webgl/ext_color_buffer_half_float.h"
@@ -56,10 +57,11 @@
 #include "third_party/blink/renderer/modules/webgl/webgl_render_shared_exponent.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_shader_pixel_local_storage.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_stencil_texturing.h"
-#include "third_party/blink/renderer/modules/webgl/webgl_video_texture.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/drawing_buffer.h"
 
 namespace blink {
+
+class ExceptionState;
 
 // An helper function for the two create() methods. The return value is an
 // indicate of whether the create() should return nullptr or not.
@@ -157,12 +159,14 @@ WebGL2RenderingContext::AsV8OffscreenRenderingContext() {
 }
 
 ImageBitmap* WebGL2RenderingContext::TransferToImageBitmap(
-    ScriptState* script_state) {
+    ScriptState* script_state,
+    ExceptionState& exception_state) {
   return TransferToImageBitmapBase(script_state);
 }
 
 void WebGL2RenderingContext::RegisterContextExtensions() {
   // Register extensions.
+  RegisterExtension(ext_blend_func_extended_, kDraftExtension);
   RegisterExtension(ext_clip_control_, kDraftExtension);
   RegisterExtension(ext_color_buffer_float_);
   RegisterExtension(ext_color_buffer_half_float_);
@@ -186,7 +190,7 @@ void WebGL2RenderingContext::RegisterContextExtensions() {
   RegisterExtension(oes_shader_multisample_interpolation_, kDraftExtension);
   RegisterExtension(oes_texture_float_linear_);
   RegisterExtension(ovr_multiview2_);
-  RegisterExtension(webgl_clip_cull_distance_, kDraftExtension);
+  RegisterExtension(webgl_clip_cull_distance_);
   RegisterExtension(webgl_compressed_texture_astc_);
   RegisterExtension(webgl_compressed_texture_etc_);
   RegisterExtension(webgl_compressed_texture_etc1_);
@@ -206,10 +210,10 @@ void WebGL2RenderingContext::RegisterContextExtensions() {
   RegisterExtension(webgl_render_shared_exponent_, kDraftExtension);
   RegisterExtension(webgl_shader_pixel_local_storage_, kDraftExtension);
   RegisterExtension(webgl_stencil_texturing_, kDraftExtension);
-  RegisterExtension(webgl_video_texture_, kDraftExtension);
 }
 
 void WebGL2RenderingContext::Trace(Visitor* visitor) const {
+  visitor->Trace(ext_blend_func_extended_);
   visitor->Trace(ext_clip_control_);
   visitor->Trace(ext_color_buffer_float_);
   visitor->Trace(ext_color_buffer_half_float_);
@@ -249,7 +253,6 @@ void WebGL2RenderingContext::Trace(Visitor* visitor) const {
   visitor->Trace(webgl_render_shared_exponent_);
   visitor->Trace(webgl_shader_pixel_local_storage_);
   visitor->Trace(webgl_stencil_texturing_);
-  visitor->Trace(webgl_video_texture_);
   WebGL2RenderingContextBase::Trace(visitor);
 }
 

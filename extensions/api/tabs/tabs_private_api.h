@@ -53,6 +53,11 @@ bool IsTabMuted(const content::WebContents* web_contents);
 bool IsTabInAWorkspace(const content::WebContents* web_contents);
 bool IsTabInAWorkspace(const std::string& viv_extdata);
 absl::optional<double> GetTabWorkspaceId(const std::string& viv_extdata);
+Browser* GetWorkspaceBrowser(const double workspace_id);
+absl::optional<double> GetActiveWorkspaceId(Browser* browser);
+int CountTabsInWorkspace(TabStripModel* tab_strip, const double workspace_id);
+base::Value::List getLinkRoutes(content::WebContents* contents);
+bool SetTabWorkspaceId(content::WebContents* contents, double workspace_id);
 
 class TabsPrivateAPI : public BrowserContextKeyedAPI {
   friend class BrowserContextKeyedAPIFactory<TabsPrivateAPI>;
@@ -292,6 +297,7 @@ class TabsPrivateStartDragFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   void OnCaptureDone(SessionID::id_type window_id,
+                     const url::Origin source_origin,
                      bool success,
                      float device_scale_factor,
                      const SkBitmap& bitmap);

@@ -23,13 +23,13 @@
 #include "chrome/browser/web_applications/test/os_integration_test_override_impl.h"
 #include "chrome/browser/web_applications/test/web_app_test_observers.h"
 #include "chrome/browser/web_applications/web_app_callback_app_identity.h"
-#include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_ui_manager.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/run_on_os_login_types.h"
 #include "components/webapps/browser/install_result_code.h"
+#include "components/webapps/common/web_app_id.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/views/widget/any_widget_observer.h"
@@ -164,7 +164,7 @@ struct BrowserState {
   BrowserState(Browser* browser_ptr,
                base::flat_map<content::WebContents*, TabState> tab_state,
                content::WebContents* active_web_contents,
-               const AppId& app_id,
+               const webapps::AppId& app_id,
                bool launch_icon_visible);
   ~BrowserState();
   BrowserState(const BrowserState&);
@@ -178,12 +178,12 @@ struct BrowserState {
   // #union
   RAW_PTR_EXCLUSION content::WebContents* active_tab;
   // If this isn't an app browser, `app_id` is empty.
-  AppId app_id;
+  webapps::AppId app_id;
   bool launch_icon_shown;
 };
 
 struct AppState {
-  AppState(AppId app_id,
+  AppState(webapps::AppId app_id,
            std::string app_name,
            GURL app_scope,
            apps::RunOnOsLoginMode run_on_os_login_mode,
@@ -196,7 +196,7 @@ struct AppState {
   AppState(const AppState&);
   bool operator==(const AppState& other) const;
 
-  AppId id;
+  webapps::AppId id;
   std::string name;
   GURL scope;
   apps::RunOnOsLoginMode run_on_os_login_mode;
@@ -209,13 +209,13 @@ struct AppState {
 
 struct ProfileState {
   ProfileState(base::flat_map<Browser*, BrowserState> browser_state,
-               base::flat_map<AppId, AppState> app_state);
+               base::flat_map<webapps::AppId, AppState> app_state);
   ~ProfileState();
   ProfileState(const ProfileState&);
   bool operator==(const ProfileState& other) const;
 
   base::flat_map<Browser*, BrowserState> browsers;
-  base::flat_map<AppId, AppState> apps;
+  base::flat_map<webapps::AppId, AppState> apps;
 };
 
 struct StateSnapshot {
@@ -403,9 +403,9 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
 
  protected:
   // WebAppInstallManagerObserver:
-  void OnWebAppManifestUpdated(const AppId& app_id) override;
+  void OnWebAppManifestUpdated(const webapps::AppId& app_id) override;
   void OnWebAppUninstalled(
-      const AppId& app_id,
+      const webapps::AppId& app_id,
       webapps::WebappUninstallSource uninstall_source) override;
 
  private:
@@ -422,7 +422,7 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
 
   void AwaitManifestSystemIdle();
 
-  AppId GetAppIdBySiteMode(Site site);
+  webapps::AppId GetAppIdBySiteMode(Site site);
   GURL GetUrlForSite(Site site);
   absl::optional<AppState> GetAppBySiteMode(StateSnapshot* state_snapshot,
                                             Profile* profile,
@@ -438,14 +438,14 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
   GURL GetInScopeURL(Site site);
   base::FilePath GetShortcutPath(base::FilePath shortcut_dir,
                                  const std::string& app_name,
-                                 const AppId& app_id);
+                                 const webapps::AppId& app_id);
   void InstallPolicyAppInternal(Site site,
                                 base::Value default_launch_container,
                                 const bool create_shortcut,
                                 const bool install_as_shortcut);
   void ApplyRunOnOsLoginPolicy(Site site, const char* policy);
 
-  void UninstallPolicyAppById(Profile* profile, const AppId& id);
+  void UninstallPolicyAppById(Profile* profile, const webapps::AppId& id);
   void ForceUpdateManifestContents(Site site,
                                    const GURL& app_url_with_manifest_param);
   void MaybeNavigateTabbedBrowserInScope(Site site);
@@ -459,17 +459,17 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
 
   bool IsShortcutAndIconCreated(Profile* profile,
                                 const std::string& name,
-                                const AppId& id);
+                                const webapps::AppId& id);
 
   bool DoIconColorsMatch(Profile* profile,
                          const std::string& name,
-                         const AppId& id);
+                         const webapps::AppId& id);
 
   bool IsFileHandledBySite(Site site, FileExtension file_extension);
   void SetFileHandlingEnabled(Site site, bool enabled);
   void LaunchFile(Site site, FilesOptions files_options);
 
-  void LaunchAppStartupBrowserCreator(const AppId& app_id);
+  void LaunchAppStartupBrowserCreator(const webapps::AppId& app_id);
 #if BUILDFLAG(IS_MAC)
   bool LaunchFromAppShim(Site site,
                          const std::vector<GURL>& urls,
@@ -505,12 +505,12 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
 
   base::test::ScopedFeatureList scoped_feature_list_;
 
-  base::flat_set<AppId> previous_manifest_updates_;
+  base::flat_set<webapps::AppId> previous_manifest_updates_;
 
   // |waiting_for_update_*| variables are either all populated or all not
   // populated. These signify that the test is currently waiting for the
   // given |waiting_for_update_id_| to receive an update before continuing.
-  absl::optional<AppId> waiting_for_update_id_;
+  absl::optional<webapps::AppId> waiting_for_update_id_;
   std::unique_ptr<base::RunLoop> waiting_for_update_run_loop_;
 
   raw_ptr<TestDelegate> delegate_;
@@ -527,10 +527,15 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
   int executing_action_level_ = 0;
 
   raw_ptr<Profile, AcrossTasksDanglingUntriaged> active_profile_ = nullptr;
-  AppId active_app_id_;
+  webapps::AppId active_app_id_;
   raw_ptr<Browser, AcrossTasksDanglingUntriaged> app_browser_ = nullptr;
 
+  // Normally BeforeState*Action returns false if a fatal error has been
+  // reported in a previous action, to avoid actions operating on potentially
+  // invalid state. If we're in tear down though, we always want to execute
+  // all actions.
   bool in_tear_down_ = false;
+
   bool is_performing_manifest_update_ = false;
 
   std::unique_ptr<views::NamedWidgetShownWaiter> app_id_update_dialog_waiter_;

@@ -18,9 +18,6 @@
       "Android Release (Nexus 5X)": {
         "_default": "_default"
       },
-      "Android WebView N (dbg)": {
-        "_default": "_default"
-      },
       "Android WebView O (dbg)": {
         "_default": "_default"
       },
@@ -34,9 +31,6 @@
         "_default": "_default"
       },
       "Android arm64 Builder All Targets (dbg)": {
-        "_default": "_default"
-      },
-      "Android x64 Builder (dbg)": {
         "_default": "_default"
       },
       "Android x64 Builder All Targets (dbg)": {
@@ -123,9 +117,6 @@
       "Mac13 Tests (dbg)": {
         "_default": "_default"
       },
-      "Nougat Phone Tester": {
-        "_default": "_default"
-      },
       "Oreo Phone Tester": {
         "_default": "_default"
       },
@@ -153,10 +144,10 @@
       "android-cronet-x86-dbg-10-tests": {
         "_default": "_default"
       },
-      "android-nougat-x86-rel": {
+      "android-official": {
         "_default": "_default"
       },
-      "android-official": {
+      "android-oreo-x86-rel": {
         "_default": "_default"
       },
       "android-pie-arm64-dbg": {
@@ -194,6 +185,34 @@
         }
       },
       "chromeos-amd64-generic-rel": {
+        "build_time": {
+          "p50_mins": 60
+        },
+        "fail_rate": {
+          "average": 0.2
+        },
+        "infra_fail_rate": {
+          "average": 0.05
+        },
+        "pending_time": {
+          "p50_mins": 20
+        }
+      },
+      "chromeos-amd64-generic-rel-gtest": {
+        "build_time": {
+          "p50_mins": 60
+        },
+        "fail_rate": {
+          "average": 0.2
+        },
+        "infra_fail_rate": {
+          "average": 0.05
+        },
+        "pending_time": {
+          "p50_mins": 20
+        }
+      },
+      "chromeos-amd64-generic-rel-renamed": {
         "build_time": {
           "p50_mins": 60
         },
@@ -286,6 +305,20 @@
           "p50_mins": 20
         }
       },
+      "lacros-amd64-generic-rel-non-skylab": {
+        "build_time": {
+          "p50_mins": 60
+        },
+        "fail_rate": {
+          "average": 0.2
+        },
+        "infra_fail_rate": {
+          "average": 0.05
+        },
+        "pending_time": {
+          "p50_mins": 20
+        }
+      },
       "lacros-arm-generic-rel": {
         "build_time": {
           "p50_mins": 60
@@ -300,7 +333,35 @@
           "p50_mins": 20
         }
       },
+      "lacros-arm-generic-rel-skylab": {
+        "build_time": {
+          "p50_mins": 60
+        },
+        "fail_rate": {
+          "average": 0.2
+        },
+        "infra_fail_rate": {
+          "average": 0.05
+        },
+        "pending_time": {
+          "p50_mins": 20
+        }
+      },
       "lacros-arm64-generic-rel": {
+        "build_time": {
+          "p50_mins": 60
+        },
+        "fail_rate": {
+          "average": 0.2
+        },
+        "infra_fail_rate": {
+          "average": 0.05
+        },
+        "pending_time": {
+          "p50_mins": 20
+        }
+      },
+      "lacros-arm64-generic-rel-skylab": {
         "build_time": {
           "p50_mins": 60
         },

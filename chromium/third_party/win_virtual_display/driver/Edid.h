@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <array>
 
-namespace Windows {
+namespace display::test {
 
 // Bytes 38-53 of an EDID (v1.4) blob contains timing information as a list of 8
 // 2-byte structures. The following structure represents a single record which
@@ -47,6 +47,10 @@ class Edid {
     std::copy_n(edidData, kBlockSize, edidBlock.begin());
   }
 
+  const std::array<unsigned char, kBlockSize>& getEdidBlock() const {
+    return edidBlock;
+  }
+
   // Return a specified timing entry (Standard timing information; EDID 1.4).
   // There are 8 entries. `entry` should be in in the range [0,8).
   EdidTimingEntry* GetTimingEntry(int entry);
@@ -58,6 +62,6 @@ class Edid {
   std::array<unsigned char, kBlockSize> edidBlock;
 };
 
-}  // namespace Windows
+}  // namespace display::test
 
 #endif  // THIRD_PARTY_WIN_VIRTUAL_DISPLAY_DRIVER_EDID_H_

@@ -9,7 +9,7 @@
 #import "ios/chrome/browser/ui/history/history_coordinator.h"
 #import "ios/chrome/browser/ui/history/history_table_view_controller.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
-#import "ios/chrome/browser/url_loading/url_loading_params.h"
+#import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/panel/panel_button_view.h"
@@ -24,11 +24,7 @@
 
 using l10n_util::GetNSString;
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
-UIEdgeInsets buttonViewPadding = UIEdgeInsetsMake(12, -7, 0, 0);
+UIEdgeInsets buttonViewPadding = UIEdgeInsetsMake(2, -7, 0, 0);
 
 @interface SidebarPanelViewController ()
         <PanelButtonViewDelegate> {
@@ -63,22 +59,23 @@ UIEdgeInsets buttonViewPadding = UIEdgeInsetsMake(12, -7, 0, 0);
   self.pageController.delegate = self;
   [self addChildViewController:self.pageController];
   [self.view addSubview:self.pageController.view];
+  [self.pageController.view anchorTop:self.view.topAnchor
+                              leading:nil
+                               bottom:self.view.bottomAnchor
+                             trailing:self.view.trailingAnchor];
   [self.pageController didMoveToParentViewController:self];
-  CGFloat sidebarWidth = panel_icon_size + kAdaptiveToolbarMargin;
-  [self.pageController.view fillSuperviewWithPadding:
-    UIEdgeInsetsMake(0, sidebarWidth, 0, 0)];
 
-  self.panelButtonView =
-    [[PanelButtonView alloc] initWithFrame:CGRectZero];
+  self.panelButtonView = [PanelButtonView new];
   self.panelButtonView.delegate = self;
   [self.view addSubview:self.panelButtonView];
-  CGSize buttonViewSize = CGSizeMake(sidebarWidth, 0);
+  CGSize buttonViewSize =
+      CGSizeMake(panel_icon_size + kAdaptiveToolbarMargin, 0);
   [self.panelButtonView anchorTop:self.view.topAnchor
-                     leading:self.view.leadingAnchor
-                      bottom:self.view.bottomAnchor
-                    trailing:nil
-                    padding:buttonViewPadding
-                       size:buttonViewSize];
+                          leading:self.view.leadingAnchor
+                           bottom:self.view.bottomAnchor
+                         trailing:self.pageController.view.leadingAnchor
+                          padding:buttonViewPadding
+                             size:buttonViewSize];
 }
 
 /*

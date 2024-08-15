@@ -304,7 +304,7 @@ size_t CountActiveFieldsInForms(const std::vector<FormStructure*>& forms) {
 std::string FieldTypeToString(uint32_t type) {
   return base::StrCat(
       {base::NumberToString(type), std::string("/"),
-       AutofillType(ToSafeServerFieldType(type, UNKNOWN_TYPE)).ToString()});
+       FieldTypeToStringView(ToSafeServerFieldType(type, UNKNOWN_TYPE))});
 }
 
 LogBuffer& operator<<(LogBuffer& out, const AutofillPageQueryRequest& query) {
@@ -519,13 +519,6 @@ absl::optional<std::string> GetAPIQueryPayload(
   return std::move(payload);
 }
 
-// Raw metadata uploading enabled iff this Chrome instance is on Canary or Dev
-// channel.
-bool IsRawMetadataUploadingEnabled(version_info::Channel channel) {
-  return channel == version_info::Channel::CANARY ||
-         channel == version_info::Channel::DEV;
-}
-
 std::string GetAPIKeyForUrl(version_info::Channel channel) {
   // First look if we can get API key from command line flag.
   const base::CommandLine& command_line =
@@ -568,22 +561,18 @@ AutofillDownloadManager::AutofillDownloadManager(AutofillClient* client,
                                                  LogManager* log_manager)
     : AutofillDownloadManager(client,
                               GetAPIKeyForUrl(channel),
-                              IsRawMetadataUploadingEnabled(channel),
                               log_manager) {}
 
-AutofillDownloadManager::AutofillDownloadManager(
-    AutofillClient* client,
-    const std::string& api_key,
-    bool is_raw_metadata_uploading_enabled,
-    LogManager* log_manager)
+AutofillDownloadManager::AutofillDownloadManager(AutofillClient* client,
+                                                 const std::string& api_key,
+                                                 LogManager* log_manager)
     : client_(client),
       api_key_(api_key),
       log_manager_(log_manager),
       autofill_server_url_(GetAutofillServerURL()),
       throttle_reset_period_(GetThrottleResetPeriod()),
       max_form_cache_size_(kAutofillDownloadManagerMaxFormCacheSize),
-      loader_backoff_(&kAutofillBackoffPolicy),
-      is_raw_metadata_uploading_enabled_(is_raw_metadata_uploading_enabled) {}
+      loader_backoff_(&kAutofillBackoffPolicy) {}
 
 AutofillDownloadManager::~AutofillDownloadManager() = default;
 
@@ -723,9 +712,9 @@ bool AutofillDownloadManager::StartUploadRequest(
     return StartRequest(std::move(request_data));
   };
 
-  std::vector<AutofillUploadContents> uploads = form.EncodeUploadRequest(
-      available_field_types, form_was_autofilled, login_form_signature,
-      observed_submission, is_raw_metadata_uploading_enabled_);
+  std::vector<AutofillUploadContents> uploads =
+      form.EncodeUploadRequest(available_field_types, form_was_autofilled,
+                               login_form_signature, observed_submission);
   bool all_succeeded = !uploads.empty();
   for (AutofillUploadContents& upload : uploads)
     all_succeeded &= Upload(std::move(upload));

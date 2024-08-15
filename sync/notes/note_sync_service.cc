@@ -4,6 +4,8 @@
 
 #include "sync/notes/note_sync_service.h"
 
+#include <utility>
+
 #include "base/feature_list.h"
 
 namespace sync_notes {
@@ -23,9 +25,10 @@ std::string NoteSyncService::EncodeNoteSyncMetadata() {
 void NoteSyncService::DecodeNoteSyncMetadata(
     const std::string& metadata_str,
     const base::RepeatingClosure& schedule_save_closure,
-    vivaldi::NotesModel* model) {
-  note_model_type_processor_.ModelReadyToSync(metadata_str,
-                                              schedule_save_closure, model);
+    std::unique_ptr<sync_notes::NoteModelView> model) {
+  note_model_view_ = std::move(model);
+  note_model_type_processor_.ModelReadyToSync(
+      metadata_str, schedule_save_closure, note_model_view_.get());
 }
 
 base::WeakPtr<syncer::ModelTypeControllerDelegate>
@@ -35,6 +38,10 @@ NoteSyncService::GetNoteSyncControllerDelegate() {
 
 bool NoteSyncService::IsTrackingMetadata() const {
   return note_model_type_processor_.IsTrackingMetadata();
+}
+
+sync_notes::NoteModelView* NoteSyncService::note_model_view() {
+  return note_model_view_.get();
 }
 
 void NoteSyncService::SetNotesLimitForTesting(size_t limit) {

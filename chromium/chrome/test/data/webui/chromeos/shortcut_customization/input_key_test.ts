@@ -7,9 +7,11 @@ import 'chrome://shortcut-customization/js/input_key.js';
 import 'chrome://webui-test/mojo_webui_test_support.js';
 
 import {IronIconElement} from '//resources/polymer/v3_0/iron-icon/iron-icon.js';
+import {strictQuery} from 'chrome://resources/ash/common/typescript_utils/strict_query.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {AcceleratorLookupManager} from 'chrome://shortcut-customization/js/accelerator_lookup_manager.js';
-import {InputKeyElement, KeyInputState, keyToIconNameMap} from 'chrome://shortcut-customization/js/input_key.js';
+import {InputKeyElement, KeyInputState} from 'chrome://shortcut-customization/js/input_key.js';
+import {keyToIconNameMap} from 'chrome://shortcut-customization/js/shortcut_utils.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {isVisible} from 'chrome://webui-test/test_util.js';
 
@@ -82,12 +84,12 @@ suite('inputKeyTest', function() {
     inputKeyElement.key = 'PrintScreen';
     await flush();
 
-    const iconElement = inputKeyElement.shadowRoot!.querySelector(
-                            '#key-icon') as IronIconElement;
-    assertTrue(isVisible(iconElement));
-    assertEquals('shortcut-customization-keys:screenshot', iconElement.icon);
-    assertEquals('take screenshot', iconElement.ariaLabel);
-    assertEquals('img', iconElement.getAttribute('role'));
+    const iconWrapperElement = inputKeyElement.shadowRoot!.querySelector(
+                                   '#key > div') as HTMLDivElement;
+    assertTrue(isVisible(iconWrapperElement));
+    const iconDescriptionElement = inputKeyElement.shadowRoot!.querySelector(
+                                       '#icon-description') as HTMLDivElement;
+    assertEquals('take screenshot', iconDescriptionElement.textContent);
   });
 
   test('MetaKeyShowLauncherIcon', async () => {
@@ -100,10 +102,14 @@ suite('inputKeyTest', function() {
     // Should show launcher icon when hasLauncherButton is true.
     const iconElement = inputKeyElement.shadowRoot!.querySelector(
                             '#key-icon') as IronIconElement;
+    const iconWrapperElement = inputKeyElement.shadowRoot!.querySelector(
+                                   '#key > div') as HTMLDivElement;
     assertTrue(isVisible(iconElement));
+    assertTrue(isVisible(iconWrapperElement));
     assertEquals('shortcut-customization-keys:launcher', iconElement.icon);
-    assertEquals('meta launcher', iconElement.ariaLabel);
-    assertEquals('img', iconElement.getAttribute('role'));
+    const iconDescriptionElement = inputKeyElement.shadowRoot!.querySelector(
+                                       '#icon-description') as HTMLDivElement;
+    assertEquals('launcher', iconDescriptionElement.textContent);
   });
 
   test('MetaKeyShowSearchIcon', async () => {
@@ -116,10 +122,15 @@ suite('inputKeyTest', function() {
     // Should show search icon when hasLauncherButton is false.
     const iconElement = inputKeyElement.shadowRoot!.querySelector(
                             '#key-icon') as IronIconElement;
+    const iconWrapperElement = inputKeyElement.shadowRoot!.querySelector(
+                                   '#key > div') as HTMLDivElement;
     assertTrue(isVisible(iconElement));
+    assertTrue(isVisible(iconWrapperElement));
     assertEquals('shortcut-customization-keys:search', iconElement.icon);
-    assertEquals('meta search', iconElement.ariaLabel);
-    assertEquals('img', iconElement.getAttribute('role'));
+
+    const iconDescriptionElement = inputKeyElement.shadowRoot!.querySelector(
+                                       '#icon-description') as HTMLDivElement;
+    assertEquals('search', iconDescriptionElement.textContent);
   });
 
   test('LwinKeyAsSearchModifier', async () => {
@@ -148,5 +159,27 @@ suite('inputKeyTest', function() {
 
     // other keys should keep their original state.
     assertEquals(KeyInputState.ALPHANUMERIC_SELECTED, inputKeyElement.keyState);
+  });
+
+  test('AriaHiddenForSelectedKeys', async () => {
+    inputKeyElement = initInputKeyElement();
+    inputKeyElement.key = 'a';
+    inputKeyElement.keyState = KeyInputState.ALPHANUMERIC_SELECTED;
+
+    const keyElement =
+        strictQuery('#key-text', inputKeyElement.shadowRoot, HTMLSpanElement);
+    assertTrue(!!keyElement);
+    assertEquals('false', keyElement.ariaHidden);
+  });
+
+  test('AriaHiddenForUnselectedKeys', async () => {
+    inputKeyElement = initInputKeyElement();
+    inputKeyElement.key = 'a';
+    inputKeyElement.keyState = KeyInputState.NOT_SELECTED;
+
+    const keyElement =
+        strictQuery('#key-text', inputKeyElement.shadowRoot, HTMLSpanElement);
+    assertTrue(!!keyElement);
+    assertEquals('true', keyElement.ariaHidden);
   });
 });

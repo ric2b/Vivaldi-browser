@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "build/build_config.h"
 #include "components/error_page/common/error.h"
 #include "components/error_page/common/localized_error.h"
@@ -207,7 +208,7 @@ class NetErrorHelperCore {
 
   void Reload();
 
-  Delegate* const delegate_;
+  const raw_ptr<Delegate, ExperimentalRenderer> delegate_;
 
   // The last DnsProbeStatus received from the browser.
   error_page::DnsProbeStatus last_probe_status_;

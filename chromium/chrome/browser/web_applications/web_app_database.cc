@@ -19,6 +19,7 @@
 #include "base/pickle.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "chrome/browser/web_applications/generated_icon_fix_util.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_location.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_version.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
@@ -271,6 +272,8 @@ WebAppManagement::Type ProtoToWebAppManagement(WebAppManagementProto type) {
       return WebAppManagement::Type::kOem;
     case WebAppManagementProto::ONEDRIVEINTEGRATION:
       return WebAppManagement::Type::kOneDriveIntegration;
+    case WebAppManagementProto::APS_DEFAULT:
+      return WebAppManagement::Type::kApsDefault;
   }
 }
 
@@ -296,6 +299,8 @@ WebAppManagementProto WebAppManagementToProto(WebAppManagement::Type type) {
       return WebAppManagementProto::OEM;
     case WebAppManagement::Type::kOneDriveIntegration:
       return WebAppManagementProto::ONEDRIVEINTEGRATION;
+    case WebAppManagement::Type::kApsDefault:
+      return WebAppManagementProto::APS_DEFAULT;
   }
 }
 
@@ -438,8 +443,9 @@ void WebAppDatabase::Write(
     write_batch->WriteData(web_app->app_id(), proto->SerializeAsString());
   }
 
-  for (const AppId& app_id : update_data.apps_to_delete)
+  for (const webapps::AppId& app_id : update_data.apps_to_delete) {
     write_batch->DeleteData(app_id);
+  }
 
   store_->CommitWriteBatch(
       std::move(write_batch),
@@ -485,6 +491,8 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
       web_app.sources_.Has(WebAppManagement::kOem));
   local_data->mutable_sources()->set_one_drive_integration(
       web_app.sources_.Has(WebAppManagement::kOneDriveIntegration));
+  local_data->mutable_sources()->set_aps_default(
+      web_app.sources_.Has(WebAppManagement::kApsDefault));
 
   local_data->set_is_locally_installed(web_app.is_locally_installed());
 
@@ -524,9 +532,9 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
     local_data->set_last_launch_time(
         syncer::TimeToProtoTime(web_app.last_launch_time()));
   }
-  if (!web_app.install_time().is_null()) {
-    local_data->set_install_time(
-        syncer::TimeToProtoTime(web_app.install_time()));
+  if (!web_app.first_install_time().is_null()) {
+    local_data->set_first_install_time(
+        syncer::TimeToProtoTime(web_app.first_install_time()));
   }
   if (!web_app.manifest_update_time().is_null()) {
     local_data->set_manifest_update_time(
@@ -549,11 +557,6 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
     mutable_chromeos_data->set_oem_installed(chromeos_data.oem_installed);
     mutable_chromeos_data->set_handles_file_open_intents(
         chromeos_data.handles_file_open_intents);
-    if (chromeos_data.app_profile_path.has_value()) {
-      CHECK(!chromeos_data.app_profile_path.value().empty());
-      mutable_chromeos_data->set_app_profile_path(
-          FilePathToProto(chromeos_data.app_profile_path.value()));
-    }
   }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -892,6 +895,21 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
   local_data->set_is_user_selected_app_for_capturing_links(
       web_app.is_user_selected_app_for_capturing_links());
 
+  if (!web_app.latest_install_time().is_null()) {
+    local_data->set_latest_install_time(
+        syncer::TimeToProtoTime(web_app.latest_install_time()));
+  }
+
+  if (web_app.generated_icon_fix().has_value()) {
+    *local_data->mutable_generated_icon_fix() =
+        web_app.generated_icon_fix().value();
+  }
+
+  local_data->set_supported_links_offer_ignore_count(
+      web_app.supported_links_offer_ignore_count());
+  local_data->set_supported_links_offer_dismiss_count(
+      web_app.supported_links_offer_dismiss_count());
+
   return local_data;
 }
 
@@ -905,7 +923,7 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
 
   const sync_pb::WebAppSpecifics& sync_data = local_data.sync_data();
 
-  // AppId is a hash of start_url. Read start_url first:
+  // webapps::AppId is a hash of start_url. Read start_url first:
   GURL start_url(sync_data.start_url());
   if (start_url.is_empty() || !start_url.is_valid()) {
     DLOG(ERROR) << "WebApp proto start_url parse error: "
@@ -913,7 +931,7 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
     return nullptr;
   }
 
-  ManifestId manifest_id;
+  webapps::ManifestId manifest_id;
   if (sync_data.has_relative_manifest_id()) {
     manifest_id =
         GenerateManifestId(sync_data.relative_manifest_id(), start_url);
@@ -921,7 +939,7 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
     manifest_id = GenerateManifestIdFromStartUrlOnly(start_url);
   }
 
-  AppId app_id = GenerateAppIdFromManifestId(manifest_id);
+  webapps::AppId app_id = GenerateAppIdFromManifestId(manifest_id);
 
   auto web_app = std::make_unique<WebApp>(app_id);
   web_app->SetStartUrl(start_url);
@@ -942,21 +960,16 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
   sources.PutOrRemove(WebAppManagement::kDefault,
                       local_data.sources().default_());
   sources.PutOrRemove(WebAppManagement::kOem, local_data.sources().oem());
-  if (local_data.sources().has_sub_app()) {
-    sources.PutOrRemove(WebAppManagement::kSubApp,
-                        local_data.sources().sub_app());
-  }
-  if (local_data.sources().has_kiosk()) {
-    sources.PutOrRemove(WebAppManagement::kKiosk, local_data.sources().kiosk());
-  }
-  if (local_data.sources().has_command_line()) {
-    sources.PutOrRemove(WebAppManagement::kCommandLine,
-                        local_data.sources().command_line());
-  }
-  if (local_data.sources().has_one_drive_integration()) {
-    sources.PutOrRemove(WebAppManagement::kOneDriveIntegration,
-                        local_data.sources().one_drive_integration());
-  }
+  sources.PutOrRemove(WebAppManagement::kSubApp,
+                      local_data.sources().sub_app());
+  sources.PutOrRemove(WebAppManagement::kKiosk, local_data.sources().kiosk());
+  sources.PutOrRemove(WebAppManagement::kCommandLine,
+                      local_data.sources().command_line());
+  sources.PutOrRemove(WebAppManagement::kOneDriveIntegration,
+                      local_data.sources().one_drive_integration());
+  sources.PutOrRemove(WebAppManagement::kApsDefault,
+                      local_data.sources().aps_default());
+
   if (sources.Empty() && !local_data.is_uninstalling()) {
     DLOG(ERROR) << "WebApp proto parse error: no source in sources field, "
                    "and is_uninstalling isn't true.";
@@ -1021,13 +1034,6 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
     chromeos_data->oem_installed = chromeos_data_proto.oem_installed();
     chromeos_data->handles_file_open_intents =
         chromeos_data_proto.handles_file_open_intents();
-    if (chromeos_data_proto.has_app_profile_path()) {
-      auto parsed_path =
-          ProtoToFilePath(chromeos_data_proto.app_profile_path());
-      CHECK(parsed_path.has_value());
-      CHECK(!parsed_path.value().empty());
-      chromeos_data->app_profile_path = std::move(parsed_path);
-    }
     web_app->SetWebAppChromeOsData(std::move(chromeos_data));
   }
 
@@ -1114,8 +1120,9 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
         syncer::ProtoTimeToTime(local_data.manifest_update_time()));
   }
 
-  if (local_data.has_install_time()) {
-    web_app->SetInstallTime(syncer::ProtoTimeToTime(local_data.install_time()));
+  if (local_data.has_first_install_time()) {
+    web_app->SetFirstInstallTime(
+        syncer::ProtoTimeToTime(local_data.first_install_time()));
   }
 
   absl::optional<WebApp::SyncFallbackData> parsed_sync_fallback_data =
@@ -1644,6 +1651,29 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
         local_data.is_user_selected_app_for_capturing_links());
   }
 
+  if (local_data.has_latest_install_time()) {
+    web_app->SetLatestInstallTime(
+        syncer::ProtoTimeToTime(local_data.latest_install_time()));
+  } else if (local_data.has_first_install_time()) {
+    web_app->SetLatestInstallTime(
+        syncer::ProtoTimeToTime(local_data.first_install_time()));
+  }
+
+  if (local_data.has_generated_icon_fix() &&
+      generated_icon_fix_util::IsValid(local_data.generated_icon_fix())) {
+    web_app->SetGeneratedIconFix(local_data.generated_icon_fix());
+  }
+
+  if (local_data.has_supported_links_offer_ignore_count()) {
+    web_app->SetSupportedLinksOfferIgnoreCount(
+        local_data.supported_links_offer_ignore_count());
+  }
+
+  if (local_data.has_supported_links_offer_dismiss_count()) {
+    web_app->SetSupportedLinksOfferDismissCount(
+        local_data.supported_links_offer_dismiss_count());
+  }
+
   return web_app;
 }
 
@@ -1695,7 +1725,7 @@ void WebAppDatabase::OnAllMetadataRead(
 
   Registry registry;
   for (const syncer::ModelTypeStore::Record& record : *data_records) {
-    const AppId app_id = record.id;
+    const webapps::AppId app_id = record.id;
     std::unique_ptr<WebApp> web_app = ParseWebApp(app_id, record.value);
     if (web_app)
       registry.emplace(app_id, std::move(web_app));
@@ -1720,8 +1750,9 @@ void WebAppDatabase::OnDataWritten(
 }
 
 // static
-std::unique_ptr<WebApp> WebAppDatabase::ParseWebApp(const AppId& app_id,
-                                                    const std::string& value) {
+std::unique_ptr<WebApp> WebAppDatabase::ParseWebApp(
+    const webapps::AppId& app_id,
+    const std::string& value) {
   WebAppProto proto;
   const bool parsed = proto.ParseFromString(value);
   if (!parsed) {

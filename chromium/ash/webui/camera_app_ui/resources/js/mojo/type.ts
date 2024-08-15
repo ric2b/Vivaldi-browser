@@ -5,7 +5,7 @@
 // This file contains many long export lines that exceed the max-len limit */
 /* eslint-disable max-len */
 
-export {
+export type {
   PointF,
 } from 'chrome://resources/mojo/ui/gfx/geometry/mojom/geometry.mojom-webui.js';
 export {
@@ -16,7 +16,6 @@ export {
   CameraAppHelperRemote,
   CameraUsageOwnershipMonitorCallbackRouter,
   DocumentOutputFormat,
-  DocumentScannerReadyState,
   ExternalScreenMonitorCallbackRouter,
   FileMonitorResult,
   ScreenState,

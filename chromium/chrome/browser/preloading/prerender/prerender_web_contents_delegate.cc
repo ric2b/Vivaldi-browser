@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/preloading/prerender/prerender_web_contents_delegate.h"
+#include "chrome/browser/ui/tab_helpers.h"
 
 content::PreloadingEligibility
 PrerenderWebContentsDelegateImpl::IsPrerender2Supported(
@@ -29,11 +30,30 @@ void PrerenderWebContentsDelegateImpl::ActivateContents(
   NOTREACHED_NORETURN();
 }
 
+void PrerenderWebContentsDelegateImpl::LoadingStateChanged(
+    content::WebContents* source,
+    bool should_show_loading_ui) {
+  // Loading events should be deferred until prerender activation.
+  NOTREACHED_NORETURN();
+}
+
 bool PrerenderWebContentsDelegateImpl::ShouldSuppressDialogs(
     content::WebContents* source) {
   // Dialogs (JS dialogs and BeforeUnload confirm) should not be shown on a
   // prerendered page.
   NOTREACHED_NORETURN();
+}
+
+bool PrerenderWebContentsDelegateImpl::ShouldFocusPageAfterCrash(
+    content::WebContents* source) {
+  // A prerendered page cannot be focused.
+  return false;
+}
+
+bool PrerenderWebContentsDelegateImpl::TakeFocus(content::WebContents* source,
+                                                 bool reverse) {
+  // A prerendered page cannot be focused.
+  return false;
 }
 
 void PrerenderWebContentsDelegateImpl::WebContentsCreated(
@@ -45,6 +65,14 @@ void PrerenderWebContentsDelegateImpl::WebContentsCreated(
     content::WebContents* new_contents) {
   // A prerendered page should not create a new WebContents.
   NOTREACHED_NORETURN();
+}
+
+void PrerenderWebContentsDelegateImpl::PrerenderWebContentsCreated(
+    content::WebContents* prerender_web_contents) {
+  // TODO(https://crbug.com/1350676): Audit attached TabHelpers and add tests
+  // for cases that need special treatment like PageLoadMetricsObserver and
+  // Extensions.
+  TabHelpers::AttachTabHelpers(prerender_web_contents);
 }
 
 void PrerenderWebContentsDelegateImpl::PortalWebContentsCreated(

@@ -63,4 +63,9 @@ void ArcNotificationDelegate::SnoozeButtonClicked() {
   item_->OpenSnooze();
 }
 
+message_center::NotificationDelegate*
+ArcNotificationDelegate::GetDelegateForParentCopy() {
+  return nullptr;
+}
+
 }  // namespace ash

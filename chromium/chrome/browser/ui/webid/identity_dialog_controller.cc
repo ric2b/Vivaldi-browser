@@ -69,8 +69,10 @@ void IdentityDialogController::ShowErrorDialog(
     const blink::mojom::RpContext& rp_context,
     const content::IdentityProviderMetadata& idp_metadata,
     const absl::optional<TokenError>& error,
-    DismissCallback dismiss_callback) {
+    DismissCallback dismiss_callback,
+    MoreDetailsCallback more_details_callback) {
   on_dismiss_ = std::move(dismiss_callback);
+  on_more_details_ = std::move(more_details_callback);
   if (!account_view_) {
     account_view_ = AccountSelectionView::Create(this);
   }
@@ -82,6 +84,10 @@ void IdentityDialogController::ShowErrorDialog(
 
 void IdentityDialogController::OnSigninToIdP() {
   std::move(on_signin_).Run();
+}
+
+void IdentityDialogController::OnMoreDetails() {
+  std::move(on_more_details_).Run();
 }
 
 void IdentityDialogController::ShowIdpSigninFailureDialog(
@@ -128,6 +134,10 @@ content::WebContents* IdentityDialogController::ShowModalDialog(
     DismissCallback dismiss_callback) {
   // TODO(crbug.com/1429083): connect the dimiss_callback to the
   // modal dialog close button.
+  if (!account_view_) {
+    account_view_ = AccountSelectionView::Create(this);
+  }
+
   return account_view_->ShowModalDialog(url);
 }
 

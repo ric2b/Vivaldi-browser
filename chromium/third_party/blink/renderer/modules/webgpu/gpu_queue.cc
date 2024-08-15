@@ -228,8 +228,8 @@ ExternalSource GetExternalSourceFromExternalImage(
   // into a single blit.
   SourceImageStatus source_image_status = kInvalidSourceImageStatus;
   auto image_for_canvas = canvas_image_source->GetSourceImageForCanvas(
-      CanvasResourceProvider::FlushReason::kWebGPUExternalImage,
-      &source_image_status, image_size, kDontChangeAlpha);
+      FlushReason::kWebGPUExternalImage, &source_image_status, image_size,
+      kDontChangeAlpha);
   if (source_image_status != kNormalSourceImageStatus) {
     // Canvas back resource is broken, zero size, incomplete or invalid.
     // but developer can do nothing. Return nullptr and issue an noop.
@@ -373,8 +373,8 @@ ScriptPromise GPUQueue::onSubmittedWorkDone(ScriptState* script_state) {
       BindWGPUOnceCallback(&GPUQueue::OnWorkDoneCallback, WrapPersistent(this),
                            WrapPersistent(resolver));
 
-  GetProcs().queueOnSubmittedWorkDone(
-      GetHandle(), 0u, callback->UnboundCallback(), callback->AsUserdata());
+  GetProcs().queueOnSubmittedWorkDone(GetHandle(), callback->UnboundCallback(),
+                                      callback->AsUserdata());
   // WebGPU guarantees that promises are resolved in finite time so we
   // need to ensure commands are flushed.
   EnsureFlush(ToEventLoop(script_state));
@@ -748,6 +748,13 @@ bool GPUQueue::CopyFromCanvasSourceImage(
 // backend is failing for unknown reasons.
 #if BUILDFLAG(IS_LINUX)
   bool forceReadback = true;
+#elif BUILDFLAG(IS_ANDROID)
+  // TODO(crbug.com/dawn/1969): Some Android devices don't fail to copy from
+  // ImageBitmaps that were created from a non-texture-backed source, like
+  // ImageData. Forcing those textures down the readback path is an easy way to
+  // ensure the copies succeed. May be able to remove this check with some
+  // better synchronization in the future.
+  bool forceReadback = !image->IsTextureBacked();
 #elif BUILDFLAG(IS_WIN)
   bool forceReadback =
       device()->adapter()->backendType() == WGPUBackendType_OpenGLES;

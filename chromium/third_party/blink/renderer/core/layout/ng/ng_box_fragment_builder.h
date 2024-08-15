@@ -9,14 +9,14 @@
 #include "base/dcheck_is_on.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/layout/flex/devtools_flex_info.h"
 #include "third_party/blink/renderer/core/layout/geometry/box_sides.h"
+#include "third_party/blink/renderer/core/layout/geometry/box_strut.h"
+#include "third_party/blink/renderer/core/layout/geometry/fragment_geometry.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
-#include "third_party/blink/renderer/core/layout/ng/flex/ng_flex_data.h"
+#include "third_party/blink/renderer/core/layout/inline/fragment_items_builder.h"
+#include "third_party/blink/renderer/core/layout/mathml/mathml_paint_info.h"
 #include "third_party/blink/renderer/core/layout/ng/frame_set_layout_data.h"
-#include "third_party/blink/renderer/core/layout/ng/geometry/ng_box_strut.h"
-#include "third_party/blink/renderer/core/layout/ng/geometry/ng_fragment_geometry.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_fragment_items_builder.h"
-#include "third_party/blink/renderer/core/layout/ng/mathml/ng_mathml_paint_info.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_block_break_token.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_break_token.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space.h"
@@ -24,8 +24,8 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_overflow_calculator.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_result.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
-#include "third_party/blink/renderer/core/layout/ng/table/ng_table_borders.h"
-#include "third_party/blink/renderer/core/layout/ng/table/ng_table_fragment_data.h"
+#include "third_party/blink/renderer/core/layout/table/table_borders.h"
+#include "third_party/blink/renderer/core/layout/table/table_fragment_data.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
@@ -46,7 +46,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final : public NGFragmentBuilder {
         is_inline_formatting_context_(node.IsInline()) {}
 
   // Build a fragment for LayoutObject without NGLayoutInputNode. LayoutInline
-  // has NGInlineItem but does not have corresponding NGLayoutInputNode.
+  // has InlineItem but does not have corresponding NGLayoutInputNode.
   NGBoxFragmentBuilder(LayoutObject* layout_object,
                        const ComputedStyle* style,
                        const NGConstraintSpace& space,
@@ -60,7 +60,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final : public NGFragmentBuilder {
   }
 
   void SetInitialFragmentGeometry(
-      const NGFragmentGeometry& initial_fragment_geometry) {
+      const FragmentGeometry& initial_fragment_geometry) {
     initial_fragment_geometry_ = &initial_fragment_geometry;
     size_ = initial_fragment_geometry_->border_box_size;
     is_initial_block_size_indefinite_ = size_.block_size == kIndefiniteSize;
@@ -86,7 +86,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final : public NGFragmentBuilder {
     border_scrollbar_padding_.block_start = LayoutUnit();
   }
 
-  const NGFragmentGeometry& InitialFragmentGeometry() const {
+  const FragmentGeometry& InitialFragmentGeometry() const {
     DCHECK(initial_fragment_geometry_);
     return *initial_fragment_geometry_;
   }
@@ -144,16 +144,16 @@ class CORE_EXPORT NGBoxFragmentBuilder final : public NGFragmentBuilder {
     intrinsic_block_size_ = intrinsic_block_size;
   }
   LayoutUnit IntrinsicBlockSize() const { return intrinsic_block_size_; }
-  const NGBoxStrut& Borders() const {
+  const BoxStrut& Borders() const {
     DCHECK(initial_fragment_geometry_);
     DCHECK_NE(BoxType(), NGPhysicalFragment::kInlineBox);
     return initial_fragment_geometry_->border;
   }
-  const NGBoxStrut& Scrollbar() const {
+  const BoxStrut& Scrollbar() const {
     DCHECK(initial_fragment_geometry_);
     return initial_fragment_geometry_->scrollbar;
   }
-  const NGBoxStrut& Padding() const {
+  const BoxStrut& Padding() const {
     DCHECK(initial_fragment_geometry_);
     return initial_fragment_geometry_->padding;
   }
@@ -161,11 +161,11 @@ class CORE_EXPORT NGBoxFragmentBuilder final : public NGFragmentBuilder {
     DCHECK(initial_fragment_geometry_);
     return initial_fragment_geometry_->border_box_size;
   }
-  const NGBoxStrut& BorderPadding() const {
+  const BoxStrut& BorderPadding() const {
     DCHECK(initial_fragment_geometry_);
     return border_padding_;
   }
-  const NGBoxStrut& BorderScrollbarPadding() const {
+  const BoxStrut& BorderScrollbarPadding() const {
     DCHECK(initial_fragment_geometry_);
     return border_scrollbar_padding_;
   }
@@ -212,7 +212,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final : public NGFragmentBuilder {
   void AddResult(
       const NGLayoutResult&,
       const LogicalOffset,
-      absl::optional<const NGBoxStrut> margins,
+      absl::optional<const BoxStrut> margins,
       absl::optional<LogicalOffset> relative_offset = absl::nullopt,
       const NGInlineContainer<LogicalOffset>* inline_container = nullptr);
   // AddResult() with the default margin computation.
@@ -225,7 +225,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final : public NGFragmentBuilder {
   void AddChild(
       const NGPhysicalFragment&,
       const LogicalOffset&,
-      const NGMarginStrut* margin_strut = nullptr,
+      const MarginStrut* margin_strut = nullptr,
       bool is_self_collapsing = false,
       absl::optional<LogicalOffset> relative_offset = absl::nullopt,
       const NGInlineContainer<LogicalOffset>* inline_container = nullptr);
@@ -340,8 +340,9 @@ class CORE_EXPORT NGBoxFragmentBuilder final : public NGFragmentBuilder {
   bool HasInsertedChildBreak() const {
     if (child_break_tokens_.empty())
       return false;
-    for (const NGBreakToken* child_token : child_break_tokens_) {
-      const auto* block_child_token = DynamicTo<NGBlockBreakToken>(child_token);
+    for (auto& child_token : child_break_tokens_) {
+      const auto* block_child_token =
+          DynamicTo<NGBlockBreakToken>(child_token.Get());
       if (!block_child_token || !block_child_token->IsRepeated())
         return true;
     }
@@ -369,39 +370,6 @@ class CORE_EXPORT NGBoxFragmentBuilder final : public NGFragmentBuilder {
   // fragment, create a break token, and resume in the next fragmentainer.
   bool HasInflowChildBreakInside() const {
     return has_inflow_child_break_inside_;
-  }
-
-  // Report space shortage, i.e. how much more space would have been sufficient
-  // to prevent some piece of content from breaking. This information may be
-  // used by the column balancer to stretch columns.
-  void PropagateSpaceShortage(absl::optional<LayoutUnit> space_shortage);
-
-  absl::optional<LayoutUnit> MinimalSpaceShortage() const {
-    if (minimal_space_shortage_ == kIndefiniteSize)
-      return absl::nullopt;
-    return minimal_space_shortage_;
-  }
-
-  void PropagateTallestUnbreakableBlockSize(LayoutUnit unbreakable_block_size) {
-    // We should only calculate the block-size of the tallest piece of
-    // unbreakable content during the initial column balancing pass, when we
-    // haven't set a tentative fragmentainer block-size yet.
-    DCHECK(IsInitialColumnBalancingPass());
-
-    tallest_unbreakable_block_size_ =
-        std::max(tallest_unbreakable_block_size_, unbreakable_block_size);
-  }
-
-  void SetIsInitialColumnBalancingPass() {
-    // Note that we have no dedicated flag for being in the initial column
-    // balancing pass here. We'll just bump tallest_unbreakable_block_size_ to
-    // 0, so that NGLayoutResult knows that we need to store unbreakable
-    // block-size.
-    DCHECK_EQ(tallest_unbreakable_block_size_, LayoutUnit::Min());
-    tallest_unbreakable_block_size_ = LayoutUnit();
-  }
-  bool IsInitialColumnBalancingPass() const {
-    return tallest_unbreakable_block_size_ >= LayoutUnit();
   }
 
   void SetInitialBreakBefore(EBreakBetween break_before) {
@@ -482,7 +450,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final : public NGFragmentBuilder {
   }
 
   void SetIsFieldsetContainer() { is_fieldset_container_ = true; }
-  void SetIsTableNGPart() { is_table_ng_part_ = true; }
+  void SetIsTablePart() { is_table_part_ = true; }
 
   void SetIsInlineFormattingContext(bool is_inline_formatting_context) {
     is_inline_formatting_context_ = is_inline_formatting_context;
@@ -497,7 +465,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final : public NGFragmentBuilder {
       LayoutUnit operator_ascent,
       LayoutUnit operator_descent) {
     if (!mathml_paint_info_)
-      mathml_paint_info_ = std::make_unique<NGMathMLPaintInfo>();
+      mathml_paint_info_ = std::make_unique<MathMLPaintInfo>();
 
     mathml_paint_info_->operator_character = operator_character;
     mathml_paint_info_->operator_shape_result_view =
@@ -513,9 +481,9 @@ class CORE_EXPORT NGBoxFragmentBuilder final : public NGFragmentBuilder {
       LayoutUnit operator_ascent,
       LayoutUnit operator_descent,
       LayoutUnit radical_operator_inline_offset,
-      const NGBoxStrut& radical_base_margins) {
+      const BoxStrut& radical_base_margins) {
     if (!mathml_paint_info_)
-      mathml_paint_info_ = std::make_unique<NGMathMLPaintInfo>();
+      mathml_paint_info_ = std::make_unique<MathMLPaintInfo>();
 
     mathml_paint_info_->operator_character = kSquareRootCharacter;
     mathml_paint_info_->operator_shape_result_view =
@@ -563,16 +531,16 @@ class CORE_EXPORT NGBoxFragmentBuilder final : public NGFragmentBuilder {
   }
 
   void SetTableColumnGeometries(
-      const NGTableFragmentData::ColumnGeometries& table_column_geometries) {
+      const TableFragmentData::ColumnGeometries& table_column_geometries) {
     table_column_geometries_ = table_column_geometries;
   }
 
-  void SetTableCollapsedBorders(const NGTableBorders& table_collapsed_borders) {
+  void SetTableCollapsedBorders(const TableBorders& table_collapsed_borders) {
     table_collapsed_borders_ = &table_collapsed_borders;
   }
 
   void SetTableCollapsedBordersGeometry(
-      std::unique_ptr<NGTableFragmentData::CollapsedBordersGeometry>
+      std::unique_ptr<TableFragmentData::CollapsedBordersGeometry>
           table_collapsed_borders_geometry) {
     table_collapsed_borders_geometry_ =
         std::move(table_collapsed_borders_geometry);
@@ -594,7 +562,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final : public NGFragmentBuilder {
   }
 
   void TransferGridLayoutData(
-      std::unique_ptr<NGGridLayoutData> grid_layout_data) {
+      std::unique_ptr<GridLayoutData> grid_layout_data) {
     grid_layout_data_ = std::move(grid_layout_data);
   }
   void TransferFlexLayoutData(
@@ -605,7 +573,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final : public NGFragmentBuilder {
     frame_set_layout_data_ = std::move(data);
   }
 
-  const NGGridLayoutData& GridLayoutData() const {
+  const GridLayoutData& GetGridLayoutData() const {
     DCHECK(grid_layout_data_);
     return *grid_layout_data_.get();
   }
@@ -671,9 +639,9 @@ class CORE_EXPORT NGBoxFragmentBuilder final : public NGFragmentBuilder {
 
   const NGLayoutResult* ToBoxFragment(WritingMode);
 
-  const NGFragmentGeometry* initial_fragment_geometry_ = nullptr;
-  NGBoxStrut border_padding_;
-  NGBoxStrut border_scrollbar_padding_;
+  const FragmentGeometry* initial_fragment_geometry_ = nullptr;
+  BoxStrut border_padding_;
+  BoxStrut border_scrollbar_padding_;
   // We clamp the block-start of |border_scrollbar_padding_| after an item
   // fragments. Store the original block-start, as well, for cases where it is
   // needed.
@@ -683,7 +651,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final : public NGFragmentBuilder {
   absl::optional<LogicalRect> inflow_bounds_;
 
   bool is_fieldset_container_ = false;
-  bool is_table_ng_part_ = false;
+  bool is_table_part_ = false;
   bool is_initial_block_size_indefinite_ = false;
   bool is_inline_formatting_context_;
   bool is_known_to_fit_in_fragmentainer_ = false;
@@ -703,8 +671,6 @@ class CORE_EXPORT NGBoxFragmentBuilder final : public NGFragmentBuilder {
   bool use_last_baseline_for_inline_baseline_ = false;
   LayoutUnit block_offset_for_additional_columns_;
 
-  LayoutUnit minimal_space_shortage_ = kIndefiniteSize;
-  LayoutUnit tallest_unbreakable_block_size_ = LayoutUnit::Min();
   LayoutUnit block_size_for_fragmentation_;
 
   // The break-before value on the initial child we cannot honor. There's no
@@ -722,9 +688,9 @@ class CORE_EXPORT NGBoxFragmentBuilder final : public NGFragmentBuilder {
 
   // Table specific types.
   absl::optional<LogicalRect> table_grid_rect_;
-  NGTableFragmentData::ColumnGeometries table_column_geometries_;
-  const NGTableBorders* table_collapsed_borders_ = nullptr;
-  std::unique_ptr<NGTableFragmentData::CollapsedBordersGeometry>
+  TableFragmentData::ColumnGeometries table_column_geometries_;
+  const TableBorders* table_collapsed_borders_ = nullptr;
+  std::unique_ptr<TableFragmentData::CollapsedBordersGeometry>
       table_collapsed_borders_geometry_;
   absl::optional<wtf_size_t> table_column_count_;
 
@@ -736,7 +702,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final : public NGFragmentBuilder {
   NGBlockBreakTokenData* break_token_data_ = nullptr;
 
   // Grid specific types.
-  std::unique_ptr<NGGridLayoutData> grid_layout_data_;
+  std::unique_ptr<GridLayoutData> grid_layout_data_;
 
   std::unique_ptr<DevtoolsFlexInfo> flex_layout_data_;
   std::unique_ptr<FrameSetLayoutData> frame_set_layout_data_;
@@ -745,7 +711,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final : public NGFragmentBuilder {
 
   scoped_refptr<SerializedScriptValue> custom_layout_data_;
 
-  std::unique_ptr<NGMathMLPaintInfo> mathml_paint_info_;
+  std::unique_ptr<MathMLPaintInfo> mathml_paint_info_;
 
 #if DCHECK_IS_ON()
   // Describes what size_.block_size represents; either the size of a single

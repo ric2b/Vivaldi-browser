@@ -19,6 +19,7 @@
 #include "chrome/browser/download/background_download_service_factory.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/optimization_guide/chrome_hints_manager.h"
+#include "chrome/browser/optimization_guide/model_execution/chrome_on_device_model_service_controller.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_key.h"
@@ -29,6 +30,8 @@
 #include "components/leveldb_proto/public/proto_database_provider.h"
 #include "components/optimization_guide/core/command_line_top_host_provider.h"
 #include "components/optimization_guide/core/hints_processing_util.h"
+#include "components/optimization_guide/core/model_execution/model_execution_manager.h"
+#include "components/optimization_guide/core/model_execution/on_device_model_service_controller.h"
 #include "components/optimization_guide/core/model_util.h"
 #include "components/optimization_guide/core/optimization_guide_constants.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
@@ -261,6 +264,17 @@ void OptimizationGuideKeyedService::Initialize() {
           // |this| owns |prediction_manager_|.
           base::Unretained(this)));
 
+  if (!profile->IsOffTheRecord() &&
+      base::FeatureList::IsEnabled(
+          optimization_guide::features::kOptimizationGuideModelExecution)) {
+    model_execution_manager_ =
+        std::make_unique<optimization_guide::ModelExecutionManager>(
+            url_loader_factory, IdentityManagerFactory::GetForProfile(profile),
+            std::make_unique<
+                optimization_guide::ChromeOnDeviceModelServiceController>(),
+            optimization_guide_logger_.get());
+  }
+
   // Register for profile initialization event to initialize the model
   // downloads.
   profile_observation_.Observe(profile);
@@ -377,6 +391,24 @@ void OptimizationGuideKeyedService::CanApplyOptimizationOnDemand(
 
   hints_manager_->CanApplyOptimizationOnDemand(urls, optimization_types,
                                                request_context, callback);
+}
+
+void OptimizationGuideKeyedService::ExecuteModel(
+    optimization_guide::proto::ModelExecutionFeature feature,
+    const google::protobuf::MessageLite& request_metadata,
+    optimization_guide::OptimizationGuideModelExecutionResultCallback
+        callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (!model_execution_manager_) {
+    std::move(callback).Run(base::unexpected(
+        optimization_guide::OptimizationGuideModelExecutionError::
+            FromModelExecutionError(
+                optimization_guide::OptimizationGuideModelExecutionError::
+                    ModelExecutionError::kGenericFailure)));
+    return;
+  }
+  model_execution_manager_->ExecuteModel(feature, request_metadata,
+                                         std::move(callback));
 }
 
 void OptimizationGuideKeyedService::OnProfileInitializationComplete(

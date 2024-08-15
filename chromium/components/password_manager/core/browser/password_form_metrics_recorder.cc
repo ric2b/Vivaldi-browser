@@ -145,7 +145,8 @@ UsernamePasswordsState CalculateUsernamePasswordsState(
         is_possibly_saved_password_in_profile_store ||
         is_possibly_saved_password_in_account_store;
 
-    bool field_has_password_type = field.form_control_type == "password";
+    bool field_has_password_type =
+        field.form_control_type == autofill::FormControlType::kInputPassword;
 
     if (is_possibly_saved_username &&
         (!is_possibly_saved_password || !field_has_password_type)) {
@@ -374,6 +375,12 @@ PasswordFormMetricsRecorder::~PasswordFormMetricsRecorder() {
         "PasswordManager.JavaScriptOnlyValueInSubmittedForm", *js_only_input_);
   }
 
+  if (submit_result_ == SubmitResult::kPassed &&
+      parsing_diff_on_filling_and_saving_.has_value()) {
+    ukm_entry_builder_.SetParsingDiffFillingAndSaving(
+        static_cast<int64_t>(parsing_diff_on_filling_and_saving_.value()));
+  }
+
   ukm_entry_builder_.Record(ukm::UkmRecorder::Get());
 }
 
@@ -535,7 +542,7 @@ void PasswordFormMetricsRecorder::CalculateFillingAssistanceMetric(
         saved_passwords,
     bool is_blocklisted,
     const std::vector<InteractionsStats>& interactions_stats,
-    metrics_util::PasswordAccountStorageUsageLevel
+    features_util::PasswordAccountStorageUsageLevel
         account_storage_usage_level) {
   CalculateJsOnlyInput(submitted_form);
   if (is_main_frame_secure_ && submitted_form.action.is_valid() &&
@@ -629,6 +636,36 @@ void PasswordFormMetricsRecorder::CalculateJsOnlyInput(
                                     : JsOnlyInput::kOnlyJsInputNoFocus);
 }
 
+void PasswordFormMetricsRecorder::CacheParsingResultInFillingMode(
+    const PasswordForm& form) {
+  username_rendered_id_ = form.username_element_renderer_id;
+  password_rendered_id_ = form.password_element_renderer_id;
+  new_password_rendered_id_ = form.new_password_element_renderer_id;
+  confirmation_password_rendered_id_ =
+      form.confirmation_password_element_renderer_id;
+}
+
+void PasswordFormMetricsRecorder::CalculateParsingDifferenceOnSavingAndFilling(
+    const PasswordForm& form) {
+  bool same_username =
+      username_rendered_id_ == form.username_element_renderer_id;
+  bool same_passwords =
+      (password_rendered_id_ == form.password_element_renderer_id) &&
+      (new_password_rendered_id_ == form.new_password_element_renderer_id) &&
+      (confirmation_password_rendered_id_ ==
+       form.confirmation_password_element_renderer_id);
+
+  if (same_username) {
+    parsing_diff_on_filling_and_saving_ =
+        same_passwords ? ParsingDifference::kNone
+                       : ParsingDifference::kPasswordDiff;
+  } else {
+    parsing_diff_on_filling_and_saving_ =
+        same_passwords ? ParsingDifference::kUsernameDiff
+                       : ParsingDifference::kUsernameAndPasswordDiff;
+  }
+}
+
 void PasswordFormMetricsRecorder::RecordPasswordBubbleShown(
     metrics_util::CredentialSourceType credential_source_type,
     metrics_util::UIDisplayDisposition display_disposition) {
@@ -688,6 +725,8 @@ void PasswordFormMetricsRecorder::RecordPasswordBubbleShown(
     case metrics_util::MANUAL_BIOMETRIC_AUTHENTICATION_FOR_FILLING:
     case metrics_util::AUTOMATIC_BIOMETRIC_AUTHENTICATION_CONFIRMATION:
     case metrics_util::AUTOMATIC_SHARED_PASSWORDS_NOTIFICATION:
+    case metrics_util::AUTOMATIC_ADD_USERNAME_BUBBLE:
+    case metrics_util::MANUAL_ADD_USERNAME_BUBBLE:
       // Do nothing.
       return;
 

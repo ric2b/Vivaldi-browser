@@ -12,7 +12,6 @@ import android.text.TextUtils;
 import androidx.annotation.VisibleForTesting;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceCategory;
-import androidx.preference.PreferenceFragmentCompat;
 
 import org.chromium.base.BuildInfo;
 import org.chromium.base.Log;
@@ -23,9 +22,8 @@ import org.chromium.chrome.browser.language.LanguageSplitInstaller;
 import org.chromium.chrome.browser.language.R;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefChangeRegistrar;
-import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.settings.ChromeBaseSettingsFragment;
 import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
-import org.chromium.chrome.browser.settings.ProfileDependentSetting;
 import org.chromium.chrome.browser.translate.TranslateBridge;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.FragmentSettingsLauncher;
@@ -42,9 +40,8 @@ import org.vivaldi.browser.common.VivaldiRelaunchUtils;
  * Settings fragment that displays information about Chrome languages, which allow users to
  * seamlessly find and manage their languages preferences across platforms.
  */
-public class LanguageSettings extends PreferenceFragmentCompat
-        implements SelectLanguageFragment.Launcher, FragmentSettingsLauncher,
-                   ProfileDependentSetting {
+public class LanguageSettings extends ChromeBaseSettingsFragment
+        implements SelectLanguageFragment.Launcher, FragmentSettingsLauncher {
     // Return codes from launching Intents on preferences.
     private static final int REQUEST_CODE_ADD_ACCEPT_LANGUAGE = 1;
     private static final int REQUEST_CODE_CHANGE_APP_LANGUAGE = 2;
@@ -69,7 +66,6 @@ public class LanguageSettings extends PreferenceFragmentCompat
     private AppLanguagePreferenceDelegate mAppLanguageDelegate =
             new AppLanguagePreferenceDelegate();
     private PrefChangeRegistrar mPrefChangeRegistrar;
-    private Profile mProfile;
 
     // Vivaldi
     static boolean isRestartRequired;
@@ -94,11 +90,6 @@ public class LanguageSettings extends PreferenceFragmentCompat
         LanguagesManager.recordImpression(LanguagesManager.LanguageSettingsPageType.PAGE_MAIN);
     }
 
-    @Override
-    public void setProfile(Profile profile) {
-        mProfile = profile;
-    }
-
     /**
      * The detailed language preferences should be shown if the flag to enable them or the app
      * language prompt is enabled. If neither flag is enabled, but an override language is set the
@@ -118,7 +109,7 @@ public class LanguageSettings extends PreferenceFragmentCompat
 
         ContentLanguagesPreference mLanguageListPref =
                 (ContentLanguagesPreference) findPreference(PREFERRED_LANGUAGES_KEY);
-        mLanguageListPref.registerActivityLauncher(this);
+        mLanguageListPref.initialize(this, getPrefService());
 
         ChromeSwitchPreference translateSwitch =
                 (ChromeSwitchPreference) findPreference(TRANSLATE_SWITCH_KEY);
@@ -141,8 +132,13 @@ public class LanguageSettings extends PreferenceFragmentCompat
                 return true;
             }
         });
-        translateSwitch.setManagedPreferenceDelegate((ChromeManagedPreferenceDelegate) preference
-                -> getPrefService().isManagedPreference(Pref.OFFER_TRANSLATE_ENABLED));
+        translateSwitch.setManagedPreferenceDelegate(new ChromeManagedPreferenceDelegate(
+                getProfile()) {
+            @Override
+            public boolean isPreferenceControlledByPolicy(Preference preference) {
+                return getPrefService().isManagedPreference(Pref.OFFER_TRANSLATE_ENABLED);
+            }
+        });
     }
 
     /**
@@ -161,7 +157,7 @@ public class LanguageSettings extends PreferenceFragmentCompat
 
         ContentLanguagesPreference mLanguageListPref =
                 (ContentLanguagesPreference) findPreference(CONTENT_LANGUAGES_KEY);
-        mLanguageListPref.registerActivityLauncher(this);
+        mLanguageListPref.initialize(this, getPrefService());
 
         setupTranslateSection(mLanguageListPref);
     }
@@ -263,8 +259,13 @@ public class LanguageSettings extends PreferenceFragmentCompat
                 return true;
             }
         });
-        translateSwitch.setManagedPreferenceDelegate((ChromeManagedPreferenceDelegate) preference
-                -> getPrefService().isManagedPreference(Pref.OFFER_TRANSLATE_ENABLED));
+        translateSwitch.setManagedPreferenceDelegate(new ChromeManagedPreferenceDelegate(
+                getProfile()) {
+            @Override
+            public boolean isPreferenceControlledByPolicy(Preference preference) {
+                return getPrefService().isManagedPreference(Pref.OFFER_TRANSLATE_ENABLED);
+            }
+        });
     }
 
     @Override
@@ -402,6 +403,6 @@ public class LanguageSettings extends PreferenceFragmentCompat
 
     @VisibleForTesting
     PrefService getPrefService() {
-        return UserPrefs.get(mProfile);
+        return UserPrefs.get(getProfile());
     }
 }

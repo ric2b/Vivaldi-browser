@@ -13,7 +13,6 @@
 #import "ios/web/public/web_state.h"
 // End Vivaldi
 
-@protocol TabStripContaining;
 @protocol TabStripPresentation;
 @class ViewRevealingVerticalPanHandler;
 class Browser;
@@ -26,7 +25,7 @@ class Browser;
 @interface TabStripController : NSObject
 
 @property(nonatomic, assign) BOOL highlightsSelectedTab;
-@property(nonatomic, readonly, strong) UIView<TabStripContaining>* view;
+@property(nonatomic, readonly, strong) UIView* view;
 
 // The duration to wait before starting tab strip animations. Used to
 // synchronize animations.

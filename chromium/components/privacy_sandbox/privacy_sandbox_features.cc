@@ -13,7 +13,7 @@ BASE_FEATURE(kPrivacySandboxSuppressDialogOnNonNormalBrowsers,
 
 BASE_FEATURE(kPrivacySandboxSettings4,
              "PrivacySandboxSettings4",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const char kPrivacySandboxSettings4ConsentRequiredName[] = "consent-required";
 const char kPrivacySandboxSettings4NoticeRequiredName[] = "notice-required";
@@ -102,7 +102,7 @@ BASE_FEATURE(kDisablePrivacySandboxPrompts,
 
 BASE_FEATURE(kPrivacySandboxFirstPartySetsUI,
              "PrivacySandboxFirstPartySetsUI",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 const base::FeatureParam<bool> kPrivacySandboxFirstPartySetsUISampleSets{
     &kPrivacySandboxFirstPartySetsUI, "use-sample-sets", false};
 
@@ -110,11 +110,38 @@ BASE_FEATURE(kEnforcePrivacySandboxAttestations,
              "EnforcePrivacySandboxAttestations",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kDefaultAllowPrivacySandboxAttestations,
+             "DefaultAllowPrivacySandboxAttestations",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 const char kPrivacySandboxEnrollmentOverrides[] =
     "privacy-sandbox-enrollment-overrides";
 
 BASE_FEATURE(kPrivacySandboxAttestationsHigherComponentRegistrationPriority,
              "PrivacySandboxAttestationsHigherComponentRegistrationPriority",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPrivacySandboxProactiveTopicsBlocking,
+             "PrivacySandboxProactiveTopicsBlocking",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kTrackingProtectionSettingsPageRollbackNotice,
+             "TrackingProtectionSettingsPageRollbackNotice",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+#if BUILDFLAG(IS_ANDROID)
+BASE_FEATURE(kTrackingProtectionOnboardingSkipSecurePageCheck,
+             "TrackingProtectionOnboardingSkipSecurePageCheck",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_ANDROID)
+
+// Show the Tracking Protection rollback flow if previously onboarded.
+BASE_FEATURE(kTrackingProtectionOnboardingRollback,
+             "TrackingProtectionOnboardingRollback",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kAttributionDebugReportingCookieDeprecationTesting,
+             "AttributionDebugReportingCookieDeprecationTesting",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace privacy_sandbox

@@ -56,6 +56,7 @@ class RuleServiceImpl : public RuleService, public RuleManager::Observer {
   RuleManager* GetRuleManager() override;
   KnownRuleSourcesHandler* GetKnownSourcesHandler() override;
   BlockedUrlsReporter* GetBlockerUrlsReporter() override;
+  void SetIncognitoBrowserState(web::BrowserState* browser_state) override;
 
   // Implementing KeyedService
   void Shutdown() override;
@@ -76,6 +77,7 @@ class RuleServiceImpl : public RuleService, public RuleManager::Observer {
   void OnDoneApplyingRules(RuleGroup group);
 
   web::BrowserState* browser_state_;
+  web::BrowserState* incognito_browser_state_;
   RuleSourceHandler::RulesCompiler rules_compiler_;
   std::string locale_;
 

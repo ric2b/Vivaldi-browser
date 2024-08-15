@@ -53,15 +53,15 @@ class TestTrayBackgroundView : public TrayBackgroundView,
       CloseBubble();
   }
 
+  void HideBubble(const TrayBubbleView* bubble_view) override {
+    if (bubble_view == bubble_->GetBubbleView()) {
+      CloseBubble();
+    }
+  }
+
   std::unique_ptr<ui::SimpleMenuModel> CreateContextMenuModel() override {
     return provide_menu_model_ ? std::make_unique<ui::SimpleMenuModel>(this)
                                : nullptr;
-  }
-
-  void OnAnyBubbleVisibilityChanged(views::Widget* bubble_widget,
-                                    bool visible) override {
-    on_bubble_visibility_change_captured_widget_ = bubble_widget;
-    on_bubble_visibility_change_captured_visibility_ = visible;
   }
 
   void ShowBubble() override {
@@ -98,10 +98,6 @@ class TestTrayBackgroundView : public TrayBackgroundView,
   TrayBubbleWrapper* bubble() { return bubble_.get(); }
 
   bool show_bubble_called() const { return show_bubble_called_; }
-
-  raw_ptr<views::Widget, DanglingUntriaged | ExperimentalAsh>
-      on_bubble_visibility_change_captured_widget_ = nullptr;
-  bool on_bubble_visibility_change_captured_visibility_ = false;
 
  private:
   std::unique_ptr<TrayBubbleWrapper> bubble_;
@@ -544,55 +540,6 @@ TEST_F(TrayBackgroundViewTest, AutoHideShelfWithContextMenu) {
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
 }
 
-// Loads a bubble inside the tray and shows that. Then verifies that
-// OnAnyBubbleVisibilityChanged is called.
-TEST_F(TrayBackgroundViewTest, OnAnyBubbleVisibilityChanged) {
-  ui::ScopedAnimationDurationScaleMode test_duration_mode(
-      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
-
-  test_tray_background_view()->SetVisiblePreferred(true);
-
-  test_tray_background_view()->ShowBubble();
-
-  EXPECT_EQ(test_tray_background_view()->bubble()->GetBubbleWidget(),
-            test_tray_background_view()
-                ->on_bubble_visibility_change_captured_widget_);
-  EXPECT_TRUE(test_tray_background_view()
-                  ->on_bubble_visibility_change_captured_visibility_);
-}
-
-// Tests the default behavior of the button press with no callback set.
-TEST_F(TrayBackgroundViewTest, NoPressedCallbackSet) {
-  test_tray_background_view()->SetVisible(true);
-  ui::test::EventGenerator* generator = GetEventGenerator();
-  generator->MoveMouseTo(
-      test_tray_background_view()->GetBoundsInScreen().CenterPoint());
-
-  generator->ClickLeftButton();
-
-  EXPECT_TRUE(test_tray_background_view()->show_bubble_called());
-}
-
-// Tests that histograms are recorded when no callback is set, and the button is
-// pressed.
-TEST_F(TrayBackgroundViewTest, HistogramRecordedNoPressedCallbackSet) {
-  auto histogram_tester = std::make_unique<base::HistogramTester>();
-  histogram_tester->ExpectTotalCount(
-      "Ash.StatusArea.TrayBackgroundView.Pressed",
-      /*count=*/0);
-
-  test_tray_background_view()->SetVisible(true);
-  ui::test::EventGenerator* generator = GetEventGenerator();
-  generator->MoveMouseTo(
-      test_tray_background_view()->GetBoundsInScreen().CenterPoint());
-
-  generator->ClickLeftButton();
-
-  histogram_tester->ExpectTotalCount(
-      "Ash.StatusArea.TrayBackgroundView.Pressed",
-      /*count=*/1);
-}
-
 // Tests that `TrayBackgroundView::SetPressedCallback()` overrides
 // TrayBackgroundView's default press behavior.
 TEST_F(TrayBackgroundViewTest, PressedCallbackSet) {
@@ -604,7 +551,7 @@ TEST_F(TrayBackgroundViewTest, PressedCallbackSet) {
   // Set the callback. Pressing the  `TestTrayBackgroundView` should execute the
   // callback instead of `TrayBackgroundView::ShowBubble()`.
   bool pressed = false;
-  test_tray_background_view()->SetPressedCallback(base::BindRepeating(
+  test_tray_background_view()->SetCallback(base::BindRepeating(
       [](bool& pressed, const ui::Event& event) { pressed = true; },
       std::ref(pressed)));
   generator->ClickLeftButton();
@@ -627,7 +574,7 @@ TEST_F(TrayBackgroundViewTest, HistogramRecordedPressedCallbackSet) {
       test_tray_background_view()->GetBoundsInScreen().CenterPoint());
 
   // Set the callback. This should not effect histogram recording.
-  test_tray_background_view()->SetPressedCallback(base::DoNothing());
+  test_tray_background_view()->SetCallback(views::Button::PressedCallback());
   generator->ClickLeftButton();
 
   histogram_tester->ExpectTotalCount(

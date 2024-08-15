@@ -25,6 +25,7 @@
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
+#include "ui/base/interaction/element_identifier.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
@@ -42,6 +43,7 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/text_utils.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/badge_painter.h"
 #include "ui/views/controls/button/menu_button.h"
 #include "ui/views/controls/image_view.h"
@@ -52,14 +54,11 @@
 #include "ui/views/controls/menu/submenu_view.h"
 #include "ui/views/controls/separator.h"
 #include "ui/views/style/typography.h"
+#include "ui/views/style/typography_provider.h"
 #include "ui/views/vector_icons.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/views/view_utils.h"
 #include "ui/views/widget/widget.h"
-
-#if BUILDFLAG(IS_MAC)
-#include "ui/views/accessibility/view_accessibility.h"
-#endif  //  BUILDFLAG(IS_MAC)
 
 namespace views {
 
@@ -428,6 +427,7 @@ SubmenuView* MenuItemView::CreateSubmenu() {
     return submenu_;
 
   submenu_ = new SubmenuView(this);
+  submenu_->SetProperty(kElementIdentifierKey, submenu_id_);
 
 #if BUILDFLAG(IS_MAC)
   // All MenuItemViews of Type kSubMenu have a respective SubmenuView.
@@ -465,6 +465,16 @@ SubmenuView* MenuItemView::GetSubmenu() const {
 
 bool MenuItemView::SubmenuIsShowing() const {
   return HasSubmenu() && GetSubmenu()->IsShowing();
+}
+
+void MenuItemView::SetSubmenuId(ui::ElementIdentifier id) {
+  CHECK(type_ == Type::kSubMenu || type_ == Type::kActionableSubMenu)
+      << "SetSubmenuId called on menu item with type "
+      << static_cast<int>(type_);
+  submenu_id_ = id;
+  if (submenu_) {
+    submenu_->SetProperty(kElementIdentifierKey, id);
+  }
 }
 
 void MenuItemView::SetTitle(const std::u16string& title) {
@@ -828,6 +838,7 @@ MenuItemView::MenuItemView(MenuItemView* parent,
       parent_menu_item_(parent),
       type_(type),
       command_(command) {
+  GetViewAccessibility().set_needs_ax_tree_manager(true);
   if (type_ == Type::kCheckbox || type_ == Type::kRadio) {
     radio_check_image_view_ = AddChildView(std::make_unique<ImageView>());
     bool show_check_radio_icon =
@@ -884,7 +895,8 @@ const gfx::FontList MenuItemView::GetFontList() const {
   }
   auto* menu_controller = GetMenuController();
   if (menu_controller && menu_controller->use_ash_system_ui_layout()) {
-    return style::GetFont(style::CONTEXT_TOUCH_MENU, style::STYLE_PRIMARY);
+    return TypographyProvider::Get().GetFont(style::CONTEXT_TOUCH_MENU,
+                                             style::STYLE_PRIMARY);
   }
   return menu_controller && menu_controller->IsContextMenu()
              ? MenuConfig::instance().context_menu_font_list
@@ -1139,7 +1151,8 @@ SkColor MenuItemView::GetTextColor(bool minor, bool paint_as_selected) const {
     text_style = style::STYLE_SECONDARY;
   }
 
-  return GetColorProvider()->GetColor(style::GetColorId(context, text_style));
+  return GetColorProvider()->GetColor(
+      TypographyProvider::Get().GetColorId(context, text_style));
 }
 
 MenuItemView::Colors MenuItemView::CalculateColors(

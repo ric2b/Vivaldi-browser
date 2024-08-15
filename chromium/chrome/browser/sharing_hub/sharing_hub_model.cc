@@ -28,6 +28,7 @@
 #include "components/feed/feed_feature_list.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_thread.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/image/image.h"
@@ -89,8 +90,7 @@ std::vector<SharingHubAction> SharingHubModel::GetFirstPartyActionList(
       if (follow_state == TabWebFeedFollowState::kFollowed)
         results.push_back(action);
     } else if (action.command_id == IDC_SAVE_PAGE) {
-      if (chrome::CanSavePage(
-              chrome::FindBrowserWithWebContents(web_contents))) {
+      if (chrome::CanSavePage(chrome::FindBrowserWithTab(web_contents))) {
         results.push_back(action);
       }
     } else {

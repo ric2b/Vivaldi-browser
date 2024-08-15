@@ -71,6 +71,14 @@ NSData* FetchSessionDataBlob(base::WeakPtr<WebState> weak_web_state) {
   return GetWebClient()->FetchSessionFromCache(web_state);
 }
 
+// Serializes the `session_storage` to proto::WebStateStorage.
+web::proto::WebStateStorage SessionStorageToProto(
+    CRWSessionStorage* session_storage) {
+  web::proto::WebStateStorage storage;
+  [session_storage serializeToProto:storage];
+  return storage;
+}
+
 // Key used to store an empty base::SupportsUserData::Data to all WebStateImpl
 // instances. Used by WebStateImpl::FromWebState(...) to assert the pointer is
 // pointing to a WebStateImpl instance and not another sub-class of WebState.
@@ -87,10 +95,13 @@ void IgnoreOverRealizationCheck() {
 WebStateImpl::WebStateImpl(const CreateParams& params) {
   AddWebStateImplMarker();
 
-  pimpl_ = std::make_unique<RealizedWebState>(this, base::Time::Now(),
-                                              [[NSUUID UUID] UUIDString],
-                                              SessionID::NewUnique());
-  pimpl_->Init(params.browser_state, params.last_active_time,
+  const base::Time creation_time = base::Time::Now();
+  const base::Time last_active_time =
+      params.last_active_time.value_or(creation_time);
+
+  pimpl_ = std::make_unique<RealizedWebState>(
+      this, creation_time, [[NSUUID UUID] UUIDString], WebStateID::NewUnique());
+  pimpl_->Init(params.browser_state, last_active_time,
                params.created_with_opener);
 
   SendGlobalCreationEvent();
@@ -118,9 +129,7 @@ WebStateImpl::WebStateImpl(const CreateParams& params,
   saved_ = std::make_unique<SerializedData>(
       this, params.browser_state, session_storage.stableIdentifier,
       session_storage.uniqueIdentifier, std::move(metadata),
-      base::BindOnce(^(proto::WebStateStorage& inner_storage) {
-        [session_storage serializeToProto:inner_storage];
-      }),
+      base::BindOnce(&SessionStorageToProto, session_storage),
       base::BindOnce(&FetchSessionDataBlob, GetWeakPtr()));
   saved_->SetSessionStorage(session_storage);
 
@@ -128,7 +137,7 @@ WebStateImpl::WebStateImpl(const CreateParams& params,
 }
 
 WebStateImpl::WebStateImpl(BrowserState* browser_state,
-                           SessionID unique_identifier,
+                           WebStateID unique_identifier,
                            proto::WebStateMetadataStorage metadata,
                            WebStateStorageLoader storage_loader,
                            NativeSessionFetcher session_fetcher) {
@@ -160,7 +169,7 @@ WebStateImpl::WebStateImpl(CloneFrom, const RealizedWebState& pimpl) {
 
   pimpl_ = std::make_unique<RealizedWebState>(this, pimpl.GetCreationTime(),
                                               [[NSUUID UUID] UUIDString],
-                                              SessionID::NewUnique());
+                                              WebStateID::NewUnique());
   pimpl_->InitWithProto(pimpl.GetBrowserState(), base::Time::Now(),
                         pimpl.GetTitle(), pimpl.GetVisibleURL(),
                         pimpl.GetFaviconStatus(), std::move(storage),
@@ -460,8 +469,7 @@ WebState* WebStateImpl::ForceRealized() {
     std::unique_ptr<SerializedData> saved = std::move(saved_);
 
     // Load the storage from disk.
-    proto::WebStateStorage storage;
-    saved->TakeStorageLoader().Run(storage);
+    proto::WebStateStorage storage = saved->TakeStorageLoader().Run();
 
     // Perform the initialisation of the RealizedWebState. No outside
     // code should be able to observe the WebStateImpl with both `saved_`
@@ -633,7 +641,7 @@ NSString* WebStateImpl::GetStableIdentifier() const {
                         : saved_->GetStableIdentifier();
 }
 
-SessionID WebStateImpl::GetUniqueIdentifier() const {
+WebStateID WebStateImpl::GetUniqueIdentifier() const {
   return LIKELY(pimpl_) ? pimpl_->GetUniqueIdentifier()
                         : saved_->GetUniqueIdentifier();
 }
@@ -839,6 +847,13 @@ UIColor* WebStateImpl::GetThemeColor() {
     return nil;
   }
   return [GetWebController() themeColor];
+}
+
+UIColor* WebStateImpl::GetUnderPageBackgroundColor() {
+  if (UNLIKELY(!IsRealized())) {
+    return nil;
+  }
+  return [GetWebController() underPageBackgroundColor];
 }
 
 #pragma mark - WebStateImpl private methods

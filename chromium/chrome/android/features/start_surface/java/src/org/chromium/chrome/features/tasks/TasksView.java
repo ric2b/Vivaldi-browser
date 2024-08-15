@@ -36,11 +36,14 @@ import org.chromium.chrome.browser.flags.MutableFlagWithSafeDefault;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.ntp.IncognitoDescriptionView;
 import org.chromium.chrome.browser.ntp.search.SearchBoxCoordinator;
+import org.chromium.chrome.browser.preferences.Pref;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.widget.CoordinatorLayoutForPointer;
 import org.chromium.components.browser_ui.widget.displaystyle.UiConfig;
 import org.chromium.components.content_settings.CookieControlsEnforcement;
+import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.ui.base.WindowAndroid;
 
 /**
@@ -217,9 +220,12 @@ public class TasksView extends CoordinatorLayoutForPointer {
             }
         }
         mSearchBoxCoordinator.setBackground(searchBackground);
-        int hintTextColor = mContext.getColor(isIncognito ? R.color.locationbar_light_hint_text
-                                                          : R.color.locationbar_dark_hint_text);
-        mSearchBoxCoordinator.setSearchBoxHintColor(hintTextColor);
+
+        if (!mIsSurfacePolishEnabled) {
+            int hintTextColor = mContext.getColor(isIncognito ? R.color.locationbar_light_hint_text
+                                                              : R.color.locationbar_dark_hint_text);
+            mSearchBoxCoordinator.setSearchBoxHintColor(hintTextColor);
+        }
     }
 
     /**
@@ -247,6 +253,24 @@ public class TasksView extends CoordinatorLayoutForPointer {
 
         mIncognitoDescriptionView =
                 (IncognitoDescriptionView) incognitoDescriptionViewStub.inflate();
+
+        // Inflate the correct cookie/tracking protection card.
+        ViewStub cardStub = findViewById(R.id.cookie_card_stub);
+        if (cardStub == null) return;
+        if (shouldShowTrackingProtectionNTP()) {
+            cardStub.setLayoutResource(
+                    sIncognitoRevampFlag.isEnabled()
+                            ? R.layout.revamped_incognito_tracking_protection_card
+                            : R.layout.incognito_tracking_protection_card);
+        } else {
+            cardStub.setLayoutResource(
+                    sIncognitoRevampFlag.isEnabled()
+                            ? R.layout.revamped_incognito_cookie_controls_card
+                            : R.layout.incognito_cookie_controls_card);
+        }
+        cardStub.inflate();
+        mIncognitoDescriptionView.formatTrackingProtectionText(getContext(), this);
+
         if (mIncognitoDescriptionLearnMoreListener != null) {
             setIncognitoDescriptionLearnMoreClickListener(mIncognitoDescriptionLearnMoreListener);
         }
@@ -425,9 +449,10 @@ public class TasksView extends CoordinatorLayoutForPointer {
      * @param translationX Current translationX of text view in fake search box layout.
      * @param buttonSize Current height and width of the buttons in fake search box layout.
      * @param lensButtonLeftMargin Current left margin of the lens button in fake search box layout.
+     * @param searchTextSize Current size for the search text in the fake search box.
      */
     public void updateFakeSearchBox(int height, int topMargin, int endPadding, float translationX,
-            int buttonSize, int lensButtonLeftMargin) {
+            int buttonSize, int lensButtonLeftMargin, float searchTextSize) {
         if (mSearchBoxCoordinator.getView().getVisibility() != View.VISIBLE) return;
         mSearchBoxCoordinator.setHeight(height);
         mSearchBoxCoordinator.setTopMargin(topMargin);
@@ -436,6 +461,30 @@ public class TasksView extends CoordinatorLayoutForPointer {
         mSearchBoxCoordinator.setButtonsHeight(buttonSize);
         mSearchBoxCoordinator.setButtonsWidth(buttonSize);
         mSearchBoxCoordinator.setLensButtonLeftMargin(lensButtonLeftMargin);
+        mSearchBoxCoordinator.setSearchTextSize(searchTextSize);
+    }
+
+    /**
+     * Update both the fake search box height.
+     * @param height Current height of the fake search box.
+     */
+    public void updateFakeSearchBoxHeight(int height) {
+        mSearchBoxCoordinator.setHeight(height);
+    }
+
+    /**
+     * Update the fake search box container.
+     * @param height Current height of the fake search box container.
+     */
+    public void updateFakeSearchBoxContainer(int height) {
+        View fakeSearchBoxContainer = findViewById(R.id.fake_search_box);
+        ViewGroup.LayoutParams lpForContainer = fakeSearchBoxContainer.getLayoutParams();
+
+        if (lpForContainer.height == height) {
+            return;
+        }
+
+        lpForContainer.height = height;
     }
 
     private void forceHeaderScrollable() {
@@ -469,5 +518,13 @@ public class TasksView extends CoordinatorLayoutForPointer {
     void setStartSurfaceBackgroundColor(int backgroundColor) {
         setBackgroundColor(backgroundColor);
         mHeaderView.setBackgroundColor(backgroundColor);
+    }
+
+    boolean shouldShowTrackingProtectionNTP() {
+        Profile profile =
+                Profile.getLastUsedRegularProfile()
+                        .getPrimaryOTRProfile(/* createIfNeeded= */ true);
+        return (UserPrefs.get(profile).getBoolean(Pref.TRACKING_PROTECTION3PCD_ENABLED)
+                || ChromeFeatureList.isEnabled(ChromeFeatureList.TRACKING_PROTECTION_3PCD));
     }
 }

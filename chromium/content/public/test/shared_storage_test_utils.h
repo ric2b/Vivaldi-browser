@@ -40,8 +40,6 @@ std::string GetSharedStorageSelectURLDisabledMessage();
 
 std::string GetSharedStorageAddModuleDisabledMessage();
 
-void SetBypassIsSharedStorageAllowed(bool allow);
-
 size_t GetAttachedSharedStorageWorkletHostsCount(
     StoragePartition* storage_partition);
 
@@ -108,11 +106,11 @@ struct SharedStorageWriteOperationAndResult {
 bool operator==(const SharedStorageWriteOperationAndResult& a,
                 const SharedStorageWriteOperationAndResult& b);
 
-PrivateAggregationHost::SendHistogramReportResult
-GetPrivateAggregationSendHistogramSuccessValue();
+PrivateAggregationHost::PipeResult
+GetPrivateAggregationHostPipeReportSuccessValue();
 
-PrivateAggregationHost::SendHistogramReportResult
-GetPrivateAggregationSendHistogramApiDisabledValue();
+PrivateAggregationHost::PipeResult
+GetPrivateAggregationHostPipeApiDisabledValue();
 
 base::WeakPtr<TestSharedStorageHeaderObserver>
 CreateAndOverrideSharedStorageHeaderObserver(StoragePartition* partition);

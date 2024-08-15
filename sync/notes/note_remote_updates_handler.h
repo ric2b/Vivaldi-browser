@@ -13,11 +13,12 @@
 #include "sync/notes/synced_note_tracker.h"
 
 namespace vivaldi {
-class NotesModel;
 class NoteNode;
 }  // namespace vivaldi
 
 namespace sync_notes {
+
+class NoteModelView;
 
 // Responsible for processing one batch of remote updates received from the sync
 // server.
@@ -25,7 +26,7 @@ class NoteRemoteUpdatesHandler {
  public:
   // |notes_model| and |note_tracker| must not be null
   // and must outlive this object.
-  NoteRemoteUpdatesHandler(vivaldi::NotesModel* notes_model,
+  NoteRemoteUpdatesHandler(NoteModelView* notes_model,
                            SyncedNoteTracker* note_tracker);
 
   NoteRemoteUpdatesHandler(const NoteRemoteUpdatesHandler&) = delete;
@@ -120,7 +121,7 @@ class NoteRemoteUpdatesHandler {
   void ReuploadEntityIfNeeded(const syncer::EntityData& entity_data,
                               const SyncedNoteTrackerEntity* tracked_entity);
 
-  const raw_ptr<vivaldi::NotesModel> notes_model_;
+  const raw_ptr<NoteModelView> notes_model_;
   const raw_ptr<SyncedNoteTracker> note_tracker_;
 };
 

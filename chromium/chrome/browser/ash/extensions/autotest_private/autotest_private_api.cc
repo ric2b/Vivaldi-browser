@@ -62,6 +62,7 @@
 #include "base/lazy_instance.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/metrics/field_trial.h"
 #include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/ranges/algorithm.h"
@@ -90,8 +91,8 @@
 #include "chrome/browser/ash/arc/tracing/arc_app_performance_tracing_session.h"
 #include "chrome/browser/ash/assistant/assistant_util.h"
 #include "chrome/browser/ash/borealis/borealis_installer.h"
-#include "chrome/browser/ash/borealis/borealis_metrics.h"
 #include "chrome/browser/ash/borealis/borealis_service.h"
+#include "chrome/browser/ash/borealis/borealis_types.mojom.h"
 #include "chrome/browser/ash/bruschetta/bruschetta_installer.h"
 #include "chrome/browser/ash/bruschetta/bruschetta_service.h"
 #include "chrome/browser/ash/bruschetta/bruschetta_util.h"
@@ -111,7 +112,6 @@
 #include "chrome/browser/ash/guest_os/guest_os_registry_service.h"
 #include "chrome/browser/ash/guest_os/guest_os_registry_service_factory.h"
 #include "chrome/browser/ash/login/lock/screen_locker.h"
-#include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/wizard_context.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_installer.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_installer_factory.h"
@@ -146,7 +146,6 @@
 #include "chrome/browser/ui/aura/accessibility/automation_manager_aura.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
-#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -154,6 +153,7 @@
 #include "chrome/browser/ui/views/bruschetta/bruschetta_installer_view.h"
 #include "chrome/browser/ui/views/crostini/crostini_uninstaller_view.h"
 #include "chrome/browser/ui/views/plugin_vm/plugin_vm_installer_view.h"
+#include "chrome/browser/ui/web_applications/web_app_dialogs.h"
 #include "chrome/browser/ui/webui/ash/crostini_installer/crostini_installer_dialog.h"
 #include "chrome/browser/ui/webui/ash/crostini_installer/crostini_installer_ui.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
@@ -162,9 +162,7 @@
 #include "chrome/common/pref_names.h"
 #include "chromeos/ash/components/dbus/dbus_thread_manager.h"
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
-#include "chromeos/ash/components/login/auth/public/user_context.h"
 #include "chromeos/ash/components/metrics/login_event_recorder.h"
-#include "chromeos/ash/components/osauth/public/auth_session_storage.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "chromeos/ash/services/assistant/assistant_manager_service_impl.h"
 #include "chromeos/ash/services/assistant/public/cpp/assistant_prefs.h"
@@ -183,6 +181,7 @@
 #include "components/policy/core/browser/policy_conversions.h"
 #include "components/policy/core/common/cloud/cloud_policy_manager.h"
 #include "components/policy/core/common/policy_service.h"
+#include "components/policy/core/common/policy_types.h"
 #include "components/policy/core/common/remote_commands/remote_commands_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/services/app_service/public/cpp/app_types.h"
@@ -511,6 +510,24 @@ api::autotest_private::HotseatState GetHotseatState(
       return api::autotest_private::HotseatState::kShownHomeLauncher;
     case ash::HotseatState::kExtended:
       return api::autotest_private::HotseatState::kExtended;
+  }
+
+  NOTREACHED();
+}
+
+api::autotest_private::WakefulnessMode GetWakefulnessMode(
+    arc::mojom::WakefulnessMode mode) {
+  switch (mode) {
+    case arc::mojom::WakefulnessMode::ASLEEP:
+      return api::autotest_private::WakefulnessMode::kAsleep;
+    case arc::mojom::WakefulnessMode::AWAKE:
+      return api::autotest_private::WakefulnessMode::kAwake;
+    case arc::mojom::WakefulnessMode::DOZING:
+      return api::autotest_private::WakefulnessMode::kDozing;
+    case arc::mojom::WakefulnessMode::DREAMING:
+      return api::autotest_private::WakefulnessMode::kDreaming;
+    case arc::mojom::WakefulnessMode::UNKNOWN:
+      return api::autotest_private::WakefulnessMode::kUnknown;
   }
 
   NOTREACHED();
@@ -1502,8 +1519,10 @@ ExtensionFunction::ResponseAction
 AutotestPrivateRefreshEnterprisePoliciesFunction::Run() {
   DVLOG(1) << "AutotestPrivateRefreshEnterprisePoliciesFunction";
 
-  g_browser_process->policy_service()->RefreshPolicies(base::BindOnce(
-      &AutotestPrivateRefreshEnterprisePoliciesFunction::RefreshDone, this));
+  g_browser_process->policy_service()->RefreshPolicies(
+      base::BindOnce(
+          &AutotestPrivateRefreshEnterprisePoliciesFunction::RefreshDone, this),
+      policy::PolicyFetchReason::kTest);
   return RespondLater();
 }
 
@@ -1863,13 +1882,14 @@ ExtensionFunction::ResponseAction AutotestPrivateGetArcStateFunction::Run() {
 
   arc_state.provisioned = arc::IsArcProvisioned(profile);
   arc_state.tos_needed = arc::IsArcTermsOfServiceNegotiationNeeded(profile);
-  arc_state.pre_start_time =
-      pre_start_time.is_null()
-          ? 0
-          : (now_time - (now_ticks - pre_start_time)).ToJsTime();
+  arc_state.pre_start_time = pre_start_time.is_null()
+                                 ? 0
+                                 : (now_time - (now_ticks - pre_start_time))
+                                       .InMillisecondsFSinceUnixEpoch();
   arc_state.start_time = start_time.is_null()
                              ? 0
-                             : (now_time - (now_ticks - start_time)).ToJsTime();
+                             : (now_time - (now_ticks - start_time))
+                                   .InMillisecondsFSinceUnixEpoch();
 
   return RespondNow(WithArguments(arc_state.ToValue()));
 }
@@ -2065,14 +2085,9 @@ AutotestPrivateGetLacrosInfoFunction::ToLacrosState(
 
 // static
 api::autotest_private::LacrosMode
-AutotestPrivateGetLacrosInfoFunction::ToLacrosMode(
-    crosapi::browser_util::LacrosMode lacrosMode) {
-  switch (lacrosMode) {
-    case crosapi::browser_util::LacrosMode::kDisabled:
-      return api::autotest_private::LacrosMode::kDisabled;
-    case crosapi::browser_util::LacrosMode::kOnly:
-      return api::autotest_private::LacrosMode::kOnly;
-  }
+AutotestPrivateGetLacrosInfoFunction::ToLacrosMode(bool is_enabled) {
+  return is_enabled ? api::autotest_private::LacrosMode::kOnly
+                    : api::autotest_private::LacrosMode::kDisabled;
 }
 
 ExtensionFunction::ResponseAction AutotestPrivateGetLacrosInfoFunction::Run() {
@@ -2083,9 +2098,15 @@ ExtensionFunction::ResponseAction AutotestPrivateGetLacrosInfoFunction::Run() {
           .Set("state", api::autotest_private::ToString(
                             ToLacrosState(browser_manager->state_)))
           .Set("isKeepAlive", browser_manager->IsKeepAliveEnabled())
-          .Set("lacrosPath", browser_manager->lacros_path().MaybeAsASCII())
+          // TODO(neis): Rename lacrosPath to avoid confusion, or make it be the
+          // binary path. Either requires changes in tast-tests.
+          .Set("lacrosPath",
+               browser_manager->lacros_path().empty()
+                   ? ""
+                   : browser_manager->lacros_path().DirName().MaybeAsASCII())
           .Set("mode", api::autotest_private::ToString(ToLacrosMode(
-                           crosapi::browser_util::GetLacrosMode())))));
+                           crosapi::browser_util::IsLacrosEnabled())))
+          .Set("isEnabled", crosapi::browser_util::IsLacrosEnabled())));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -2119,8 +2140,10 @@ ExtensionFunction::ResponseAction AutotestPrivateGetArcAppFunction::Run() {
           .Set("activity", std::move(app_info->activity))
           .Set("intentUri", std::move(app_info->intent_uri))
           .Set("iconResourceId", std::move(app_info->icon_resource_id))
-          .Set("lastLaunchTime", app_info->last_launch_time.ToJsTime())
-          .Set("installTime", app_info->install_time.ToJsTime())
+          .Set("lastLaunchTime",
+               app_info->last_launch_time.InMillisecondsFSinceUnixEpoch())
+          .Set("installTime",
+               app_info->install_time.InMillisecondsFSinceUnixEpoch())
           .Set("sticky", app_info->sticky)
           .Set("notificationsEnabled", app_info->notifications_enabled)
           .Set("ready", app_info->ready)
@@ -2213,69 +2236,11 @@ ExtensionFunction::ResponseAction AutotestPrivateGetArcPackageFunction::Run() {
     package_value.Set("lastBackupTime",
                       base::Time::FromDeltaSinceWindowsEpoch(
                           base::Microseconds(package_info->last_backup_time))
-                          .ToJsTime());
+                          .InMillisecondsFSinceUnixEpoch());
     package_value.Set("shouldSync", package_info->should_sync);
     package_value.Set("vpnProvider", package_info->vpn_provider);
   }
   return RespondNow(WithArguments(std::move(package_value)));
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// AutotestPrivateGetCryptohomeRecoveryDataFunction
-///////////////////////////////////////////////////////////////////////////////
-
-AutotestPrivateGetCryptohomeRecoveryDataFunction::
-    ~AutotestPrivateGetCryptohomeRecoveryDataFunction() = default;
-
-ExtensionFunction::ResponseAction
-AutotestPrivateGetCryptohomeRecoveryDataFunction::Run() {
-  // The API is available only on test images.
-  base::SysInfo::CrashIfChromeOSNonTestImage();
-
-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-          ash::switches::kForceCryptohomeRecoveryForTesting)) {
-    return RespondNow(
-        Error("force-cryptohome-recovery-for-testing switch is not set"));
-  }
-
-  auto* host = ash::LoginDisplayHost::default_host();
-  if (!host) {
-    return RespondNow(Error("LoginDisplayHost is not available"));
-  }
-  auto* context = host->GetWizardContext();
-  if (!context) {
-    return RespondNow(Error("WizardContext is not available"));
-  }
-  ash::UserContext* user_context;
-  if (ash::features::ShouldUseAuthSessionStorage()) {
-    if (!context->extra_factors_token.has_value()) {
-      return RespondNow(Error("UserContext is not available"));
-    }
-    auto* storage = ash::AuthSessionStorage::Get();
-    auto& token = context->extra_factors_token.value();
-    if (!storage->IsValid(token)) {
-      return RespondNow(Error("UserContext is not available"));
-    }
-    user_context = storage->Peek(token);
-  } else {
-    user_context = context->extra_factors_auth_session.get();
-  }
-
-  if (!user_context) {
-    return RespondNow(Error("UserContext is not available"));
-  }
-
-  std::string reauth_proof_token = user_context->GetReauthProofToken();
-  std::string refresh_token = user_context->GetRefreshToken();
-  if (reauth_proof_token.empty() || refresh_token.empty()) {
-    return RespondNow(Error("Tokens are empty"));
-  }
-
-  api::autotest_private::CryptohomeRecoveryDataDict result;
-  result.reauth_proof_token = reauth_proof_token;
-  result.refresh_token = refresh_token;
-
-  return RespondNow(WithArguments(result.ToValue()));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -2348,7 +2313,7 @@ void AutotestPrivateGetRegisteredSystemWebAppsFunction::
         delegate->GetInstallUrl().DeprecatedGetOriginAsURL().spec();
     system_web_app.name = base::UTF16ToUTF8(delegate->GetWebAppInfo()->title);
 
-    absl::optional<web_app::AppId> app_id =
+    absl::optional<webapps::AppId> app_id =
         swa_manager->GetAppIdForSystemApp(type_and_info.first);
     if (app_id) {
       system_web_app.start_url =
@@ -2878,10 +2843,10 @@ class AutotestPrivateInstallBorealisFunction::InstallationObserver
   void OnStateUpdated(
       borealis::BorealisInstaller::InstallingState new_state) override {}
 
-  void OnInstallationEnded(borealis::BorealisInstallResult result,
+  void OnInstallationEnded(borealis::mojom::InstallResult result,
                            const std::string& error_description) override {
     std::move(completion_callback_)
-        .Run(result == borealis::BorealisInstallResult::kSuccess
+        .Run(result == borealis::mojom::InstallResult::kSuccess
                  ? ""
                  : "Failed to install Borealis: " + error_description);
   }
@@ -2936,7 +2901,9 @@ AutotestPrivateRegisterComponentFunction::Run() {
 
   g_browser_process->platform_part()
       ->cros_component_manager()
-      ->RegisterCompatiblePath(params->name, base::FilePath(params->path));
+      ->RegisterCompatiblePath(
+          params->name, component_updater::CompatibleComponentInfo(
+                            base::FilePath(params->path), absl::nullopt));
 
   return RespondNow(NoArguments());
 }
@@ -3186,51 +3153,6 @@ ExtensionFunction::ResponseAction AutotestPrivateRemovePrinterFunction::Run() {
       ash::CupsPrintersManagerFactory::GetForBrowserContext(browser_context());
   printers_manager->RemoveSavedPrinter(params->printer_id);
   return RespondNow(NoArguments());
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// AutotestPrivateBootstrapMachineLearningServiceFunction
-///////////////////////////////////////////////////////////////////////////////
-
-AutotestPrivateBootstrapMachineLearningServiceFunction::
-    AutotestPrivateBootstrapMachineLearningServiceFunction() = default;
-AutotestPrivateBootstrapMachineLearningServiceFunction::
-    ~AutotestPrivateBootstrapMachineLearningServiceFunction() = default;
-
-ExtensionFunction::ResponseAction
-AutotestPrivateBootstrapMachineLearningServiceFunction::Run() {
-  DVLOG(1) << "AutotestPrivateBootstrapMachineLearningServiceFunction";
-
-  // Load a model. This will first bootstrap the Mojo connection to ML Service.
-  chromeos::machine_learning::ServiceConnection::GetInstance()
-      ->GetMachineLearningService()
-      .LoadBuiltinModel(
-          chromeos::machine_learning::mojom::BuiltinModelSpec::New(
-              chromeos::machine_learning::mojom::BuiltinModelId::TEST_MODEL),
-          model_.BindNewPipeAndPassReceiver(),
-          base::BindOnce(
-              &AutotestPrivateBootstrapMachineLearningServiceFunction::
-                  ModelLoaded,
-              this));
-  model_.set_disconnect_handler(base::BindOnce(
-      &AutotestPrivateBootstrapMachineLearningServiceFunction::OnMojoDisconnect,
-      this));
-  return RespondLater();
-}
-
-void AutotestPrivateBootstrapMachineLearningServiceFunction::ModelLoaded(
-    chromeos::machine_learning::mojom::LoadModelResult result) {
-  if (result == chromeos::machine_learning::mojom::LoadModelResult::OK) {
-    Respond(NoArguments());
-  } else {
-    Respond(Error(base::StrCat(
-        {"Model load error ", (std::ostringstream() << result).str()})));
-  }
-}
-
-void AutotestPrivateBootstrapMachineLearningServiceFunction::
-    OnMojoDisconnect() {
-  Respond(Error("ML Service connection error"));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -4300,7 +4222,8 @@ AutotestPrivateGetDefaultPinnedAppIdsFunction::
 ExtensionFunction::ResponseAction
 AutotestPrivateGetDefaultPinnedAppIdsFunction::Run() {
   std::vector<std::string> default_pinned_app_ids;
-  for (const char* default_app_id : GetDefaultPinnedAppsForFormFactor()) {
+  for (const char* default_app_id :
+       GetDefaultPinnedAppsForFormFactor(browser_context())) {
     default_pinned_app_ids.emplace_back(default_app_id);
   }
 
@@ -4533,13 +4456,14 @@ void AutotestPrivateWaitForDisplayRotationFunction::
 
 absl::optional<ExtensionFunction::ResponseValue>
 AutotestPrivateWaitForDisplayRotationFunction::CheckScreenRotationAnimation() {
-  auto* root_window = ash::Shell::GetRootWindowForDisplayId(display_id_);
-  if (!root_window) {
+  auto* root_controller =
+      ash::Shell::GetRootWindowControllerWithDisplayId(display_id_);
+  if (!root_controller || !root_controller->GetScreenRotationAnimator()) {
     return Error(base::StringPrintf(
         "Invalid display_id; no root window found for the display id %" PRId64,
         display_id_));
   }
-  auto* animator = ash::ScreenRotationAnimator::GetForRootWindow(root_window);
+  auto* animator = root_controller->GetScreenRotationAnimator();
   if (!animator->IsRotating()) {
     display::Display display;
     display::Screen::GetScreen()->GetDisplayWithDisplayId(display_id_,
@@ -4910,7 +4834,7 @@ class AutotestPrivateInstallPWAForCurrentURLFunction::PWAInstallManagerObserver
  public:
   PWAInstallManagerObserver(
       Profile* profile,
-      base::OnceCallback<void(const web_app::AppId&)> callback)
+      base::OnceCallback<void(const webapps::AppId&)> callback)
       : provider_(web_app::WebAppProvider::GetForWebApps(profile)),
         callback_(std::move(callback)) {
     if (!provider_) {
@@ -4933,7 +4857,7 @@ class AutotestPrivateInstallPWAForCurrentURLFunction::PWAInstallManagerObserver
     observation_.Observe(&provider_->install_manager());
   }
 
-  void OnWebAppInstalled(const web_app::AppId& app_id) override {
+  void OnWebAppInstalled(const webapps::AppId& app_id) override {
     observation_.Reset();
     std::move(callback_).Run(app_id);
   }
@@ -4945,7 +4869,7 @@ class AutotestPrivateInstallPWAForCurrentURLFunction::PWAInstallManagerObserver
                           web_app::WebAppInstallManagerObserver>
       observation_{this};
   raw_ptr<web_app::WebAppProvider, ExperimentalAsh> provider_;
-  base::OnceCallback<void(const web_app::AppId&)> callback_;
+  base::OnceCallback<void(const webapps::AppId&)> callback_;
   base::WeakPtrFactory<
       AutotestPrivateInstallPWAForCurrentURLFunction::PWAInstallManagerObserver>
       weak_factory_{this};
@@ -5002,21 +4926,21 @@ void AutotestPrivateInstallPWAForCurrentURLFunction::PWALoaded() {
       base::BindOnce(
           &AutotestPrivateInstallPWAForCurrentURLFunction::PWAInstalled, this));
 
-  chrome::SetAutoAcceptPWAInstallConfirmationForTesting(true);
+  web_app::SetAutoAcceptPWAInstallConfirmationForTesting(true);
   if (!chrome::ExecuteCommand(browser, IDC_INSTALL_PWA)) {
     return Respond(Error("Failed to execute INSTALL_PWA command"));
   }
 }
 
 void AutotestPrivateInstallPWAForCurrentURLFunction::PWAInstalled(
-    const web_app::AppId& app_id) {
-  chrome::SetAutoAcceptPWAInstallConfirmationForTesting(false);
+    const webapps::AppId& app_id) {
+  web_app::SetAutoAcceptPWAInstallConfirmationForTesting(false);
   Respond(WithArguments(app_id));
   timeout_timer_.AbandonAndStop();
 }
 
 void AutotestPrivateInstallPWAForCurrentURLFunction::PWATimeout() {
-  chrome::SetAutoAcceptPWAInstallConfirmationForTesting(false);
+  web_app::SetAutoAcceptPWAInstallConfirmationForTesting(false);
   Respond(Error("Install PWA timed out"));
 }
 
@@ -5160,11 +5084,11 @@ AutotestPrivateRemoveActiveDeskFunction::
 
 ExtensionFunction::ResponseAction
 AutotestPrivateRemoveActiveDeskFunction::Run() {
-  // Check whether overview mode is active before removing the desk. In case of
+  // Check whether overview mode was active before removing the desk. In case of
   // split view, the desk removal may cause overview to end, but what matters is
-  // whether overview mode is active before.
-  const bool in_overview =
-      ash::Shell::Get()->overview_controller()->InOverviewSession();
+  // whether overview mode was active before.
+  const bool was_in_overview =
+      ash::OverviewController::Get()->InOverviewSession();
 
   if (!ash::AutotestDesksApi().RemoveActiveDesk(base::BindOnce(
           &AutotestPrivateRemoveActiveDeskFunction::OnAnimationComplete,
@@ -5172,11 +5096,12 @@ AutotestPrivateRemoveActiveDeskFunction::Run() {
     return RespondNow(WithArguments(false));
   }
 
-  // In overview, the desk removal animation does
-  // not apply, so we should not wait for it.
-  if (in_overview) {
+  // In overview, the desk removal animation does not apply, so we should not
+  // wait for it.
+  if (was_in_overview) {
     return RespondNow(WithArguments(true));
   }
+
   return RespondLater();
 }
 
@@ -6830,6 +6755,73 @@ AutotestPrivateSetArcInteractiveStateFunction::Run() {
   power_instance->SetInteractive(params->enabled);
 
   return RespondNow(NoArguments());
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateIsFieldTrialActiveFunction
+///////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateIsFieldTrialActiveFunction::
+    AutotestPrivateIsFieldTrialActiveFunction() = default;
+
+AutotestPrivateIsFieldTrialActiveFunction::
+    ~AutotestPrivateIsFieldTrialActiveFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateIsFieldTrialActiveFunction::Run() {
+  absl::optional<api::autotest_private::IsFieldTrialActive::Params> params =
+      api::autotest_private::IsFieldTrialActive::Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  return RespondNow(
+      WithArguments(base::FieldTrialList::IsTrialActive(params->feature_name)));
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateGetArcWakefulnessModeFunction
+//////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateGetArcWakefulnessModeFunction::
+    AutotestPrivateGetArcWakefulnessModeFunction() = default;
+
+AutotestPrivateGetArcWakefulnessModeFunction::
+    ~AutotestPrivateGetArcWakefulnessModeFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateGetArcWakefulnessModeFunction::Run() {
+  arc::ArcServiceManager* arc_service_manager = arc::ArcServiceManager::Get();
+  if (!arc_service_manager) {
+    return RespondNow(Error("ARC service manager is not available"));
+  }
+
+  arc::ArcBridgeService* arc_bridge_service =
+      arc_service_manager->arc_bridge_service();
+
+  if (!arc_bridge_service) {
+    return RespondNow(Error(
+        "ARC service manager exist, but ARC bridge service is not available"));
+  }
+
+  arc::mojom::PowerInstance* power_instance =
+      ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service->power(), SetInteractive);
+
+  if (!power_instance) {
+    return RespondNow(
+        Error("ARC bridge exist, but ARC power service is not available"));
+  }
+
+  power_instance->GetWakefulnessMode(
+      base::BindOnce(&AutotestPrivateGetArcWakefulnessModeFunction::
+                         OnGetWakefulnessStateRespond,
+                     this));
+
+  return RespondLater();
+}
+
+void AutotestPrivateGetArcWakefulnessModeFunction::OnGetWakefulnessStateRespond(
+    arc::mojom::WakefulnessMode mode) {
+  return Respond(
+      WithArguments(api::autotest_private::ToString(GetWakefulnessMode(mode))));
 }
 
 ///////////////////////////////////////////////////////////////////////////////

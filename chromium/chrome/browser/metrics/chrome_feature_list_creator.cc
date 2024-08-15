@@ -59,7 +59,7 @@
 #include "ui/base/resource/resource_bundle.h"
 
 #include "app/vivaldi_apptools.h"
-#include "prefs/vivaldi_browser_prefs.h"
+#include "prefs/vivaldi_local_state_prefs.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
@@ -90,9 +90,6 @@ GetSwitchDependentFeatureOverrides(const base::CommandLine& command_line) {
     base::FeatureList::OverrideState override_state;
   } chrome_layer_override_info[] = {
       // Overrides for --enable-download-warning-improvements.
-      {switches::kEnableDownloadWarningImprovements,
-       std::cref(safe_browsing::kDeepScanningUpdatedUX),
-       base::FeatureList::OVERRIDE_ENABLE_FEATURE},
       {switches::kEnableDownloadWarningImprovements,
        std::cref(safe_browsing::kDeepScanningEncryptedArchives),
        base::FeatureList::OVERRIDE_ENABLE_FEATURE},
@@ -207,7 +204,7 @@ void ChromeFeatureListCreator::CreatePrefService() {
 
   auto pref_registry = base::MakeRefCounted<PrefRegistrySimple>();
   RegisterLocalState(pref_registry.get());
-  vivaldi::RegisterLocalState(pref_registry.get());
+  vivaldi::RegisterLocalStatePrefs(pref_registry.get());
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // DBus must be initialized before constructing the policy connector.

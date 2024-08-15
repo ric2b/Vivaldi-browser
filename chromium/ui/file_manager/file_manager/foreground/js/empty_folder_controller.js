@@ -5,11 +5,11 @@
 import {assert} from 'chrome://resources/ash/common/assert.js';
 
 import {queryRequiredElement} from '../../common/js/dom_utils.js';
-import {str, util} from '../../common/js/util.js';
+import {getODFSMetadataQueryEntry, isInteractiveVolume, isOneDrive, isRecentRootType} from '../../common/js/entry_utils.js';
+import {str} from '../../common/js/translations.js';
+import {FileErrorToDomError} from '../../common/js/util.js';
 import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
 import {FakeEntry} from '../../externs/files_app_entry_interfaces.js';
-import {PropStatus} from '../../externs/ts/state.js';
-import {VolumeInfo} from '../../externs/volume_info.js';
 import {updateIsInteractiveVolume} from '../../state/ducks/volumes.js';
 import {getStore} from '../../state/store.js';
 
@@ -63,39 +63,39 @@ export class EmptyFolderController {
    */
   constructor(emptyFolder, directoryModel, providersModel, recentEntry) {
     /**
-     * @private {!HTMLElement}
+     * @private @type {!HTMLElement}
      */
     this.emptyFolder_ = emptyFolder;
 
     /**
-     * @private {!DirectoryModel}
+     * @private @type {!DirectoryModel}
      */
     this.directoryModel_ = directoryModel;
 
     /**
      * Model for providers (providing extensions).
-     * @private {!ProvidersModel}
+     * @private @type {!ProvidersModel}
      */
     this.providersModel_ = providersModel;
 
     /**
-     * @private {!FakeEntry}
+     * @private @type {!FakeEntry}
      * @const
      */
     this.recentEntry_ = recentEntry;
 
     /**
-     * @private {!HTMLElement}
+     * @private @type {!HTMLElement}
      */
     this.label_ = queryRequiredElement('.label', emptyFolder);
 
     /**
-     * @private {!HTMLElement}
+     * @private @type {!HTMLElement}
      */
     this.image_ = queryRequiredElement('.image', emptyFolder);
 
     /**
-     * @private {boolean}
+     * @private @type {boolean}
      */
     this.isScanning_ = false;
 
@@ -125,29 +125,33 @@ export class EmptyFolderController {
    * volume metadata through the special root actions request to determine if re
    * authentication is required.
    * @private
-   * @param {VolumeInfo} odfsVolumeInfo
+   * @param {import("../../externs/volume_info.js").VolumeInfo} odfsVolumeInfo
    * @return {Promise<boolean>}
    */
   async checkIfReauthenticationRequired_(odfsVolumeInfo) {
     // Request ODFS root actions to get ODFS metadata.
     return new Promise((fulfill) => {
       chrome.fileManagerPrivate.getCustomActions(
-          [util.getODFSMetadataQueryEntry(odfsVolumeInfo)], customActions => {
+          // @ts-ignore: error TS2322: Type 'FileSystemEntry | FilesAppEntry' is
+          // not assignable to type 'FileSystemEntry'.
+          [getODFSMetadataQueryEntry(odfsVolumeInfo)], customActions => {
             if (chrome.runtime.lastError) {
               console.error(
                   'Unexpectedly failed to fetch custom actions for ODFS ' +
                   'root because of: ' + chrome.runtime.lastError.message);
               fulfill(false);
+              return;
             }
             // Find the reauthentication required action.
-            customActions.forEach(action => {
+            for (const action of customActions) {
               if (action.id ===
                       constants
                           .FSP_ACTION_HIDDEN_ONEDRIVE_REAUTHENTICATION_REQUIRED &&
                   action.title === 'true') {
                 fulfill(true);
+                return;
               }
-            });
+            }
             fulfill(false);
           });
     });
@@ -159,6 +163,7 @@ export class EmptyFolderController {
    * interactive.
    * @private
    */
+  // @ts-ignore: error TS7006: Parameter 'event' implicitly has an 'any' type.
   onScanFailed_(event) {
     this.isScanning_ = false;
     const currentVolumeInfo = this.directoryModel_.getCurrentVolumeInfo();
@@ -167,18 +172,18 @@ export class EmptyFolderController {
       return;
     }
     // If scan did not fail for ODFS, return.
-    if (!util.isOneDrive(currentVolumeInfo)) {
+    if (!isOneDrive(currentVolumeInfo)) {
       this.updateUI_();
       return;
     }
     // If the error is not NO_MODIFICATION_ALLOWED_ERR, return. This is
     // equivalent to the ACCESS_DENIED error thrown by ODFS.
-    if (event.error.name != util.FileError.NO_MODIFICATION_ALLOWED_ERR) {
+    if (event.error.name != FileErrorToDomError.NO_MODIFICATION_ALLOWED_ERR) {
       this.updateUI_();
       return;
     }
     // If ODFS is already non-interactive, return.
-    if (!util.isInteractiveVolume(currentVolumeInfo)) {
+    if (!isInteractiveVolume(currentVolumeInfo)) {
       this.updateUI_();
       return;
     }
@@ -203,8 +208,8 @@ export class EmptyFolderController {
    */
   onScanFinished_() {
     const currentVolumeInfo = this.directoryModel_.getCurrentVolumeInfo();
-    if (util.isOneDrive(currentVolumeInfo)) {
-      if (!util.isInteractiveVolume(currentVolumeInfo)) {
+    if (isOneDrive(currentVolumeInfo)) {
+      if (!isInteractiveVolume(currentVolumeInfo)) {
         // Set |isInteractive| to true for ODFS when in an authenticated state.
         getStore().dispatch(updateIsInteractiveVolume({
           volumeId: currentVolumeInfo.volumeId,
@@ -276,7 +281,7 @@ export class EmptyFolderController {
    */
   onODFSSignIn_() {
     const currentVolumeInfo = this.directoryModel_.getCurrentVolumeInfo();
-    if (util.isOneDrive(currentVolumeInfo) &&
+    if (isOneDrive(currentVolumeInfo) &&
         currentVolumeInfo.providerId !== undefined) {
       this.providersModel_.requestMount(currentVolumeInfo.providerId);
     }
@@ -291,22 +296,20 @@ export class EmptyFolderController {
     const currentVolumeInfo = this.directoryModel_.getCurrentVolumeInfo();
 
     let svgRef = null;
-    if (util.isRecentRootType(currentRootType)) {
+    if (isRecentRootType(currentRootType)) {
       svgRef = RECENTS_EMPTY_FOLDER;
     } else if (currentRootType === VolumeManagerCommon.RootType.TRASH) {
       svgRef = TRASH_EMPTY_FOLDER;
     } else if (
-        util.isOneDrive(currentVolumeInfo) &&
-        !util.isInteractiveVolume(currentVolumeInfo)) {
+        isOneDrive(currentVolumeInfo) &&
+        !isInteractiveVolume(currentVolumeInfo)) {
       // Show ODFS reauthentication required empty state if is it
       // non-interactive.
       svgRef = ODFS_REAUTHENTICATION_REQUIRED;
     } else {
-      if (util.isSearchV2Enabled()) {
-        const {search} = getStore().getState();
-        if (search && search.query) {
-          svgRef = SEARCH_EMPTY_RESULTS;
-        }
+      const {search} = getStore().getState();
+      if (search && search.query) {
+        svgRef = SEARCH_EMPTY_RESULTS;
       }
     }
 
@@ -319,6 +322,7 @@ export class EmptyFolderController {
     }
 
     const svgUseElement = this.image_.querySelector('.image > svg > use');
+    // @ts-ignore: error TS18047: 'svgUseElement' is possibly 'null'.
     svgUseElement.setAttributeNS(
         'http://www.w3.org/1999/xlink', 'xlink:href', svgRef);
     this.emptyFolder_.hidden = false;

@@ -12,15 +12,16 @@
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/task/bind_post_task.h"
 #include "chrome/browser/ash/arc/fileapi/arc_select_files_util.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
 #include "chrome/browser/ash/drive/file_system_util.h"
 #include "chrome/browser/ash/extensions/file_manager/private_api_util.h"
 #include "chrome/browser/ash/extensions/file_manager/select_file_dialog_extension_user_data.h"
-#include "chrome/browser/ash/file_manager/file_tasks.h"
 #include "chrome/browser/ash/file_manager/file_tasks_notifier.h"
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
 #include "chrome/browser/ash/file_manager/filesystem_api_util.h"
+#include "chrome/browser/ash/file_manager/office_file_tasks.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/views/select_file_dialog_extension.h"
 #include "chrome/common/extensions/api/file_manager_private.h"
@@ -135,6 +136,8 @@ ExtensionFunction::ResponseAction FileManagerPrivateSelectFilesFunction::Run() {
 
   Profile* const profile = Profile::FromBrowserContext(browser_context());
 
+  std::vector<base::FilePath> local_paths;
+  auto* drive_service = drive::util::GetIntegrationServiceByProfile(profile);
   for (const auto& selected_path : params->selected_paths) {
     base::FilePath local_path = file_manager::util::GetLocalPathFromURL(
         render_frame_host(), profile, GURL(selected_path));
@@ -142,36 +145,30 @@ ExtensionFunction::ResponseAction FileManagerPrivateSelectFilesFunction::Run() {
       continue;
     }
 
-    if (file_manager::util::IsDriveLocalPath(profile, local_path) &&
+    if (drive_service &&
+        file_manager::util::IsDriveLocalPath(profile, local_path) &&
         file_manager::file_tasks::IsOfficeFile(local_path)) {
       UMA_HISTOGRAM_ENUMERATION(
           file_manager::file_tasks::kUseOutsideDriveMetricName,
           file_manager::file_tasks::OfficeFilesUseOutsideDriveHook::
               FILE_PICKER_SELECTION);
       ++resync_files_remaining_;
+      // ForceReSyncFile may call its callback synchronously, so BindPostTask
+      // the callback avoid that.
+      drive_service->ForceReSyncFile(
+          local_path,
+          base::BindPostTaskToCurrentDefault(base::BindOnce(
+              &FileManagerPrivateSelectFilesFunction::OnReSyncFile, this)));
     }
-    local_paths_.push_back(std::move(local_path));
+    local_paths.push_back(std::move(local_path));
   }
   if (resync_files_remaining_ > 0) {
-    if (auto* drive_service =
-            drive::util::GetIntegrationServiceByProfile(profile)) {
-      // This loop must be done after calculating `resync_files_remaining_` as
-      // ForceReSyncFile() may return synchronously.
-      for (const base::FilePath& local_path : local_paths_) {
-        if (file_manager::util::IsDriveLocalPath(profile, local_path) &&
-            file_manager::file_tasks::IsOfficeFile(local_path)) {
-          drive_service->ForceReSyncFile(
-              local_path,
-              base::BindOnce(
-                  &FileManagerPrivateSelectFilesFunction::OnReSyncFile, this));
-        }
-      }
-      return RespondLater();
-    }
+    local_paths_for_resync_callback_ = std::move(local_paths);
+    return RespondLater();
   }
 
   file_manager::util::GetSelectedFileInfo(
-      Profile::FromBrowserContext(browser_context()), local_paths_,
+      Profile::FromBrowserContext(browser_context()), std::move(local_paths),
       params->should_return_local_path
           ? file_manager::util::NEED_LOCAL_PATH_FOR_OPENING
           : file_manager::util::NO_LOCAL_PATH_RESOLUTION,
@@ -187,7 +184,8 @@ void FileManagerPrivateSelectFilesFunction::OnReSyncFile() {
     return;
   }
   file_manager::util::GetSelectedFileInfo(
-      Profile::FromBrowserContext(browser_context()), local_paths_,
+      Profile::FromBrowserContext(browser_context()),
+      std::move(local_paths_for_resync_callback_),
       should_return_local_path_
           ? file_manager::util::NEED_LOCAL_PATH_FOR_OPENING
           : file_manager::util::NO_LOCAL_PATH_RESOLUTION,

@@ -94,7 +94,7 @@
 // of lacros-chrome is complete.
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chrome/common/chrome_paths_internal.h"
-#include "chrome/grit/chromium_strings.h"
+#include "chrome/grit/branded_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
@@ -136,11 +136,18 @@ SystemNetworkContextManager* g_system_network_context_manager = nullptr;
 // received a failed launch for a sandboxed network service.
 bool g_previously_failed_to_launch_sandboxed_service = false;
 
-#if BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
 // Whether kerberos library loading will work in the network service due to the
 // sandbox.
 bool g_network_service_will_allow_gssapi_library_load = false;
-#endif  // BUILDFLAG(IS_CHROMEOS)
+
+const char* kGssapiDesiredPref =
+#if BUILDFLAG(IS_CHROMEOS)
+    prefs::kKerberosEnabled;
+#elif BUILDFLAG(IS_LINUX)
+    prefs::kReceivedHttpAuthNegotiateHeader;
+#endif
+#endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
 
 // Constructs HttpAuthStaticParams based on |local_state|.
 network::mojom::HttpAuthStaticParamsPtr CreateHttpAuthStaticParams(
@@ -198,9 +205,9 @@ network::mojom::HttpAuthDynamicParamsPtr CreateHttpAuthDynamicParams(
       local_state->GetString(prefs::kAuthAndroidNegotiateAccountType);
 #endif  // BUILDFLAG(IS_ANDROID)
 
-#if BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
   auth_dynamic_params->allow_gssapi_library_load =
-      local_state->GetBoolean(prefs::kKerberosEnabled);
+      local_state->GetBoolean(kGssapiDesiredPref);
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
   return auth_dynamic_params;
@@ -208,7 +215,7 @@ network::mojom::HttpAuthDynamicParamsPtr CreateHttpAuthDynamicParams(
 
 void OnNewHttpAuthDynamicParams(
     network::mojom::HttpAuthDynamicParamsPtr& params) {
-#if BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
   // The kerberos library is incompatible with the network service sandbox, so
   // if library loading is now enabled, the network service needs to be
   // restarted. It will be restarted unsandboxed because is
@@ -219,13 +226,22 @@ void OnNewHttpAuthDynamicParams(
     // The network service, if sandboxed, will still not allow gssapi library
     // loading until it is shut down. On restart the network service will get
     // the correct value.
+    // NOTE: technically another call to OnNewHttpAuthDynamicParams() before the
+    // RestartNetworkService() call will leave this as true. This could happen
+    // if the admin sends out another edit to the HTTP auth dynamic params right
+    // after enabling kerberos. Then if the user attempts a load of a page that
+    // requires "negotiate" HTTP auth, the network service will load a GSSAPI
+    // library despite the sandbox. This is incredibly unlikely, probably
+    // wouldn't have any consequences anyway, and would be quickly self-healing
+    // once RestartNetworkService() runs, so there's no reason to handle this
+    // case.
     params->allow_gssapi_library_load = false;
     // Post a shutdown task because the current task probably holds a raw
     // pointer to the remote.
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&content::RestartNetworkService));
   }
-#endif  // BUILDFLAG(IS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
 }
 
 void OnAuthPrefsChanged(PrefService* local_state,
@@ -245,16 +261,15 @@ NetworkSandboxState IsNetworkSandboxEnabledInternal() {
   auto* local_state = g_browser_process->local_state();
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
   // The network service sandbox and the kerberos library are incompatible.
   // If kerberos is enabled by policy, disable the network service sandbox.
   if (g_network_service_will_allow_gssapi_library_load ||
-      (local_state && local_state->HasPrefPath(prefs::kKerberosEnabled) &&
-       local_state->GetBoolean(prefs::kKerberosEnabled))) {
-    g_network_service_will_allow_gssapi_library_load = true;
+      (local_state && local_state->HasPrefPath(kGssapiDesiredPref) &&
+       local_state->GetBoolean(kGssapiDesiredPref))) {
     return NetworkSandboxState::kDisabledBecauseOfKerberos;
   }
-#endif  // BUILDFLAG(IS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
 
 #if BUILDFLAG(IS_WIN)
   if (!sandbox::policy::features::IsNetworkSandboxSupported()) {
@@ -529,9 +544,9 @@ SystemNetworkContextManager::SystemNetworkContextManager(
                              auth_pref_callback);
 #endif  // BUILDFLAG(IS_ANDROID)
 
-#if BUILDFLAG(IS_CHROMEOS)
-  pref_change_registrar_.Add(prefs::kKerberosEnabled, auth_pref_callback);
-#endif  // BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
+  pref_change_registrar_.Add(kGssapiDesiredPref, auth_pref_callback);
+#endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
 
   local_state_->SetDefaultPrefValue(
       prefs::kEnableReferrers,
@@ -578,6 +593,12 @@ SystemNetworkContextManager::SystemNetworkContextManager(
     network_process_launch_watcher_ =
         std::make_unique<NetworkProcessLaunchWatcher>();
   }
+
+  pref_change_registrar_.Add(
+      prefs::kIPv6ReachabilityOverrideEnabled,
+      base::BindRepeating(
+          &SystemNetworkContextManager::UpdateIPv6ReachabilityOverrideEnabled,
+          base::Unretained(this)));
 }
 
 SystemNetworkContextManager::~SystemNetworkContextManager() {
@@ -656,6 +677,10 @@ void SystemNetworkContextManager::RegisterPrefs(PrefRegistrySimple* registry) {
 #if BUILDFLAG(IS_LINUX)
   registry->RegisterBooleanPref(prefs::kReceivedHttpAuthNegotiateHeader, false);
 #endif  // BUILDFLAG(IS_LINUX)
+
+  registry->RegisterBooleanPref(prefs::kZstdContentEncodingEnabled, true);
+
+  registry->RegisterBooleanPref(prefs::kIPv6ReachabilityOverrideEnabled, false);
 }
 
 // static
@@ -782,6 +807,8 @@ void SystemNetworkContextManager::OnNetworkServiceCreated(
       ->ReconfigureAfterNetworkRestart();
 
   UpdateExplicitlyAllowedNetworkPorts();
+
+  UpdateIPv6ReachabilityOverrideEnabled();
 }
 
 void SystemNetworkContextManager::DisableQuic() {
@@ -806,7 +833,8 @@ void SystemNetworkContextManager::ConfigureDefaultNetworkContextParams(
   network_context_params->enable_brotli = true;
 
   network_context_params->enable_zstd =
-      base::FeatureList::IsEnabled(net::features::kZstdContentEncoding);
+      base::FeatureList::IsEnabled(net::features::kZstdContentEncoding) &&
+      local_state_->GetBoolean(prefs::kZstdContentEncodingEnabled);
 
   network_context_params->user_agent = embedder_support::GetUserAgent();
 
@@ -888,20 +916,35 @@ bool SystemNetworkContextManager::IsNetworkSandboxEnabled() {
   base::UmaHistogramEnumeration(
       "Chrome.SystemNetworkContextManager.NetworkSandboxState", state);
 
+  bool enabled = true;
   switch (state) {
     case NetworkSandboxState::kDisabledBecauseOfKerberos:
-      return false;
+      enabled = false;
+      break;
     case NetworkSandboxState::kDisabledByPlatform:
-      return false;
+      enabled = false;
+      break;
     case NetworkSandboxState::kEnabledByPlatform:
-      return true;
+      enabled = true;
+      break;
     case NetworkSandboxState::kDisabledByPolicy:
-      return false;
+      enabled = false;
+      break;
     case NetworkSandboxState::kEnabledByPolicy:
-      return true;
+      enabled = true;
+      break;
     case NetworkSandboxState::kDisabledBecauseOfFailedLaunch:
-      return false;
+      enabled = false;
+      break;
   }
+
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
+  if (!enabled) {
+    g_network_service_will_allow_gssapi_library_load = true;
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
+
+  return enabled;
 }
 
 void SystemNetworkContextManager::FlushSSLConfigManagerForTesting() {
@@ -1029,6 +1072,17 @@ void SystemNetworkContextManager::UpdateEnforceLocalAnchorConstraintsEnabled() {
 
 void SystemNetworkContextManager::UpdateReferrersEnabled() {
   GetContext()->SetEnableReferrers(enable_referrers_.GetValue());
+}
+
+void SystemNetworkContextManager::UpdateIPv6ReachabilityOverrideEnabled() {
+  bool is_managed = local_state_->IsManagedPreference(
+      prefs::kIPv6ReachabilityOverrideEnabled);
+  bool pref_value =
+      local_state_->GetBoolean(prefs::kIPv6ReachabilityOverrideEnabled);
+  bool is_launched = base::FeatureList::IsEnabled(
+      net::features::kEnableIPv6ReachabilityOverride);
+  bool value = is_managed ? pref_value : is_launched;
+  content::GetNetworkService()->SetIPv6ReachabilityOverride(value);
 }
 
 // static

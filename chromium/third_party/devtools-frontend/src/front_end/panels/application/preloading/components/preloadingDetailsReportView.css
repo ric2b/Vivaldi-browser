@@ -1,0 +1,26 @@
+/*
+ * Copyright 2022 The Chromium Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+button.link {
+  color: var(--sys-color-primary);
+  text-decoration: underline;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: inherit;
+  height: 16px;
+}
+
+button.link devtools-icon {
+  vertical-align: sub;
+}
+
+.link {
+  color: var(--sys-color-primary);
+  text-decoration: underline;
+  cursor: pointer;
+}

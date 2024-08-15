@@ -76,7 +76,7 @@ class TextPaintTimingDetectorTest : public testing::Test {
   }
 
   LargestTextPaintManager* GetLargestTextPaintManager() {
-    return GetTextPaintTimingDetector()->ltp_manager_;
+    return GetTextPaintTimingDetector()->ltp_manager_.Get();
   }
 
   wtf_size_t CountRecordedSize() {
@@ -126,11 +126,13 @@ class TextPaintTimingDetectorTest : public testing::Test {
   }
 
   base::TimeTicks LargestPaintTime() {
-    return GetPaintTimingDetector().lcp_details_.largest_text_paint_time_;
+    return GetPaintTimingDetector()
+        .latest_lcp_details_.largest_text_paint_time_;
   }
 
   uint64_t LargestPaintSize() {
-    return GetPaintTimingDetector().lcp_details_.largest_text_paint_size_;
+    return GetPaintTimingDetector()
+        .latest_lcp_details_.largest_text_paint_size_;
   }
 
   void SetBodyInnerHTML(const std::string& content) {

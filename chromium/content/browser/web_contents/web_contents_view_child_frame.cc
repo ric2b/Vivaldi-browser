@@ -176,10 +176,16 @@ DropData* WebContentsViewChildFrame::GetDropData() const {
   return nullptr;
 }
 
-void WebContentsViewChildFrame::UpdateDragCursor(
-    ui::mojom::DragOperation operation) {
-  if (auto* view = GetOuterDelegateView())
-    view->UpdateDragCursor(operation);
+void WebContentsViewChildFrame::TransferDragSecurityInfo(WebContentsView*) {
+  NOTREACHED();
+}
+
+void WebContentsViewChildFrame::UpdateDragOperation(
+    ui::mojom::DragOperation operation,
+    bool document_is_handling_drag) {
+  if (auto* view = GetOuterDelegateView()) {
+    view->UpdateDragOperation(operation, document_is_handling_drag);
+  }
 }
 
 void WebContentsViewChildFrame::GotFocus(
@@ -222,6 +228,7 @@ void WebContentsViewChildFrame::ShowPopupMenu(
 
 void WebContentsViewChildFrame::StartDragging(
     const DropData& drop_data,
+    const url::Origin& source_origin,
     DragOperationsMask ops,
     const gfx::ImageSkia& image,
     const gfx::Vector2d& cursor_offset,
@@ -229,8 +236,8 @@ void WebContentsViewChildFrame::StartDragging(
     const blink::mojom::DragEventSourceInfo& event_info,
     RenderWidgetHostImpl* source_rwh) {
   if (auto* view = GetOuterDelegateView()) {
-    view->StartDragging(drop_data, ops, image, cursor_offset, drag_obj_rect,
-                        event_info, source_rwh);
+    view->StartDragging(drop_data, source_origin, ops, image, cursor_offset,
+                        drag_obj_rect, event_info, source_rwh);
   } else {
     web_contents_->GetOuterWebContents()->SystemDragEnded(source_rwh);
   }

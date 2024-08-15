@@ -25,8 +25,7 @@ extern const char kAutofillCreditCardFidoAuthEnabled[];
 #if BUILDFLAG(IS_ANDROID)
 extern const char kAutofillCreditCardFidoAuthOfferCheckboxState[];
 #endif  // BUILDFLAG(IS_ANDROID)
-// Please use kAutofillCreditCardEnabled, kAutofillIbanEnabled and
-// kAutofillProfileEnabled instead.
+// Please use kAutofillCreditCardEnabled and kAutofillProfileEnabled instead.
 extern const char kAutofillEnabledDeprecated[];
 extern const char kAutofillHasSeenIban[];
 extern const char kAutofillIbanEnabled[];
@@ -78,9 +77,9 @@ bool IsCreditCardFIDOAuthEnabled(PrefService* prefs);
 
 void SetCreditCardFIDOAuthEnabled(PrefService* prefs, bool enabled);
 
-bool IsAutofillCreditCardEnabled(const PrefService* prefs);
+bool IsAutofillPaymentMethodsEnabled(const PrefService* prefs);
 
-void SetAutofillCreditCardEnabled(PrefService* prefs, bool enabled);
+void SetAutofillPaymentMethodsEnabled(PrefService* prefs, bool enabled);
 
 bool HasSeenIban(const PrefService* prefs);
 

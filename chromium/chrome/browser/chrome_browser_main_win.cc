@@ -41,7 +41,6 @@
 #include "base/win/pe_image.h"
 #include "base/win/registry.h"
 #include "base/win/win_util.h"
-#include "base/win/windows_version.h"
 #include "base/win/wrapped_window_proc.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
@@ -54,9 +53,6 @@
 #include "chrome/browser/os_crypt/app_bound_encryption_metrics_win.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_shortcut_manager.h"
-#include "chrome/browser/safe_browsing/chrome_cleaner/settings_resetter_win.h"
-#include "chrome/browser/safe_browsing/settings_reset_prompt/settings_reset_prompt_config.h"
-#include "chrome/browser/safe_browsing/settings_reset_prompt/settings_reset_prompt_util_win.h"
 #include "chrome/browser/shell_integration_win.h"
 #include "chrome/browser/ui/accessibility_util.h"
 #include "chrome/browser/ui/simple_message_box.h"
@@ -84,7 +80,7 @@
 #include "chrome/common/crash_keys.h"
 #include "chrome/common/env_vars.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/grit/chromium_strings.h"
+#include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/install_static/install_details.h"
 #include "chrome/installer/util/helper.h"
@@ -101,6 +97,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/version_info/channel.h"
 #include "components/version_info/version_info.h"
+#include "components/webapps/common/web_app_id.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
@@ -327,15 +324,6 @@ void ShowCloseBrowserFirstMessageBox() {
       l10n_util::GetStringUTF16(IDS_UNINSTALL_CLOSE_APP));
 }
 
-void MaybePostSettingsResetPrompt() {
-  if (base::FeatureList::IsEnabled(safe_browsing::kSettingsResetPrompt)) {
-    content::GetUIThreadTaskRunner({base::TaskPriority::BEST_EFFORT})
-        ->PostTask(FROM_HERE,
-                   base::BindOnce(
-                       safe_browsing::MaybeShowSettingsResetPromptWithDelay));
-  }
-}
-
 // Updates all Progressive Web App launchers in |profile_dir| to the latest
 // version.
 void UpdatePwaLaunchersForProfile(const base::FilePath& profile_dir) {
@@ -353,7 +341,7 @@ void UpdatePwaLaunchersForProfile(const base::FilePath& profile_dir) {
 
   // Create a vector of all PWA-launcher paths in |profile_dir|.
   std::vector<base::FilePath> pwa_launcher_paths;
-  for (const web_app::AppId& app_id : registrar.GetAppIds()) {
+  for (const webapps::AppId& app_id : registrar.GetAppIds()) {
     base::FilePath web_app_path =
         web_app::GetOsIntegrationResourcesDirectoryForApp(profile_dir, app_id,
                                                           GURL());
@@ -559,24 +547,6 @@ void ChromeBrowserMainPartsWin::PostBrowserStart() {
 
   InitializeChromeElf();
 
-  // Reset settings for the current profile if it's tagged to be reset after a
-  // complete run of the Chrome Cleanup tool. If post-cleanup settings reset is
-  // enabled, we delay checks for settings reset prompt until the scheduled
-  // reset is finished.
-  if (safe_browsing::PostCleanupSettingsResetter::IsEnabled() &&
-      !base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kAppId)) {
-    // Using last opened profiles, because we want to find reset the profile
-    // that was open in the last Chrome run, which may not be open yet in
-    // the current run.
-    safe_browsing::PostCleanupSettingsResetter().ResetTaggedProfiles(
-        g_browser_process->profile_manager()->GetLastOpenedProfiles(),
-        base::BindOnce(&MaybePostSettingsResetPrompt),
-        std::make_unique<
-            safe_browsing::PostCleanupSettingsResetter::Delegate>());
-  } else {
-    MaybePostSettingsResetPrompt();
-  }
-
   // Query feature first, to include full population in field trial.
   if (base::FeatureList::IsEnabled(features::kAppBoundEncryptionMetrics) &&
       install_static::IsSystemInstall()) {
@@ -584,16 +554,12 @@ void ChromeBrowserMainPartsWin::PostBrowserStart() {
   }
 
   // Record Processor Metrics. This is very low priority, hence posting as
-  // BEST_EFFORT to start after Chrome startup has completed. This metric is
-  // only available starting Windows 10.
-  if (base::win::OSInfo::GetInstance()->version() >=
-      base::win::Version::WIN10) {
-    scoped_refptr<base::SequencedTaskRunner> task_runner =
-        base::ThreadPool::CreateSequencedTaskRunner(
-            {base::MayBlock(), base::TaskPriority::BEST_EFFORT});
-    task_runner->PostTask(FROM_HERE,
-                          base::BindOnce(&DelayedRecordProcessorMetrics));
-  }
+  // BEST_EFFORT to start after Chrome startup has completed.
+  scoped_refptr<base::SequencedTaskRunner> task_runner =
+      base::ThreadPool::CreateSequencedTaskRunner(
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT});
+  task_runner->PostTask(FROM_HERE,
+                        base::BindOnce(&DelayedRecordProcessorMetrics));
 
   // Write current executable path to the User Data directory to inform
   // Progressive Web App launchers, which run from within the User Data

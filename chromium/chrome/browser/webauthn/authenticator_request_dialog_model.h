@@ -15,6 +15,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
+#include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/types/strong_alias.h"
@@ -22,10 +23,12 @@
 #include "chrome/browser/webauthn/authenticator_reference.h"
 #include "chrome/browser/webauthn/authenticator_transport.h"
 #include "chrome/browser/webauthn/observable_authenticator_list.h"
+#include "components/webauthn/core/browser/passkey_model.h"
 #include "content/public/browser/authenticator_request_client_delegate.h"
 #include "content/public/browser/global_routing_id.h"
 #include "device/fido/cable/cable_discovery_data.h"
 #include "device/fido/cable/v2_constants.h"
+#include "device/fido/discoverable_credential_metadata.h"
 #include "device/fido/fido_constants.h"
 #include "device/fido/fido_request_handler_base.h"
 #include "device/fido/fido_types.h"
@@ -54,7 +57,8 @@ struct VectorIcon;
 // Ultimately, this will become an observer of the AuthenticatorRequest, and
 // contain the logic to figure out which steps the user needs to take, in which
 // order, to complete the authentication flow.
-class AuthenticatorRequestDialogModel {
+class AuthenticatorRequestDialogModel
+    : public webauthn::PasskeyModel::Observer {
  public:
   using RequestCallback = device::FidoRequestHandlerBase::RequestCallback;
   using TransportAvailabilityInfo =
@@ -139,11 +143,12 @@ class AuthenticatorRequestDialogModel {
     kSelectAccount,
     kSelectSingleAccount,
 
-    // TODO(crbug.com/1459273): Remove after new passkey selection UI launches.
     kPreSelectAccount,
+
+    // TODO(crbug.com/1490293): Merge with kSelectPriorityMechanism.
     kPreSelectSingleAccount,
 
-    // kSelectPriorityPasskey lets the user confirm a single "priority"
+    // kSelectPriorityMechanism lets the user confirm a single "priority"
     // mechanism.
     kSelectPriorityMechanism,
 
@@ -255,7 +260,7 @@ class AuthenticatorRequestDialogModel {
   AuthenticatorRequestDialogModel& operator=(
       const AuthenticatorRequestDialogModel&) = delete;
 
-  virtual ~AuthenticatorRequestDialogModel();
+  ~AuthenticatorRequestDialogModel() override;
 
   Step current_step() const { return current_step_; }
 
@@ -330,6 +335,10 @@ class AuthenticatorRequestDialogModel {
   // actives the platform authenticator of the given type.
   void HideDialogAndDispatchToPlatformAuthenticator(
       absl::optional<device::AuthenticatorType> type = absl::nullopt);
+
+  // Called when the transport availability info changes.
+  void OnTransportAvailabilityChanged(
+      TransportAvailabilityInfo transport_availability);
 
   // Called when an attempt to contact a phone failed.
   void OnPhoneContactFailed(const std::string& name);
@@ -538,8 +547,10 @@ class AuthenticatorRequestDialogModel {
     return ephemeral_state_.priority_mechanism_index_;
   }
 
-  // Contacts the "priority" paired phone. This is only valid to call when there
-  // is a single phone paired.
+  // Contacts the "priority" paired phone. This is the phone from sync if there
+  // are a priori discovered GPM passkeys, or the first phone on the list
+  // otherwise.
+  // Only valid to call if |GetPriorityPhoneName()| returns a value.
   void ContactPriorityPhone();
 
   // ContactPhoneForTesting triggers a contact for a phone with the given name.
@@ -547,10 +558,10 @@ class AuthenticatorRequestDialogModel {
   // user-visible mechanisms and use the callbacks therein.
   void ContactPhoneForTesting(const std::string& name);
 
-  // Returns the name of the phone from sync that will be dispatched to when a
-  // user selects a Mechanism::Credential corresponding to a phone credential,
-  // or absl::nullopt if there isn't one.
-  virtual absl::optional<std::u16string> GetPrioritySyncedPhoneName() const;
+  // Returns the name of the "priority" paired phone. This is the phone from
+  // sync if there are a priori discovered GPM passkeys, or the first phone on
+  // the list otherwise.
+  virtual absl::optional<std::u16string> GetPriorityPhoneName() const;
 
   // StartTransportFlowForTesting moves the UI to focus on the given transport.
   // UI should use |mechanisms()| to enumerate the user-visible mechanisms and
@@ -730,10 +741,6 @@ class AuthenticatorRequestDialogModel {
 
   void StartICloudKeychain();
 
-  // Contacts the "priority" paired phone from sync. At least one sync phone
-  // must be available to call this.
-  void ContactPrioritySyncedPhone();
-
   // Contacts a paired phone. The phone is specified by name.
   void ContactPhone(const std::string& name);
   void ContactPhoneAfterOffTheRecordInterstitial(std::string name);
@@ -747,7 +754,7 @@ class AuthenticatorRequestDialogModel {
 
   // Returns the index (into `paired_phones_`) of a phone that has been paired
   // through Chrome Sync, or absl::nullopt if there isn't one.
-  absl::optional<size_t> GetPrioritySyncedPhoneIndex() const;
+  absl::optional<size_t> GetIndexOfMostRecentlyUsedPhoneFromSync() const;
 
   // SortRecognizedCredentials sorts
   // `transport_availability_.recognized_credentials` into username order.
@@ -766,6 +773,10 @@ class AuthenticatorRequestDialogModel {
 
   std::vector<device::DiscoverableCredentialMetadata> RecognizedCredentialsFor(
       device::AuthenticatorType source);
+
+  // webauthn::PasskeyModel::Observer:
+  void OnPasskeysChanged() override;
+  void OnPasskeyModelShuttingDown() override;
 
   // Identifier for the RenderFrameHost of the frame that initiated the current
   // request.
@@ -852,6 +863,10 @@ class AuthenticatorRequestDialogModel {
   // QR-based pairing. The entries are sorted by name.
   std::vector<std::unique_ptr<device::cablev2::Pairing>> paired_phones_;
 
+  // priority_phone_index_ contains an index in `paired_phones_` for the phone
+  // that should be dispatched to by default, if any.
+  absl::optional<size_t> priority_phone_index_;
+
   // paired_phones_contacted_ is the same length as |paired_phones_| and
   // contains true whenever the corresponding phone as already been contacted.
   std::vector<bool> paired_phones_contacted_;
@@ -914,6 +929,10 @@ class AuthenticatorRequestDialogModel {
   // present (e.g. a Mac Mini) or because it's a laptop in clamshell mode.
   absl::optional<bool> local_biometrics_override_for_testing_;
 #endif
+
+  base::ScopedObservation<webauthn::PasskeyModel,
+                          webauthn::PasskeyModel::Observer>
+      passkey_model_observation_{this};
 
   base::WeakPtrFactory<AuthenticatorRequestDialogModel> weak_factory_{this};
 };

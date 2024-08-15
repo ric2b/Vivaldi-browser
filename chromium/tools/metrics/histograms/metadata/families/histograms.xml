@@ -283,11 +283,15 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyLinkUser.ClassifyUrlRequest.Latency" units="ms"
-    expires_after="2024-01-21">
+    expires_after="2024-03-24">
   <owner>tju@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
   <summary>
-    Tracks the latency in calls to Kids Management API::ClassifyURL.
+    Tracks the latency in calls to Kids Management API::ClassifyURL. It includes
+    both the actual RPC call and the time spent in requesting access token.
+
+    Googlers only: See go/chrome-kids-backend-monitoring for backend-related
+    metrics.
   </summary>
 </histogram>
 
@@ -302,12 +306,41 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyLinkUser.ClassifyUrlRequest.Status"
-    enum="SupervisedUserProtoFetcherStatus" expires_after="2024-01-21">
+    enum="SupervisedUserProtoFetcherStatus" expires_after="2024-03-24">
   <owner>tju@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
   <summary>
     The status of the fetch in calls to Kids Management API::ClassifyURL.
   </summary>
+</histogram>
+
+<histogram
+    name="FamilyLinkUser.ClassifyUrlRequest.{AuthErrorState}.AccessTokenLatency"
+    units="ms" expires_after="2023-11-01">
+  <owner>tju@google.com</owner>
+  <owner>chrome-kids-eng@google.com</owner>
+  <summary>
+    Latency of the access token fetching before making calls to Kids Management
+    API::ClassifyURL. Currenlty only successful authentication is counted.
+  </summary>
+  <token key="AuthErrorState">
+    <variant name="NONE"/>
+  </token>
+</histogram>
+
+<histogram
+    name="FamilyLinkUser.ClassifyUrlRequest.{HttpStatusOrNetError}.ApiLatency"
+    units="ms" expires_after="2023-11-01">
+  <owner>tju@google.com</owner>
+  <owner>chrome-kids-eng@google.com</owner>
+  <summary>
+    Latency of the calls in calls to Kids Management API::ClassifyURL that
+    resulted with &quot;{HttpStatusOrNetError}&quot; status. Currently only
+    succesful communication with API is recorded.
+  </summary>
+  <token key="HttpStatusOrNetError">
+    <variant name="HTTP_OK"/>
+  </token>
 </histogram>
 
 <histogram name="FamilyLinkUser.ClassifyUrlRequest.{Status}.Latency" units="ms"
@@ -316,7 +349,8 @@ chromium-metrics-reviews@google.com.
   <owner>chrome-kids-eng@google.com</owner>
   <summary>
     Latency of the calls in calls to Kids Management API::ClassifyURL that
-    resulted with &quot;{Status}&quot; status.
+    resulted with &quot;{Status}&quot; status. It includes both the actual RPC
+    call and the time spent in requesting access token.
   </summary>
   <token key="Status">
     <variant name="AuthError"/>
@@ -348,6 +382,9 @@ chromium-metrics-reviews@google.com.
   <owner>chrome-kids-eng@google.com</owner>
   <summary>
     Tracks the latency in calls to Kids Management API::CreatePermissionRequest.
+    It includes both the actual RPC call and the time spent in requesting access
+    token. Googlers only: See go/chrome-kids-backend-monitoring for
+    backend-related metrics.
   </summary>
 </histogram>
 
@@ -370,6 +407,8 @@ chromium-metrics-reviews@google.com.
   <summary>
     Latency of the calls in calls to Kids Management
     API::CreatePermissionRequest that resulted with &quot;{Status}&quot; status.
+    It includes both the actual RPC call and the time spent in requesting access
+    token.
   </summary>
   <token key="Status">
     <variant name="AuthError"/>
@@ -511,6 +550,17 @@ chromium-metrics-reviews@google.com.
     Records whether the given url has a match in both the allowlist and the
     block list which means a conflict. This metric is recorded if the given url
     matches at least one manual rule.
+  </summary>
+</histogram>
+
+<histogram name="FamilyUser.ManagedSiteList.SubdomainConflictType"
+    enum="FamilyLinkFilteringSubdomainConflictType" expires_after="2024-02-11">
+  <owner>anthie@google.com</owner>
+  <owner>chrome-kids-eng@google.com</owner>
+  <owner>cros-families-eng@google.com</owner>
+  <summary>
+    Records the type of the conflict during url filtering when a match exists in
+    both the allowlist and the blocklist.
   </summary>
 </histogram>
 
@@ -694,7 +744,7 @@ chromium-metrics-reviews@google.com.
     The counts of results from supervised user URL filtering. Each entry
     includes the outcome of the filter (i.e. allowed, blocked, or unknown) and
     the page transition type (how the user got there, e.g. typed URL, clicked
-    link).
+    link). For a more general metric see ManagedUsers.TopLevelFilteringResult
   </summary>
 </histogram>
 
@@ -746,13 +796,15 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="ManagedUsers.SafeSitesDelay" units="ms"
-    expires_after="2024-02-11">
-  <owner>agawronska@chromium.org</owner>
-  <owner>cros-families-eng@google.com</owner>
+<histogram name="ManagedUsers.TopLevelFilteringResult"
+    enum="SupervisedUserFilterTopLevelResult" expires_after="2024-09-25">
+  <owner>fernandex@chromium.org</owner>
+  <owner>chrome-kids-eng@google.com</owner>
   <summary>
-    The extra page load delays introduced by network requests due to the
-    supervised user SafeSites feature, measured once per page load.
+    Records counts of results from supervised user URL filtering. Each entry
+    includes the outcome of the filter (allowed or blocked). If outcome is
+    blocked reason for the block (e.g. SafeSites, Blocklist) is also recorded.
+    For more granular information see ManagedUsers.FilteringResult.
   </summary>
 </histogram>
 

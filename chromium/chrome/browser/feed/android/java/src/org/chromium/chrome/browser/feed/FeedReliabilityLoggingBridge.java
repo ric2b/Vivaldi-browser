@@ -6,9 +6,10 @@ package org.chromium.chrome.browser.feed;
 
 import androidx.annotation.Nullable;
 
-import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.annotations.JNINamespace;
-import org.chromium.base.annotations.NativeMethods;
+import org.jni_zero.CalledByNative;
+import org.jni_zero.JNINamespace;
+import org.jni_zero.NativeMethods;
+
 import org.chromium.chrome.browser.xsurface.feed.FeedLaunchReliabilityLogger;
 import org.chromium.chrome.browser.xsurface.feed.FeedUserInteractionReliabilityLogger;
 import org.chromium.chrome.browser.xsurface.feed.FeedUserInteractionReliabilityLogger.PaginationResult;
@@ -25,7 +26,7 @@ public class FeedReliabilityLoggingBridge {
     private boolean mRenderingStarted;
     private DiscoverLaunchResult mLaunchResult;
 
-    public static org.chromium.base.JniStaticTestMocker<FeedReliabilityLoggingBridge.Natives>
+    public static org.jni_zero.JniStaticTestMocker<FeedReliabilityLoggingBridge.Natives>
     getTestHooksForTesting() {
         return FeedReliabilityLoggingBridgeJni.TEST_HOOKS;
     }

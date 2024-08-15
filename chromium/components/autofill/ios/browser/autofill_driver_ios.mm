@@ -6,6 +6,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "components/autofill/core/browser/form_structure.h"
+#include "components/autofill/core/common/mojom/autofill_types.mojom-shared.h"
 #include "components/autofill/ios/browser/autofill_driver_ios_bridge.h"
 #include "components/autofill/ios/browser/autofill_driver_ios_factory.h"
 #import "components/autofill/ios/browser/autofill_java_script_feature.h"
@@ -87,11 +88,16 @@ bool AutofillDriverIOS::RendererIsAvailable() {
   return true;
 }
 
-std::vector<FieldGlobalId> AutofillDriverIOS::FillOrPreviewForm(
-    mojom::AutofillActionPersistence action_persistence,
+std::vector<FieldGlobalId> AutofillDriverIOS::ApplyFormAction(
+    mojom::ActionType action_type,
+    mojom::ActionPersistence action_persistence,
     const FormData& data,
     const url::Origin& triggered_origin,
     const base::flat_map<FieldGlobalId, ServerFieldType>& field_type_map) {
+  // TODO(crbug.com/1441410) Add Undo support on iOS.
+  if (action_type == mojom::ActionType::kUndo) {
+    return {};
+  }
   web::WebFrame* frame = web_frame();
   if (frame) {
     [bridge_ fillFormData:data inFrame:frame];
@@ -102,11 +108,34 @@ std::vector<FieldGlobalId> AutofillDriverIOS::FillOrPreviewForm(
   return safe_fields;
 }
 
-void AutofillDriverIOS::UndoAutofill(
-    mojom::AutofillActionPersistence action_persistence,
-    const FormData& data,
-    const url::Origin& triggered_origin,
-    const base::flat_map<FieldGlobalId, ServerFieldType>& field_type_map) {}
+void AutofillDriverIOS::ApplyFieldAction(
+    mojom::ActionPersistence action_persistence,
+    mojom::TextReplacement text_replacement,
+    const FieldGlobalId& field,
+    const std::u16string& value) {
+  // For now, only support filling.
+  switch (action_persistence) {
+    case mojom::ActionPersistence::kFill: {
+      web::WebFrame* frame = web_frame();
+      if (frame) {
+        [bridge_ fillSpecificFormField:field.renderer_id
+                             withValue:value
+                               inFrame:frame];
+      }
+      break;
+    }
+    case mojom::ActionPersistence::kPreview:
+      return;
+  }
+}
+
+void AutofillDriverIOS::ExtractForm(
+    FormGlobalId form,
+    base::OnceCallback<void(AutofillDriver*, const std::optional<FormData>&)>
+        response_callback) {
+  // TODO(crbug.com/1490670): Implement ExtractForm().
+  NOTIMPLEMENTED();
+}
 
 void AutofillDriverIOS::HandleParsedForms(const std::vector<FormData>& forms) {
   const std::map<FormGlobalId, std::unique_ptr<FormStructure>>& map =
@@ -143,7 +172,7 @@ void AutofillDriverIOS::RendererShouldAcceptDataListSuggestion(
 void AutofillDriverIOS::SendFieldsEligibleForManualFillingToRenderer(
     const std::vector<FieldGlobalId>& fields) {}
 
-void AutofillDriverIOS::TriggerFormExtraction() {
+void AutofillDriverIOS::TriggerFormExtractionInDriverFrame() {
   NOTIMPLEMENTED();  // TODO(crbug.com/1441921) implement.
 }
 
@@ -171,14 +200,6 @@ void AutofillDriverIOS::RendererShouldTriggerSuggestions(
   // manual fallbacks on Desktop. It is not implemented on iOS.
   NOTIMPLEMENTED();
 }
-
-void AutofillDriverIOS::RendererShouldFillFieldWithValue(
-    const FieldGlobalId& field,
-    const std::u16string& value) {}
-
-void AutofillDriverIOS::RendererShouldPreviewFieldWithValue(
-    const FieldGlobalId& field,
-    const std::u16string& value) {}
 
 void AutofillDriverIOS::RendererShouldSetSuggestionAvailability(
     const FieldGlobalId& field,

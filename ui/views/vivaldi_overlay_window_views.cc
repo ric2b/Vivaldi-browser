@@ -221,7 +221,7 @@ constexpr char kPipHeight[] = "height";
 // OverlayWindowViews implementation
 gfx::Rect VideoOverlayWindowViews::GetStoredBoundsFromPrefs() {
   Browser* browser =
-      chrome::FindBrowserWithWebContents(GetController()->GetWebContents());
+      chrome::FindBrowserWithTab(GetController()->GetWebContents());
   if (browser) {
     PrefService* prefs = browser->profile()->GetPrefs();
     if (prefs->FindPreference(vivaldiprefs::kVivaldiPIPPlacement)) {
@@ -253,7 +253,7 @@ void VideoOverlayWindowViews::UpdateStoredBounds() {
     return;
   }
   Browser* browser =
-      chrome::FindBrowserWithWebContents(GetController()->GetWebContents());
+      chrome::FindBrowserWithTab(GetController()->GetWebContents());
   if (browser) {
     PrefService* prefs = browser->profile()->GetPrefs();
     ScopedDictPrefUpdate update(prefs, vivaldiprefs::kVivaldiPIPPlacement);

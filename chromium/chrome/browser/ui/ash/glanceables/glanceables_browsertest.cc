@@ -5,15 +5,12 @@
 #include <memory>
 #include <vector>
 
+#include "ash/api/tasks/fake_tasks_client.h"
 #include "ash/constants/ash_features.h"
-#include "ash/constants/ash_switches.h"
 #include "ash/glanceables/classroom/fake_glanceables_classroom_client.h"
-#include "ash/glanceables/classroom/glanceables_classroom_client.h"
 #include "ash/glanceables/classroom/glanceables_classroom_item_view.h"
 #include "ash/glanceables/common/glanceables_view_id.h"
 #include "ash/glanceables/glanceables_controller.h"
-#include "ash/glanceables/glanceables_v2_controller.h"
-#include "ash/glanceables/tasks/fake_glanceables_tasks_client.h"
 #include "ash/glanceables/tasks/glanceables_task_view.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
@@ -29,28 +26,20 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/types/cxx23_to_underlying.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
-#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/profiles/profile_test_util.h"
-#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "chrome/test/base/testing_profile.h"
 #include "components/account_id/account_id.h"
 #include "components/session_manager/core/session_manager.h"
-#include "components/signin/public/base/consent_level.h"
-#include "components/signin/public/identity_manager/identity_manager.h"
-#include "components/signin/public/identity_manager/identity_test_utils.h"
-#include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/test/browser_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/events/test/event_generator.h"
-#include "ui/views/controls/menu/menu_item_view.h"
+#include "ui/views/controls/label.h"
+#include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/view_utils.h"
-#include "url/gurl.h"
 
 namespace ash {
 namespace {
@@ -103,106 +92,28 @@ views::Label* FindMenuItemLabelWithString(const std::u16string& label) {
 
 }  // namespace
 
-// Tests for the glanceables feature, which adds a "welcome back" screen on
-// some logins.
 class GlanceablesBrowserTest : public InProcessBrowserTest {
  public:
-  void SetUpDefaultCommandLine(base::CommandLine* command_line) override {
-    InProcessBrowserTest::SetUpDefaultCommandLine(command_line);
-
-    // The test harness adds --no-first-run. Remove it so glanceables show up.
-    command_line->RemoveSwitch(::switches::kNoFirstRun);
-
-    // Don't open a browser window, because doing so would hide glanceables.
-    // Note that InProcessBrowserTest::browser() will be null.
-    command_line->AppendSwitch(::switches::kNoStartupWindow);
-
-    command_line->AppendSwitch(switches::kLoginManager);
-    command_line->AppendSwitchASCII(switches::kLoginProfile,
-                                    TestingProfile::kTestUserProfileDir);
-    command_line->AppendSwitch(switches::kAllowFailedPolicyFetchForTest);
-  }
-
-  void CreateAndStartUserSession() {
-    const AccountId account_id =
-        AccountId::FromUserEmailGaiaId(kTestUserName, kTestUserGaiaId);
-    auto* session_manager = session_manager::SessionManager::Get();
-    session_manager->CreateSession(account_id, kTestUserName, false);
-
-    profile_ = &profiles::testing::CreateProfileSync(
-        g_browser_process->profile_manager(),
-        ProfileHelper::GetProfilePathByUserIdHash(
-            user_manager::UserManager::Get()
-                ->FindUser(account_id)
-                ->username_hash()));
-
-    session_manager->NotifyUserProfileLoaded(account_id);
-    session_manager->SessionStarted();
-  }
-
   GlanceablesController* glanceables_controller() {
     return Shell::Get()->glanceables_controller();
-  }
-
-  signin::IdentityManager* identity_manager() {
-    return IdentityManagerFactory::GetForProfileIfExists(profile_);
-  }
-
- protected:
-  base::test::ScopedFeatureList features_{features::kGlanceables};
-  raw_ptr<Profile, DanglingUntriaged | ExperimentalAsh> profile_ = nullptr;
-};
-
-IN_PROC_BROWSER_TEST_F(GlanceablesBrowserTest, ShowsAndHide) {
-  // Not showing on the login screen.
-  EXPECT_FALSE(glanceables_controller()->IsShowing());
-
-  CreateAndStartUserSession();
-
-  // Not showing right after login if there's no refresh token yet.
-  EXPECT_FALSE(glanceables_controller()->IsShowing());
-
-  // Makes the primary account available, generates a refresh token and runs
-  // `IdentityManager` callbacks for signin success.
-  signin::MakePrimaryAccountAvailable(identity_manager(), kTestUserName,
-                                      signin::ConsentLevel::kSignin);
-
-  // Showing once the refresh token is loaded.
-  EXPECT_TRUE(glanceables_controller()->IsShowing());
-
-  // Open a browser window.
-  CreateBrowser(ProfileManager::GetLastUsedProfile());
-
-  // Glanceables should close because a window opened.
-  EXPECT_FALSE(glanceables_controller()->IsShowing());
-}
-
-class GlanceablesV2BrowserTest : public InProcessBrowserTest {
- public:
-  GlanceablesV2Controller* glanceables_controller() {
-    return Shell::Get()->glanceables_v2_controller();
   }
 
   void SetUpOnMainThread() override {
     InProcessBrowserTest::SetUpOnMainThread();
 
-    base::AddFeatureIdTagToTestResult(
-        "screenplay-ace3b729-5402-40cd-b2bf-d488bc95b7e2");
-
     base::Time date;
     ASSERT_TRUE(base::Time::FromString(kDueDate, &date));
     fake_glanceables_tasks_client_ =
-        std::make_unique<FakeGlanceablesTasksClient>(date);
+        std::make_unique<api::FakeTasksClient>(date);
     fake_glanceables_classroom_client_ =
-        std::make_unique<FakeGlanceablesClassroomClient>(
-            glanceables_controller()->GetClassroomClient());
+        std::make_unique<FakeGlanceablesClassroomClient>();
 
-    Shell::Get()->glanceables_v2_controller()->UpdateClientsRegistration(
+    Shell::Get()->glanceables_controller()->UpdateClientsRegistration(
         account_id_,
-        GlanceablesV2Controller::ClientsRegistration{
+        GlanceablesController::ClientsRegistration{
             .classroom_client = fake_glanceables_classroom_client_.get(),
             .tasks_client = fake_glanceables_tasks_client_.get()});
-    Shell::Get()->glanceables_v2_controller()->OnActiveUserSessionChanged(
+    Shell::Get()->glanceables_controller()->OnActiveUserSessionChanged(
         account_id_);
 
     date_tray_ = StatusAreaWidgetTestHelper::GetStatusAreaWidget()->date_tray();
@@ -220,11 +131,11 @@ class GlanceablesV2BrowserTest : public InProcessBrowserTest {
     return date_tray_->bubble_.get();
   }
 
-  FakeGlanceablesTasksClient* fake_glanceables_tasks_client() const {
+  api::FakeTasksClient* fake_glanceables_tasks_client() const {
     return fake_glanceables_tasks_client_.get();
   }
 
-  TasksBubbleView* GetTasksView() const {
+  views::View* GetTasksView() const {
     return GetGlanceableTrayBubble()->GetTasksView();
   }
 
@@ -305,14 +216,22 @@ class GlanceablesV2BrowserTest : public InProcessBrowserTest {
   std::unique_ptr<ui::test::EventGenerator> event_generator_;
   AccountId account_id_ =
       AccountId::FromUserEmailGaiaId(kTestUserName, kTestUserGaiaId);
-  std::unique_ptr<FakeGlanceablesTasksClient> fake_glanceables_tasks_client_;
+  std::unique_ptr<api::FakeTasksClient> fake_glanceables_tasks_client_;
   std::unique_ptr<FakeGlanceablesClassroomClient>
       fake_glanceables_classroom_client_;
 
   base::test::ScopedFeatureList features_{features::kGlanceablesV2};
 };
 
-IN_PROC_BROWSER_TEST_F(GlanceablesV2BrowserTest, OpenStudentCourseItemURL) {
+class GlanceablesMvpBrowserTest : public GlanceablesBrowserTest {
+  void SetUpOnMainThread() override {
+    GlanceablesBrowserTest::SetUpOnMainThread();
+    base::AddFeatureIdTagToTestResult(
+        "screenplay-ace3b729-5402-40cd-b2bf-d488bc95b7e2");
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(GlanceablesMvpBrowserTest, OpenStudentCourseItemURL) {
   ASSERT_TRUE(glanceables_controller()->GetClassroomClient());
 
   // Click the date tray to show the glanceable bubbles.
@@ -343,7 +262,7 @@ IN_PROC_BROWSER_TEST_F(GlanceablesV2BrowserTest, OpenStudentCourseItemURL) {
       "https://classroom.google.com/c/test/a/test_course_id_0/details");
 }
 
-IN_PROC_BROWSER_TEST_F(GlanceablesV2BrowserTest, ClickSeeAllStudentButton) {
+IN_PROC_BROWSER_TEST_F(GlanceablesMvpBrowserTest, ClickSeeAllStudentButton) {
   ASSERT_TRUE(glanceables_controller()->GetClassroomClient());
 
   // Click the date tray to show the glanceable bubbles.
@@ -374,7 +293,7 @@ IN_PROC_BROWSER_TEST_F(GlanceablesV2BrowserTest, ClickSeeAllStudentButton) {
       "https://classroom.google.com/u/0/a/not-turned-in/all");
 }
 
-IN_PROC_BROWSER_TEST_F(GlanceablesV2BrowserTest,
+IN_PROC_BROWSER_TEST_F(GlanceablesMvpBrowserTest,
                        ViewAndSwitchStudentClassroomLists) {
   ASSERT_TRUE(glanceables_controller()->GetClassroomClient());
 
@@ -429,7 +348,7 @@ IN_PROC_BROWSER_TEST_F(GlanceablesV2BrowserTest,
                                       "No Due Date Course Work 2"}));
 }
 
-IN_PROC_BROWSER_TEST_F(GlanceablesV2BrowserTest, ViewAndSwitchTaskLists) {
+IN_PROC_BROWSER_TEST_F(GlanceablesMvpBrowserTest, ViewAndSwitchTaskLists) {
   ASSERT_TRUE(glanceables_controller()->GetTasksClient());
   EXPECT_FALSE(GetGlanceableTrayBubble());
 
@@ -472,7 +391,7 @@ IN_PROC_BROWSER_TEST_F(GlanceablesV2BrowserTest, ViewAndSwitchTaskLists) {
                                       "Task List 2 Item 3 Title"}));
 }
 
-IN_PROC_BROWSER_TEST_F(GlanceablesV2BrowserTest, ClickSeeAllTasksButton) {
+IN_PROC_BROWSER_TEST_F(GlanceablesMvpBrowserTest, ClickSeeAllTasksButton) {
   ASSERT_TRUE(glanceables_controller()->GetTasksClient());
   EXPECT_FALSE(GetGlanceableTrayBubble());
 
@@ -505,7 +424,7 @@ IN_PROC_BROWSER_TEST_F(GlanceablesV2BrowserTest, ClickSeeAllTasksButton) {
       "https://calendar.google.com/calendar/u/0/r/week?opentasks=1");
 }
 
-IN_PROC_BROWSER_TEST_F(GlanceablesV2BrowserTest, CheckOffTaskItems) {
+IN_PROC_BROWSER_TEST_F(GlanceablesMvpBrowserTest, CheckOffTaskItems) {
   ASSERT_TRUE(glanceables_controller()->GetTasksClient());
   EXPECT_FALSE(GetGlanceableTrayBubble());
 
@@ -550,6 +469,90 @@ IN_PROC_BROWSER_TEST_F(GlanceablesV2BrowserTest, CheckOffTaskItems) {
   GetEventGenerator()->ClickLeftButton();
   EXPECT_TRUE(GetTaskItemView(/*item_index=*/0)->GetCompletedForTest());
   EXPECT_TRUE(GetTaskItemView(/*item_index=*/1)->GetCompletedForTest());
+}
+
+class GlanceablesWithAddEditBrowserTest : public GlanceablesBrowserTest {
+ private:
+  base::test::ScopedFeatureList features_{
+      features::kGlanceablesTimeManagementStableLaunch};
+};
+
+IN_PROC_BROWSER_TEST_F(GlanceablesWithAddEditBrowserTest, EditTaskItem) {
+  ASSERT_TRUE(glanceables_controller()->GetTasksClient());
+  EXPECT_FALSE(GetGlanceableTrayBubble());
+
+  // Click the date tray to show the glanceable bubbles.
+  GetEventGenerator()->MoveMouseTo(
+      GetDateTray()->GetBoundsInScreen().CenterPoint());
+  GetEventGenerator()->ClickLeftButton();
+
+  EXPECT_TRUE(GetGlanceableTrayBubble());
+  EXPECT_TRUE(GetTasksView());
+
+  // Check that the tasks glanceable is completely shown on the primary screen.
+  GetTasksView()->ScrollViewToVisible();
+  EXPECT_TRUE(
+      Shell::Get()->GetPrimaryRootWindow()->GetBoundsInScreen().Contains(
+          GetTasksView()->GetBoundsInScreen()));
+
+  const auto* const task_view = GetTaskItemView(0);
+  ASSERT_TRUE(task_view);
+
+  {
+    const auto* const title_label =
+        views::AsViewClass<views::Label>(task_view->GetViewByID(
+            base::to_underlying(GlanceablesViewId::kTaskItemTitleLabel)));
+    const auto* const title_text_field =
+        views::AsViewClass<views::Textfield>(task_view->GetViewByID(
+            base::to_underlying(GlanceablesViewId::kTaskItemTitleTextField)));
+
+    // Check that the view is in "view" mode (the label is displayed).
+    ASSERT_TRUE(title_label);
+    ASSERT_FALSE(title_text_field);
+    EXPECT_EQ(title_label->GetText(), u"Task List 1 Item 1 Title");
+
+    // Click the label to switch to "edit" mode.
+    GetEventGenerator()->MoveMouseTo(
+        title_label->GetBoundsInScreen().CenterPoint());
+    GetEventGenerator()->ClickLeftButton();
+  }
+
+  {
+    const auto* const title_label =
+        views::AsViewClass<views::Label>(task_view->GetViewByID(
+            base::to_underlying(GlanceablesViewId::kTaskItemTitleLabel)));
+    const auto* const title_text_field =
+        views::AsViewClass<views::Textfield>(task_view->GetViewByID(
+            base::to_underlying(GlanceablesViewId::kTaskItemTitleTextField)));
+
+    // Check that the view is in "edit" mode (the text field is displayed).
+    ASSERT_FALSE(title_label);
+    ASSERT_TRUE(title_text_field);
+    EXPECT_EQ(title_text_field->GetText(), u"Task List 1 Item 1 Title");
+
+    // Append " upd" text.
+    GetEventGenerator()->PressAndReleaseKey(ui::VKEY_SPACE);
+    GetEventGenerator()->PressAndReleaseKey(ui::VKEY_U);
+    GetEventGenerator()->PressAndReleaseKey(ui::VKEY_P);
+    GetEventGenerator()->PressAndReleaseKey(ui::VKEY_D);
+
+    // Finish editing by pressing Esc key.
+    GetEventGenerator()->PressAndReleaseKey(ui::VKEY_ESCAPE);
+  }
+
+  {
+    const auto* const title_label =
+        views::AsViewClass<views::Label>(task_view->GetViewByID(
+            base::to_underlying(GlanceablesViewId::kTaskItemTitleLabel)));
+    const auto* const title_text_field =
+        views::AsViewClass<views::Textfield>(task_view->GetViewByID(
+            base::to_underlying(GlanceablesViewId::kTaskItemTitleTextField)));
+
+    // Check that the view is in "view" mode with the updated label
+    ASSERT_TRUE(title_label);
+    ASSERT_FALSE(title_text_field);
+    EXPECT_EQ(title_label->GetText(), u"Task List 1 Item 1 Title upd");
+  }
 }
 
 }  // namespace ash

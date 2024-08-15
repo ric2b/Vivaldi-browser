@@ -16,6 +16,7 @@
 <translation id="1729654308190250600">Kérjük, ne hagyja üresen az e-mail-cím mezőjét.</translation>
 <translation id="1758486001363313524">Más...</translation>
 <translation id="1787192514241997742">összes idő: <ph name="REMAINING_TIME" /></translation>
+<translation id="1800494066469288780">Kamerahasználat engedélyezése</translation>
 <translation id="1822429046913737220">de./du.</translation>
 <translation id="1832974991323546415">lejátszás távoli eszközön</translation>
 <translation id="1921819250265091946">nn</translation>
@@ -45,11 +46,13 @@
 <translation id="2761667185364618470">Kérjük, jelölje be ezt a jelölőnégyzetet, ha tovább kíván haladni.</translation>
 <translation id="2908441821576996758">Kérjük, adjon meg egy vesszőkkel elválasztott e-mail címlistát.</translation>
 <translation id="3049748772180311791"><ph name="QUANTITY" /> MB</translation>
+<translation id="3053226512517284904">audionarrációk menüjének megjelenítése</translation>
 <translation id="3075154866155599887">Kérjük, adjon meg érvényes értéket. A mező hiányos, vagy érvénytelen dátum van megadva.</translation>
 <translation id="310520048233152454">Adjon meg egy URL-t.</translation>
 <translation id="3220661731597678625">aktuális lépés</translation>
 <translation id="3321030238473337787">Lejátszási sebesség</translation>
 <translation id="3329013043687509092">Telítettség</translation>
+<translation id="3377518164566272702">Mikrofon- és kamerahasználat engedélyezése</translation>
 <translation id="3450233048674729344">Az érték legyen kisebb vagy egyenlő, mint <ph name="MAXIMUM" />.</translation>
 <translation id="3732799496749320381">hh</translation>
 <translation id="3754210790023674521">Kilépés a kép a képben módból</translation>
@@ -65,6 +68,7 @@
 <translation id="4718048029184481307">Lejátszás kép a képben módban</translation>
 <translation id="4748357248530471599">képernyőkivágás váltása teljes képernyőn</translation>
 <translation id="4763480195061959176">video</translation>
+<translation id="4792862212177489858">Hely megosztása</translation>
 <translation id="4812940957355064477">Kérjük, adjon meg egy számot.</translation>
 <translation id="4912200001568447310">aktuális elem</translation>
 <translation id="4915360478455618802">Időválasztó megjelenítése</translation>
@@ -74,6 +78,7 @@
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> kiválasztva</translation>
 <translation id="4992066212339426712">Némítás feloldása</translation>
 <translation id="49969490063480558">Kérjük, adja meg a „<ph name="ATSIGN" />” utáni részt is. A(z) „<ph name="INVALIDADDRESS" />” cím nem teljes.</translation>
+<translation id="5037575921016181960">Erős jelszó</translation>
 <translation id="5090250355906949916">a videóidő vezérlője</translation>
 <translation id="509897012892853729">Kék csatorna</translation>
 <translation id="5117590920725113268">A következő hónap megjelenítése</translation>
@@ -178,6 +183,7 @@
 <translation id="9132465097189459683">Más...</translation>
 <translation id="9155987714137265666"><ph name="WEEK" />. hét (<ph name="WEEK_START_DATE" />-i dátummal kezdődik)</translation>
 <translation id="916607977885256133">Kép a képben</translation>
+<translation id="918430632320614861">Mikrofonhasználat engedélyezése</translation>
 <translation id="945780513535800434">Részben ellenőrzött</translation>
 <translation id="954003015749068518">belépés a kép a képben funkcióba</translation>
 </translationbundle>

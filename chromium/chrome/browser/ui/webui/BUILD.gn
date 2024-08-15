@@ -17,6 +17,7 @@ source_set("configs") {
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
   deps = [
+    "//chrome/browser/ui:ui",
     "//components/lens:buildflags",
     "//content/public/browser",
     "//printing/buildflags",
@@ -34,6 +35,7 @@ source_set("configs") {
       "//build:branding_buildflags",
       "//chrome/browser/companion/core",
       "//chrome/browser/companion/core/mojom:mojo_bindings",
+      "//chrome/browser/ui/webui/hats:hats_ui",
     ]
   }
 
@@ -66,6 +68,7 @@ source_set("configs") {
       "//ash/webui/scanning",
       "//ash/webui/shimless_rma",
       "//ash/webui/shortcut_customization_ui",
+      "//ash/webui/status_area_internals",
       "//ash/webui/system_extensions_internals_ui",
       "//chrome/browser/ash",
       "//components/cross_device/logging",

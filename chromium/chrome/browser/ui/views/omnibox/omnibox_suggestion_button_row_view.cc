@@ -133,8 +133,14 @@ class OmniboxSuggestionRowButton : public views::MdTextButton {
     SetEnabledTextColors(color_provider->GetColor(
         selected ? kColorOmniboxResultsTextSelected : kColorOmniboxText));
     if (Cr2023ExpandedStateColorsEnabled()) {
-      ConfigureInkDropForRefresh2023(this, kColorOmniboxResultsButtonInkDrop,
-                                     kColorOmniboxResultsButtonInkDropSelected);
+      ConfigureInkDropForRefresh2023(
+          this,
+          /*hover_color_id=*/
+          selected ? kColorOmniboxResultsButtonInkDropRowSelected
+                   : kColorOmniboxResultsButtonInkDropRowHovered,
+          /*ripple_color_id=*/
+          selected ? kColorOmniboxResultsButtonInkDropSelectedRowSelected
+                   : kColorOmniboxResultsButtonInkDropSelectedRowHovered);
     } else {
       views::InkDrop::Get(this)->SetBaseColorId(
           selected ? kColorOmniboxResultsButtonInkDropSelected
@@ -190,8 +196,13 @@ OmniboxSuggestionButtonRowView::OmniboxSuggestionButtonRowView(
   int left_margin = OmniboxMatchCellView::GetTextIndent();
   // +4 for the focus bar width, which shifts the suggest text but isn't
   // included in `GetTextIndent()`.
-  if (OmniboxFieldTrial::IsCr23LayoutEnabled())
+  if (OmniboxFieldTrial::IsCr23LayoutEnabled()) {
     left_margin += 4;
+    // Do not apply left margin when action chips are inlined.
+    if (OmniboxFieldTrial::IsActionsUISimplificationEnabled()) {
+      left_margin = 0;
+    }
+  }
   int top_margin =
       OmniboxFieldTrial::IsChromeRefreshSuggestHoverFillShapeEnabled() ? 6 : 0;
   int bottom_margin =
@@ -199,11 +210,12 @@ OmniboxSuggestionButtonRowView::OmniboxSuggestionButtonRowView(
           ? 6
           : ChromeLayoutProvider::Get()->GetDistanceMetric(
                 DISTANCE_OMNIBOX_CELL_VERTICAL_PADDING);
+  const auto insets =
+      gfx::Insets::TLBR(top_margin, left_margin, bottom_margin, 0);
   SetLayoutManager(std::make_unique<views::FlexLayout>())
       ->SetCrossAxisAlignment(views::LayoutAlignment::kStart)
       .SetCollapseMargins(true)
-      .SetInteriorMargin(
-          gfx::Insets::TLBR(top_margin, left_margin, bottom_margin, 0))
+      .SetInteriorMargin(insets)
       .SetDefault(
           views::kMarginsKey,
           gfx::Insets::VH(0, ChromeLayoutProvider::Get()->GetDistanceMetric(
@@ -289,8 +301,14 @@ void OmniboxSuggestionButtonRowView::UpdateFromModel() {
     BuildViews();
   }
 
+  // Used to keep track of which OmniboxSuggestionRowButton is the first in
+  // the row, which can then be used to apply different layout/styling.
+  OmniboxSuggestionRowButton* first_button = nullptr;
+
   SetPillButtonVisibility(keyword_button_, OmniboxPopupSelection::KEYWORD_MODE);
   if (keyword_button_->GetVisible()) {
+    first_button = keyword_button_;
+
     std::u16string keyword;
     bool is_keyword_hint = false;
     match().GetKeywordUIState(
@@ -308,6 +326,10 @@ void OmniboxSuggestionButtonRowView::UpdateFromModel() {
     SetPillButtonVisibility(action_button,
                             OmniboxPopupSelection::FOCUSED_BUTTON_ACTION);
     if (action_button->GetVisible()) {
+      if (!first_button) {
+        first_button = action_button;
+      }
+
       const OmniboxAction* action =
           match().actions[action_button->selection().action_index].get();
       const auto label_strings = action->GetLabelStrings();
@@ -316,6 +338,16 @@ void OmniboxSuggestionButtonRowView::UpdateFromModel() {
       action_button->SetAccessibleName(label_strings.accessibility_hint);
       action_button->SetIcon(action->GetVectorIcon());
     }
+  }
+
+  if (OmniboxFieldTrial::IsActionsUISimplificationEnabled() && first_button) {
+    // Apply a left margin of 4px (rather than zero) in order to make room for
+    // the focus ring that gets rendered around action chips.
+    first_button->SetProperty(
+        views::kMarginsKey,
+        gfx::Insets::TLBR(0, 4, 0,
+                          ChromeLayoutProvider::Get()->GetDistanceMetric(
+                              views::DISTANCE_RELATED_BUTTON_HORIZONTAL)));
   }
 
   bool is_any_button_visible =

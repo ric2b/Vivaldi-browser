@@ -164,6 +164,7 @@ void ContentAutofillDriverFactory::RenderFrameDeleted(
   for (Observer& observer : observers_) {
     observer.OnContentAutofillDriverWillBeDeleted(*this, *driver);
   }
+
   driver_map_.erase(it);
 }
 
@@ -191,18 +192,13 @@ void ContentAutofillDriverFactory::DidFinishNavigation(
   if (!navigation_handle->HasCommitted()) {
     return;
   }
-  // TODO(crbug.com/1064709): Should we really return early?
-  if (!navigation_handle->IsInMainFrame() &&
-      !navigation_handle->HasSubframeNavigationEntryCommitted()) {
-    return;
-  }
-
   auto* driver = DriverForFrame(navigation_handle->GetRenderFrameHost());
   if (!driver) {
     return;
   }
-  if (!navigation_handle->IsInPrerenderedMainFrame()) {
-    client_->HideAutofillPopup(PopupHidingReason::kNavigation);
+  if (!navigation_handle->IsInPrerenderedMainFrame() &&
+      (navigation_handle->IsInMainFrame() ||
+       navigation_handle->HasSubframeNavigationEntryCommitted())) {
     if (client_->IsTouchToFillCreditCardSupported()) {
       client_->HideTouchToFillCreditCard();
     }
@@ -227,6 +223,7 @@ void ContentAutofillDriverFactory::DidFinishNavigation(
       navigation_handle->IsPrerenderedPageActivation()) {
     return;
   }
+
   driver->Reset();
 }
 

@@ -33,10 +33,13 @@ struct MEDIA_EXPORT VideoEncoderOutput {
   VideoEncoderOutput(VideoEncoderOutput&&);
   ~VideoEncoderOutput();
 
-  // Feel free take this buffer out and use underlying memory as is without
+  // Feel free take these buffers out and use underlying memory as is without
   // copying.
   std::unique_ptr<uint8_t[]> data;
   size_t size = 0;
+
+  std::unique_ptr<uint8_t[]> alpha_data;
+  size_t alpha_size = 0;
 
   base::TimeDelta timestamp;
   bool key_frame = false;
@@ -60,6 +63,7 @@ class MEDIA_EXPORT VideoEncoder {
   };
 
   enum class LatencyMode { Realtime, Quality };
+  enum class ContentHint { Camera, Screen };
 
   struct MEDIA_EXPORT Options {
     Options();
@@ -75,6 +79,8 @@ class MEDIA_EXPORT VideoEncoder {
     LatencyMode latency_mode = LatencyMode::Realtime;
 
     absl::optional<SVCScalabilityMode> scalability_mode;
+
+    absl::optional<ContentHint> content_hint;
 
     // Only used for H264 encoding.
     AvcOptions avc;

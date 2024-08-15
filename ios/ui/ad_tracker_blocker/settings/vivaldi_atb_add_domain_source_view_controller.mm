@@ -338,7 +338,7 @@ UIButton* ActionButton() {
 
 #pragma mark ACTIONS
 - (void)handleAddEditButtonTap {
-  NSString* inputString = [[_textFieldView getText] lowercaseString];
+  NSString* inputString = [_textFieldView getText];
   if (![_textFieldView hasText] ||
       !self.adblockManager)
     return;
@@ -382,7 +382,7 @@ UIButton* ActionButton() {
 
 /// Only available in exceptions editing mode.
 - (void)handleDeleteButtonTap {
-  NSString* domain = [[_textFieldView getText] lowercaseString];
+  NSString* domain = [_textFieldView getText];
   if (![_textFieldView hasText] ||
       !self.adblockManager ||
       ![VivaldiGlobalHelpers isValidDomain:domain])

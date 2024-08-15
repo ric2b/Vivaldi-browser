@@ -31,7 +31,7 @@ import {RouteObserverMixin} from '../route_observer_mixin.js';
 import {Route, Router, routes} from '../router.js';
 
 import {getInputDeviceSettingsProvider} from './input_device_mojo_interface_provider.js';
-import {InputDeviceSettingsProviderInterface, Mouse, MousePolicies, MouseSettings} from './input_device_settings_types.js';
+import {CustomizationRestriction, InputDeviceSettingsProviderInterface, Mouse, MousePolicies, MouseSettings} from './input_device_settings_types.js';
 import {getPrefPolicyFields, settingsAreEqual} from './input_device_settings_utils.js';
 import {getTemplate} from './per_device_mouse_subsection.html.js';
 
@@ -39,7 +39,7 @@ const SettingsPerDeviceMouseSubsectionElementBase =
     DeepLinkingMixin(RouteObserverMixin(I18nMixin(PolymerElement)));
 export class SettingsPerDeviceMouseSubsectionElement extends
     SettingsPerDeviceMouseSubsectionElementBase {
-  static get is(): string {
+  static get is() {
     return 'settings-per-device-mouse-subsection';
   }
 
@@ -108,7 +108,7 @@ export class SettingsPerDeviceMouseSubsectionElement extends
 
       scrollAccelerationValue: {
         type: Boolean,
-        value: false,
+        value: true,
       },
 
       swapPrimaryOptions: {
@@ -188,6 +188,10 @@ export class SettingsPerDeviceMouseSubsectionElement extends
         type: Boolean,
         reflectToAttribute: true,
       },
+
+      customizationRestriction: {
+        type: Object,
+      },
     };
   }
 
@@ -231,6 +235,19 @@ export class SettingsPerDeviceMouseSubsectionElement extends
   private mouseIndex: number;
   private isLastDevice: boolean;
   private isRevampWayfindingEnabled_: boolean;
+  private customizationRestriction: CustomizationRestriction;
+
+  private showCustomizeButtonRow(): boolean {
+    return (this.customizationRestriction !==
+            CustomizationRestriction.kDisallowCustomizations) &&
+        this.isPeripheralCustomizationEnabled_;
+  }
+
+  private showSwapToggleButton(): boolean {
+    return this.customizationRestriction ===
+        CustomizationRestriction.kDisallowCustomizations &&
+        this.isPeripheralCustomizationEnabled_;
+  }
 
   private updateSettingsToCurrentPrefs(): void {
     // `updateSettingsToCurrentPrefs` gets called when the `keyboard` object
@@ -244,10 +261,11 @@ export class SettingsPerDeviceMouseSubsectionElement extends
         'scrollSensitivityPref.value', this.mouse.settings.scrollSensitivity);
     this.reverseScrollValue = this.mouse.settings.reverseScrolling;
     this.scrollAccelerationValue = this.mouse.settings.scrollAcceleration;
+    this.customizationRestriction = this.mouse.customizationRestriction;
     this.isInitialized = true;
   }
 
-  private onPoliciesChanged() {
+  private onPoliciesChanged(): void {
     this.primaryRightPref = {
       ...this.primaryRightPref,
       ...getPrefPolicyFields(this.mousePolicies.swapRightPolicy),
@@ -270,7 +288,7 @@ export class SettingsPerDeviceMouseSubsectionElement extends
     this.reverseScrollValue = !this.reverseScrollValue;
   }
 
-  private onMouseScrollAccelerationRowClicked_(): void {
+  private onMouseControlledScrollingRowClicked_(): void {
     this.scrollAccelerationValue = !this.scrollAccelerationValue;
   }
 

@@ -41,11 +41,14 @@ std::vector<std::string> GetStorageTypesForFrame(bool include_cookies) {
 }
 
 std::string GetFrameContent(content::RenderFrameHost* frame) {
-  return content::EvalJs(frame, "document.body.textContent").ExtractString();
+  return content::EvalJs(frame, "document.body.textContent",
+                         content::EXECUTE_SCRIPT_NO_USER_GESTURE)
+      .ExtractString();
 }
 
 void SetStorageForFrame(content::RenderFrameHost* frame,
                         bool include_cookies,
+                        bool expected_to_be_set,
                         const base::Location& location) {
   base::flat_map<std::string, bool> actual;
   base::flat_map<std::string, bool> expected;
@@ -58,7 +61,7 @@ void SetStorageForFrame(content::RenderFrameHost* frame,
       // Third-party context WebSQL is disabled as of M97.
       expected[data_type] = false;
     } else {
-      expected[data_type] = true;
+      expected[data_type] = expected_to_be_set;
     }
   }
   EXPECT_THAT(actual, testing::UnorderedElementsAreArray(expected))
@@ -151,7 +154,9 @@ bool RequestStorageAccessForOrigin(content::RenderFrameHost* frame,
 }
 
 bool HasStorageAccessForFrame(content::RenderFrameHost* frame) {
-  return content::EvalJs(frame, kHasStorageAccess).ExtractBool();
+  return content::EvalJs(frame, kHasStorageAccess,
+                         content::EXECUTE_SCRIPT_NO_USER_GESTURE)
+      .ExtractBool();
 }
 
 std::string FetchWithCredentials(content::RenderFrameHost* frame,
@@ -162,7 +167,8 @@ std::string FetchWithCredentials(content::RenderFrameHost* frame,
       .then((result) => result.text());
     )";
   const std::string mode = cors_enabled ? "cors" : "no-cors";
-  return content::EvalJs(frame, content::JsReplace(script, url, mode))
+  return content::EvalJs(frame, content::JsReplace(script, url, mode),
+                         content::EXECUTE_SCRIPT_NO_USER_GESTURE)
       .ExtractString();
 }
 

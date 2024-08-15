@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//chrome/test/base/js2gtest.gni")
+import("//chrome/test/base/ash/js2gtest.gni")
 import("//third_party/closure_compiler/compile_js.gni")
 import("//tools/polymer/html_to_js.gni")
 
@@ -223,6 +223,7 @@ js_library("welcome_dialog") {
   deps = [
     "../../components:long_touch_detector",
     "../../components:oobe_cr_lottie",
+    "../../components:quick_start_entry_point",
     "../../components/behaviors:oobe_i18n_behavior",
     "../../components/buttons:oobe_icon_button",
     "../../components/buttons:oobe_text_button",

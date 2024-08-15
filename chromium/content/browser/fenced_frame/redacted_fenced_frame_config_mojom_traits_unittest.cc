@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <functional>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 
@@ -12,6 +13,7 @@
 #include "content/browser/fenced_frame/fenced_frame_reporter.h"
 #include "content/public/test/test_renderer_host.h"
 #include "mojo/public/cpp/test_support/test_utils.h"
+#include "net/base/schemeful_site.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -419,61 +421,56 @@ TEST_F(FencedFrameConfigMojomTraitsTest, ConfigMojomTraitsTest) {
   // Test `nested_configs`.
   {
     FencedFrameConfig test_nested_config(GenerateUrnUuid(), test_url);
-    // Returns a lambda that compares two ranges using the given `pred`.
-    const auto eq = [](const auto& pred) {
+    // Returns a lambda that compares two ranges using the given `proj`.
+    const auto cmp = [](const auto& proj) {
       return [&](const auto& a, const auto& b) {
-        return std::ranges::equal(a, b, pred);
+        return base::ranges::equal(a, b, {}, proj, proj);
       };
     };
 
     {
       std::vector<FencedFrameConfig> test_nested_configs = {test_nested_config};
-      const auto pred = [](const auto& a, const auto& b) {
-        return Project(a) == Project(b);
-      };
+      const auto eq = cmp([](const auto& elem) { return Project(elem); });
       TestProperty(&FencedFrameConfig::nested_configs_,
                    &RedactedFencedFrameConfig::nested_configs,
-                   test_nested_configs, eq(pred), eq(pred));
+                   test_nested_configs, eq, eq);
     }
 
     {
       GURL test_urn("urn:uuid:abcd");
       std::vector<std::pair<GURL, FencedFrameConfig>>
           test_nested_urn_config_pairs = {{test_urn, test_nested_config}};
-      const auto pred = [](const auto& a, const auto& b) {
-        return std::make_pair(a.first, Project(a.second)) ==
-               std::make_pair(b.first, Project(b.second));
-      };
+      const auto eq = cmp([](const auto& elem) {
+        return std::make_pair(elem.first, Project(elem.second));
+      });
       TestProperty(&FencedFrameProperties::nested_urn_config_pairs_,
                    &RedactedFencedFrameProperties::nested_urn_config_pairs,
-                   test_nested_urn_config_pairs, eq(pred), eq(pred));
+                   test_nested_urn_config_pairs, eq, eq);
     }
   }
 
   // Test `shared_storage_budget_metadata`.
   {
     SharedStorageBudgetMetadata test_shared_storage_budget_metadata = {
-        url::Origin::Create(test_url), 0.5, /*top_navigated=*/true};
-    auto eq_fn = [](const SharedStorageBudgetMetadata& a,
-                    const SharedStorageBudgetMetadata& b) {
-      return a.origin == b.origin && a.budget_to_charge == b.budget_to_charge &&
-             a.top_navigated == b.top_navigated;
+        net::SchemefulSite(test_url), 0.5, /*top_navigated=*/true};
+    const auto eq = [](const SharedStorageBudgetMetadata& a,
+                       const SharedStorageBudgetMetadata& b) {
+      return std::tie(a.site, a.budget_to_charge, a.top_navigated) ==
+             std::tie(b.site, b.budget_to_charge, b.top_navigated);
     };
     TestProperty(&FencedFrameConfig::shared_storage_budget_metadata_,
                  &RedactedFencedFrameConfig::shared_storage_budget_metadata,
-                 test_shared_storage_budget_metadata, eq_fn, eq_fn);
+                 test_shared_storage_budget_metadata, eq, eq);
 
-    auto pointer_value_eq_fn = [](const SharedStorageBudgetMetadata* a,
-                                  const SharedStorageBudgetMetadata& b) {
-      return a->origin == b.origin &&
-             a->budget_to_charge == b.budget_to_charge &&
-             a->top_navigated == b.top_navigated;
+    const auto ptr_eq = [&](const SharedStorageBudgetMetadata* a,
+                            const SharedStorageBudgetMetadata& b) {
+      return eq(*a, b);
     };
     TestProperty(&FencedFrameProperties::shared_storage_budget_metadata_,
                  &RedactedFencedFrameProperties::shared_storage_budget_metadata,
                  static_cast<raw_ptr<const SharedStorageBudgetMetadata>>(
                      &test_shared_storage_budget_metadata),
-                 pointer_value_eq_fn, eq_fn);
+                 ptr_eq, eq);
   }
 }
 
@@ -498,7 +495,8 @@ TEST_F(FencedFrameConfigMojomTraitsTest,
       /*direct_seller_is_seller=*/false,
       /*private_aggregation_manager=*/nullptr,
       /*main_frame_origin=*/url::Origin(),
-      /*winner_origin=*/url::Origin());
+      /*winner_origin=*/url::Origin(),
+      /*winner_aggregation_coordinator_origin=*/absl::nullopt);
   input_properties = properties.RedactFor(FencedFrameEntity::kEmbedder);
   EXPECT_TRUE(input_properties.has_fenced_frame_reporting());
   mojo::test::SerializeAndDeserialize<blink::mojom::FencedFrameProperties>(

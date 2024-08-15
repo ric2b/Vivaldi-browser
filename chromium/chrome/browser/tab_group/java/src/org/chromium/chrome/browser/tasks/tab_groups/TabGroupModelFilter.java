@@ -19,7 +19,6 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
-import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelFilter;
@@ -35,7 +34,7 @@ import java.util.Map;
 import java.util.Set;
 
 // Vivaldi
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
 /**
  * An implementation of {@link TabModelFilter} that puts {@link Tab}s into a group
@@ -621,8 +620,7 @@ public class TabGroupModelFilter extends TabModelFilter {
                         // TODO(https://crbug.com/1194287): Investigates a better solution
                         // without adding the TabLaunchType.FROM_START_SURFACE.
                         || tab.getLaunchType() == TabLaunchType.FROM_START_SURFACE))) {
-            Tab parentTab = TabModelUtils.getTabById(
-                    getTabModel(), CriticalPersistedTabData.from(tab).getParentId());
+            Tab parentTab = TabModelUtils.getTabById(getTabModel(), tab.getParentId());
             if (parentTab != null) {
                 return getRootId(parentTab);
             }
@@ -637,7 +635,7 @@ public class TabGroupModelFilter extends TabModelFilter {
         }
 
         int newTabPositionSetting =
-                SharedPreferencesManager.getInstance().readInt("new_tab_position", 1);
+                ChromeSharedPreferences.getInstance().readInt("new_tab_position", 1);
 
         int parentId = getParentId(tab);
         if (parentId != Tab.INVALID_TAB_ID) {
@@ -697,6 +695,7 @@ public class TabGroupModelFilter extends TabModelFilter {
 
     @Override
     protected void closeTab(Tab tab) {
+        if (!isTabGroupsAndroidEnabled()) return; // Vivaldi
         int groupId = getRootId(tab);
         if (tab.isIncognito() != isIncognito() || mGroupIdToGroupMap.get(groupId) == null
                 || !mGroupIdToGroupMap.get(groupId).contains(tab.getId())) {
@@ -737,6 +736,7 @@ public class TabGroupModelFilter extends TabModelFilter {
 
     @Override
     protected void selectTab(Tab tab) {
+        if (!isTabGroupsAndroidEnabled()) return; // Vivaldi
         if (!org.chromium.build.BuildConfig.IS_VIVALDI)
         assert mAbsentSelectedTab == null;
         int groupId = getRootId(tab);
@@ -750,6 +750,7 @@ public class TabGroupModelFilter extends TabModelFilter {
 
     @Override
     protected void reorder() {
+        if (!isTabGroupsAndroidEnabled()) return; // Vivaldi
         reorderGroup(TabGroup.INVALID_GROUP_ID);
 
         TabModel tabModel = getTabModel();
@@ -783,6 +784,7 @@ public class TabGroupModelFilter extends TabModelFilter {
 
     @Override
     protected void resetFilterStateInternal() {
+        if (!isTabGroupsAndroidEnabled()) return; // Vivaldi
         mGroupIdToGroupIndexMap.clear();
         mGroupIdToGroupMap.clear();
         mActualGroupCount = 0;
@@ -790,6 +792,7 @@ public class TabGroupModelFilter extends TabModelFilter {
 
     @Override
     protected void removeTab(Tab tab) {
+        if (!isTabGroupsAndroidEnabled()) return; // Vivaldi
         closeTab(tab);
     }
 
@@ -875,6 +878,7 @@ public class TabGroupModelFilter extends TabModelFilter {
 
     @Override
     public int getValidPosition(Tab tab, int proposedPosition) {
+        if (!isTabGroupsAndroidEnabled()) return proposedPosition; // Vivaldi
         final int parentId = getParentId(tab);
         final int rootId = parentId == Tab.INVALID_TAB_ID ? getRootId(tab) : parentId;
         int newPosition = proposedPosition;
@@ -942,6 +946,14 @@ public class TabGroupModelFilter extends TabModelFilter {
 
     @Override
     public void didMoveTab(Tab tab, int newIndex, int curIndex) {
+        // Note(david@vivaldi.com) When tab stacking is off, we just inform the observers.
+        if (!isTabGroupsAndroidEnabled()) {
+            for (Observer observer : mGroupFilterObserver) {
+                observer.didMoveTabGroup(tab, curIndex, newIndex);
+            }
+            return;
+        }
+
         // Ignore didMoveTab calls in tab restoring stage.
         if (!isTabModelRestored()) return;
         // Need to cache the flags before resetting the internal data map.
@@ -984,7 +996,7 @@ public class TabGroupModelFilter extends TabModelFilter {
     }
 
     private static void setRootId(Tab tab, int id) {
-        CriticalPersistedTabData.from(tab).setRootId(id);
+        tab.setRootId(id);
     }
 
     /**
@@ -995,7 +1007,7 @@ public class TabGroupModelFilter extends TabModelFilter {
     public int getRootId(Tab tab) {
         // Vivaldi
         if (tab == null) return Tab.INVALID_TAB_ID;
-        return CriticalPersistedTabData.from(tab).getRootId();
+        return tab.getRootId();
     }
 
     private boolean isMoveTabOutOfGroup(Tab movedTab) {
@@ -1050,6 +1062,7 @@ public class TabGroupModelFilter extends TabModelFilter {
 
     @Override
     public int index() {
+        if (!isTabGroupsAndroidEnabled()) return getTabModel().index(); // Vivaldi
         return mCurrentGroupIndex;
     }
 
@@ -1058,11 +1071,14 @@ public class TabGroupModelFilter extends TabModelFilter {
      */
     @Override
     public int getCount() {
+        if (!isTabGroupsAndroidEnabled()) return getTabModel().getCount(); // Vivaldi
         return mGroupIdToGroupMap.size();
     }
 
     @Override
     public Tab getTabAt(int index) {
+        if (!isTabGroupsAndroidEnabled()) // Vivaldi
+            return getTabModel().getTabAt(index);
         if (index < 0 || index >= getCount()) return null;
         int groupId = Tab.INVALID_TAB_ID;
         Set<Integer> groupIdSet = mGroupIdToGroupIndexMap.keySet();
@@ -1080,6 +1096,7 @@ public class TabGroupModelFilter extends TabModelFilter {
 
     @Override
     public int indexOf(Tab tab) {
+        if (!isTabGroupsAndroidEnabled()) return getTabModel().indexOf(tab); // Vivaldi
         if (tab == null || tab.isIncognito() != isIncognito()
                 || getTabModel().indexOf(tab) == TabList.INVALID_TAB_INDEX) {
             return TabList.INVALID_TAB_INDEX;
@@ -1095,14 +1112,6 @@ public class TabGroupModelFilter extends TabModelFilter {
     }
 
     /**
-     * Vivaldi: Only notify observers when tab stack is enabled.
-     */
-    @Override
-    protected boolean shouldNotifyObservers() {
-        return (SharedPreferencesManager.getInstance().readBoolean("enable_tab_stack", true));
-    }
-
-    /**
      * Vivaldi: Get the last shown tab id within a group.
      */
     public int getLastShownTabId(Tab tab) {
@@ -1112,5 +1121,12 @@ public class TabGroupModelFilter extends TabModelFilter {
         }
         // By default we consider the first tab in the group as the last one being selected,
         return 0;
+    }
+
+    /**
+     * Vivaldi.
+     */
+    public boolean isTabGroupsAndroidEnabled() {
+        return (ChromeSharedPreferences.getInstance().readBoolean("enable_tab_stack", true));
     }
 }

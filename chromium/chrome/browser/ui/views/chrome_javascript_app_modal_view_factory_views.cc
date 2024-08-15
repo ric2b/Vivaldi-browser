@@ -110,7 +110,7 @@ javascript_dialogs::AppModalDialogView* CreateViewsJavaScriptDialog(
     // NOTE(andre@vivaldi.com) : There are no toplevelnative window in Vivaldi
     // since we use WebViews.
     content::WebContents* web_contents = controller->web_contents();
-    Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+    Browser* browser = chrome::FindBrowserWithTab(web_contents);
     if (!browser) {
       browser = chrome::FindBrowserWithProfile(
           Profile::FromBrowserContext(web_contents->GetBrowserContext()));

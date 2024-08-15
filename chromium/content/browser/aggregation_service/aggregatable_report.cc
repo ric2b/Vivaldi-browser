@@ -20,6 +20,7 @@
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/span.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/json/json_writer.h"
 #include "base/ranges/algorithm.h"
@@ -59,14 +60,6 @@ using DpfParameters = distributed_point_functions::DpfParameters;
 constexpr char kHistogramValue[] = "histogram";
 constexpr char kOperationKey[] = "operation";
 
-GURL GetProcessingUrl(const url::Origin& origin) {
-  GURL::Replacements replacements;
-  static constexpr char kEndpointPath[] =
-      ".well-known/aggregation-service/public-keys";
-  replacements.SetPathStr(kEndpointPath);
-  return origin.GetURL().ReplaceComponents(replacements);
-}
-
 std::vector<GURL> GetDefaultProcessingUrls(
     blink::mojom::AggregationServiceMode aggregation_mode,
     const absl::optional<url::Origin>& aggregation_coordinator_origin) {
@@ -75,14 +68,15 @@ std::vector<GURL> GetDefaultProcessingUrls(
       if (base::FeatureList::IsEnabled(
               aggregation_service::kAggregationServiceMultipleCloudProviders)) {
         if (!aggregation_coordinator_origin.has_value()) {
-          return {GetProcessingUrl(
+          return {GetAggregationServiceProcessingUrl(
               ::aggregation_service::GetDefaultAggregationCoordinatorOrigin())};
         }
         if (!::aggregation_service::IsAggregationCoordinatorOriginAllowed(
                 *aggregation_coordinator_origin)) {
           return {};
         }
-        return {GetProcessingUrl(*aggregation_coordinator_origin)};
+        return {GetAggregationServiceProcessingUrl(
+            *aggregation_coordinator_origin)};
       } else {
         return {GURL(
             kPrivacySandboxAggregationServiceTrustedServerUrlAwsParam.Get())};
@@ -202,6 +196,16 @@ std::vector<uint8_t> EncodeIntegerForPayload(T integer) {
   return byte_string;
 }
 
+void AppendEncodedContributionToCborArray(
+    cbor::Value::ArrayValue& array,
+    const blink::mojom::AggregatableReportHistogramContribution& contribution) {
+  cbor::Value::MapValue map;
+  map.emplace("bucket",
+              EncodeIntegerForPayload<absl::uint128>(contribution.bucket));
+  map.emplace("value", EncodeIntegerForPayload<uint32_t>(contribution.value));
+  array.emplace_back(std::move(map));
+}
+
 // Returns a vector with a serialized CBOR map. See the AggregatableReport
 // documentation for more detail on the expected format. Returns an empty
 // vector in case of error.
@@ -212,15 +216,30 @@ std::vector<std::vector<uint8_t>> ConstructUnencryptedTeeBasedPayload(
   value.emplace(kOperationKey, kHistogramValue);
 
   cbor::Value::ArrayValue data;
-  for (const blink::mojom::AggregatableReportHistogramContribution&
-           contribution : payload_contents.contributions) {
-    cbor::Value::MapValue data_map;
-    data_map.emplace(
-        "bucket", EncodeIntegerForPayload<absl::uint128>(contribution.bucket));
-    data_map.emplace("value",
-                     EncodeIntegerForPayload<uint32_t>(contribution.value));
-    data.push_back(cbor::Value(std::move(data_map)));
+  base::ranges::for_each(
+      payload_contents.contributions,
+      [&data](const blink::mojom::AggregatableReportHistogramContribution&
+                  contribution) {
+        AppendEncodedContributionToCborArray(data, contribution);
+      });
+
+  int number_of_null_contributions_to_add = 0;
+  if (base::FeatureList::IsEnabled(
+          kPrivacySandboxAggregationServiceReportPadding)) {
+    number_of_null_contributions_to_add =
+        payload_contents.max_contributions_allowed -
+        payload_contents.contributions.size();
+  } else if (payload_contents.contributions.empty()) {
+    number_of_null_contributions_to_add = 1;
   }
+  CHECK_GE(number_of_null_contributions_to_add, 0);
+
+  for (int i = 0; i < number_of_null_contributions_to_add; ++i) {
+    AppendEncodedContributionToCborArray(
+        data, blink::mojom::AggregatableReportHistogramContribution(
+                  /*bucket=*/0, /*value=*/0));
+  }
+
   value.emplace("data", std::move(data));
 
   absl::optional<std::vector<uint8_t>> unencrypted_payload =
@@ -316,10 +335,24 @@ ConvertPayloadContentsFromProto(
       return absl::nullopt;
   }
 
+  absl::optional<url::Origin> aggregation_coordinator_origin;
+  if (proto.has_aggregation_coordinator_origin()) {
+    aggregation_coordinator_origin =
+        url::Origin::Create(GURL(proto.aggregation_coordinator_origin()));
+  }
+
+  int max_contributions_allowed = proto.max_contributions_allowed();
+  if (max_contributions_allowed < 0) {
+    return absl::nullopt;
+  } else if (max_contributions_allowed == 0) {
+    // Don't pad reports stored before padding was implemented.
+    max_contributions_allowed = contributions.size();
+  }
+
   // Report storage doesn't support multiple aggregation coordinators.
   return AggregationServicePayloadContents(
       operation, std::move(contributions), aggregation_mode,
-      /*aggregation_coordinator_origin=*/absl::nullopt);
+      std::move(aggregation_coordinator_origin), max_contributions_allowed);
 }
 
 absl::optional<AggregatableReportSharedInfo> ConvertSharedInfoFromProto(
@@ -414,8 +447,15 @@ void ConvertPayloadContentsToProto(
       break;
   }
 
-  // Report storage doesn't support multiple aggregation coordinators.
-  CHECK(!payload_contents.aggregation_coordinator_origin.has_value());
+  if (base::FeatureList::IsEnabled(
+          aggregation_service::kAggregationServiceMultipleCloudProviders) &&
+      payload_contents.aggregation_coordinator_origin.has_value()) {
+    out->set_aggregation_coordinator_origin(
+        payload_contents.aggregation_coordinator_origin->Serialize());
+  }
+
+  out->set_max_contributions_allowed(
+      payload_contents.max_contributions_allowed);
 }
 
 void ConvertSharedInfoToProto(const AggregatableReportSharedInfo& shared_info,
@@ -464,19 +504,39 @@ proto::AggregatableReportRequest ConvertReportRequestToProto(
   return request_proto;
 }
 
+void MaybeVerifyPayloadLength(size_t max_contributions_allowed,
+                              size_t payload_length) {
+  // TODO(alexmt): Replace with a more general method to ensure that the payload
+  // length is deterministic.
+  // Note that the 747 byte expectation derives from the following:
+  // 27 (baseline size with no contributions) + 20 * 36 (size per contribution)
+  if (max_contributions_allowed == 20 && payload_length != 747) {
+    base::debug::DumpWithoutCrashing();
+  }
+}
+
 }  // namespace
+
+GURL GetAggregationServiceProcessingUrl(const url::Origin& origin) {
+  GURL::Replacements replacements;
+  static constexpr char kEndpointPath[] =
+      ".well-known/aggregation-service/v1/public-keys";
+  replacements.SetPathStr(kEndpointPath);
+  return origin.GetURL().ReplaceComponents(replacements);
+}
 
 AggregationServicePayloadContents::AggregationServicePayloadContents(
     Operation operation,
     std::vector<blink::mojom::AggregatableReportHistogramContribution>
         contributions,
     blink::mojom::AggregationServiceMode aggregation_mode,
-    absl::optional<url::Origin> aggregation_coordinator_origin)
+    absl::optional<url::Origin> aggregation_coordinator_origin,
+    int max_contributions_allowed)
     : operation(operation),
       contributions(std::move(contributions)),
       aggregation_mode(aggregation_mode),
-      aggregation_coordinator_origin(
-          std::move(aggregation_coordinator_origin)) {}
+      aggregation_coordinator_origin(std::move(aggregation_coordinator_origin)),
+      max_contributions_allowed(max_contributions_allowed) {}
 
 AggregationServicePayloadContents::AggregationServicePayloadContents(
     const AggregationServicePayloadContents& other) = default;
@@ -531,8 +591,9 @@ std::string AggregatableReportSharedInfo::SerializeAsJson() const {
   DCHECK(!scheduled_report_time.is_null());
   DCHECK(!scheduled_report_time.is_inf());
   value.Set("scheduled_report_time",
-            base::NumberToString(scheduled_report_time.ToJavaTime() /
-                                 base::Time::kMillisecondsPerSecond));
+            base::NumberToString(
+                scheduled_report_time.InMillisecondsSinceUnixEpoch() /
+                base::Time::kMillisecondsPerSecond));
 
   value.Set("version", api_version);
 
@@ -633,6 +694,11 @@ AggregatableReportRequest::CreateInternal(
   }
 
   if (failed_send_attempts < 0) {
+    return absl::nullopt;
+  }
+
+  if (payload_contents.max_contributions_allowed <
+      static_cast<int>(payload_contents.contributions.size())) {
     return absl::nullopt;
   }
 
@@ -779,6 +845,13 @@ AggregatableReport::Provider::CreateFromRequestAndPublicKeys(
     case blink::mojom::AggregationServiceMode::kTeeBased: {
       unencrypted_payloads = ConstructUnencryptedTeeBasedPayload(
           report_request.payload_contents());
+
+      if (base::FeatureList::IsEnabled(
+              kPrivacySandboxAggregationServiceReportPadding)) {
+        MaybeVerifyPayloadLength(
+            report_request.payload_contents().max_contributions_allowed,
+            /*payload_length=*/unencrypted_payloads[0].size());
+      }
       break;
     }
     case blink::mojom::AggregationServiceMode::kExperimentalPoplar: {
@@ -899,7 +972,7 @@ bool AggregatableReport::IsNumberOfHistogramContributionsValid(
   // Note: APIs using the aggregation service may impose their own limits.
   switch (aggregation_mode) {
     case blink::mojom::AggregationServiceMode::kTeeBased:
-      return number >= 1u;
+      return true;
     case blink::mojom::AggregationServiceMode::kExperimentalPoplar:
       return number == 1u;
   }

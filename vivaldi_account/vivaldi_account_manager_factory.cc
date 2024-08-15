@@ -3,7 +3,7 @@
 #include "vivaldi_account/vivaldi_account_manager_factory.h"
 
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/password_manager/password_store_factory.h"
+#include "chrome/browser/password_manager/profile_password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "content/public/browser/storage_partition.h"
@@ -27,7 +27,7 @@ VivaldiAccountManagerFactory::VivaldiAccountManagerFactory()
     : BrowserContextKeyedServiceFactory(
           "VivaldiAccountManager",
           BrowserContextDependencyManager::GetInstance()) {
-  DependsOn(PasswordStoreFactory::GetInstance());
+  DependsOn(ProfilePasswordStoreFactory::GetInstance());
 }
 
 VivaldiAccountManagerFactory::~VivaldiAccountManagerFactory() {}
@@ -37,7 +37,7 @@ KeyedService* VivaldiAccountManagerFactory::BuildServiceInstanceFor(
   Profile* profile = Profile::FromBrowserContext(context);
   auto url_loader_factory = profile->GetDefaultStoragePartition()
                                 ->GetURLLoaderFactoryForBrowserProcess();
-  auto password_store = PasswordStoreFactory::GetForProfile(
+  auto password_store = ProfilePasswordStoreFactory::GetForProfile(
       profile, ServiceAccessType::IMPLICIT_ACCESS);
 
   return new VivaldiAccountManager(

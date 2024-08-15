@@ -19,9 +19,9 @@ import androidx.fragment.app.FragmentActivity;
 
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.tab.TabLaunchType;
-import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
+import org.chromium.chrome.browser.tabmodel.document.ChromeAsyncTabLauncher;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.ui.text.NoUnderlineClickableSpan;
 import org.chromium.ui.text.SpanApplier;
@@ -49,13 +49,21 @@ public class OtherFormsOfHistoryDialogFragment
 
         // Linkify the <link></link> span in the dialog text.
         TextView textView = (TextView) view.findViewById(R.id.text);
-        final SpannableString textWithLink = SpanApplier.applySpans(textView.getText().toString(),
-                new SpanApplier.SpanInfo("<link>", "</link>",
-                        new NoUnderlineClickableSpan(getContext(), (widget) -> {
-                            new TabDelegate(false /* incognito */)
-                                    .launchUrl(UrlConstants.MY_ACTIVITY_URL_IN_CBD_NOTICE,
-                                            TabLaunchType.FROM_CHROME_UI);
-                        })));
+        final SpannableString textWithLink =
+                SpanApplier.applySpans(
+                        textView.getText().toString(),
+                        new SpanApplier.SpanInfo(
+                                "<link>",
+                                "</link>",
+                                new NoUnderlineClickableSpan(
+                                        getContext(),
+                                        (widget) -> {
+                                            new ChromeAsyncTabLauncher(false /* incognito */)
+                                                    .launchUrl(
+                                                            UrlConstants
+                                                                    .MY_ACTIVITY_URL_IN_CBD_NOTICE,
+                                                            TabLaunchType.FROM_CHROME_UI);
+                                        })));
 
         textView.setText(textWithLink);
         textView.setMovementMethod(LinkMovementMethod.getInstance());
@@ -89,7 +97,7 @@ public class OtherFormsOfHistoryDialogFragment
      * @param shown Whether the dialog was shown.
      */
     private static void recordDialogWasShown(boolean shown) {
-        SharedPreferencesManager.getInstance().writeBoolean(
+        ChromeSharedPreferences.getInstance().writeBoolean(
                 ChromePreferenceKeys.SETTINGS_PRIVACY_OTHER_FORMS_OF_HISTORY_DIALOG_SHOWN, shown);
     }
 
@@ -97,7 +105,7 @@ public class OtherFormsOfHistoryDialogFragment
      * @return Whether the dialog has already been shown to the user before.
      */
     static boolean wasDialogShown() {
-        return SharedPreferencesManager.getInstance().readBoolean(
+        return ChromeSharedPreferences.getInstance().readBoolean(
                 ChromePreferenceKeys.SETTINGS_PRIVACY_OTHER_FORMS_OF_HISTORY_DIALOG_SHOWN, false);
     }
 

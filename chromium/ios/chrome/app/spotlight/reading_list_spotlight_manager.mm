@@ -18,7 +18,7 @@
 #import "ios/chrome/app/spotlight/spotlight_interface.h"
 #import "ios/chrome/app/spotlight/spotlight_logger.h"
 #import "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
-#import "ios/chrome/browser/reading_list/reading_list_model_factory.h"
+#import "ios/chrome/browser/reading_list/model/reading_list_model_factory.h"
 
 // Called from the BrowserBookmarkModelBridge from C++ -> ObjC.
 @interface ReadingListSpotlightManager () <ReadingListModelBridgeObserver> {
@@ -62,12 +62,11 @@
             readingListModel:(ReadingListModel*)model
           spotlightInterface:(SpotlightInterface*)spotlightInterface
        searchableItemFactory:(SearchableItemFactory*)searchableItemFactory {
-  self = [super init];
+  self = [super initWithSpotlightInterface:spotlightInterface
+                     searchableItemFactory:searchableItemFactory];
 
   if (self) {
     _model = model;
-    _searchableItemFactory = searchableItemFactory;
-    _spotlightInterface = spotlightInterface;
     _modelBridge.reset(new ReadingListModelBridge(self, model));
   }
   return self;
@@ -79,6 +78,7 @@
 }
 
 - (void)shutdown {
+  [super shutdown];
   [self detachModel];
 }
 
@@ -108,6 +108,10 @@
   if (!self.model || !self.model->loaded()) {
     [SpotlightLogger logSpotlightError:[ReadingListSpotlightManager
                                            modelNotReadyOrShutDownError]];
+    return;
+  }
+
+  if (self.isShuttingDown) {
     return;
   }
 

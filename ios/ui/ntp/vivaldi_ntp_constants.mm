@@ -44,6 +44,12 @@ NSString* const vPrivateNTPBackgroundColor =
 // Color for the search bar background
 NSString* const vSearchbarBackgroundColor =
     @"vivaldi_ntp_searchbar_background_color";
+// Color for private mode toolbar background
+NSString* const vPrivateModeToolbarBackgroundColor =
+    @"vivaldi_private_toolbar_background_color";
+// Color for private mode selected tab view
+NSString* const vPrivateModeTabSelectedBackgroundColor =
+    @"vivaldi_private_tabview_selected_background_color";
 // Color for the new tab page toolbar selection underline
 NSString* const vNTPToolbarSelectionLineColor =
     @"vivaldi_ntp_toolbar_selectionline_color";

@@ -237,6 +237,11 @@ class VIEWS_EXPORT MenuDelegate {
   virtual void VivaldiGetContextMenuPosition(gfx::Rect* menu_bounds,
     const gfx::Rect& monitor_bounds,
     const gfx::Rect& anchor_bounds) const;
+
+  // Added by Vivaldi. Allow executing and keep menu open.
+  virtual void VivaldiExecutePersistent(MenuItemView* menu,
+                                        int event_flags,
+                                        bool* success) {}
 };
 
 }  // namespace views

@@ -27,8 +27,7 @@ constexpr uint64_t kInternalMicId = 10003;
 class AudioDetailedViewPixelTest : public AshTestBase {
  public:
   AudioDetailedViewPixelTest() {
-    feature_list_.InitWithFeatures(
-        {features::kQsRevamp, chromeos::features::kJelly}, {});
+    feature_list_.InitWithFeatures({chromeos::features::kJelly}, {});
   }
 
   // AshTestBase:
@@ -51,12 +50,14 @@ TEST_F(AudioDetailedViewPixelTest, Basics) {
       ->ShowAudioDetailedView();
 
   TrayDetailedView* detailed_view =
-      system_tray->bubble()->quick_settings_view()->GetDetailedViewForTest();
+      system_tray->bubble()
+          ->quick_settings_view()
+          ->GetDetailedViewForTest<TrayDetailedView>();
   ASSERT_TRUE(detailed_view);
 
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
       "qs_audio_detailed_view",
-      /*revision_number=*/6, detailed_view));
+      /*revision_number=*/11, detailed_view));
 }
 
 TEST_F(AudioDetailedViewPixelTest, ShowNoiseCancellationButton) {
@@ -84,12 +85,14 @@ TEST_F(AudioDetailedViewPixelTest, ShowNoiseCancellationButton) {
       ->ShowAudioDetailedView();
 
   TrayDetailedView* detailed_view =
-      system_tray->bubble()->quick_settings_view()->GetDetailedViewForTest();
+      system_tray->bubble()
+          ->quick_settings_view()
+          ->GetDetailedViewForTest<TrayDetailedView>();
   ASSERT_TRUE(detailed_view);
 
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
       "qs_audio_detailed_view",
-      /*revision_number=*/0, detailed_view));
+      /*revision_number=*/5, detailed_view));
 }
 
 }  // namespace ash

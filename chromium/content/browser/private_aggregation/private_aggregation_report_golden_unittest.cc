@@ -26,6 +26,8 @@
 #include "base/time/time.h"
 #include "base/uuid.h"
 #include "base/values.h"
+#include "components/aggregation_service/features.h"
+#include "content/browser/aggregation_service/aggregatable_report.h"
 #include "content/browser/aggregation_service/aggregation_service.h"
 #include "content/browser/aggregation_service/aggregation_service_features.h"
 #include "content/browser/aggregation_service/aggregation_service_impl.h"
@@ -84,7 +86,9 @@ class PrivateAggregationReportGoldenLatestVersionTest : public testing::Test {
     ASSERT_EQ(keyset.keys.size(), 1u);
 
     aggregation_service().SetPublicKeysForTesting(
-        GURL(kPrivacySandboxAggregationServiceTrustedServerUrlAwsParam.Get()),
+        GetAggregationServiceProcessingUrl(url::Origin::Create(
+            GURL(::aggregation_service::kAggregationServiceCoordinatorAwsCloud
+                     .Get()))),
         std::move(keyset));
 
     absl::optional<std::vector<uint8_t>> private_key =
@@ -122,23 +126,23 @@ class PrivateAggregationReportGoldenLatestVersionTest : public testing::Test {
         expected_cleartext_payloads.GetList().front().GetIfString();
     ASSERT_TRUE(base64_encoded_expected_cleartext_payload);
 
-    absl::optional<AggregatableReportRequest> actual_report;
-
-    actual_report = PrivateAggregationHost::GenerateReportRequest(
-        std::move(contributions),
-        blink::mojom::AggregationServiceMode::kDefault,
-        std::move(debug_details),
-        /*scheduled_report_time=*/base::Time::FromJavaTime(1234486400000),
-        /*report_id=*/
-        base::Uuid::ParseLowercase("21abd97f-73e8-4b88-9389-a9fee6abda5e"),
-        /*reporting_origin=*/kExampleOrigin, api_identifier,
-        /*context_id=*/absl::nullopt);
-    ASSERT_TRUE(actual_report.has_value());
+    AggregatableReportRequest actual_report =
+        PrivateAggregationHost::GenerateReportRequest(
+            std::move(debug_details),
+            /*scheduled_report_time=*/
+            base::Time::FromMillisecondsSinceUnixEpoch(1234486400000),
+            /*report_id=*/
+            base::Uuid::ParseLowercase("21abd97f-73e8-4b88-9389-a9fee6abda5e"),
+            /*reporting_origin=*/kExampleOrigin, api_identifier,
+            /*context_id=*/absl::nullopt,
+            // TODO(alexmt): Generate golden reports for multiple coordinators.
+            /*aggregation_coordinator_origin=*/absl::nullopt,
+            std::move(contributions));
 
     base::RunLoop run_loop;
 
     aggregation_service().AssembleReport(
-        std::move(*actual_report),
+        std::move(actual_report),
         base::BindLambdaForTesting(
             [&](AggregatableReportRequest,
                 absl::optional<AggregatableReport> assembled_report,
@@ -402,7 +406,7 @@ TEST_F(PrivateAggregationReportGoldenLatestVersionTest, VerifyGoldenReport) {
 
 std::vector<base::FilePath> GetLegacyVersions() {
   base::FilePath input_dir;
-  base::PathService::Get(base::DIR_SOURCE_ROOT, &input_dir);
+  base::PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, &input_dir);
   input_dir = input_dir.AppendASCII(
       "content/test/data/private_aggregation/aggregatable_report_goldens");
 

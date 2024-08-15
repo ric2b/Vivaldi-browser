@@ -34,6 +34,7 @@ import org.chromium.chrome.browser.signin.services.DisplayableProfileData;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.ProfileDataCache;
 import org.chromium.chrome.browser.signin.services.SigninManager;
+import org.chromium.chrome.browser.signin.services.SigninManager.DataWipeOption;
 import org.chromium.chrome.browser.signin.services.SigninMetricsUtils;
 import org.chromium.chrome.browser.signin.services.SigninMetricsUtils.State;
 import org.chromium.chrome.browser.signin.services.UnifiedConsentServiceBridge;
@@ -41,6 +42,7 @@ import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.browser.ui.device_lock.DeviceLockCoordinator;
 import org.chromium.chrome.browser.ui.signin.account_picker.AccountPickerCoordinator;
 import org.chromium.chrome.browser.ui.signin.account_picker.AccountPickerDialogCoordinator;
+import org.chromium.components.browser_ui.device_lock.DeviceLockActivityLauncher;
 import org.chromium.components.externalauth.ExternalAuthUtils;
 import org.chromium.components.externalauth.UserRecoverableErrorHandler;
 import org.chromium.components.signin.AccountManagerFacade;
@@ -521,6 +523,11 @@ public abstract class SyncConsentFragmentBase extends Fragment
     }
 
     @Override
+    public @DeviceLockActivityLauncher.Source String getSource() {
+        return DeviceLockActivityLauncher.Source.SYNC_CONSENT;
+    }
+
+    @Override
     public void onViewCreated(View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
         if (!BuildConfig.IS_VIVALDI) {
@@ -814,7 +821,7 @@ public abstract class SyncConsentFragmentBase extends Fragment
                 new ConfirmSyncDataStateMachineDelegate(
                         requireContext(), getChildFragmentManager(), mModalDialogManager),
                 UserPrefs.get(Profile.getLastUsedRegularProfile())
-                        .getString(Pref.GOOGLE_SERVICES_LAST_USERNAME),
+                        .getString(Pref.GOOGLE_SERVICES_LAST_SYNCING_USERNAME),
                 mSelectedAccountEmail, new ConfirmSyncDataStateMachine.Listener() {
                     @Override
                     public void onConfirm(boolean wipeData) {
@@ -831,7 +838,7 @@ public abstract class SyncConsentFragmentBase extends Fragment
                                 signinManager.wipeSyncUserData(() -> {
                                     onSyncAccepted(mSelectedAccountEmail, settingsClicked,
                                             () -> mIsSigninInProgress = false);
-                                });
+                                }, DataWipeOption.WIPE_SYNC_DATA);
                             } else {
                                 onSyncAccepted(mSelectedAccountEmail, settingsClicked,
                                         () -> mIsSigninInProgress = false);

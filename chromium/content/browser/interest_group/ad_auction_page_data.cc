@@ -5,6 +5,8 @@
 #include "content/browser/interest_group/ad_auction_page_data.h"
 
 #include "base/no_destructor.h"
+#include "base/time/time.h"
+#include "services/data_decoder/public/cpp/data_decoder.h"
 
 namespace content {
 
@@ -108,13 +110,24 @@ AdAuctionRequestContext* AdAuctionPageData::GetContextForAdAuctionRequest(
   return &it->second;
 }
 
+data_decoder::DataDecoder* AdAuctionPageData::GetDecoderFor(
+    const url::Origin& origin) {
+  std::unique_ptr<data_decoder::DataDecoder>& decoder = decoder_map_[origin];
+  if (!decoder) {
+    decoder = std::make_unique<data_decoder::DataDecoder>();
+  }
+  return decoder.get();
+}
+
 AdAuctionRequestContext::AdAuctionRequestContext(
     url::Origin seller,
     base::flat_map<url::Origin, std::vector<std::string>> group_names,
-    quiche::ObliviousHttpRequest::Context context)
+    quiche::ObliviousHttpRequest::Context context,
+    base::TimeTicks start_time)
     : seller(std::move(seller)),
       group_names(std::move(group_names)),
-      context(std::move(context)) {}
+      context(std::move(context)),
+      start_time(start_time) {}
 AdAuctionRequestContext::AdAuctionRequestContext(
     AdAuctionRequestContext&& other) = default;
 AdAuctionRequestContext::~AdAuctionRequestContext() = default;

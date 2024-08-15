@@ -43,14 +43,14 @@
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/shadow/shadow_element_names.h"
 #include "third_party/blink/renderer/core/layout/hit_test_location.h"
+#include "third_party/blink/renderer/core/layout/inline/inline_cursor.h"
+#include "third_party/blink/renderer/core/layout/inline/offset_mapping.h"
 #include "third_party/blink/renderer/core/layout/layout_flow_thread.h"
 #include "third_party/blink/renderer/core/layout/layout_inline.h"
 #include "third_party/blink/renderer/core/layout/layout_multi_column_flow_thread.h"
 #include "third_party/blink/renderer/core/layout/layout_multi_column_spanner_placeholder.h"
 #include "third_party/blink/renderer/core/layout/layout_object_inlines.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_offset_mapping.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_block_flow.h"
 #include "third_party/blink/renderer/core/layout/ng/legacy_layout_tree_walking.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_absolute_utils.h"
@@ -96,83 +96,6 @@ LayoutBlockFlow* LayoutBlockFlow::CreateAnonymous(Document* document,
 bool LayoutBlockFlow::IsInitialLetterBox() const {
   return IsA<FirstLetterPseudoElement>(GetNode()) &&
          !StyleRef().InitialLetter().IsNormal();
-}
-
-void LayoutBlockFlow::AddVisualOverflowFromInlineChildren() {
-  NOT_DESTROYED();
-  DCHECK(!NeedsLayout());
-  DCHECK(!ChildPrePaintBlockedByDisplayLock());
-
-  if (!PhysicalFragmentCount()) {
-    return;
-  }
-
-  // TODO(crbug.com/1144203): This should compute in the stitched coordinate
-  // system, but overflows in the block direction is converted to the inline
-  // direction in the multicol container. Just unite overflows in the inline
-  // direction only for now.
-  for (const NGPhysicalBoxFragment& fragment : PhysicalFragments()) {
-    if (const NGFragmentItems* items = fragment.Items()) {
-      PhysicalRect children_rect;
-      for (NGInlineCursor cursor(fragment, *items); cursor;
-           cursor.MoveToNextSkippingChildren()) {
-        const NGFragmentItem* child = cursor.CurrentItem();
-        DCHECK(child);
-        if (child->HasSelfPaintingLayer()) {
-          continue;
-        }
-        PhysicalRect child_rect = child->InkOverflow();
-        if (!child_rect.IsEmpty()) {
-          child_rect.offset += child->OffsetInContainerFragment();
-          children_rect.Unite(child_rect);
-        }
-      }
-      AddContentsVisualOverflow(children_rect);
-    } else if (fragment.HasFloatingDescendantsForPaint()) {
-      AddVisualOverflowFromFloats(fragment);
-    }
-  }
-}
-
-void LayoutBlockFlow::AddVisualOverflowFromFloats(
-    const NGPhysicalFragment& fragment) {
-  NOT_DESTROYED();
-  DCHECK(!NeedsLayout());
-  DCHECK(!ChildPrePaintBlockedByDisplayLock());
-  DCHECK(fragment.HasFloatingDescendantsForPaint());
-
-  for (const NGLink& child : fragment.PostLayoutChildren()) {
-    if (child->HasSelfPaintingLayer())
-      continue;
-
-    if (child->IsFloating()) {
-      AddVisualOverflowFromChild(To<LayoutBox>(*child->GetLayoutObject()));
-      continue;
-    }
-
-    if (const NGPhysicalFragment* child_container = child.get()) {
-      if (child_container->HasFloatingDescendantsForPaint() &&
-          !child_container->IsFormattingContextRoot())
-        AddVisualOverflowFromFloats(*child_container);
-    }
-  }
-}
-
-void LayoutBlockFlow::ComputeVisualOverflow() {
-  NOT_DESTROYED();
-  DCHECK(!SelfNeedsFullLayout());
-
-  PhysicalRect previous_visual_overflow_rect =
-      PhysicalVisualOverflowRectAllowingUnset();
-  ClearVisualOverflow();
-  AddVisualOverflowFromChildren();
-  AddVisualEffectOverflow();
-
-  if (PhysicalVisualOverflowRect() != previous_visual_overflow_rect) {
-    InvalidateIntersectionObserverCachedRects();
-    SetShouldCheckForPaintInvalidation();
-    GetFrameView()->SetIntersectionObservationState(LocalFrameView::kDesired);
-  }
 }
 
 bool LayoutBlockFlow::CanContainFirstFormattedLine() const {
@@ -252,7 +175,7 @@ void LayoutBlockFlow::AddChild(LayoutObject* new_child,
 
     // LayoutNGOutsideListMarker is out-of-flow for the tree building purpose,
     // and that is not inline level, but IsInline().
-    if (new_child->IsInline() && !new_child->IsLayoutNGOutsideListMarker()) {
+    if (new_child->IsInline() && !new_child->IsLayoutOutsideListMarker()) {
       // No suitable existing anonymous box - create a new one.
       auto* new_block = To<LayoutBlockFlow>(CreateAnonymousBlock());
       LayoutBox::AddChild(new_block, before_child);
@@ -348,10 +271,6 @@ void LayoutBlockFlow::RemoveChild(LayoutObject* old_child) {
     // inline without the need for anonymous blocks, then do that.
     MakeChildrenInlineIfPossible();
   }
-}
-
-bool LayoutBlockFlow::CreatesAnonymousWrapper() const {
-  return IsLayoutFlowThread() && Parent()->IsLayoutNGObject();
 }
 
 void LayoutBlockFlow::MoveAllChildrenIncludingFloatsTo(
@@ -560,8 +479,9 @@ static void GetInlineRun(LayoutObject* start,
 
   // LayoutNGOutsideListMarker is out-of-flow for the tree building purpose.
   // Skip here because it's the first child.
-  if (curr && curr->IsLayoutNGOutsideListMarker())
+  if (curr && curr->IsLayoutOutsideListMarker()) {
     curr = curr->NextSibling();
+  }
 
   bool saw_inline;
   do {
@@ -602,7 +522,7 @@ void LayoutBlockFlow::MakeChildrenNonInline(LayoutObject* insertion_point) {
   DCHECK(!insertion_point || insertion_point->Parent() == this);
 
   SetChildrenInline(false);
-  ClearNGInlineNodeData();
+  ClearInlineNodeData();
 
   LayoutObject* child = FirstChild();
   if (!child)
@@ -625,7 +545,7 @@ void LayoutBlockFlow::MakeChildrenNonInline(LayoutObject* insertion_point) {
 
 #if DCHECK_IS_ON()
   for (LayoutObject* c = FirstChild(); c; c = c->NextSibling())
-    DCHECK(!c->IsInline() || c->IsLayoutNGOutsideListMarker());
+    DCHECK(!c->IsInline() || c->IsLayoutOutsideListMarker());
 #endif
 
   SetShouldDoFullPaintInvalidation();
@@ -785,7 +705,7 @@ void LayoutBlockFlow::SetShouldDoFullPaintInvalidationForFirstLine() {
     return;
   }
   for (const NGPhysicalBoxFragment& fragment : fragments) {
-    NGInlineCursor first_line(fragment);
+    InlineCursor first_line(fragment);
     if (!first_line) {
       continue;
     }
@@ -795,9 +715,9 @@ void LayoutBlockFlow::SetShouldDoFullPaintInvalidationForFirstLine() {
     }
     if (first_line.Current().UsesFirstLineStyle()) {
       // Mark all descendants of the first line if first-line style.
-      for (NGInlineCursor descendants = first_line.CursorForDescendants();
+      for (InlineCursor descendants = first_line.CursorForDescendants();
            descendants; descendants.MoveToNext()) {
-        const NGFragmentItem* item = descendants.Current().Item();
+        const FragmentItem* item = descendants.Current().Item();
         if (UNLIKELY(item->IsLayoutObjectDestroyedOrMoved())) {
           descendants.MoveToNextSkippingChildren();
           continue;
@@ -810,50 +730,6 @@ void LayoutBlockFlow::SetShouldDoFullPaintInvalidationForFirstLine() {
       StyleRef().ClearCachedPseudoElementStyles();
       SetShouldDoFullPaintInvalidation();
       return;
-    }
-  }
-}
-
-void LayoutBlockFlow::RecalcInlineChildrenVisualOverflow() {
-  NOT_DESTROYED();
-  DCHECK(ChildrenInline());
-
-  if (!CanUseFragmentsForVisualOverflow()) {
-    return;
-  }
-
-  // TODO(crbug.com/1144203): This code path should be switch to
-  // |RecalcFragmentsVisualOverflow|.
-  for (const NGPhysicalBoxFragment& fragment : PhysicalFragments()) {
-    if (const NGFragmentItems* items = fragment.Items()) {
-      NGInlineCursor cursor(fragment, *items);
-      NGInlinePaintContext inline_context;
-      NGFragmentItem::RecalcInkOverflowForCursor(&cursor, &inline_context);
-    }
-    // Even if this turned out to be an inline formatting context with
-    // fragment items (handled above), we need to handle floating descendants.
-    // If a float is block-fragmented, it is resumed as a regular box fragment
-    // child, rather than becoming a fragment item.
-    if (fragment.HasFloatingDescendantsForPaint()) {
-      RecalcFloatingDescendantsVisualOverflow(fragment);
-    }
-  }
-}
-
-void LayoutBlockFlow::RecalcFloatingDescendantsVisualOverflow(
-    const NGPhysicalFragment& fragment) {
-  DCHECK(fragment.HasFloatingDescendantsForPaint());
-
-  for (const NGLink& child : fragment.PostLayoutChildren()) {
-    if (child->IsFloating()) {
-      child->GetMutableLayoutObject()
-          ->RecalcNormalFlowChildVisualOverflowIfNeeded();
-      continue;
-    }
-
-    if (const NGPhysicalFragment* child_container_fragment = child.get()) {
-      if (child_container_fragment->HasFloatingDescendantsForPaint())
-        RecalcFloatingDescendantsVisualOverflow(*child_container_fragment);
     }
   }
 }

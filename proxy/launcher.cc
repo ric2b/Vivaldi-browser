@@ -29,15 +29,14 @@ class ProcessWrapper {
 public:
   ProcessWrapper() {}
   ~ProcessWrapper() {
-    if (process_ && process_->IsValid()) {
-      process_->Terminate(0, false);
+    if (process_.IsValid()) {
+      process_.Terminate(0, false);
     }
   }
-  raw_ptr<base::Process> process_ = nullptr;
+  base::Process process_;
 };
 
 static ProcessWrapper process_wrapper;
-static base::Process process;
 
 }  // namespace
 
@@ -57,7 +56,7 @@ bool connect(const ConnectSettings& settings, ConnectState& state) {
   // proxy binary.
   const char* here = getenv("HERE");
   if (!here) {
-    state.message = "$HERE not set";
+    state.message = "Can not locate proxy application (environment variable $HERE not set).";
     return false;
   }
   std::string filename_with_path = std::string(here) + "/"
@@ -98,16 +97,16 @@ bool connect(const ConnectSettings& settings, ConnectState& state) {
   launch_command.AppendSwitchASCII("-listenPort", settings.local_port);
   launch_command.AppendSwitchASCII("-token", settings.token);
 #endif
-  process = base::LaunchProcess(launch_command, base::LaunchOptions());
-  state.pid = process.Pid();
-  process_wrapper.process_ = &process;
+  process_wrapper.process_ =
+    base::LaunchProcess(launch_command, base::LaunchOptions());
+  state.pid = process_wrapper.process_.Pid();
 
   return state.pid != 0;
 }
 
 void disconnect() {
-  if (process.IsValid()) {
-    process.Terminate(0, false);
+  if (process_wrapper.process_.IsValid()) {
+    process_wrapper.process_.Terminate(0, false);
   }
 }
 

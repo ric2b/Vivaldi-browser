@@ -11,17 +11,19 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "chrome/browser/password_manager/password_store_factory.h"
+#include "chrome/browser/extensions/api/passwords_private/passwords_private_delegate.h"
+#include "chrome/browser/extensions/api/passwords_private/passwords_private_delegate_factory.h"
+#include "chrome/browser/password_manager/profile_password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/password_manager/core/browser/password_form.h"
-#include "components/password_manager/core/browser/password_list_sorter.h"
 #include "components/prefs/pref_service.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/web_ui.h"
 
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "extensions/schema/savedpasswords.h"
+#include "password_list_sorter.h"
 #include "ui/vivaldi_browser_window.h"
 
 #if BUILDFLAG(IS_MAC)
@@ -40,9 +42,7 @@ void FilterAndSortPasswords(
                      [](const auto& form) { return form->blocked_by_user; }),
       password_list->end());
 
-  password_manager::DuplicatesMap ignored_duplicates;
-  password_manager::SortEntriesAndHideDuplicates(password_list,
-                                                 &ignored_duplicates);
+  extensions::SortEntriesAndHideDuplicates(password_list);
 }
 
 }  // namespace
@@ -54,7 +54,8 @@ SavedpasswordsGetListFunction::~SavedpasswordsGetListFunction() {}
 ExtensionFunction::ResponseAction SavedpasswordsGetListFunction::Run() {
   Profile* profile = Profile::FromBrowserContext(browser_context());
   scoped_refptr<password_manager::PasswordStoreInterface> password_store =
-      PasswordStoreFactory::GetForProfile(profile,
+      ProfilePasswordStoreFactory::GetForProfile(
+          profile,
                                           ServiceAccessType::EXPLICIT_ACCESS);
 
   AddRef();  // Balanced in OnGetPasswordStoreResults
@@ -102,7 +103,7 @@ ExtensionFunction::ResponseAction SavedpasswordsRemoveFunction::Run() {
   }
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
-  password_store_ = PasswordStoreFactory::GetForProfile(
+  password_store_ = ProfilePasswordStoreFactory::GetForProfile(
       profile, ServiceAccessType::EXPLICIT_ACCESS);
 
   AddRef();  // Balanced in OnGetPasswordStoreResults
@@ -155,7 +156,7 @@ ExtensionFunction::ResponseAction SavedpasswordsAddFunction::Run() {
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
   scoped_refptr<password_manager::PasswordStoreInterface> password_store =
-      PasswordStoreFactory::GetForProfile(
+      ProfilePasswordStoreFactory::GetForProfile(
           profile, params->is_explicit ? ServiceAccessType::EXPLICIT_ACCESS
                                        : ServiceAccessType::IMPLICIT_ACCESS);
   password_store->AddLogin(password_form);
@@ -177,8 +178,8 @@ ExtensionFunction::ResponseAction SavedpasswordsGetFunction::Run() {
   // incognito too.
   Profile* profile = Profile::FromBrowserContext(browser_context());
   scoped_refptr<password_manager::PasswordStoreInterface> password_store =
-      PasswordStoreFactory::GetForProfile(profile,
-                                          ServiceAccessType::EXPLICIT_ACCESS);
+      ProfilePasswordStoreFactory::GetForProfile(
+          profile, ServiceAccessType::EXPLICIT_ACCESS);
 
   username_ = params->password_form.username;
 
@@ -223,7 +224,7 @@ ExtensionFunction::ResponseAction SavedpasswordsDeleteFunction::Run() {
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
   scoped_refptr<password_manager::PasswordStoreInterface> password_store(
-      PasswordStoreFactory::GetForProfile(
+      ProfilePasswordStoreFactory::GetForProfile(
           profile, params->is_explicit ? ServiceAccessType::EXPLICIT_ACCESS
                                        : ServiceAccessType::IMPLICIT_ACCESS));
   if (!password_store.get()) {
@@ -254,10 +255,14 @@ ExtensionFunction::ResponseAction SavedpasswordsAuthenticateFunction::Run() {
     return RespondNow(Error("No such window"));
   }
 
-  VivaldiUtilitiesAPI::AuthenticateUser(
-      window->web_contents(),
-      base::BindOnce(
-          &SavedpasswordsAuthenticateFunction::AuthenticationComplete, this));
+  PasswordsPrivateDelegateFactory::GetForBrowserContext(
+      window->web_contents()->GetBrowserContext(),
+      /*create=*/true)
+      ->AuthenticateUser(
+          base::BindOnce(
+              &SavedpasswordsAuthenticateFunction::AuthenticationComplete,
+              this),
+          window->web_contents());
 
   return RespondLater();
 }

@@ -15,6 +15,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/user_metrics.h"
+#include "base/trace_event/trace_event.h"
 #include "cc/slim/layer.h"
 #include "chrome/android/chrome_jni_headers/TabImpl_jni.h"
 #include "chrome/android/chrome_jni_headers/TabUtils_jni.h"
@@ -29,7 +30,6 @@
 #include "chrome/browser/resource_coordinator/tab_helper.h"
 #include "chrome/browser/resource_coordinator/tab_load_tracker.h"
 #include "chrome/browser/sync/glue/synced_tab_delegate_android.h"
-#include "chrome/browser/tab/jni_headers/CriticalPersistedTabData_jni.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/browser/ui/android/context_menu_helper.h"
 #include "chrome/browser/ui/android/tab_model/tab_model.h"
@@ -188,8 +188,7 @@ int TabAndroid::GetLaunchType() const {
 
 int TabAndroid::GetUserAgent() const {
   JNIEnv* env = base::android::AttachCurrentThread();
-  return Java_CriticalPersistedTabData_getUserAgent(env,
-                                                    weak_java_tab_.get(env));
+  return Java_TabImpl_getUserAgent(env, weak_java_tab_.get(env));
 }
 
 bool TabAndroid::IsNativePage() const {
@@ -233,12 +232,11 @@ bool TabAndroid::IsIncognito() const {
 
 base::Time TabAndroid::GetLastShownTimestamp() const {
   JNIEnv* env = base::android::AttachCurrentThread();
-  const long timestamp =
+  const int64_t timestamp =
       Java_TabImpl_getLastShownTimestamp(env, weak_java_tab_.get(env));
-  if (timestamp == -1) {
-    return base::Time();
-  }
-  return base::Time::FromJavaTime(timestamp);
+  return (timestamp == -1)
+             ? base::Time()
+             : base::Time::FromMillisecondsSinceUnixEpoch(timestamp);
 }
 
 void TabAndroid::DeleteFrozenNavigationEntries(
@@ -310,6 +308,8 @@ void TabAndroid::InitWebContents(
     const JavaParamRef<jobject>& jcontext_menu_populator_factory) {
   web_contents_.reset(content::WebContents::FromJavaWebContents(jweb_contents));
   DCHECK(web_contents_.get());
+
+  web_contents_->SetOwnerLocationForDebug(FROM_HERE);
 
   TabAndroidHelper::SetTabForWebContents(web_contents(), this);
   web_contents_delegate_ =
@@ -402,6 +402,9 @@ void TabAndroid::ReleaseWebContents(JNIEnv* env) {
   // Ownership of |released_contents| is assumed by the code that initiated the
   // release.
   content::WebContents* released_contents = web_contents_.release();
+  if (released_contents) {
+    released_contents->SetOwnerLocationForDebug(absl::nullopt);
+  }
 
   // Remove the link from the native WebContents to |this|, since the
   // lifetimes of the two objects are no longer intertwined.

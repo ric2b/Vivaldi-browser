@@ -1,0 +1,5 @@
+target/
+/.idea
+/*.mdb
+/auth_token.txt
+.DS_Store

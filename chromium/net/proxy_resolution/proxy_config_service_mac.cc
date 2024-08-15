@@ -18,8 +18,8 @@
 #include "base/task/sequenced_task_runner.h"
 #include "net/base/net_errors.h"
 #include "net/base/proxy_server.h"
-#include "net/base/proxy_string_util.h"
 #include "net/proxy_resolution/proxy_info.h"
+#include "net/proxy_resolution/proxy_server_util_mac.h"
 
 namespace net {
 
@@ -246,8 +246,8 @@ void ProxyConfigServiceMac::SetDynamicStoreNotificationKeys(
   base::apple::ScopedCFTypeRef<CFArrayRef> key_array(CFArrayCreate(
       nullptr, (const void**)(&proxies_key), 1, &kCFTypeArrayCallBacks));
 
-  bool ret =
-      SCDynamicStoreSetNotificationKeys(store, key_array, /*patterns=*/nullptr);
+  bool ret = SCDynamicStoreSetNotificationKeys(store, key_array.get(),
+                                               /*patterns=*/nullptr);
   // TODO(willchan): Figure out a proper way to handle this rather than crash.
   CHECK(ret);
 }

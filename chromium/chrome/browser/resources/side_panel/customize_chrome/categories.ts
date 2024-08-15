@@ -10,10 +10,12 @@ import 'chrome://resources/cr_elements/cr_grid/cr_grid.js';
 import 'chrome://resources/cr_elements/cr_icons.css.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import './check_mark_wrapper.js';
+import './strings.m.js';
 
 import {SpHeading} from 'chrome://customize-chrome-side-panel.top-chrome/shared/sp_heading.js';
 import {HelpBubbleMixin, HelpBubbleMixinInterface} from 'chrome://resources/cr_components/help_bubble/help_bubble_mixin.js';
 import {FocusOutlineManager} from 'chrome://resources/js/focus_outline_manager.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {DomRepeatEvent, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getTemplate} from './categories.html.js';
@@ -27,6 +29,7 @@ export enum CategoryType {
   LOCAL,
   COLOR,
   COLLECTION,
+  WALLPAPER_SEARCH,
 }
 
 export const CHROME_THEME_COLLECTION_ELEMENT_ID =
@@ -81,9 +84,17 @@ export class CategoriesElement extends CategoriesElementBase {
         type: Boolean,
         computed: 'computeIsLocalImageSelected_(selectedCategory_)',
       },
+      isWallpaperSearchSelected_: {
+        type: Boolean,
+        computed: 'computeIsWallpaperSearchSelected_(selectedCategory_)',
+      },
       isChromeColorsSelected_: {
         type: Boolean,
         computed: 'computeIsChromeColorsSelected_(selectedCategory_)',
+      },
+      wallpaperSearchEnabled_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('wallpaperSearchEnabled'),
       },
     };
   }
@@ -165,7 +176,9 @@ export class CategoriesElement extends CategoriesElementBase {
       return {type: CategoryType.COLOR};
     }
     if (this.theme_.backgroundImage.isUploadedImage) {
-      return {type: CategoryType.LOCAL};
+      return this.theme_.backgroundImage.localBackgroundId ?
+          {type: CategoryType.WALLPAPER_SEARCH} :
+          {type: CategoryType.LOCAL};
     }
     if (this.theme_.backgroundImage.collectionId) {
       return {
@@ -182,6 +195,10 @@ export class CategoriesElement extends CategoriesElementBase {
 
   private computeIsLocalImageSelected_() {
     return this.selectedCategory_.type === CategoryType.LOCAL;
+  }
+
+  private computeIsWallpaperSearchSelected_() {
+    return this.selectedCategory_.type === CategoryType.WALLPAPER_SEARCH;
   }
 
   private computeIsChromeColorsSelected_() {
@@ -206,7 +223,13 @@ export class CategoriesElement extends CategoriesElementBase {
     this.pageHandler_.removeBackgroundImage();
   }
 
+  private onWallpaperSearchClick_() {
+    this.dispatchEvent(new Event('wallpaper-search-select'));
+  }
+
   private async onUploadImageClick_() {
+    chrome.metricsPrivate.recordUserAction(
+        'NTPRicherPicker.Backgrounds.UploadClicked');
     const {success} = await this.pageHandler_.chooseLocalCustomBackground();
     if (success) {
       this.dispatchEvent(new Event('local-image-upload'));

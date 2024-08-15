@@ -21,6 +21,7 @@
 #include "components/viz/common/resources/resource_id.h"
 #include "components/viz/common/resources/returned_resource.h"
 #include "components/viz/common/surfaces/frame_sink_bundle_id.h"
+#include "gpu/command_buffer/client/raster_interface.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_types.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -95,6 +96,7 @@ class VideoFrameSubmitter::FrameSinkBundleProxy
   // Not used by VideoFrameSubmitter.
   void SetWantsAnimateOnlyBeginFrames() override { NOTREACHED(); }
   void SetWantsBeginFrameAcks() override { NOTREACHED(); }
+  void SetAutoNeedsBeginFrame() override { NOTREACHED(); }
 
   void SubmitCompositorFrame(
       const viz::LocalSurfaceId& local_surface_id,
@@ -523,7 +525,7 @@ bool VideoFrameSubmitter::MaybeAcceptContextProvider(
     return false;
   }
 
-  return context_provider_->ContextGL()->GetGraphicsResetStatusKHR() ==
+  return context_provider_->RasterInterface()->GetGraphicsResetStatusKHR() ==
          GL_NO_ERROR;
 }
 

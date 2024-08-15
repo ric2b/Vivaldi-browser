@@ -152,10 +152,11 @@ void FilesRequestHandler::ReportWarningBypass(
     size_t index = warning.first;
 
     ReportAnalysisConnectorWarningBypass(
-        profile_, url_, source_, destination_, paths_[index].AsUTF8Unsafe(),
-        file_info_[index].sha256, file_info_[index].mime_type,
-        AccessPointToTriggerString(access_point_), access_point_,
-        file_info_[index].size, warning.second, user_justification);
+        profile_, url_, url_, source_, destination_,
+        paths_[index].AsUTF8Unsafe(), file_info_[index].sha256,
+        file_info_[index].mime_type, AccessPointToTriggerString(access_point_),
+        access_point_, file_info_[index].size, warning.second,
+        user_justification);
   }
 }
 
@@ -261,7 +262,8 @@ void FilesRequestHandler::FinishRequestEarly(
   // We add the request here in case we never actually uploaded anything, so it
   // wasn't added in OnGetRequestData
   safe_browsing::WebUIInfoSingleton::GetInstance()->AddToDeepScanRequests(
-      request->per_profile_request(), request->content_analysis_request());
+      request->per_profile_request(), /*access_token*/ "",
+      request->content_analysis_request());
   safe_browsing::WebUIInfoSingleton::GetInstance()->AddToDeepScanResponses(
       /*token=*/"", safe_browsing::BinaryUploadService::ResultToString(result),
       enterprise_connectors::ContentAnalysisResponse());
@@ -330,7 +332,7 @@ void FilesRequestHandler::FileRequestCallback(
   }
 
   MaybeReportDeepScanningVerdict(
-      profile_, url_, source_, destination_, path.AsUTF8Unsafe(),
+      profile_, url_, url_, source_, destination_, path.AsUTF8Unsafe(),
       file_info_[index].sha256, file_info_[index].mime_type,
       AccessPointToTriggerString(access_point_), access_point_,
       file_info_[index].size, upload_result, response,

@@ -9,7 +9,8 @@
 #import "components/omnibox/browser/actions/omnibox_pedal.h"
 #import "components/omnibox/browser/actions/omnibox_pedal_concepts.h"
 #import "components/omnibox/browser/autocomplete_match.h"
-#import "ios/chrome/browser/default_browser/promo_source.h"
+#import "components/password_manager/core/browser/ui/password_check_referrer.h"
+#import "ios/chrome/browser/default_browser/model/promo_source.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
@@ -205,7 +206,12 @@ const CGFloat kSymbolSize = 18;
                        type:pedalType
                      action:^{
                        [omniboxCommandHandler cancelOmniboxEdit];
-                       [pedalsEndpoint showAndStartSafetyCheckInHalfSheet:NO];
+                       [pedalsEndpoint
+                           showAndStartSafetyCheckInHalfSheet:NO
+                                                     referrer:
+                                                         password_manager::
+                                                             PasswordCheckReferrer::
+                                                                 kSafetyCheck];
                      }];
     }
     case OmniboxPedalId::MANAGE_CHROME_SETTINGS: {

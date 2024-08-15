@@ -103,13 +103,12 @@ class TestProfileClient : public DemographicMetricsProvider::ProfileClient {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
       case SYNC_FEATURE_DISABLED_ON_CHROMEOS_ASH_VIA_DASHBOARD:
         sync_service_ = std::make_unique<syncer::TestSyncService>();
-        sync_service_->SetSyncFeatureDisabledViaDashboard(true);
+        sync_service_->GetUserSettings()->SetSyncFeatureDisabledViaDashboard(
+            true);
 
-        // On ChromeOS Ash, IsInitialSyncFeatureSetupComplete gets cleared
-        // temporarily but immediately afterwards, it gets set again with
-        // ENGINE_INITIALIZED_WITH_AUTO_START. And yet, IsSyncFeatureEnabled()
-        // stays false because the user needs to manually resume sync the
-        // feature.
+        // On ChromeOS Ash, IsInitialSyncFeatureSetupComplete always returns
+        // true but IsSyncFeatureEnabled() stays false because the user needs to
+        // manually resume sync the feature.
         CHECK(sync_service_->GetUserSettings()
                   ->IsInitialSyncFeatureSetupComplete());
         CHECK(!sync_service_->IsSyncFeatureEnabled());

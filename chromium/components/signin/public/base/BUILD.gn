@@ -50,6 +50,7 @@ static_library("base") {
   deps = [
     "//build:chromeos_buildflags",
     "//components/prefs",
+    "//third_party/boringssl",
     "//third_party/icu:icui18n",
     "//third_party/re2",
   ]
@@ -61,6 +62,11 @@ static_library("base") {
     "//google_apis",
     "//url",
   ]
+
+  if (is_android) {
+    sources += [ "signin_feature_map.cc" ]
+    deps += [ "//components/signin/public/android:jni_headers" ]
+  }
 
   if (is_chromeos_ash) {
     deps += [ "//components/user_manager" ]
@@ -95,6 +101,9 @@ static_library("test_support") {
     "//base/test:test_support",
     "//build:chromeos_buildflags",
     "//components/prefs",
+
+    # TODO(b/309104936): Remove this unwanted dependency.
+    "//components/signin/public/identity_manager:identity_manager",
     "//crypto",
     "//google_apis:test_support",
   ]
@@ -103,6 +112,7 @@ static_library("test_support") {
     ":base",
     "//base",
     "//services/network:test_support",
+    "//testing/gtest",
   ]
 }
 

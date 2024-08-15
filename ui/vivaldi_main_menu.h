@@ -14,7 +14,6 @@ namespace vivaldi {
 void CreateVivaldiMainMenu(
     Profile* profile,
     std::vector<extensions::vivaldi::menubar::MenuItem>* items,
-    extensions::vivaldi::menubar::Mode mode,
     int min_id,
     int max_id);
 

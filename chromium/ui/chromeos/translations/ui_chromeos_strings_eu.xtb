@@ -8,6 +8,7 @@
 <translation id="1056898198331236512">Abisua</translation>
 <translation id="1060368002126861100">Fitxategiak <ph name="APP_NAME" /> aplikazioarekin irekitzeko, lehenik eraman itzazu Windows-eko fitxategien karpetara.</translation>
 <translation id="1062407476771304334">Ordeztu</translation>
+<translation id="1119383441774809183">Erakutsi testu-mezuak</translation>
 <translation id="1119447706177454957">Barneko errorea</translation>
 <translation id="1120073797882051782">Hangul romaja</translation>
 <translation id="112387589102719461">Ingelesa (AEB), Programmer Dvorak teklatuarekin</translation>
@@ -328,6 +329,7 @@
 <translation id="3619115746895587757">Kaputxinoa</translation>
 <translation id="3619593063686672873">Ez dago azkenaldiko bideorik</translation>
 <translation id="3634507049637220048"><ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" /> sarea. <ph name="NETWORK_NAME" /> (<ph name="CONNECTION_STATUS" />). Administratzaileak kudeatua. Xehetasunak.</translation>
+<translation id="36451918667380448">Sare mugikorraren hornitzailea blokeatuta dago. Laguntza jasotzeko, jarri hornitzailearekin harremanetan.</translation>
 <translation id="3645233063072417428"><ph name="NUMBER_OF_ITEMS" /> elementu mugitu dira.</translation>
 <translation id="3658269352872031728"><ph name="SELECTED_FILE_COUNT" /> fitxategi hautatu dira</translation>
 <translation id="3685122418104378273">Datu-konexioa erabiltzean, Google Drive sinkronizazioa modu lehenetsian desaktibatuta dago.</translation>
@@ -1013,6 +1015,7 @@
 <translation id="8698877009525468705">Fitxategia isilpekoa da, eta administratzailearen gidalerroek ezarritako murriztapenen mende dago.</translation>
 <translation id="8712637175834984815">Ados</translation>
 <translation id="8713112442029511308">Maltarra</translation>
+<translation id="8714138378966541668">Hornitzaileak blokeatu du</translation>
 <translation id="8714406895390098252">Bizikleta</translation>
 <translation id="8719721339511222681">Hautatu da <ph name="ENTRY_NAME" />.</translation>
 <translation id="872537912056138402">Kroaziarra</translation>

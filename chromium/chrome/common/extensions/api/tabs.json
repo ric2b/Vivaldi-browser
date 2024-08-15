@@ -406,6 +406,11 @@
                 "optional": true,
                 "description": "Vivaldi addition: Whether the creation request came from the url field"
               },
+              "ignoreLinkRouting": {
+                "type": "boolean",
+                "optional": true,
+                "description": "Vivaldi addition: Do not apply workspace link routing rules on this tab."
+              },
               "vivExtData": {
                 "type": "string",
                 "optional": true,

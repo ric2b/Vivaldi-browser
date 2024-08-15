@@ -5,10 +5,10 @@
 
 #import <UIKit/UIKit.h>
 
+#import "components/notes/note_node.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/ui/notes/note_add_edit_controller_delegate.h"
 #import "ios/ui/notes/note_folder_chooser_view_controller.h"
-#import "notes/note_node.h"
 
 using vivaldi::NoteNode;
 

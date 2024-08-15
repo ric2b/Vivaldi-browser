@@ -20,6 +20,8 @@
 #include "ash/wm/overview/overview_item_view.h"
 #include "ash/wm/overview/overview_utils.h"
 #include "ash/wm/overview/scoped_overview_animation_settings.h"
+#include "ash/wm/snap_group/snap_group.h"
+#include "ash/wm/snap_group/snap_group_controller.h"
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/splitview/split_view_utils.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
@@ -40,6 +42,7 @@
 #include "ui/compositor/layer_observer.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/geometry/transform_util.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 #include "ui/views/layout/layout_provider.h"
@@ -124,6 +127,35 @@ void ClipWindow(aura::Window* window, const gfx::Rect& clip_rect) {
   }
 
   window->layer()->SetClipRect(new_clip_rect);
+}
+
+// Returns the rounded corners to be applied on the transformed window based on
+// whether the given `window` belongs to a group or not.
+gfx::RoundedCornersF GetRoundedCornersForTransformWindow(aura::Window* window,
+                                                         float scale) {
+  if (SnapGroupController* snap_group_controller = SnapGroupController::Get()) {
+    if (SnapGroup* snap_group =
+            snap_group_controller->GetSnapGroupForGivenWindow(window)) {
+      return window == snap_group->window1()
+                 ? gfx::RoundedCornersF(
+                       /*upper_left=*/0,
+                       /*upper_right=*/0, /*lower_right=*/0,
+                       /*lower_left=*/
+                       kOverviewItemCornerRadius / scale)
+                 : gfx::RoundedCornersF(
+                       /*upper_left=*/0,
+                       /*upper_right=*/0,
+                       /*lower_right=*/
+                       kOverviewItemCornerRadius / scale,
+                       /*lower_left=*/0);
+    }
+  }
+
+  return gfx::RoundedCornersF(
+      /*upper_left=*/0,
+      /*upper_right=*/0,
+      /*lower_right=*/kOverviewItemCornerRadius / scale,
+      /*lower_left=*/kOverviewItemCornerRadius / scale);
 }
 
 }  // namespace
@@ -246,12 +278,12 @@ ScopedOverviewTransformWindow::~ScopedOverviewTransformWindow() {
 }
 
 // static
-float ScopedOverviewTransformWindow::GetItemScale(const gfx::SizeF& source,
-                                                  const gfx::SizeF& target,
+float ScopedOverviewTransformWindow::GetItemScale(int source_height,
+                                                  int target_height,
                                                   int top_view_inset,
                                                   int title_height) {
-  return std::min(2.0f, (target.height() - title_height) /
-                            (source.height() - top_view_inset));
+  return std::min(2.0f, static_cast<float>(target_height - title_height) /
+                            (source_height - top_view_inset));
 }
 
 // static
@@ -294,7 +326,7 @@ void ScopedOverviewTransformWindow::RestoreWindow(bool reset_transform,
       settings->AddObserver(exit_observer.get());
       if (window_->layer()->GetAnimator() == settings->GetAnimator())
         settings->AddObserver(new WindowTransformAnimationObserver(window_));
-      Shell::Get()->overview_controller()->AddExitAnimationObserver(
+      OverviewController::Get()->AddExitAnimationObserver(
           std::move(exit_observer));
     }
 
@@ -335,7 +367,7 @@ void ScopedOverviewTransformWindow::BeginScopedAnimation(
     if (animation_type == OVERVIEW_ANIMATION_LAYOUT_OVERVIEW_ITEMS_ON_ENTER) {
       auto enter_observer = std::make_unique<EnterAnimationObserver>();
       settings->AddObserver(enter_observer.get());
-      Shell::Get()->overview_controller()->AddEnterAnimationObserver(
+      OverviewController::Get()->AddEnterAnimationObserver(
           std::move(enter_observer));
     }
 
@@ -436,8 +468,8 @@ gfx::RectF ScopedOverviewTransformWindow::ShrinkRectToFitPreservingAspectRatio(
     int title_height) const {
   DCHECK(!rect.IsEmpty());
   DCHECK_LE(top_view_inset, rect.height());
-  const float scale =
-      GetItemScale(rect.size(), bounds.size(), top_view_inset, title_height);
+  const float scale = GetItemScale(rect.height(), bounds.height(),
+                                   top_view_inset, title_height);
   const float horizontal_offset = 0.5 * (bounds.width() - scale * rect.width());
   const float width = bounds.width() - 2.f * horizontal_offset;
   const float vertical_offset = title_height - scale * top_view_inset;
@@ -478,7 +510,7 @@ gfx::RectF ScopedOverviewTransformWindow::ShrinkRectToFitPreservingAspectRatio(
           // to find out the height of the inset when the whole window,
           // including the inset, is scaled down to `new_bounds`.
           const float new_scale =
-              GetItemScale(rect.size(), new_bounds.size(), 0, 0);
+              GetItemScale(rect.height(), new_bounds.height(), 0, 0);
           const float scaled_top_view_inset = top_view_inset * new_scale;
           // Offset `new_bounds` to be at a point in the overview item frame
           // where it will be centered when we clip the `top_view_inset`.
@@ -578,15 +610,12 @@ void ScopedOverviewTransformWindow::UpdateRoundedCorners(bool show) {
 
   // Depending on the size of `backdrop_view`, we might not want to round the
   // window associated with `layer`.
-  auto* backdrop_view = overview_item_->GetBackDropView();
   const bool has_rounding = window_util::ShouldRoundThumbnailWindow(
-      backdrop_view, GetTransformedBounds());
+      overview_item_->GetBackDropView(), GetTransformedBounds());
 
   layer->SetRoundedCornerRadius(
-      has_rounding
-          ? gfx::RoundedCornersF(0, 0, kOverviewItemCornerRadius / scale,
-                                 kOverviewItemCornerRadius / scale)
-          : gfx::RoundedCornersF(0));
+      has_rounding ? GetRoundedCornersForTransformWindow(window_, scale)
+                   : gfx::RoundedCornersF(0));
 }
 
 void ScopedOverviewTransformWindow::OnTransientChildWindowAdded(

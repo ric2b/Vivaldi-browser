@@ -6,6 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_PEERCONNECTION_PEER_CONNECTION_DEPENDENCY_FACTORY_H_
 
 #include "base/feature_list.h"
+#include "base/memory/raw_ptr.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread.h"
@@ -22,6 +23,7 @@
 #include "third_party/blink/renderer/platform/wtf/gc_plugin.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
+#include "third_party/webrtc/api/async_dns_resolver.h"
 #include "third_party/webrtc/api/peer_connection_interface.h"
 #include "third_party/webrtc_overrides/metronome_source.h"
 
@@ -116,9 +118,9 @@ class MODULES_EXPORT PeerConnectionDependencyFactory
   virtual std::unique_ptr<cricket::PortAllocator> CreatePortAllocator(
       blink::WebLocalFrame* web_frame);
 
-  // Creates an AsyncResolverFactory that uses the networking Mojo service.
-  virtual std::unique_ptr<webrtc::AsyncResolverFactory>
-  CreateAsyncResolverFactory();
+  // Creates an AsyncDnsResolverFactory that uses the networking Mojo service.
+  virtual std::unique_ptr<webrtc::AsyncDnsResolverFactoryInterface>
+  CreateAsyncDnsResolverFactory();
 
   // Creates a libjingle representation of an ice candidate.
   virtual webrtc::IceCandidateInterface* CreateIceCandidate(
@@ -203,7 +205,8 @@ class MODULES_EXPORT PeerConnectionDependencyFactory
 
   scoped_refptr<blink::WebRtcAudioDeviceImpl> audio_device_;
 
-  media::GpuVideoAcceleratorFactories* gpu_factories_;
+  raw_ptr<media::GpuVideoAcceleratorFactories, ExperimentalRenderer>
+      gpu_factories_;
 
   GC_PLUGIN_IGNORE("https://crbug.com/1381979")
   WebrtcVideoPerfReporter webrtc_video_perf_reporter_;

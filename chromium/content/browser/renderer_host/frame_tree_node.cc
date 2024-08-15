@@ -42,14 +42,6 @@
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom.h"
 
-namespace features {
-
-BASE_FEATURE(kDumpWhenFrameTreeNodeTakesNavigationRequestWithEvictedBFCacheRFH,
-             "DumpWhenFrameTreeNodeTakesNavigationRequestWithEvictedBFCacheRFH",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-}  // namespace features
-
 namespace content {
 
 namespace {
@@ -151,9 +143,10 @@ FrameTreeNode::FencedFrameStatus ComputeFencedFrameStatus(
     const blink::FramePolicy& frame_policy) {
   using FencedFrameStatus = FrameTreeNode::FencedFrameStatus;
   if (blink::features::IsFencedFramesEnabled() &&
-      frame_tree.type() == FrameTree::Type::kFencedFrame) {
-    if (!parent)
+      frame_tree.is_fenced_frame()) {
+    if (!parent) {
       return FencedFrameStatus::kFencedFrameRoot;
+    }
     return FencedFrameStatus::kIframeNestedWithinFencedFrame;
   }
 
@@ -605,23 +598,15 @@ void FrameTreeNode::TakeNavigationRequest(
   // initiated previously.
   CancelRestartingBackForwardCacheNavigation();
 
-  // TODO(crbug.com/1468984): Remove.
-  // Dump the process to investigate the case when BFCache is evicted
-  // after the NavigationRequest creation but before its ownership is
-  // transferred to the FrameTreeNode.
-  if (base::FeatureList::IsEnabled(
-          features::
-              kDumpWhenFrameTreeNodeTakesNavigationRequestWithEvictedBFCacheRFH)) {
-    if (navigation_request->IsServedFromBackForwardCache() &&
-        navigation_request->GetRenderFrameHostRestoredFromBackForwardCache()
-            ->is_evicted_from_back_forward_cache()) {
-      SCOPED_CRASH_KEY_STRING256(
-          "Bug1468984", "bfcache_eviction_reason",
-          navigation_request->GetRenderFrameHostRestoredFromBackForwardCache()
-              ->GetBackForwardCacheMetrics()
-              ->GetPageStoredResultString());
-      base::debug::DumpWithoutCrashing();
-    }
+  // If `navigation_request` is a BFCache navigation, the RFH for BFCache
+  // restore should not be evicted before.
+  // This CHECK is added with the fix of https://crbug.com/1468984. See
+  // `BackForwardCacheBrowserTest.TwoBackNavigationsToTheSameEntry` for how
+  // BFCache entry could be evicted before the BFCache `NavigationRequest`
+  // is moved to the FrameTreeNode without the fix.
+  if (navigation_request->IsServedFromBackForwardCache()) {
+    CHECK(!navigation_request->GetRenderFrameHostRestoredFromBackForwardCache()
+               ->is_evicted_from_back_forward_cache());
   }
 
   navigation_request_ = std::move(navigation_request);
@@ -959,7 +944,8 @@ FrameTreeNode::GetFencedFramePropertiesForEditing(
   return fenced_frame_properties_;
 }
 
-void FrameTreeNode::MaybeResetFencedFrameAutomaticBeaconReportEventData() {
+void FrameTreeNode::MaybeResetFencedFrameAutomaticBeaconReportEventData(
+    blink::mojom::AutomaticBeaconType event_type) {
   absl::optional<FencedFrameProperties>& properties =
       GetFencedFramePropertiesForEditing();
   // `properties` will exist for both fenced frames as well as iframes loaded
@@ -967,10 +953,11 @@ void FrameTreeNode::MaybeResetFencedFrameAutomaticBeaconReportEventData() {
   if (!properties) {
     return;
   }
-  properties->MaybeResetAutomaticBeaconData();
+  properties->MaybeResetAutomaticBeaconData(event_type);
 }
 
 void FrameTreeNode::SetFencedFrameAutomaticBeaconReportEventData(
+    blink::mojom::AutomaticBeaconType event_type,
     const std::string& event_data,
     const std::vector<blink::FencedFrame::ReportingDestination>& destinations,
     network::AttributionReportingRuntimeFeatures
@@ -997,8 +984,9 @@ void FrameTreeNode::SetFencedFrameAutomaticBeaconReportEventData(
         "origin to the mapped url from the fenced frame config.");
     return;
   }
-  properties->UpdateAutomaticBeaconData(
-      event_data, destinations, attribution_reporting_runtime_features, once);
+  properties->UpdateAutomaticBeaconData(event_type, event_data, destinations,
+                                        attribution_reporting_runtime_features,
+                                        once);
 }
 
 size_t FrameTreeNode::GetFencedFrameDepth(

@@ -16,7 +16,7 @@
 #import "ios/chrome/browser/bookmarks/model/bookmarks_utils.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
-#import "ios/chrome/browser/sync/sync_observer_bridge.h"
+#import "ios/chrome/browser/sync/model/sync_observer_bridge.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_mediator.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
 #import "ios/chrome/browser/ui/bookmarks/editor/bookmarks_editor_consumer.h"
@@ -259,8 +259,8 @@
 
   // When launched from the star button, removing the current bookmark
   // removes all matching nodes.
-  std::vector<const bookmarks::BookmarkNode*> nodesVector;
-  [self bookmarkModel]->GetNodesByURL([self bookmark]->url(), &nodesVector);
+  std::vector<const bookmarks::BookmarkNode*> nodesVector =
+      [self bookmarkModel]->GetNodesByURL([self bookmark]->url());
   std::set<const bookmarks::BookmarkNode*> nodes(nodesVector.begin(),
                                                  nodesVector.end());
   if (!nodesVector.empty()) {

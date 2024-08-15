@@ -145,7 +145,8 @@ void ExclusiveAccessBubbleViews::UpdateContent(
   // notification, a notification was visible earlier, and the earlier
   // notification was either a non-download one, or was one about an override
   // itself.
-  notify_overridden_ = notify_download && IsVisible() &&
+  notify_overridden_ = notify_download &&
+                       (IsVisible() || animation_->IsShowing()) &&
                        (!notify_download_ || notify_overridden_);
   notify_download_ = notify_download;
 
@@ -279,8 +280,9 @@ gfx::Rect ExclusiveAccessBubbleViews::GetPopupRect() const {
   int x = widget_bounds.x() + (widget_bounds.width() - size.width()) / 2;
 
   int top_container_bottom = widget_bounds.y();
+#if !BUILDFLAG(IS_MAC)
   if (bubble_view_context_->IsImmersiveModeEnabled()) {
-    // Skip querying the top container height in non-immersive fullscreen
+    // Skip querying the top container height in CrOS non-immersive fullscreen
     // because:
     // - The top container height is always zero in non-immersive fullscreen.
     // - Querying the top container height may return the height before entering
@@ -292,6 +294,7 @@ gfx::Rect ExclusiveAccessBubbleViews::GetPopupRect() const {
     top_container_bottom =
         bubble_view_context_->GetTopContainerBoundsInScreen().bottom();
   }
+#endif
   // |desired_top| is the top of the bubble area including the shadow.
   const int desired_top = kSimplifiedPopupTopPx - view_->GetInsets().top();
   const int y = top_container_bottom + desired_top;

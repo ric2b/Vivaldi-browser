@@ -4,7 +4,7 @@
 
 import {LanguageHelper, LanguagesBrowserProxyImpl, LanguagesMetricsProxyImpl, LanguagesPageInteraction, LanguageState, LifetimeBrowserProxyImpl, OsSettingsChangeDeviceLanguageDialogElement, OsSettingsLanguagesPageV2Element, SettingsLanguagesElement} from 'chrome://os-settings/lazy_load.js';
 import {CrActionMenuElement, CrCheckboxElement, CrPolicyIndicatorElement, CrSettingsPrefs, Router, routes, settingMojom, SettingsPrefsElement} from 'chrome://os-settings/os_settings.js';
-import {assert} from 'chrome://resources/js/assert_ts.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {getDeepActiveElement} from 'chrome://resources/js/util_ts.js';
 import {keyDownOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
@@ -14,9 +14,10 @@ import {fakeDataBind, waitAfterNextRender} from 'chrome://webui-test/polymer_tes
 
 import {FakeLanguageSettingsPrivate, getFakeLanguagePrefs} from '../fake_language_settings_private.js';
 import {FakeSettingsPrivate} from '../fake_settings_private.js';
-import {TestLanguagesBrowserProxy} from '../test_os_languages_browser_proxy.js';
-import {TestLanguagesMetricsProxy} from '../test_os_languages_metrics_proxy.js';
 import {TestLifetimeBrowserProxy} from '../test_os_lifetime_browser_proxy.js';
+
+import {TestLanguagesBrowserProxy} from './test_os_languages_browser_proxy.js';
+import {TestLanguagesMetricsProxy} from './test_os_languages_metrics_proxy.js';
 
 suite('<os-settings-languages-page-v2>', () => {
   let languageHelper: LanguageHelper;

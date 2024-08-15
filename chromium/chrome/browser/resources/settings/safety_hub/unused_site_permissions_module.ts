@@ -4,23 +4,27 @@
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
+import 'chrome://resources/polymer/v3_0/paper-tooltip/paper-tooltip.js';
 import '../i18n_setup.js';
+import '../icons.html.js';
 import './safety_hub_module.js';
 
+import {CrActionMenuElement} from 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
 import {CrToastElement} from 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
-import {assert, assertNotReached} from 'chrome://resources/js/assert_ts.js';
+import {assert, assertNotReached} from 'chrome://resources/js/assert.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.js';
 import {PluralStringProxyImpl} from 'chrome://resources/js/plural_string_proxy.js';
-import {isUndoKeyboardEvent} from 'chrome://resources/js/util_ts.js';
+import {isUndoKeyboardEvent} from 'chrome://resources/js/util.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {routes} from '../route.js';
-import {Route, RouteObserverMixin} from '../router.js';
+import {Route, RouteObserverMixin, Router} from '../router.js';
 import {ContentSettingsTypes} from '../site_settings/constants.js';
 import {SiteSettingsMixin} from '../site_settings/site_settings_mixin.js';
 import {getLocalizationStringForContentType} from '../site_settings_page/site_settings_page_util.js';
+import {TooltipMixin} from '../tooltip_mixin.js';
 
 import {SafetyHubBrowserProxy, SafetyHubBrowserProxyImpl, SafetyHubEvent, UnusedSitePermissions} from './safety_hub_browser_proxy.js';
 import {SettingsSafetyHubModuleElement, SiteInfo} from './safety_hub_module.js';
@@ -28,9 +32,12 @@ import {getTemplate} from './unused_site_permissions_module.html.js';
 
 export interface SettingsSafetyHubUnusedSitePermissionsModuleElement {
   $: {
+    headerActionMenu: CrActionMenuElement,
     bulkUndoButton: HTMLElement,
     gotItButton: HTMLElement,
+    goToSettings: HTMLElement,
     module: SettingsSafetyHubModuleElement,
+    moreActionButton: HTMLElement,
     toastUndoButton: HTMLElement,
     undoToast: CrToastElement,
   };
@@ -50,8 +57,9 @@ interface UnusedSitePermissionsDisplay extends UnusedSitePermissions, SiteInfo {
   detail: string;
 }
 
-const SettingsSafetyHubUnusedSitePermissionsModuleElementBase = I18nMixin(
-    RouteObserverMixin(WebUiListenerMixin(SiteSettingsMixin(PolymerElement))));
+const SettingsSafetyHubUnusedSitePermissionsModuleElementBase =
+    TooltipMixin(I18nMixin(RouteObserverMixin(
+        WebUiListenerMixin(SiteSettingsMixin(PolymerElement)))));
 
 export class SettingsSafetyHubUnusedSitePermissionsModuleElement extends
     SettingsSafetyHubUnusedSitePermissionsModuleElementBase {
@@ -71,6 +79,9 @@ export class SettingsSafetyHubUnusedSitePermissionsModuleElement extends
       // Text below primary header label.
       subheaderString_: String,
 
+      // The icon next to primary header label.
+      headerIconString_: String,
+
       // Most recent site permissions the user has allowed again.
       lastUnusedSitePermissionsAllowedAgain_: {
         type: Object,
@@ -81,6 +92,13 @@ export class SettingsSafetyHubUnusedSitePermissionsModuleElement extends
       lastUnusedSitePermissionsListAcknowledged_: {
         type: Array,
         value: null,
+      },
+
+      // Sites that have already been rendered. Any new ones not listed here
+      // will need to be explicitly animated to show.
+      renderedOrigins_: {
+        type: Array,
+        value: [],
       },
 
       // Last action the user has taken, determines the function of the undo
@@ -111,12 +129,14 @@ export class SettingsSafetyHubUnusedSitePermissionsModuleElement extends
 
   private headerString_: string;
   private subheaderString_: string|null;
+  private headerIconString_: string;
   private toastText_: string|null;
   private sites_: UnusedSitePermissionsDisplay[]|null;
   private shouldShowCompletionInfo_: boolean;
   private lastUnusedSitePermissionsAllowedAgain_: UnusedSitePermissions|null;
   private lastUnusedSitePermissionsListAcknowledged_: UnusedSitePermissions[]|
       null;
+  private renderedOrigins_: string[];
   private lastUserAction_: Action|null;
   private eventTracker_: EventTracker = new EventTracker();
   private browserProxy_: SafetyHubBrowserProxy =
@@ -199,7 +219,10 @@ export class SettingsSafetyHubUnusedSitePermissionsModuleElement extends
 
     this.showUndoToast_(
         this.i18n('safetyCheckUnusedSitePermissionsToastLabel', item.origin));
-    this.browserProxy_.allowPermissionsAgainForUnusedSite(item.origin);
+    this.$.module.animateHide(
+        item.origin,
+        this.browserProxy_.allowPermissionsAgainForUnusedSite.bind(
+            this.browserProxy_, item.origin));
   }
 
   private async onGotItClick_(e: Event) {
@@ -208,10 +231,26 @@ export class SettingsSafetyHubUnusedSitePermissionsModuleElement extends
     this.lastUserAction_ = Action.GOT_IT;
     this.lastUnusedSitePermissionsListAcknowledged_ = this.sites_;
 
-    this.browserProxy_.acknowledgeRevokedUnusedSitePermissionsList();
+    this.$.module.animateHide(
+        /* all origins */ null,
+        this.browserProxy_.acknowledgeRevokedUnusedSitePermissionsList.bind(
+            this.browserProxy_));
     const toastText = await PluralStringProxyImpl.getInstance().getPluralString(
         'safetyCheckUnusedSitePermissionsToastBulkLabel', this.sites_.length);
     this.showUndoToast_(toastText);
+  }
+
+  private onMoreActionClick_(e: Event) {
+    e.stopPropagation();
+    this.$.headerActionMenu.showAt(e.target as HTMLElement);
+  }
+
+  private onGoToSettingsClick_(e: Event) {
+    e.stopPropagation();
+    this.$.headerActionMenu.close();
+    Router.getInstance().navigateTo(
+        routes.SITE_SETTINGS, /* dynamicParams= */ undefined,
+        /* removeSearch= */ true);
   }
 
   /* Repopulate the list when unused site permission list is updated. */
@@ -221,17 +260,28 @@ export class SettingsSafetyHubUnusedSitePermissionsModuleElement extends
             ({...site, detail: this.getPermissionsText_(site.permissions)}));
   }
 
+  private setHeaderToCompletionState_() {
+    this.headerString_ = this.toastText_ ?
+        this.toastText_ :
+        this.i18n('safetyCheckUnusedSitePermissionsDoneLabel');
+    this.subheaderString_ = '';
+    this.headerIconString_ = 'cr:check';
+  }
+
   private async onSitesChanged_() {
     if (this.sites_ === null) {
       return;
     }
 
+    // Run the show animation on all new items, i.e. those items
+    // in |this.sites_| which aren't already rendered.
+    this.$.module.animateShow(
+        this.sites_.map(site => site.origin)
+            .filter(origin => !this.renderedOrigins_.includes(origin)));
+    this.renderedOrigins_ = this.sites_.map(site => site.origin);
+
     if (this.shouldShowCompletionInfo_) {
-      // In the completion state, the header string should be replaced with
-      // completion string.
-      this.headerString_ =
-          this.i18n('safetyCheckUnusedSitePermissionsDoneLabel');
-      this.subheaderString_ = '';
+      this.setHeaderToCompletionState_();
       return;
     }
 
@@ -242,6 +292,7 @@ export class SettingsSafetyHubUnusedSitePermissionsModuleElement extends
         await PluralStringProxyImpl.getInstance().getPluralString(
             'safetyCheckUnusedSitePermissionsSecondaryLabel',
             this.sites_.length);
+    this.headerIconString_ = 'settings:permissions';
   }
 
   private onUndoClick_(e: Event) {
@@ -292,6 +343,16 @@ export class SettingsSafetyHubUnusedSitePermissionsModuleElement extends
   private showUndoToast_(text: string) {
     this.toastText_ = text;
     this.$.undoToast.show();
+  }
+
+  // TODO(crbug.com/1443466): Move common functionality between
+  // unused_site_permissions_module.ts and notification_permissions_module.ts to
+  // a util class.
+  private showUndoTooltip_(e: Event) {
+    e.stopPropagation();
+    const tooltip = this.shadowRoot!.querySelector('paper-tooltip');
+    assert(tooltip);
+    this.showTooltipAtTarget(tooltip, e.target!);
   }
 }
 

@@ -156,7 +156,7 @@ class DeprecatedAppsDialogViewBrowserTest
                                                      const char* url) {
     extensions::TestExtensionDir test_app_dir;
     test_app_dir.WriteManifest(
-        base::StringPrintf(app_manifest, GURL(url).spec().c_str()));
+        base::StringPrintfNonConstexpr(app_manifest, GURL(url).spec().c_str()));
     const extensions::Extension* app = InstallExtensionWithSourceAndFlags(
         test_app_dir.UnpackedPath(), /*expected_change=*/1,
         extensions::mojom::ManifestLocation::kInternal,
@@ -275,7 +275,9 @@ IN_PROC_BROWSER_TEST_P(DeprecatedAppsDialogViewBrowserTest,
       ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUIAppsURL)));
   auto waiter = views::NamedWidgetShownWaiter(
       views::test::AnyWidgetTestPasskey{}, "DeprecatedAppsDialogView");
-  content::EvalJs(web_contents, ClickDeprecatedDialogLinkString());
+  // TODO: handle return value.
+  std::ignore =
+      content::EvalJs(web_contents, ClickDeprecatedDialogLinkString());
   EXPECT_NE(waiter.WaitIfNeededAndGet(), nullptr);
 }
 

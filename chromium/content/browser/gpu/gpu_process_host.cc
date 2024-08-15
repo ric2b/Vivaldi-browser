@@ -56,7 +56,6 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/gpu_utils.h"
 #include "content/public/common/content_client.h"
-#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
@@ -255,16 +254,19 @@ static const char* const kSwitchNames[] = {
     switches::kDRMVirtualConnectorIsExternal,
     switches::kEnableBackgroundThreadPool,
     switches::kEnableGpuRasterization,
+    switches::kEnableSkiaGraphite,
     switches::kEnableLogging,
     switches::kDoubleBufferCompositing,
     switches::kHeadless,
     switches::kLoggingLevel,
     switches::kEnableLowEndDeviceMode,
+    switches::kDisableSkiaGraphite,
     switches::kDisableLowEndDeviceMode,
     switches::kProfilingAtStart,
     switches::kProfilingFile,
     switches::kProfilingFlush,
     switches::kRunAllCompositorStagesBeforeDraw,
+    switches::kShaderCachePath,
     switches::kSkiaFontCacheLimitMb,
     switches::kSkiaGraphiteBackend,
     switches::kSkiaResourceCacheLimitMb,
@@ -1222,7 +1224,8 @@ bool GpuProcessHost::LaunchGpuProcess() {
 
 #if BUILDFLAG(IS_WIN)
   if (kind_ == GPU_PROCESS_KIND_INFO_COLLECTION &&
-      base::FeatureList::IsEnabled(kGpuInfoCollectionSeparatePrefetch)) {
+      base::FeatureList::IsEnabled(
+          features::kGpuInfoCollectionSeparatePrefetch)) {
     cmd_line->AppendArg(switches::kPrefetchArgumentOther);
   } else {
     cmd_line->AppendArg(switches::kPrefetchArgumentGpu);

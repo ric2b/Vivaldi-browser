@@ -115,8 +115,8 @@ void AppendSuggestionIfMatching(
     std::vector<autofill::Suggestion>* suggestions) {
   std::u16string lower_suggestion = base::i18n::ToLower(field_suggestion);
   std::u16string lower_contents = base::i18n::ToLower(field_contents);
-  if (show_all || autofill::FieldIsSuggestionSubstringStartingOnTokenBoundary(
-                      lower_suggestion, lower_contents, true)) {
+  if (show_all || base::StartsWith(lower_suggestion, lower_contents,
+                                   base::CompareCase::SENSITIVE)) {
     bool replaced_username;
     autofill::Suggestion suggestion(
         ReplaceEmptyUsername(field_suggestion, &replaced_username));
@@ -146,11 +146,6 @@ void AppendSuggestionIfMatching(
                                      ? autofill::PopupItemId::kPasswordEntry
                                      : autofill::PopupItemId::kUsernameEntry;
     }
-    suggestion.match =
-        show_all || base::StartsWith(lower_suggestion, lower_contents,
-                                     base::CompareCase::SENSITIVE)
-            ? autofill::Suggestion::PREFIX_MATCH
-            : autofill::Suggestion::SUBSTRING_MATCH;
     suggestion.custom_icon = custom_icon;
     // The UI code will pick up an icon from the resources based on the string.
     suggestion.icon = "globeIcon";
@@ -160,10 +155,8 @@ void AppendSuggestionIfMatching(
 }
 
 // This function attempts to fill |suggestions| from |fill_data| based on
-// |current_username| that is the current value of the field. Unless |show_all|
-// is true, it only picks suggestions allowed by
-// FieldIsSuggestionSubstringStartingOnTokenBoundary. It can pick either a
-// substring or a prefix based on the flag.
+// |current_username| that is the current value of the field. If |show_all|
+// is true, we do not match suggestions with field content.
 void GetSuggestions(const autofill::PasswordFormFillData& fill_data,
                     const std::u16string& current_username,
                     const gfx::Image& custom_icon,
@@ -189,16 +182,6 @@ void GetSuggestions(const autofill::PasswordFormFillData& fill_data,
             [](const autofill::Suggestion& a, const autofill::Suggestion& b) {
               return a.main_text.value < b.main_text.value;
             });
-
-  // Prefix matches should precede other token matches.
-  if (!show_all && autofill::IsFeatureSubstringMatchEnabled()) {
-    // Using stable sort in order to preserve sorting by 'value'
-    std::stable_sort(
-        suggestions->begin(), suggestions->end(),
-        [](const autofill::Suggestion& a, const autofill::Suggestion& b) {
-          return a.match < b.match;
-        });
-  }
 }
 
 void MaybeAppendManagePasswordsEntry(
@@ -271,8 +254,13 @@ autofill::Suggestion CreateGenerationEntry() {
 
 // Entry for opting in to password account storage and then filling.
 autofill::Suggestion CreateEntryToOptInToAccountStorageThenFill() {
+  bool has_passkey_sync = false;
+#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
+  has_passkey_sync =
+      base::FeatureList::IsEnabled(syncer::kSyncWebauthnCredentials);
+#endif
   autofill::Suggestion suggestion(l10n_util::GetStringUTF16(
-      base::FeatureList::IsEnabled(syncer::kSyncWebauthnCredentials)
+      has_passkey_sync
           ? IDS_PASSWORD_MANAGER_OPT_INTO_ACCOUNT_STORE_WITH_PASSKEYS
           : IDS_PASSWORD_MANAGER_OPT_INTO_ACCOUNT_STORE));
   suggestion.popup_item_id =
@@ -507,7 +495,7 @@ void PasswordAutofillManager::DidAcceptSuggestion(
           password_client_->IsOffTheRecord());
 
       CancelBiometricReauthIfOngoing();
-      scoped_refptr<device_reauth::DeviceAuthenticator> authenticator =
+      std::unique_ptr<device_reauth::DeviceAuthenticator> authenticator =
           password_client_->GetDeviceAuthenticator();
       // Note: this is currently only implemented on Android, Mac and Windows.
       // For other platforms, the `authenticator` will be null.
@@ -519,37 +507,36 @@ void PasswordAutofillManager::DidAcceptSuggestion(
         DCHECK(success);
       } else {
         authenticator_ = std::move(authenticator);
-#if BUILDFLAG(IS_ANDROID)
-        authenticator_->Authenticate(
-            device_reauth::DeviceAuthRequester::kAutofillSuggestion,
-            base::BindOnce(&PasswordAutofillManager::OnBiometricReauthCompleted,
-                           weak_ptr_factory_.GetWeakPtr(),
-                           suggestion.main_text.value,
-                           suggestion.popup_item_id),
-            /*use_last_valid_auth=*/true);
-#elif BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-        const std::u16string origin =
-            base::UTF8ToUTF16(GetShownOrigin(url::Origin::Create(
-                password_manager_driver_->GetLastCommittedURL())));
 
+        std::u16string message;
         auto on_reath_complete = base::BindOnce(
             &PasswordAutofillManager::OnBiometricReauthCompleted,
             weak_ptr_factory_.GetWeakPtr(), suggestion.main_text.value,
             suggestion.popup_item_id);
 
-        authenticator_->AuthenticateWithMessage(
-            l10n_util::GetStringFUTF16(IDS_PASSWORD_MANAGER_FILLING_REAUTH,
-                                       origin),
-            metrics_util::TimeCallback(
-                std::move(on_reath_complete),
-                "PasswordManager.PasswordFilling.AuthenticationTime"));
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+        const std::u16string origin =
+            base::UTF8ToUTF16(GetShownOrigin(url::Origin::Create(
+                password_manager_driver_->GetLastCommittedURL())));
+        message = l10n_util::GetStringFUTF16(
+            IDS_PASSWORD_MANAGER_FILLING_REAUTH, origin);
 #endif
+        authenticator_->AuthenticateWithMessage(
+            message, metrics_util::TimeCallback(
+                         std::move(on_reath_complete),
+                         "PasswordManager.PasswordFilling.AuthenticationTime"));
       }
       break;
   }
 
   autofill_client_->HideAutofillPopup(
       autofill::PopupHidingReason::kAcceptSuggestion);
+}
+
+void PasswordAutofillManager::DidPerformButtonActionForSuggestion(
+    const autofill::Suggestion&) {
+  // Button actions do currently not exist for password entries.
+  NOTREACHED();
 }
 
 bool PasswordAutofillManager::GetDeletionConfirmationText(
@@ -987,8 +974,7 @@ void PasswordAutofillManager::OnBiometricReauthCompleted(
 void PasswordAutofillManager::CancelBiometricReauthIfOngoing() {
   if (!authenticator_)
     return;
-  authenticator_->Cancel(
-      device_reauth::DeviceAuthRequester::kAutofillSuggestion);
+  authenticator_->Cancel();
   authenticator_.reset();
 }
 

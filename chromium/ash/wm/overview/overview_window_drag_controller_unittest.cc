@@ -3,8 +3,6 @@
 // found in the LICENSE file.
 
 #include "ash/wm/overview/overview_window_drag_controller.h"
-#include "base/memory/raw_ptr.h"
-
 #include "ash/display/screen_orientation_controller.h"
 #include "ash/display/screen_orientation_controller_test_api.h"
 #include "ash/shell.h"
@@ -17,16 +15,18 @@
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/desks/legacy_desk_bar_view.h"
 #include "ash/wm/desks/zero_state_button.h"
-#include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/overview_controller.h"
+#include "ash/wm/overview/overview_drop_target.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_item.h"
 #include "ash/wm/overview/overview_session.h"
+#include "ash/wm/overview/overview_test_util.h"
 #include "ash/wm/splitview/split_view_constants.h"
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/splitview/split_view_drag_indicators.h"
 #include "ash/wm/window_util.h"
 #include "base/containers/contains.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "ui/aura/window_tree_host.h"
@@ -218,6 +218,51 @@ TEST_F(OverviewWindowDragControllerTest, NoDragToCloseUsingMouse) {
   event_generator->ReleaseLeftButton();
   EXPECT_TRUE(overview_controller->InOverviewSession());
   EXPECT_EQ(target_bounds_before_drag, overview_item->target_bounds());
+}
+
+// Tests that the bounds of the drop target for `OverviewItem` will match that
+// of the corresponding item which the drop target is a placeholder for.
+TEST_F(OverviewWindowDragControllerTest, DropTargetBoundsTest) {
+  auto* desk_controller = DesksController::Get();
+  desk_controller->NewDesk(DesksCreationRemovalSource::kButton);
+  ASSERT_EQ(2u, desk_controller->desks().size());
+
+  std::unique_ptr<aura::Window> window = CreateAppWindow();
+
+  OverviewController* overview_controller = Shell::Get()->overview_controller();
+  overview_controller->StartOverview(OverviewStartAction::kTests,
+                                     OverviewEnterExitType::kImmediateEnter);
+  ASSERT_TRUE(overview_controller->InOverviewSession());
+
+  auto* overview_grid = GetOverviewGridForRoot(Shell::GetPrimaryRootWindow());
+  ASSERT_TRUE(overview_grid);
+  const auto& window_list = overview_grid->window_list();
+  ASSERT_EQ(window_list.size(), 1u);
+
+  OverviewSession* overview_session = overview_controller->overview_session();
+  auto* overview_item =
+      overview_session->GetOverviewItemForWindow(window.get());
+  auto* event_generator = GetEventGenerator();
+  const gfx::RectF target_bounds_before_dragging =
+      overview_item->target_bounds();
+
+  for (const bool by_touch : {false, true}) {
+    DragItemToPoint(
+        overview_item,
+        Shell::GetPrimaryRootWindow()->GetBoundsInScreen().CenterPoint(),
+        event_generator, by_touch, /*drop=*/false);
+    EXPECT_TRUE(overview_controller->InOverviewSession());
+
+    OverviewDropTarget* drop_target = overview_grid->drop_target();
+    EXPECT_TRUE(drop_target);
+    EXPECT_EQ(gfx::RectF(drop_target->item_widget()->GetWindowBoundsInScreen()),
+              target_bounds_before_dragging);
+    if (by_touch) {
+      event_generator->ReleaseTouch();
+    } else {
+      event_generator->ReleaseLeftButton();
+    }
+  }
 }
 
 TEST_F(OverviewWindowDragControllerTest,

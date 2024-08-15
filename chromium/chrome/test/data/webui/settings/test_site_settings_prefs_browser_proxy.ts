@@ -3,10 +3,11 @@
 // found in the LICENSE file.
 
 // clang-format off
-import {assert} from 'chrome://resources/js/assert_ts.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
 import {StorageAccessSiteException, AppProtocolEntry, ChooserType, ContentSetting, ContentSettingsTypes, HandlerEntry, OriginFileSystemGrants, ProtocolEntry, RawChooserException, RawSiteException, RecentSitePermissions, SiteGroup, SiteSettingSource, SiteSettingsPrefsBrowserProxy, ZoomLevelEntry} from 'chrome://settings/lazy_load.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 
 import {createOriginInfo, createSiteGroup,createSiteSettingsPrefs, getContentSettingsTypeFromChooserType, SiteSettingsPref} from './test_util.js';
 // clang-format on
@@ -81,6 +82,7 @@ export class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy
     this.categoryList_ = [
       ContentSettingsTypes.ADS,
       ContentSettingsTypes.AR,
+      ContentSettingsTypes.AUTO_PICTURE_IN_PICTURE,
       ContentSettingsTypes.AUTOMATIC_DOWNLOADS,
       ContentSettingsTypes.BACKGROUND_SYNC,
       ContentSettingsTypes.BLUETOOTH_DEVICES,
@@ -96,7 +98,6 @@ export class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy
       ContentSettingsTypes.JAVASCRIPT,
       ContentSettingsTypes.LOCAL_FONTS,
       ContentSettingsTypes.MIC,
-      ContentSettingsTypes.MIDI_DEVICES,
       ContentSettingsTypes.MIXEDSCRIPT,
       ContentSettingsTypes.NOTIFICATIONS,
       ContentSettingsTypes.PAYMENT_HANDLER,
@@ -109,6 +110,12 @@ export class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy
       ContentSettingsTypes.VR,
       ContentSettingsTypes.WINDOW_MANAGEMENT,
     ];
+
+    if (loadTimeData.getBoolean('blockMidiByDefault')) {
+      this.categoryList_.push(ContentSettingsTypes.MIDI);
+    } else {
+      this.categoryList_.push(ContentSettingsTypes.MIDI_DEVICES);
+    }
 
     this.prefs_ = createSiteSettingsPrefs([], [], []);
   }
@@ -326,6 +333,9 @@ export class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy
     // Defer |methodCalled| call so that |then| callback for the promise
     // returned from this method runs before the one for the promise returned
     // from |whenCalled| calls in tests.
+    // TODO(b/297567461): Remove once the flaky test fixes in
+    // https://chromium-review.googlesource.com/c/chromium/src/+/4124308 are
+    // confirmed to no longer be needed.
     window.setTimeout(
         () => this.methodCalled('getExceptionList', contentType), 0);
     let pref = this.prefs_.exceptions[contentType];

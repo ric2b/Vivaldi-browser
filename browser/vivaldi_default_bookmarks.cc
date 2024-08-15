@@ -25,7 +25,7 @@
 
 namespace vivaldi_default_bookmarks {
 
-bool g_bookmark_update_actve = false;
+bool g_bookmark_update_active = false;
 
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
@@ -344,8 +344,8 @@ void AddBookmarkUuids(const std::vector<DefaultBookmarkItem>& default_items,
 }
 
 void BookmarkUpdater::RunCleanUpdate() {
-  DCHECK(!g_bookmark_update_actve);
-  g_bookmark_update_actve = true;
+  DCHECK(!g_bookmark_update_active);
+  g_bookmark_update_active = true;
 
   FindExistingPartners(model_->bookmark_bar_node());
   FindExistingPartners(model_->trash_node());
@@ -377,8 +377,8 @@ void BookmarkUpdater::RunCleanUpdate() {
     }
   }
 
-  DCHECK(g_bookmark_update_actve);
-  g_bookmark_update_actve = false;
+  DCHECK(g_bookmark_update_active);
+  g_bookmark_update_active = false;
 }
 
 void BookmarkUpdater::FindExistingPartners(const BookmarkNode* top_node) {

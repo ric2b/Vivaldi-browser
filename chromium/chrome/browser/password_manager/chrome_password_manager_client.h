@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
-#include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "components/autofill/content/browser/scoped_autofill_managers_observation.h"
@@ -144,7 +143,7 @@ class ChromePasswordManagerClient
       password_manager::ErrorMessageFlowType flow_type,
       password_manager::PasswordStoreBackendErrorType error_type) override;
 
-  void ShowKeyboardReplacingSurface(
+  bool ShowKeyboardReplacingSurface(
       password_manager::PasswordManagerDriver* driver,
       const password_manager::SubmissionReadinessParams& submission_readiness,
       bool is_webauthn_form) override;
@@ -153,7 +152,7 @@ class ChromePasswordManagerClient
   // Returns a pointer to the DeviceAuthenticator which is created on demand.
   // This is currently only implemented for Android, Mac and Windows. On all
   // other platforms this will always be null.
-  scoped_refptr<device_reauth::DeviceAuthenticator> GetDeviceAuthenticator()
+  std::unique_ptr<device_reauth::DeviceAuthenticator> GetDeviceAuthenticator()
       override;
   void GeneratePassword(
       autofill::password_generation::PasswordGenerationType type) override;
@@ -179,7 +178,8 @@ class ChromePasswordManagerClient
       bool is_blocklisted) override;
   void AutomaticPasswordSave(
       std::unique_ptr<password_manager::PasswordFormManagerForUI>
-          saved_form_manager) override;
+          saved_form_manager,
+      bool is_update_confirmation) override;
   void PasswordWasAutofilled(
       const std::vector<const password_manager::PasswordForm*>& best_matches,
       const url::Origin& origin,

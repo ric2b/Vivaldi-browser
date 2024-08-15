@@ -41,7 +41,6 @@ import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
 import org.chromium.chrome.browser.omnibox.NewTabPageDelegate;
 import org.chromium.chrome.browser.omnibox.OmniboxFocusReason;
 import org.chromium.chrome.browser.omnibox.UrlBarData;
-import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionsDropdownScrollListener;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -50,7 +49,6 @@ import org.chromium.chrome.browser.theme.ThemeColorProvider.ThemeColorObserver;
 import org.chromium.chrome.browser.theme.ThemeColorProvider.TintObserver;
 import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.toolbar.ButtonData;
-import org.chromium.chrome.browser.toolbar.HomeButton;
 import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.chrome.browser.toolbar.TabCountProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
@@ -70,7 +68,7 @@ import org.chromium.url.GURL;
 import java.util.function.BooleanSupplier;
 
 // Vivaldi
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
 /**
  * Layout class that contains the base shared logic for manipulating the toolbar component. For
@@ -78,8 +76,7 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
  * through {@link Toolbar} rather than using this class directly.
  */
 public abstract class ToolbarLayout
-        extends FrameLayout implements Destroyable, TintObserver, ThemeColorObserver,
-                                       OmniboxSuggestionsDropdownScrollListener {
+        extends FrameLayout implements Destroyable, TintObserver, ThemeColorObserver {
     private Callback<Runnable> mInvalidator;
     private @Nullable ToolbarColorObserver mToolbarColorObserver;
 
@@ -839,9 +836,9 @@ public abstract class ToolbarLayout
     void setTabModelSelector(TabModelSelector selector) {}
 
     /**
-     * @return {@link HomeButton} this {@link ToolbarLayout} contains.
+     * @return Home button this {@link ToolbarLayout} contains, if any.
      */
-    public HomeButton getHomeButton() {
+    public ImageView getHomeButton() {
         return null;
     }
 
@@ -931,12 +928,12 @@ public abstract class ToolbarLayout
 
     /** Vivaldi **/
     static public boolean isTopToolbarOn() {
-        return !SharedPreferencesManager.getInstance().readBoolean("address_bar_to_bottom", false);
+        return !ChromeSharedPreferences.getInstance().readBoolean("address_bar_to_bottom", false);
     }
 
     /** Vivaldi **/
     static public boolean isTabStripOn() {
-        return SharedPreferencesManager.getInstance().readBoolean("show_tab_strip", true);
+        return ChromeSharedPreferences.getInstance().readBoolean("show_tab_strip", true);
     }
 
     public void maybeUnfocusUrlbarPublic() {

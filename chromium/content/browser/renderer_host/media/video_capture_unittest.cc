@@ -57,7 +57,7 @@ void VideoInputDevicesEnumerated(
     blink::WebMediaDeviceInfoArray* out,
     const MediaDeviceEnumeration& enumeration) {
   for (const auto& info : enumeration[static_cast<size_t>(
-           blink::mojom::MediaDeviceType::MEDIA_VIDEO_INPUT)]) {
+           blink::mojom::MediaDeviceType::kMediaVideoInput)]) {
     std::string device_id =
         GetHMACForRawMediaDeviceID(salt_and_origin, info.device_id);
     out->emplace_back(device_id, info.label, std::string());
@@ -84,6 +84,7 @@ class MockRenderProcessHostDelegate
  public:
   MOCK_METHOD0(NotifyStreamAdded, void());
   MOCK_METHOD0(NotifyStreamRemoved, void());
+  MOCK_CONST_METHOD0(GetRenderProcessId, uint32_t());
 };
 
 // This is an integration test of VideoCaptureHost in conjunction with
@@ -126,14 +127,11 @@ class VideoCaptureTest : public testing::Test,
 
     CloseSession();
 
-    // Release the reference to the mock object. The object will be destructed
-    // on the current message loop.
-    host_ = nullptr;
+    host_.reset();
   }
 
   void OpenSession() {
-    const int render_process_id = 1;
-    const int render_frame_id = 1;
+    const GlobalRenderFrameHostId render_frame_host_id{1, 1};
     const int requester_id = 1;
     const int page_request_id = 1;
     const url::Origin security_origin =
@@ -147,11 +145,9 @@ class VideoCaptureTest : public testing::Test,
       base::RunLoop run_loop;
       MediaDevicesManager::BoolDeviceTypes devices_to_enumerate;
       devices_to_enumerate[static_cast<size_t>(
-          blink::mojom::MediaDeviceType::MEDIA_VIDEO_INPUT)] = true;
+          blink::mojom::MediaDeviceType::kMediaVideoInput)] = true;
       base::test::TestFuture<const MediaDeviceSaltAndOrigin&> future;
-      GetMediaDeviceSaltAndOrigin(
-          GlobalRenderFrameHostId(render_process_id, render_frame_id),
-          future.GetCallback());
+      GetMediaDeviceSaltAndOrigin(render_frame_host_id, future.GetCallback());
       MediaDeviceSaltAndOrigin salt_and_origin = future.Get();
       media_stream_manager_->media_devices_manager()->EnumerateDevices(
           devices_to_enumerate,
@@ -164,14 +160,12 @@ class VideoCaptureTest : public testing::Test,
     // Open the first device.
     {
       base::test::TestFuture<const MediaDeviceSaltAndOrigin&> future;
-      GetMediaDeviceSaltAndOrigin(
-          GlobalRenderFrameHostId(render_process_id, render_frame_id),
-          future.GetCallback());
+      GetMediaDeviceSaltAndOrigin(render_frame_host_id, future.GetCallback());
       MediaDeviceSaltAndOrigin salt_and_origin = future.Get();
 
       base::RunLoop run_loop;
       media_stream_manager_->OpenDevice(
-          render_process_id, render_frame_id, requester_id, page_request_id,
+          render_frame_host_id, requester_id, page_request_id,
           video_devices[0].device_id,
           blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE, salt_and_origin,
           base::BindOnce(&VideoCaptureTest::OnDeviceOpened,
@@ -206,14 +200,13 @@ class VideoCaptureTest : public testing::Test,
     DoOnNewBuffer(buffer_id);
   }
   MOCK_METHOD1(DoOnNewBuffer, void(int32_t));
-  void OnBufferReady(
-      media::mojom::ReadyBufferPtr buffer,
-      std::vector<media::mojom::ReadyBufferPtr> scaled_buffers) override {
+  void OnBufferReady(media::mojom::ReadyBufferPtr buffer) override {
     DoOnBufferReady(buffer->buffer_id);
   }
   MOCK_METHOD1(DoOnBufferReady, void(int32_t));
   MOCK_METHOD1(OnBufferDestroyed, void(int32_t));
-  MOCK_METHOD1(OnNewCropVersion, void(uint32_t));
+  MOCK_METHOD1(OnFrameDropped, void(media::VideoCaptureFrameDropReason));
+  MOCK_METHOD1(OnNewSubCaptureTargetVersion, void(uint32_t));
 
   void StartCapture() {
     base::RunLoop run_loop;
@@ -233,6 +226,10 @@ class VideoCaptureTest : public testing::Test,
     host_->Start(DeviceId(), opened_session_id_, params,
                  observer_receiver_.BindNewPipeAndPassRemote());
 
+    // Ensure that the browser context has been retrevied and the observer is
+    // connected.
+    observer_receiver_.FlushForTesting();
+
     run_loop.Run();
   }
 
@@ -247,6 +244,10 @@ class VideoCaptureTest : public testing::Test,
         .Times(1);
     host_->Start(DeviceId(), base::UnguessableToken(), params,
                  observer_receiver_.BindNewPipeAndPassRemote());
+
+    // Ensure that the browser context has been retrevied and the observer is
+    // connected.
+    observer_receiver_.FlushForTesting();
   }
 
   void StartAndImmediateStopCapture() {
@@ -266,6 +267,10 @@ class VideoCaptureTest : public testing::Test,
         .Times(AtMost(1));
     host_->Start(DeviceId(), opened_session_id_, params,
                  observer_receiver_.BindNewPipeAndPassRemote());
+
+    // Ensure that the browser context has been retrevied and the observer is
+    // connected.
+    observer_receiver_.FlushForTesting();
 
     EXPECT_CALL(*this,
                 DoOnStateChanged(media::mojom::VideoCaptureState::STOPPED));

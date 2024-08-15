@@ -5,11 +5,16 @@
 #import "ios/chrome/browser/ui/lens/lens_coordinator.h"
 
 #import "base/strings/sys_string_conversions.h"
+#import "components/feature_engagement/public/event_constants.h"
+#import "components/feature_engagement/public/feature_constants.h"
+#import "components/feature_engagement/public/tracker.h"
 #import "components/lens/lens_metrics.h"
 #import "components/prefs/pref_service.h"
 #import "components/search_engines/template_url.h"
 #import "components/search_engines/template_url_service.h"
-#import "ios/chrome/browser/search_engines/template_url_service_factory.h"
+#import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
+#import "ios/chrome/browser/intents/intents_donation_helper.h"
+#import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
@@ -29,8 +34,8 @@
 #import "ios/chrome/browser/ui/lens/lens_availability.h"
 #import "ios/chrome/browser/ui/lens/lens_entrypoint.h"
 #import "ios/chrome/browser/ui/lens/lens_modal_animator.h"
-#import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
-#import "ios/chrome/browser/url_loading/url_loading_params.h"
+#import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
+#import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "ios/chrome/browser/web/web_navigation_util.h"
 #import "ios/chrome/browser/web_state_list/web_state_dependency_installer_bridge.h"
 #import "ios/chrome/common/app_group/app_group_constants.h"
@@ -72,6 +77,9 @@ using lens::CameraOpenEntryPoint;
 
 // TemplateURL used to get the search engine.
 @property(nonatomic, assign) TemplateURLService* templateURLService;
+
+// Feature Engagement Tracker used to handle promo events.
+@property(nonatomic, assign) feature_engagement::Tracker* tracker;
 
 @end
 
@@ -124,8 +132,13 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
       base::ScopedObservation<web::WebState, web::WebStateObserver>>(
       _webStateObserverBridge.get());
 
-  self.templateURLService = ios::TemplateURLServiceFactory::GetForBrowserState(
-      self.browser->GetBrowserState());
+  ChromeBrowserState* browserState = browser->GetBrowserState();
+  DCHECK(browserState);
+
+  self.templateURLService =
+      ios::TemplateURLServiceFactory::GetForBrowserState(browserState);
+  self.tracker =
+      feature_engagement::TrackerFactory::GetForBrowserState(browserState);
   self.loadingWebState = nil;
   self.lensWebPageLoadTriggeredFromInputSelection = NO;
   self.transitionAnimator = [[LensModalAnimator alloc] init];
@@ -143,6 +156,7 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
   self.transitionAnimator = nil;
   self.lensWebPageLoadTriggeredFromInputSelection = NO;
   self.templateURLService = nil;
+  self.tracker = nil;
 
   _webStateListObservation.reset();
   _webStateObservation.reset();
@@ -183,6 +197,8 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
     return;
   }
 
+  [IntentDonationHelper donateIntent:IntentType::kStartLens];
+
   // Create a Lens configuration for this request.
   const LensEntrypoint entrypoint = command.entryPoint;
   ChromeBrowserState* browserState = browser->GetBrowserState();
@@ -191,6 +207,15 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
   configuration.isIncognito = isIncognito;
   configuration.ssoService = GetApplicationContext()->GetSSOService();
   configuration.entrypoint = entrypoint;
+
+  // Mark IPHs as completed.
+  if (entrypoint == LensEntrypoint::Keyboard) {
+    feature_engagement::Tracker* featureTracker = self.tracker;
+    DCHECK(featureTracker);
+    featureTracker->NotifyEvent(
+        feature_engagement::events::kLensButtonKeyboardUsed);
+    featureTracker->Dismissed(feature_engagement::kIPHiOSLensKeyboardFeature);
+  }
 
   if (!isIncognito) {
     AuthenticationService* authenticationService =

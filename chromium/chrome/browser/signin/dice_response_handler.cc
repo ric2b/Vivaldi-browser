@@ -87,8 +87,8 @@ enum DiceTokenFetchResult {
 #if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
 bool IsBoundSessionCredentialsEnabledForDice() {
   return switches::IsBoundSessionCredentialsEnabled() &&
-         base::FeatureList::IsEnabled(
-             kEnableBoundSessionCredentialsOnDiceProfiles);
+         switches::kEnableBoundSessionCredentialsDiceSupport.Get() ==
+             switches::EnableBoundSessionCredentialsDiceSupport::kEnabled;
 }
 
 std::unique_ptr<RegistrationTokenHelper> BuildRegistrationTokenHelper(
@@ -414,6 +414,8 @@ void DiceResponseHandler::ProcessDiceSigninHeader(
   VLOG(1) << "Start processing Dice signin response";
   RecordDiceResponseHeader(kSignin);
 
+  delegate->OnDiceSigninHeaderReceived();
+
   for (auto it = token_fetchers_.begin(); it != token_fetchers_.end(); ++it) {
     if ((it->get()->gaia_id() == gaia_id) && (it->get()->email() == email) &&
         (it->get()->authorization_code() == authorization_code)) {
@@ -421,6 +423,7 @@ void DiceResponseHandler::ProcessDiceSigninHeader(
       return;  // There is already a request in flight with the same parameters.
     }
   }
+
   token_fetchers_.push_back(std::make_unique<DiceTokenFetcher>(
       gaia_id, email, authorization_code, signin_client_, account_reconcilor_,
       std::move(delegate), registration_token_helper_factory_, this));
@@ -443,9 +446,8 @@ void DiceResponseHandler::ProcessEnableSyncHeader(
       return;  // There is already a request in flight with the same parameters.
     }
   }
-  CoreAccountId account_id =
-      identity_manager_->PickAccountIdForAccount(gaia_id, email);
-  delegate->EnableSync(account_id);
+  delegate->EnableSync(
+      identity_manager_->FindExtendedAccountInfoByGaiaId(gaia_id));
 }
 
 void DiceResponseHandler::ProcessDiceSignoutHeader(
@@ -541,8 +543,10 @@ void DiceResponseHandler::OnTokenExchangeSuccess(
       base::StringPrintf("Successful (%s)", account_id.ToString().c_str()));
   token_fetcher->delegate()->HandleTokenExchangeSuccess(account_id,
                                                         is_new_account);
-  if (should_enable_sync)
-    token_fetcher->delegate()->EnableSync(account_id);
+  if (should_enable_sync) {
+    token_fetcher->delegate()->EnableSync(
+        identity_manager_->FindExtendedAccountInfoByAccountId(account_id));
+  }
 
   DeleteTokenFetcher(token_fetcher);
 }

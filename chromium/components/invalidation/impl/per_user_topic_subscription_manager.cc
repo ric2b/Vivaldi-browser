@@ -239,7 +239,7 @@ void PerUserTopicSubscriptionManager::Init() {
 }
 
 void PerUserTopicSubscriptionManager::UpdateSubscribedTopics(
-    const Topics& topics,
+    const TopicMap& topics,
     const std::string& instance_id_token) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   instance_id_token_ = instance_id_token;
@@ -604,15 +604,6 @@ void PerUserTopicSubscriptionManager::NotifySubscriptionRequestFinished(
   for (auto& observer : observers_) {
     observer.OnSubscriptionRequestFinished(topic, code);
   }
-}
-
-base::Value::Dict PerUserTopicSubscriptionManager::CollectDebugData() const {
-  base::Value::Dict status;
-  for (const auto& topic_to_private_topic : topic_to_private_topic_) {
-    status.Set(topic_to_private_topic.first, topic_to_private_topic.second);
-  }
-  status.Set("Instance id token", instance_id_token_);
-  return status;
 }
 
 absl::optional<Topic>

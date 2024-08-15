@@ -12,7 +12,7 @@
 <translation id="2038563949887743358">Ativar "Ver versão para computador"</translation>
 <translation id="2139186145475833000">Adicionar à Tela Inicial</translation>
 <translation id="2149973817440762519">Editar Marcadores</translation>
-<translation id="2306442503286132111">Favorito salvo na pasta <ph name="FOLDER_NAME" /></translation>
+<translation id="2306442503286132111">Marcador salvo na pasta <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Aparência</translation>
 <translation id="2501278716633472235">Voltar</translation>
 <translation id="2633278372998075009">Abas privadas</translation>
@@ -53,7 +53,7 @@ Tocar para Pesquisar é um recurso apenas disponível quando o Google é seu mec
 
 Para ajustar o termo pesquisado, pressione por mais tempo para selecionar. Para refinar sua pesquisa, deslize o painel até em cima e toque na caixa de pesquisa.</translation>
 <translation id="572328651809341494">Abas recentes</translation>
-<translation id="6150320133806434356">Favorito salvo</translation>
+<translation id="6150320133806434356">Marcador salvo</translation>
 <translation id="6336451774241870485">Nova guia privada</translation>
 <translation id="6404511346730675251">Editar marcador</translation>
 <translation id="6585139692466700358">Sugerir para traduzir paginas noutros idiomas, utilizando o serviço de tradução do Vivaldi</translation>
@@ -61,7 +61,7 @@ Para ajustar o termo pesquisado, pressione por mais tempo para selecionar. Para 
 <translation id="6610147964972079463">Fechar guias privadas</translation>
 <translation id="7029995644714925509">Quando um site te pergunta se pode carregar links previamente de suas páginas (pré-carregamento), o navegador Vivaldi encripta e carrega essas páginas através dos servidores da Google sem utilizar cookies. Isso esconde a sua identidade do site pré-carregado.</translation>
 <translation id="706339621163631076">Política de privacidade do Vivaldi</translation>
-<translation id="732145680195464316">Favorito salvo em <ph name="PRODUCT_NAME" /></translation>
+<translation id="732145680195464316">Marcador salvo em <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Sobre o Vivaldi</translation>
 <translation id="7465104139234185284">Fechar todas as guias privadas</translation>
 <translation id="7481312909269577407">Avançar</translation>
@@ -71,7 +71,7 @@ Para ajustar o termo pesquisado, pressione por mais tempo para selecionar. Para 
 <translation id="8127542551745560481">Editar página inicial</translation>
 <translation id="8560602726703398413">Encontre sua lista de leitura nos Marcadores</translation>
 <translation id="85991616550051997">Ir para a página inicial</translation>
-<translation id="8820817407110198400">Favoritos</translation>
+<translation id="8820817407110198400">Marcadores</translation>
 <translation id="9063523880881406963">Desativar "Ver versão para computador"</translation>
 <translation id="9080642952018487277">Entrar no modo privado</translation>
 <translation id="96681097142096641">Ver página simplificada?</translation>

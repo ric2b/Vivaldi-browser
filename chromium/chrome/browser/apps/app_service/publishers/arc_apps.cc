@@ -33,7 +33,6 @@
 #include "chrome/browser/apps/app_service/intent_util.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/apps/app_service/menu_util.h"
-#include "chrome/browser/apps/app_service/package_id.h"
 #include "chrome/browser/apps/app_service/promise_apps/promise_app.h"
 #include "chrome/browser/apps/app_service/promise_apps/promise_app_registry_cache.h"
 #include "chrome/browser/apps/app_service/publishers/arc_apps_factory.h"
@@ -61,6 +60,7 @@
 #include "components/services/app_service/public/cpp/intent.h"
 #include "components/services/app_service/public/cpp/intent_filter.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
+#include "components/services/app_service/public/cpp/package_id.h"
 #include "components/services/app_service/public/cpp/permission.h"
 #include "components/services/app_service/public/cpp/types_util.h"
 #include "extensions/grit/extensions_browser_resources.h"
@@ -77,6 +77,8 @@
 // overwritten icon... IIRC this applies to shelf items and ArcAppWindow icon".
 
 namespace {
+
+absl::optional<int> g_test_arc_version_;
 
 apps::PermissionType GetPermissionType(
     arc::mojom::AppPermission arc_permission_type) {
@@ -477,9 +479,18 @@ apps::InstallReason GetInstallReason(const ArcAppListPrefs* prefs,
   return apps::InstallReason::kUser;
 }
 
+bool ArcVersionEligibleForPromiseIcons() {
+  return g_test_arc_version_.value_or(arc::GetArcAndroidSdkVersionAsInt()) >=
+         arc::kArcVersionR;
+}
+
 }  // namespace
 
 namespace apps {
+
+void ArcApps::SetArcVersionForTesting(int version) {
+  g_test_arc_version_ = version;
+}
 
 // static
 ArcApps* ArcApps::Get(Profile* profile) {
@@ -886,6 +897,34 @@ void ArcApps::UnpauseApp(const std::string& app_id) {
 
 void ArcApps::StopApp(const std::string& app_id) {
   CloseTasks(app_id);
+}
+
+void ArcApps::UpdateAppSize(const std::string& app_id) {
+  arc::mojom::AppInstance* app_instance =
+      (arc::ArcServiceManager::Get()
+           ? ARC_GET_INSTANCE_FOR_METHOD(
+                 arc::ArcServiceManager::Get()->arc_bridge_service()->app(),
+                 UpdateAppDetails)
+           : nullptr);
+  if (!app_instance) {
+    return;
+  }
+  ArcAppListPrefs* prefs = ArcAppListPrefs::Get(profile_);
+  if (!prefs) {
+    return;
+  }
+  const std::unique_ptr<ArcAppListPrefs::AppInfo> app_info =
+      prefs->GetApp(app_id);
+  if (!app_info) {
+    return;
+  }
+  if (app_info->package_name.empty()) {
+    return;
+  }
+
+  // A request is made to simultaneously update all of the app's details,
+  // inclusive of the app size, for simplicity
+  app_instance->UpdateAppDetails(app_info->package_name);
 }
 
 void ArcApps::ExecuteContextMenuCommand(const std::string& app_id,
@@ -1466,7 +1505,8 @@ void ArcApps::OnGetAppShortcutItems(
 }
 
 void ArcApps::OnInstallationStarted(const std::string& package_name) {
-  if (ash::features::ArePromiseIconsEnabled()) {
+  if (ash::features::ArePromiseIconsEnabled() &&
+      ArcVersionEligibleForPromiseIcons()) {
     PromiseAppPtr promise_app =
         AppPublisher::MakePromiseApp(PackageId(AppType::kArc, package_name));
 
@@ -1479,16 +1519,25 @@ void ArcApps::OnInstallationStarted(const std::string& package_name) {
 void ArcApps::OnInstallationProgressChanged(const std::string& package_name,
                                             float progress) {
   if (ash::features::ArePromiseIconsEnabled()) {
-    if (!proxy()->PromiseAppRegistryCache()->HasPromiseApp(
-            PackageId(AppType::kArc, package_name))) {
+    PackageId package_id = PackageId(AppType::kArc, package_name);
+    const PromiseApp* existing_promise_app =
+        proxy()->PromiseAppRegistryCache()->GetPromiseApp(package_id);
+    if (!existing_promise_app) {
       LOG(ERROR) << "Cannot update installation progress value for "
                  << package_name
                  << ", as there is no promise app registered for this package.";
       return;
     }
-    PromiseAppPtr promise_app =
-        AppPublisher::MakePromiseApp(PackageId(AppType::kArc, package_name));
+    PromiseAppPtr promise_app = AppPublisher::MakePromiseApp(package_id);
     promise_app->progress = progress;
+
+    // Update the status to reflect that the app is actively downloading/
+    // installing. We update the status here on the first progress update
+    // instead of in OnInstallationActiveChanged, due to some conflicts with
+    // what the ARC active status indicates and what we need.
+    if (existing_promise_app->status == PromiseStatus::kPending) {
+      promise_app->status = PromiseStatus::kInstalling;
+    }
     AppPublisher::PublishPromiseApp(std::move(promise_app));
   }
 }
@@ -1497,17 +1546,32 @@ void ArcApps::OnInstallationActiveChanged(const std::string& package_name,
                                           bool active) {
   if (ash::features::ArePromiseIconsEnabled()) {
     PackageId package_id(AppType::kArc, package_name);
-    if (!proxy()->PromiseAppRegistryCache()->HasPromiseApp(
-            PackageId(AppType::kArc, package_name))) {
+    if (!proxy()->PromiseAppRegistryCache()->HasPromiseApp(package_id)) {
       LOG(ERROR) << "Cannot update installation active status for "
                  << package_name
                  << ", as there is no promise app registered for this package.";
       return;
     }
-    PromiseAppPtr promise_app =
-        AppPublisher::MakePromiseApp(PackageId(AppType::kArc, package_name));
-    promise_app->status =
-        active ? PromiseStatus::kInstalling : PromiseStatus::kPending;
+    // TODO(b/261907409): Set PromiseStatus to kPending if the installation is
+    // no longer active, i.e. if active=false after there has been at least one
+    // progress change.
+  }
+}
+
+void ArcApps::OnInstallationFinished(const std::string& package_name,
+                                     bool success) {
+  if (ash::features::ArePromiseIconsEnabled() &&
+      ArcVersionEligibleForPromiseIcons()) {
+    // Remove the promise app of any failed installation.
+    if (success) {
+      return;
+    }
+    PackageId package_id(AppType::kArc, package_name);
+    if (!proxy()->PromiseAppRegistryCache()->HasPromiseApp(package_id)) {
+      return;
+    }
+    PromiseAppPtr promise_app = AppPublisher::MakePromiseApp(package_id);
+    promise_app->status = PromiseStatus::kCancelled;
     AppPublisher::PublishPromiseApp(std::move(promise_app));
   }
 }

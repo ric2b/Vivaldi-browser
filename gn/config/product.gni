@@ -83,7 +83,11 @@ if (is_vivaldi_automotive && !is_vivaldi_polestar) {
 
 if (is_ios) {
   ios_primary_app_icon_name = ""
-  if (release_kind == "final") {
+  # A flag to test local builds as a final build
+  # if true, compiling will produce a stable build, not a snapshot
+  # This should always be false when committing to main!
+  test_ios_app_as_final = false
+  if (release_kind == "final" || test_ios_app_as_final) {
     ios_primary_app_icon_name = "AppIcon-Final"
   } else {
     ios_primary_app_icon_name = "AppIcon-Snapshot"

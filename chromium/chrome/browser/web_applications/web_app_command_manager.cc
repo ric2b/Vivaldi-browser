@@ -25,6 +25,7 @@
 #include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_install_utils.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/browser/web_applications/web_contents/web_app_url_loader.h"
 #include "chrome/browser/web_applications/web_contents/web_contents_manager.h"
 #include "chrome/common/chrome_features.h"
 #include "content/public/browser/web_contents.h"
@@ -83,6 +84,7 @@ void WebAppCommandManager::SetProvider(base::PassKey<WebAppProvider>,
                                        WebAppProvider& provider) {
   provider_ = &provider;
   lock_manager_.SetProvider(PassKey(), provider);
+  url_loader_ = provider_->web_contents_manager().CreateUrlLoader();
 }
 
 void WebAppCommandManager::Start() {
@@ -131,32 +133,44 @@ void WebAppCommandManager::OnLockAcquired(WebAppCommand::Id command_id,
   // this task is being run in response to a call to
   // NotifySyncSourceRemoved.
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&WebAppCommandManager::StartCommand,
-                     weak_ptr_factory_.GetWeakPtr(), command_it->second.get(),
-                     std::move(start_command)));
+      FROM_HERE, base::BindOnce(&WebAppCommandManager::StartCommand,
+                                weak_ptr_factory_.GetWeakPtr(),
+                                command_it->second->AsWeakPtr(),
+                                std::move(start_command)));
 }
 
-void WebAppCommandManager::StartCommand(WebAppCommand* command,
+void WebAppCommandManager::StartCommand(base::WeakPtr<WebAppCommand> command,
                                         base::OnceClosure start_command) {
-  if (is_in_shutdown_)
+  if (is_in_shutdown_) {
     return;
+  }
+
+  // Commands can destroy themselves before they are started, see
+  // crbug.com/1495279 for more information.
+  // TODO(b/303115173): Do a more holistic fix here.
+  if (!command) {
+    return;
+  }
 #if DCHECK_IS_ON()
   DCHECK(command);
   auto command_it = commands_.find(command->id());
   DCHECK(command_it != commands_.end());
 #endif
+  DVLOG(2) << "Starting command: " << CreateCommandMetadata(*command);
   if (command->lock_description().IncludesSharedWebContents()) {
     CHECK(shared_web_contents_);
+    url_loader_->PrepareForLoad(shared_web_contents_.get(),
+                                std::move(start_command));
+  } else {
+    std::move(start_command).Run();
   }
-  DVLOG(2) << "Starting command: " << CreateCommandMetadata(*command);
-  std::move(start_command).Run();
 }
 
 void WebAppCommandManager::Shutdown() {
   // Ignore duplicate shutdowns for unittests.
-  if (is_in_shutdown_)
+  if (is_in_shutdown_) {
     return;
+  }
   is_in_shutdown_ = true;
   AddValueToLog(base::Value("Shutdown has begun"));
 
@@ -171,8 +185,9 @@ void WebAppCommandManager::Shutdown() {
     }
   }
   for (const auto& command_ptr : commands_to_shutdown) {
-    if (!command_ptr)
+    if (!command_ptr) {
       continue;
+    }
     command_ptr->OnShutdown();
   }
   commands_.clear();
@@ -214,6 +229,21 @@ bool WebAppCommandManager::IsInstallingForWebContents(
     }
   }
   return false;
+}
+
+std::size_t WebAppCommandManager::GetCommandCountForTesting() {
+  return commands_.size();
+}
+
+std::size_t
+WebAppCommandManager::GetCommandsInstallingForWebContentsForTesting() {
+  std::size_t num = 0;
+  for (const auto& [id, command] : commands_) {
+    if (command->GetInstallingWebContents() != nullptr) {
+      ++num;
+    }
+  }
+  return num;
 }
 
 void WebAppCommandManager::AwaitAllCommandsCompleteForTesting() {
@@ -273,10 +303,11 @@ content::WebContents* WebAppCommandManager::EnsureWebContentsCreated(
 
 content::WebContents* WebAppCommandManager::EnsureWebContentsCreated() {
   DCHECK(profile_);
-  if (!shared_web_contents_)
+  if (!shared_web_contents_) {
     shared_web_contents_ = content::WebContents::Create(
         content::WebContents::CreateParams(profile_));
-  web_app::CreateWebAppInstallTabHelpers(shared_web_contents_.get());
+    web_app::CreateWebAppInstallTabHelpers(shared_web_contents_.get());
+  }
 
   return shared_web_contents_.get();
 }

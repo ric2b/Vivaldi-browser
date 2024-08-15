@@ -86,8 +86,7 @@ class ObjectPermissionContextBase : public KeyedService {
   ~ObjectPermissionContextBase() override;
 
   // Checks whether |origin| can request permission to access objects. This is
-  // done by checking |guard_content_settings_type_| which will usually be "ask"
-  // by default but could be set by the user or group policy.
+  // done by checking |guard_content_settings_type_| is in the "ask" state.
   bool CanRequestObjectPermission(const url::Origin& origin);
 
   // Returns the object corresponding to |key| that |origin| has been granted
@@ -150,6 +149,14 @@ class ObjectPermissionContextBase : public KeyedService {
   // |host_content_settings_map_|.
   virtual void RevokeObjectPermission(const url::Origin& origin,
                                       const base::StringPiece key);
+
+  // Revokes a given `origin`'s permissions for access to all of its
+  // corresponding objects.
+  //
+  // This method may be extended by a subclass to revoke permissions to access
+  // objects returned by `GetGrantedObjects` but not stored in the
+  // `host_content_settings_map`.
+  virtual bool RevokeObjectPermissions(const url::Origin& origin);
 
   // Returns a string which is used to uniquely identify this object.
   virtual std::string GetKeyForObject(const base::Value::Dict& object) = 0;

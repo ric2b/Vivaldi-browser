@@ -1,0 +1,164 @@
+# Copyright 2023 The Dawn & Tint Authors
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice, this
+#    list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# 3. Neither the name of the copyright holder nor the names of its
+#    contributors may be used to endorse or promote products derived from
+#    this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+import("//build_overrides/build.gni")
+
+import("../../scripts/tint_overrides_with_defaults.gni")
+
+template("libtint_source_set") {
+  source_set(target_name) {
+    forward_variables_from(invoker, "*", [ "configs" ])
+
+    if (!defined(invoker.deps)) {
+      deps = []
+    }
+
+    if (defined(invoker.configs)) {
+      configs += invoker.configs
+    }
+
+    configs += [ "${tint_src_dir}:tint_common_config" ]
+
+    if (build_with_chromium) {
+      configs -= [ "//build/config/compiler:chromium_code" ]
+      configs += [ "//build/config/compiler:no_chromium_code" ]
+    }
+
+    if (!defined(invoker.public_configs)) {
+      public_configs = []
+    }
+
+    public_configs += [ "${tint_src_dir}:tint_public_config" ]
+  }
+}
+
+###############################################################################
+# Executables - only built when tint_build_cmds is enabled
+###############################################################################
+template("tint_executable") {
+  if (tint_build_cmds) {
+    executable(target_name) {
+      forward_variables_from(invoker, "*")
+    }
+  }
+}
+
+###############################################################################
+# Unit tests - only built when tint_build_unittests is enabled
+###############################################################################
+template("tint_unittests_source_set") {
+  if (tint_build_unittests) {
+    source_set(target_name) {
+      forward_variables_from(invoker, "*", [ "configs" ])
+
+      testonly = true
+
+      if (defined(invoker.configs)) {
+        configs += invoker.configs
+      }
+
+      configs += [ "${tint_src_dir}:tint_unittests_config" ]
+
+      if (build_with_chromium) {
+        configs -= [ "//build/config/compiler:chromium_code" ]
+        configs += [ "//build/config/compiler:no_chromium_code" ]
+      }
+
+      if (!defined(invoker.deps)) {
+        deps = []
+      }
+
+      deps += [ "${tint_src_dir}:gmock_and_gtest" ]
+    }
+  }
+}
+
+###############################################################################
+# Fuzzers - only built when tint_has_fuzzers is enabled
+###############################################################################
+if (tint_has_fuzzers) {
+  import("//testing/libfuzzer/fuzzer_test.gni")
+  fuzzer_corpus_wgsl_dir = "${root_gen_dir}/fuzzers/wgsl_corpus"
+  fuzzer_corpus_wgsl_stamp = "${fuzzer_corpus_wgsl_dir}.stamp"
+
+  template("tint_fuzz_source_set") {
+    source_set(target_name) {
+      forward_variables_from(invoker, "*", [ "configs" ])
+
+      testonly = true
+
+      if (!defined(invoker.deps)) {
+        deps = []
+      }
+
+      if (defined(invoker.configs)) {
+        configs += invoker.configs
+      }
+
+      configs += [ "${tint_src_dir}:tint_common_config" ]
+
+      if (build_with_chromium) {
+        configs -= [ "//build/config/compiler:chromium_code" ]
+        configs += [ "//build/config/compiler:no_chromium_code" ]
+      }
+
+      if (!defined(invoker.public_configs)) {
+        public_configs = []
+      }
+
+      public_configs += [ "${tint_src_dir}:tint_public_config" ]
+    }
+  }
+
+  template("tint_fuzzer_test") {
+    fuzzer_test(target_name) {
+      forward_variables_from(invoker, "*")
+      exclude_main = false
+
+      if (target_name == "wgsl") {
+        dict = "dictionary.txt"
+        libfuzzer_options = [
+          "only_ascii=1",  # TODO(bclayton): Remove this to fuzz unicode?
+          "max_len=10000",
+        ]
+        seed_corpus = fuzzer_corpus_wgsl_dir
+        seed_corpus_deps = [ "${tint_src_dir}:tint_generate_wgsl_corpus" ]
+      } else {
+        assert(false, "unsupported tint fuzzer target")
+      }
+    }
+  }
+} else {
+  template("tint_fuzz_source_set") {
+    not_needed(invoker, "*")
+    not_needed("*")
+  }
+  template("tint_fuzzer_test") {
+    not_needed(invoker, "*")
+    not_needed("*")
+  }
+}

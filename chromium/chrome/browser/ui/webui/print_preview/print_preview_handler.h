@@ -30,6 +30,10 @@
 #include "printing/print_job_constants.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
+namespace base {
+class TimeTicks;
+}  // namespace base
+
 #if BUILDFLAG(IS_CHROMEOS)
 namespace crosapi {
 namespace mojom {
@@ -119,6 +123,7 @@ class PrintPreviewHandler : public content::WebUIMessageHandler {
   virtual void BadMessageReceived();
 
   // Gets the initiator for the print preview dialog.
+  // Virtual so tests can override.
   virtual content::WebContents* GetInitiator();
 
   // Initiates print after any content analysis checks have been passed
@@ -149,6 +154,8 @@ class PrintPreviewHandler : public content::WebUIMessageHandler {
   content::WebContents* preview_web_contents();
 
   PrintPreviewUI* print_preview_ui();
+
+  const mojom::RequestPrintPreviewParams* GetRequestParams();
 
   PrefService* GetPrefs();
 
@@ -258,7 +265,9 @@ class PrintPreviewHandler : public content::WebUIMessageHandler {
 
   // Called when printer search is done for some destination type.
   // |callback_id|: The javascript callback to call.
-  void OnGetPrintersDone(const std::string& callback_id);
+  void OnGetPrintersDone(const std::string& callback_id,
+                         mojom::PrinterType printer_type,
+                         const base::TimeTicks& start_time);
 
   // Called when an extension print job is completed.
   // |callback_id|: The javascript callback to run.

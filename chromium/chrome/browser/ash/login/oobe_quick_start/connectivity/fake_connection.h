@@ -44,9 +44,9 @@ class FakeConnection : public Connection {
   // Connection:
   void InitiateHandshake(const std::string& authentication_token,
                          HandshakeSuccessCallback callback) override;
-  void RequestWifiCredentials(int32_t session_id,
-                              RequestWifiCredentialsCallback callback) override;
+  void RequestWifiCredentials(RequestWifiCredentialsCallback callback) override;
   void WaitForUserVerification(AwaitUserVerificationCallback callback) override;
+  void RequestAccountInfo(base::OnceClosure callback) override;
   void RequestAccountTransferAssertion(
       const Base64UrlString& challenge,
       RequestAccountTransferAssertionCallback callback) override;
@@ -54,6 +54,7 @@ class FakeConnection : public Connection {
   bool WasHandshakeInitiated();
   void SendWifiCredentials(absl::optional<mojom::WifiCredentials> credentials);
   void VerifyUser(absl::optional<mojom::UserVerificationResponse> response);
+  void SendAccountInfo();
   void SendAccountTransferAssertionInfo(
       absl::optional<FidoAssertionInfo> assertion_info);
   void HandleHandshakeResult(bool success);
@@ -70,6 +71,7 @@ class FakeConnection : public Connection {
   HandshakeSuccessCallback handshake_success_callback_;
   RequestWifiCredentialsCallback wifi_credentials_callback_;
   AwaitUserVerificationCallback await_user_verification_callback_;
+  base::OnceClosure request_account_info_callback_;
   RequestAccountTransferAssertionCallback
       request_account_transfer_assertion_callback_;
 

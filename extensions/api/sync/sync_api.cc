@@ -99,9 +99,6 @@ vivaldi::sync::ProtocolErrorType ToVivaldiSyncProtocolErrorType(
           PROTOCOL_ERROR_TYPE_NOT_MY_BIRTHDAY;
     case syncer::THROTTLED:
       return vivaldi::sync::ProtocolErrorType::PROTOCOL_ERROR_TYPE_THROTTLED;
-    case syncer::CLEAR_PENDING:
-      return vivaldi::sync::ProtocolErrorType::
-          PROTOCOL_ERROR_TYPE_CLEAR_PENDING;
     case syncer::TRANSIENT_ERROR:
       return vivaldi::sync::ProtocolErrorType::
           PROTOCOL_ERROR_TYPE_TRANSIENT_ERROR;
@@ -120,6 +117,11 @@ vivaldi::sync::ProtocolErrorType ToVivaldiSyncProtocolErrorType(
     case syncer::ENCRYPTION_OBSOLETE:
       return vivaldi::sync::ProtocolErrorType::
           PROTOCOL_ERROR_TYPE_ENCRYPTION_OBSOLETE;
+    case syncer::CONFLICT:
+      return vivaldi::sync::ProtocolErrorType::PROTOCOL_ERROR_TYPE_CONFLICT;
+    case syncer::INVALID_MESSAGE:
+      return vivaldi::sync::ProtocolErrorType::
+          PROTOCOL_ERROR_TYPE_INVALID_MESSAGE;
     case syncer::UNKNOWN_ERROR:
       return vivaldi::sync::ProtocolErrorType::PROTOCOL_ERROR_TYPE_UNKNOWN;
   }
@@ -218,12 +220,14 @@ vivaldi::sync::CycleData GetLastCycleData(Profile* profile) {
   ::vivaldi::VivaldiSyncUIHelper::CycleData helper_cycle_data =
       sync_service->ui_helper()->GetCycleData();
 
-  cycle_data.cycle_start_time = helper_cycle_data.cycle_start_time.ToJsTime();
+  cycle_data.cycle_start_time =
+      helper_cycle_data.cycle_start_time.InMillisecondsFSinceUnixEpoch();
   cycle_data.download_updates_status =
       ToVivaldiCycleStatus(helper_cycle_data.download_updates_status);
   cycle_data.commit_status =
       ToVivaldiCycleStatus(helper_cycle_data.commit_status);
-  cycle_data.next_retry_time = helper_cycle_data.next_retry_time.ToJsTime();
+  cycle_data.next_retry_time =
+      helper_cycle_data.next_retry_time.InMillisecondsFSinceUnixEpoch();
 
   return cycle_data;
 }

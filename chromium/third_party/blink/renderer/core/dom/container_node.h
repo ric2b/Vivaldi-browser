@@ -102,10 +102,10 @@ class CORE_EXPORT ContainerNode : public Node {
   StaticElementList* querySelectorAll(const AtomicString& selectors,
                                       ExceptionState&);
 
-  Node* firstChild() const { return first_child_; }
-  Node* lastChild() const { return last_child_; }
-  bool hasChildren() const { return first_child_; }
-  bool HasChildren() const { return first_child_; }
+  Node* firstChild() const { return first_child_.Get(); }
+  Node* lastChild() const { return last_child_.Get(); }
+  bool hasChildren() const { return static_cast<bool>(first_child_); }
+  bool HasChildren() const { return static_cast<bool>(first_child_); }
 
   bool HasOneChild() const {
     return first_child_ && !first_child_->HasNextSibling();
@@ -156,17 +156,12 @@ class CORE_EXPORT ContainerNode : public Node {
       SubtreeModificationAction = kDispatchSubtreeModifiedEvent);
 
   void CloneChildNodesFrom(const ContainerNode&, NodeCloningData&);
-  void ClonePartsFrom(const ContainerNode& node, NodeCloningData& data);
 
+  using Node::DetachLayoutTree;
   void AttachLayoutTree(AttachContext&) override;
-  void DetachLayoutTree(bool performing_reattach = false) override;
+  void DetachLayoutTree(bool performing_reattach) override;
   PhysicalRect BoundingBox() const final;
-  void SetFocused(bool, mojom::blink::FocusType) override;
-  void SetHasFocusWithinUpToAncestor(bool, Node* ancestor);
-  void FocusStateChanged();
-  void FocusVisibleStateChanged();
-  void FocusWithinStateChanged();
-  void SetDragged(bool) override;
+
   void RemovedFrom(ContainerNode& insertion_point) override;
 
   bool ChildrenOrSiblingsAffectedByFocus() const {
@@ -421,6 +416,9 @@ class CORE_EXPORT ContainerNode : public Node {
     return EnsureCachedCollection<HTMLCollection>(kPopoverInvokers);
   }
 
+  void ReplaceChildren(const VectorOf<Node>& nodes,
+                       ExceptionState& exception_state);
+
   // DocumentOrElementEventHandlers:
   // These event listeners are only actually web-exposed on interfaces that
   // include the DocumentOrElementEventHandlers mixin in their idl.
@@ -516,6 +514,9 @@ class CORE_EXPORT ContainerNode : public Node {
                                                      ExceptionState&) const;
   inline bool IsChildTypeAllowed(const Node& child) const;
 
+  void CheckSoftNavigationHeuristicsTracking(const Document& document,
+                                             Node& inserted_node);
+
   Member<Node> first_child_;
   Member<Node> last_child_;
 };
@@ -526,7 +527,7 @@ struct DowncastTraits<ContainerNode> {
 };
 
 inline bool ContainerNode::HasChildCount(unsigned count) const {
-  Node* child = first_child_;
+  Node* child = first_child_.Get();
   while (count && child) {
     child = child->nextSibling();
     --count;

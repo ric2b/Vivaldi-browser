@@ -72,6 +72,18 @@ absl::optional<base::FilePath> GetVersionedInstallDirectory(UpdaterScope scope);
 // Does not create the directory if it does not exist.
 absl::optional<base::FilePath> GetInstallDirectory(UpdaterScope scope);
 
+// Returns the base path for discardable caches. Deleting a discardable cache
+// between runs of the updater may impair performance, cause a redownload, etc.,
+// but otherwise not interfere with overall updater function. Cache contents
+// should only be stored in subpaths under this path. Does not create the
+// directory if it does not exist.
+absl::optional<base::FilePath> GetCacheBaseDirectory(UpdaterScope scope);
+
+// Returns the path where CRXes cached for delta updates should be stored,
+// common to all versions of the updater. Does not create the directory if it
+// does not exist.
+absl::optional<base::FilePath> GetCrxDiffCacheDirectory(UpdaterScope scope);
+
 #if BUILDFLAG(IS_MAC)
 // For example: ~/Library/Google/GoogleUpdater/88.0.4293.0/GoogleUpdater.app
 absl::optional<base::FilePath> GetUpdaterAppBundlePath(UpdaterScope scope);
@@ -131,6 +143,9 @@ absl::optional<base::FilePath> GetLogFilePath(UpdaterScope scope);
 
 // Initializes logging for an executable.
 void InitLogging(UpdaterScope updater_scope);
+
+// Returns HTTP user-agent value.
+std::string GetUpdaterUserAgent();
 
 // Returns a new GURL by appending the given query parameter name and the
 // value. Unsafe characters in the name and the value are escaped like

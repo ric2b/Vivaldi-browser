@@ -28,6 +28,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(ENABLE_OOP_PRINTING)
+#include "chrome/browser/printing/prefs_util.h"
 #include "chrome/browser/printing/print_backend_service_manager.h"
 #endif
 
@@ -114,6 +115,7 @@ FetchCapabilitiesOnBlockingTaskRunner(const std::string& printer_id,
 
 #if BUILDFLAG(ENABLE_OOP_PRINTING)
 void CapabilitiesFetchedFromService(
+    ::printing::PrintBackendServiceManager::ClientId client_id,
     const std::string& printer_id,
     bool elevated_privileges,
     GetPrinterCapabilitiesCallback cb,
@@ -137,15 +139,22 @@ void CapabilitiesFetchedFromService(
       // level.
       service_mgr.GetPrinterSemanticCapsAndDefaults(
           printer_id,
-          base::BindOnce(&CapabilitiesFetchedFromService, printer_id,
+          base::BindOnce(&CapabilitiesFetchedFromService, client_id, printer_id,
                          /*elevated_privileges=*/true, std::move(cb)));
       return;
     }
+    // No more attempts to get capabilities for this client.
+    ::printing::PrintBackendServiceManager::GetInstance().UnregisterClient(
+        client_id);
 
     // Unable to fallback, call back without data.
     std::move(cb).Run(absl::nullopt);
     return;
   }
+
+  // Done getting capabilities, no more need for this client.
+  ::printing::PrintBackendServiceManager::GetInstance().UnregisterClient(
+      client_id);
 
   VLOG(1) << "Successfully received printer capabilities from service for "
           << printer_id;
@@ -158,14 +167,17 @@ void FetchCapabilities(const std::string& printer_id,
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
 #if BUILDFLAG(ENABLE_OOP_PRINTING)
-  if (base::FeatureList::IsEnabled(
-          ::printing::features::kEnableOopPrintDrivers)) {
+  if (::printing::IsOopPrintingEnabled()) {
     VLOG(1) << "Fetching printer capabilities via service";
     ::printing::PrintBackendServiceManager& service_mgr =
         ::printing::PrintBackendServiceManager::GetInstance();
+    // Require client ID before making call.  Client scope is just the time
+    // to get the capabilities.
+    ::printing::PrintBackendServiceManager::ClientId client_id =
+        service_mgr.RegisterQueryClient();
     service_mgr.GetPrinterSemanticCapsAndDefaults(
         printer_id,
-        base::BindOnce(&CapabilitiesFetchedFromService, printer_id,
+        base::BindOnce(&CapabilitiesFetchedFromService, client_id, printer_id,
                        service_mgr.PrinterDriverFoundToRequireElevatedPrivilege(
                            printer_id),
                        std::move(cb)));

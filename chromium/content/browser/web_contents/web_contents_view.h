@@ -67,6 +67,12 @@ class WebContentsView {
   // Returns the current drop data, if any.
   virtual DropData* GetDropData() const = 0;
 
+  // Used to transfer WebContentsViewDragSecurityInfo across portal activation
+  // (where we destroy and create a new WebContentsView for a tab).
+  // TODO(crbug.com/1254770): We don't need this after we migrate portals to
+  // MPArch.
+  virtual void TransferDragSecurityInfo(WebContentsView* view) = 0;
+
   // Get the bounds of the View, relative to the parent.
   virtual gfx::Rect GetViewBounds() const = 0;
 

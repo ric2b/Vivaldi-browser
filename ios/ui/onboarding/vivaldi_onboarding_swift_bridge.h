@@ -11,6 +11,8 @@
 #import "ios/ui/helpers/vivaldi_colors_helper.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+#import "ios/ui/onboarding/vivaldi_onboarding_background_view.h"
+#import "ios/ui/onboarding/vivaldi_onboarding_promo_view.h"
 #import "ios/ui/settings/sync/vivaldi_sync_settings_constants.h"
 #import "ui/base/l10n/l10n_util_mac_bridge.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"

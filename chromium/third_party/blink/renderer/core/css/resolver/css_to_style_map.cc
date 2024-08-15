@@ -37,6 +37,7 @@
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value_mappings.h"
 #include "third_party/blink/renderer/core/css/css_quad_value.h"
+#include "third_party/blink/renderer/core/css/css_repeat_style_value.h"
 #include "third_party/blink/renderer/core/css/css_scroll_value.h"
 #include "third_party/blink/renderer/core/css/css_timing_function_value.h"
 #include "third_party/blink/renderer/core/css/css_value_pair.h"
@@ -95,11 +96,12 @@ void CSSToStyleMap::MapFillClip(StyleResolverState&,
   layer->SetClip(identifier_value->ConvertTo<EFillBox>());
 }
 
-void CSSToStyleMap::MapFillComposite(StyleResolverState&,
-                                     FillLayer* layer,
-                                     const CSSValue& value) {
+void CSSToStyleMap::MapFillCompositingOperator(StyleResolverState&,
+                                               FillLayer* layer,
+                                               const CSSValue& value) {
   if (value.IsInitialValue()) {
-    layer->SetComposite(FillLayer::InitialFillComposite(layer->GetType()));
+    layer->SetCompositingOperator(
+        FillLayer::InitialFillCompositingOperator(layer->GetType()));
     return;
   }
 
@@ -108,7 +110,8 @@ void CSSToStyleMap::MapFillComposite(StyleResolverState&,
     return;
   }
 
-  layer->SetComposite(identifier_value->ConvertTo<CompositeOperator>());
+  layer->SetCompositingOperator(
+      identifier_value->ConvertTo<CompositingOperator>());
 }
 
 void CSSToStyleMap::MapFillBlendMode(StyleResolverState&,
@@ -143,6 +146,17 @@ void CSSToStyleMap::MapFillOrigin(StyleResolverState&,
   layer->SetOrigin(identifier_value->ConvertTo<EFillBox>());
 }
 
+namespace {
+
+CSSPropertyID MaskImageProperty() {
+  if (!RuntimeEnabledFeatures::CSSMaskingInteropEnabled()) {
+    return CSSPropertyID::kWebkitMaskImage;
+  }
+  return CSSPropertyID::kMaskImage;
+}
+
+}  // namespace
+
 void CSSToStyleMap::MapFillImage(StyleResolverState& state,
                                  FillLayer* layer,
                                  const CSSValue& value) {
@@ -153,32 +167,30 @@ void CSSToStyleMap::MapFillImage(StyleResolverState& state,
 
   CSSPropertyID property = layer->GetType() == EFillLayerType::kBackground
                                ? CSSPropertyID::kBackgroundImage
-                               : CSSPropertyID::kWebkitMaskImage;
+                               : MaskImageProperty();
   layer->SetImage(
       state.GetStyleImage(property, state.ResolveLightDarkPair(value)));
 }
 
-void CSSToStyleMap::MapFillRepeatX(StyleResolverState&,
-                                   FillLayer* layer,
-                                   const CSSValue& value) {
+void CSSToStyleMap::MapFillRepeat(StyleResolverState&,
+                                  FillLayer* layer,
+                                  const CSSValue& value) {
   if (value.IsInitialValue()) {
-    layer->SetRepeatX(FillLayer::InitialFillRepeatX(layer->GetType()));
+    layer->SetRepeat(FillLayer::InitialFillRepeat(layer->GetType()));
     return;
   }
 
-  const auto* identifier_value = DynamicTo<CSSIdentifierValue>(value);
-  if (!identifier_value) {
-    return;
+  if (const auto* repeat = DynamicTo<CSSRepeatStyleValue>(value)) {
+    layer->SetRepeat({repeat->x()->ConvertTo<EFillRepeat>(),
+                      repeat->y()->ConvertTo<EFillRepeat>()});
   }
-
-  layer->SetRepeatX(identifier_value->ConvertTo<EFillRepeat>());
 }
 
-void CSSToStyleMap::MapFillRepeatY(StyleResolverState&,
-                                   FillLayer* layer,
-                                   const CSSValue& value) {
+void CSSToStyleMap::MapFillMaskMode(StyleResolverState&,
+                                    FillLayer* layer,
+                                    const CSSValue& value) {
   if (value.IsInitialValue()) {
-    layer->SetRepeatY(FillLayer::InitialFillRepeatY(layer->GetType()));
+    layer->SetMaskMode(FillLayer::InitialFillMaskMode(layer->GetType()));
     return;
   }
 
@@ -187,7 +199,7 @@ void CSSToStyleMap::MapFillRepeatY(StyleResolverState&,
     return;
   }
 
-  layer->SetRepeatY(identifier_value->ConvertTo<EFillRepeat>());
+  layer->SetMaskMode(identifier_value->ConvertTo<EFillMaskMode>());
 }
 
 void CSSToStyleMap::MapFillSize(StyleResolverState& state,

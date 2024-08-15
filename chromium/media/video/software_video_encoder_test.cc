@@ -20,7 +20,7 @@
 #include "build/build_config.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/media_switches.h"
-#include "media/base/mock_media_log.h"
+#include "media/base/media_util.h"
 #include "media/base/video_decoder.h"
 #include "media/base/video_encoder.h"
 #include "media/base/video_frame.h"
@@ -97,17 +97,17 @@ class SoftwareVideoEncoderTest
         VideoColorSpace::JPEG(), VideoTransformation(), size, gfx::Rect(size),
         size, extra_data, EncryptionScheme::kUnencrypted);
 
-    if (codec_ == VideoCodec::kH264 || codec_ == VideoCodec::kVP8) {
+    if (codec_ == VideoCodec::kH264) {
 #if BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
       decoder_ = std::make_unique<FFmpegVideoDecoder>(&media_log_);
 #endif
-    } else if (codec_ == VideoCodec::kVP9) {
+    } else if (codec_ == VideoCodec::kVP8 || codec_ == VideoCodec::kVP9) {
 #if BUILDFLAG(ENABLE_LIBVPX)
       decoder_ = std::make_unique<VpxVideoDecoder>();
 #endif
     } else if (codec_ == VideoCodec::kAV1) {
 #if BUILDFLAG(ENABLE_DAV1D_DECODER)
-      decoder_ = std::make_unique<Dav1dVideoDecoder>(&media_log_);
+      decoder_ = std::make_unique<Dav1dVideoDecoder>(media_log_.Clone());
 #endif
     }
 
@@ -337,7 +337,7 @@ class SoftwareVideoEncoderTest
   VideoPixelFormat pixel_format_;
   std::vector<uint8_t> resize_buff_;
 
-  MockMediaLog media_log_;
+  NullMediaLog media_log_;
   base::test::TaskEnvironment task_environment_;
   std::unique_ptr<VideoEncoder> encoder_;
   std::unique_ptr<VideoDecoder> decoder_;
@@ -750,6 +750,44 @@ TEST_P(SVCVideoEncoderTest, ChangeLayers) {
   encoder_->Flush(ValidatingStatusCB(/* quit_run_loop_on_call */ true));
   RunUntilQuit();
   EXPECT_EQ(chunks.size(), total_frames_count);
+}
+
+TEST_P(SoftwareVideoEncoderTest, ReconfigureWithResizingNumberOfThreads) {
+  int outputs_count = 0;
+  VideoEncoder::Options options;
+  options.frame_size = gfx::Size(1024, 1024);
+
+  VideoEncoder::OutputCB output_cb = base::BindLambdaForTesting(
+      [&](VideoEncoderOutput output,
+          absl::optional<VideoEncoder::CodecDescription> desc) {
+        outputs_count++;
+      });
+
+  encoder_->Initialize(profile_, options, /*info_cb=*/base::DoNothing(),
+                       std::move(output_cb), ValidatingStatusCB());
+
+  auto frame0 = CreateFrame(options.frame_size, pixel_format_, {});
+  encoder_->Encode(frame0, VideoEncoder::EncodeOptions(false),
+                   ValidatingStatusCB());
+
+  options.frame_size = gfx::Size(1000, 608);
+  encoder_->ChangeOptions(options, VideoEncoder::OutputCB(),
+                          ValidatingStatusCB());
+
+  auto frame1 = CreateFrame(options.frame_size, pixel_format_, {});
+  encoder_->Encode(frame1, VideoEncoder::EncodeOptions(false),
+                   ValidatingStatusCB());
+
+  options.frame_size = gfx::Size(16, 720);
+  encoder_->ChangeOptions(options, VideoEncoder::OutputCB(),
+                          ValidatingStatusCB());
+
+  auto frame2 = CreateFrame(options.frame_size, pixel_format_, {});
+  encoder_->Encode(frame2, VideoEncoder::EncodeOptions(false),
+                   ValidatingStatusCB(/* quit_run_loop_on_call */ true));
+
+  RunUntilQuit();
+  EXPECT_EQ(outputs_count, 3);
 }
 
 TEST_P(H264VideoEncoderTest, ReconfigureWithResize) {

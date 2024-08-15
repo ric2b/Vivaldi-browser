@@ -39,20 +39,20 @@ FullscreenControllerImpl::FullscreenControllerImpl(Browser* browser)
                     mediator:&mediator_]) {
   DCHECK(broadcaster_);
   [broadcaster_ addObserver:bridge_
-                forSelector:@selector(broadcastScrollViewSize:)];
-  [broadcaster_ addObserver:bridge_
                 forSelector:@selector(broadcastScrollViewContentSize:)];
-  [broadcaster_ addObserver:bridge_
-                forSelector:@selector(broadcastScrollViewContentInset:)];
-  [broadcaster_ addObserver:bridge_
-                forSelector:@selector(broadcastContentScrollOffset:)];
   if (base::FeatureList::IsEnabled(web::features::kSmoothScrollingDefault)) {
+    [broadcaster_ addObserver:bridge_
+                  forSelector:@selector(broadcastScrollViewSize:)];
     [broadcaster_ addObserver:bridge_
                   forSelector:@selector(broadcastScrollViewIsScrolling:)];
     [broadcaster_ addObserver:bridge_
                   forSelector:@selector(broadcastScrollViewIsDragging:)];
     [broadcaster_ addObserver:bridge_
                   forSelector:@selector(broadcastScrollViewIsZooming:)];
+    [broadcaster_ addObserver:bridge_
+                  forSelector:@selector(broadcastScrollViewContentInset:)];
+    [broadcaster_ addObserver:bridge_
+                  forSelector:@selector(broadcastContentScrollOffset:)];
   }
   [broadcaster_ addObserver:bridge_
                 forSelector:@selector(broadcastCollapsedTopToolbarHeight:)];
@@ -69,20 +69,20 @@ FullscreenControllerImpl::~FullscreenControllerImpl() {
   web_state_list_observer_.Disconnect();
   [notification_observer_ disconnect];
   [broadcaster_ removeObserver:bridge_
-                   forSelector:@selector(broadcastScrollViewSize:)];
-  [broadcaster_ removeObserver:bridge_
                    forSelector:@selector(broadcastScrollViewContentSize:)];
-  [broadcaster_ removeObserver:bridge_
-                   forSelector:@selector(broadcastScrollViewContentInset:)];
-  [broadcaster_ removeObserver:bridge_
-                   forSelector:@selector(broadcastContentScrollOffset:)];
   if (base::FeatureList::IsEnabled(web::features::kSmoothScrollingDefault)) {
+    [broadcaster_ removeObserver:bridge_
+                     forSelector:@selector(broadcastScrollViewSize:)];
     [broadcaster_ removeObserver:bridge_
                      forSelector:@selector(broadcastScrollViewIsScrolling:)];
     [broadcaster_ removeObserver:bridge_
                      forSelector:@selector(broadcastScrollViewIsDragging:)];
     [broadcaster_ removeObserver:bridge_
                      forSelector:@selector(broadcastScrollViewIsZooming:)];
+    [broadcaster_ removeObserver:bridge_
+                     forSelector:@selector(broadcastScrollViewContentInset:)];
+    [broadcaster_ removeObserver:bridge_
+                     forSelector:@selector(broadcastContentScrollOffset:)];
   }
   [broadcaster_ removeObserver:bridge_
                    forSelector:@selector(broadcastCollapsedTopToolbarHeight:)];
@@ -158,11 +158,35 @@ void FullscreenControllerImpl::ExitFullscreen() {
   mediator_.ExitFullscreen();
 }
 
-void FullscreenControllerImpl::ForceEnterFullscreen() {
+void FullscreenControllerImpl::ExitFullscreenWithoutAnimation() {
+  mediator_.ExitFullscreenWithoutAnimation();
+}
+
+bool FullscreenControllerImpl::IsForceFullscreenMode() const {
+  return model_.IsForceFullscreenMode();
+}
+
+void FullscreenControllerImpl::EnterForceFullscreenMode() {
+  CHECK(IsBottomOmniboxSteadyStateEnabled());
+  if (IsForceFullscreenMode()) {
+    return;
+  }
+  model_.SetForceFullscreenMode(true);
+  // Disable fullscreen because:
+  // - It interfers with the animation when moving the secondary toolbar above
+  // the keyboard.
+  // - Fullscreen should not resize the toolbar it's above the keyboard.
+  IncrementDisabledCounter();
   mediator_.ForceEnterFullscreen();
 }
 
-void FullscreenControllerImpl::ExitFullscreenWithoutAnimation() {
+void FullscreenControllerImpl::ExitForceFullscreenMode() {
+  CHECK(IsBottomOmniboxSteadyStateEnabled());
+  if (!IsForceFullscreenMode()) {
+    return;
+  }
+  DecrementDisabledCounter();
+  model_.SetForceFullscreenMode(false);
   mediator_.ExitFullscreenWithoutAnimation();
 }
 

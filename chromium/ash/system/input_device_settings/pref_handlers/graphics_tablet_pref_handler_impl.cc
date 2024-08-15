@@ -36,10 +36,12 @@ void GraphicsTabletPrefHandlerImpl::InitializeGraphicsTabletSettings(
   // Retrieve the settings if both tablet and pen button remappings lists
   // exist.
   if (tablet_button_remappings_list && pen_button_remappings_list) {
-    settings->tablet_button_remappings =
-        ConvertListToButtonRemappingArray(*tablet_button_remappings_list);
-    settings->pen_button_remappings =
-        ConvertListToButtonRemappingArray(*pen_button_remappings_list);
+    settings->tablet_button_remappings = ConvertListToButtonRemappingArray(
+        *tablet_button_remappings_list,
+        mojom::CustomizationRestriction::kAllowCustomizations);
+    settings->pen_button_remappings = ConvertListToButtonRemappingArray(
+        *pen_button_remappings_list,
+        mojom::CustomizationRestriction::kAllowCustomizations);
   }
   graphics_tablet->settings = std::move(settings);
   DCHECK(graphics_tablet->settings);
@@ -53,9 +55,12 @@ void GraphicsTabletPrefHandlerImpl::UpdateGraphicsTabletSettings(
   DCHECK(graphics_tablet.settings);
   const mojom::GraphicsTabletSettings& settings = *graphics_tablet.settings;
   base::Value::List tablet_button_remappings =
-      ConvertButtonRemappingArrayToList(settings.tablet_button_remappings);
-  base::Value::List pen_button_remappings =
-      ConvertButtonRemappingArrayToList(settings.pen_button_remappings);
+      ConvertButtonRemappingArrayToList(
+          settings.tablet_button_remappings,
+          mojom::CustomizationRestriction::kAllowCustomizations);
+  base::Value::List pen_button_remappings = ConvertButtonRemappingArrayToList(
+      settings.pen_button_remappings,
+      mojom::CustomizationRestriction::kAllowCustomizations);
 
   // Update tablet button remappings dict.
   base::Value::Dict tablet_button_remappings_dict =
@@ -83,19 +88,11 @@ void GraphicsTabletPrefHandlerImpl::InitializeLoginScreenGraphicsTabletSettings(
     PrefService* local_state,
     const AccountId& account_id,
     mojom::GraphicsTablet* graphics_tablet) {
-  CHECK(local_state);
-  // If the flag is disabled, clear the button remapping lists.
+  // Verify if the flag is enabled.
   if (!features::IsPeripheralCustomizationEnabled()) {
-    user_manager::KnownUser known_user(local_state);
-    known_user.SetPath(
-        account_id,
-        prefs::kGraphicsTabletLoginScreenTabletButtonRemappingListPref,
-        absl::nullopt);
-    known_user.SetPath(
-        account_id, prefs::kGraphicsTabletLoginScreenPenButtonRemappingListPref,
-        absl::nullopt);
     return;
   }
+  CHECK(local_state);
 
   mojom::GraphicsTabletSettingsPtr settings =
       mojom::GraphicsTabletSettings::New();
@@ -106,10 +103,12 @@ void GraphicsTabletPrefHandlerImpl::InitializeLoginScreenGraphicsTabletSettings(
       local_state, account_id,
       prefs::kGraphicsTabletLoginScreenPenButtonRemappingListPref);
   if (tablet_button_remappings_list && pen_button_remappings_list) {
-    settings->tablet_button_remappings =
-        ConvertListToButtonRemappingArray(*tablet_button_remappings_list);
-    settings->pen_button_remappings =
-        ConvertListToButtonRemappingArray(*pen_button_remappings_list);
+    settings->tablet_button_remappings = ConvertListToButtonRemappingArray(
+        *tablet_button_remappings_list,
+        mojom::CustomizationRestriction::kAllowCustomizations);
+    settings->pen_button_remappings = ConvertListToButtonRemappingArray(
+        *pen_button_remappings_list,
+        mojom::CustomizationRestriction::kAllowCustomizations);
   }
   graphics_tablet->settings = std::move(settings);
 }
@@ -125,13 +124,15 @@ void GraphicsTabletPrefHandlerImpl::UpdateLoginScreenGraphicsTabletSettings(
           account_id,
           prefs::kGraphicsTabletLoginScreenTabletButtonRemappingListPref,
           absl::make_optional<base::Value>(ConvertButtonRemappingArrayToList(
-              graphics_tablet.settings->tablet_button_remappings)));
+              graphics_tablet.settings->tablet_button_remappings,
+              mojom::CustomizationRestriction::kAllowCustomizations)));
   user_manager::KnownUser(local_state)
       .SetPath(
           account_id,
           prefs::kGraphicsTabletLoginScreenPenButtonRemappingListPref,
           absl::make_optional<base::Value>(ConvertButtonRemappingArrayToList(
-              graphics_tablet.settings->pen_button_remappings)));
+              graphics_tablet.settings->pen_button_remappings,
+              mojom::CustomizationRestriction::kAllowCustomizations)));
 }
 
 }  // namespace ash

@@ -305,6 +305,26 @@ $ out/Debug-iphonesimulator/iossim \
     out/Debug-iphonesimulator/ios_chrome_ui_egtests.app/PlugIns/ios_chrome_ui_egtests_module.xctest
 ```
 
+### Running Web Tests on Blink for iOS
+
+The current Blink for iOS only supports running Web Tests on the simulator
+environment now. Before you run the web tests, you need to build the blink_tests
+target to get content_shell and all of the other needed binaries for the
+simulator test environment.
+
+```shell
+$ autoninja -C out/Debug-iphonesimulator blink_tests
+```
+
+When the blink_tests target is complete you can then run the test runner script
+(third_party/blink/tools/run_web_tests.py) as below. See [Web Tests](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/testing/web_tests.md) document
+for more information.
+
+```shell
+$ third_party/blink/tools/run_web_tests.py -t Debug-iphonesimulator \
+    --platform ios
+```
+
 ### Running on specific simulator
 
 By default, `iossim` will pick an arbitrary simulator to run the tests. If
@@ -479,7 +499,8 @@ $ git config core.untrackedCache true
 
 You can significantly speed up git by using [fsmonitor.](https://github.blog/2022-06-29-improve-git-monorepo-performance-with-a-file-system-monitor/)
 You should enable fsmonitor in large repos, such as Chromium and v8. Enabling
-it globally will launch many processes and probably isn't worthwhile. The
+it globally will launch many processes and probably isn't worthwhile. Be sure
+you have at least version 2.43 (fsmonitor on the Mac is broken before then). The
 command to enable fsmonitor in the current repo is:
 
 ```shell

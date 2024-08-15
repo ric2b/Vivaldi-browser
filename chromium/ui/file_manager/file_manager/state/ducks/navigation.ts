@@ -2,15 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {isOneDriveId} from '../../common/js/entry_utils.js';
 import {EntryList, VolumeEntry} from '../../common/js/files_app_entry_types.js';
-import {util} from '../../common/js/util.js';
 import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
 import {FilesAppEntry} from '../../externs/files_app_entry_interfaces.js';
-import {NavigationKey, NavigationRoot, NavigationSection, NavigationType, State, Volume} from '../../externs/ts/state.js';
+import {AndroidApp, NavigationKey, NavigationRoot, NavigationSection, NavigationType, State, Volume} from '../../externs/ts/state.js';
 import {Slice} from '../../lib/base_store.js';
 import {getMyFiles} from '../ducks/all_entries.js';
 import {driveRootEntryListKey, recentRootKey, trashRootKey} from '../ducks/volumes.js';
-import {FileKey} from '../file_key.js';
+import type {FileKey} from '../file_key.js';
 import {getEntry, getFileData} from '../store.js';
 
 /**
@@ -18,7 +18,7 @@ import {getEntry, getFileData} from '../store.js';
  * @suppress {checkTypes}
  */
 
-const slice = new Slice<State>('navigation');
+const slice = new Slice<State, State['navigation']>('navigation');
 export {slice as navigationSlice};
 
 const VolumeType = VolumeManagerCommon.VolumeType;
@@ -69,7 +69,7 @@ function getPrefixEntryOrEntry(state: State, volume: Volume): VolumeEntry|
  *  10. Trash.
  */
 export const refreshNavigationRoots =
-    slice.addReducer<void>('refresh-roots', refreshNavigationRootsReducer);
+    slice.addReducer('refresh-roots', refreshNavigationRootsReducer);
 
 function refreshNavigationRootsReducer(currentState: State): State {
   const {
@@ -166,7 +166,7 @@ function refreshNavigationRootsReducer(currentState: State): State {
       });
 
   function getVolumeOrder(volume: Volume) {
-    if (util.isOneDriveId(volume.providerId)) {
+    if (isOneDriveId(volume.providerId)) {
       return 0;
     }
     return volumesOrder[volume.volumeType] ?? 999;
@@ -199,7 +199,7 @@ function refreshNavigationRootsReducer(currentState: State): State {
     if (volumeEntry && !processedEntryKeys.has(volumeEntry.toURL())) {
       let section =
           sections.get(volume.volumeType) ?? NavigationSection.REMOVABLE;
-      if (util.isOneDriveId(volume.providerId)) {
+      if (isOneDriveId(volume.providerId)) {
         section = NavigationSection.ODFS;
       }
       const isSectionStart = section !== lastSection;
@@ -215,9 +215,7 @@ function refreshNavigationRootsReducer(currentState: State): State {
   }
 
   // 9. Android Apps.
-  Object
-      .values(
-          androidApps as Record<string, chrome.fileManagerPrivate.AndroidApp>)
+  Object.values(androidApps as Record<string, AndroidApp>)
       .forEach((app, index) => {
         roots.push({
           key: app.packageName,

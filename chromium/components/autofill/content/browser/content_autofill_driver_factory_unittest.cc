@@ -39,11 +39,6 @@ namespace autofill {
 
 namespace {
 
-class MockAutofillClient : public TestAutofillClient {
- public:
-  MOCK_METHOD(void, HideAutofillPopup, (PopupHidingReason), (override));
-};
-
 class MockContentAutofillDriverFactoryObserver
     : public ContentAutofillDriverFactory::Observer {
  public:
@@ -75,15 +70,24 @@ class MockAutofillAgent : public mojom::AutofillAgent {
               TriggerFormExtractionWithResponse,
               (base::OnceCallback<void(bool)>),
               (override));
+  MOCK_METHOD(
+      void,
+      ExtractForm,
+      (FormRendererId form,
+       base::OnceCallback<void(const std::optional<FormData>&)> callback),
+      (override));
   MOCK_METHOD(void,
-              FillOrPreviewForm,
-              (const FormData& form,
-               mojom::AutofillActionPersistence action_persistence),
+              ApplyFormAction,
+              (mojom::ActionType action_type,
+               mojom::ActionPersistence action_persistence,
+               const FormData& form),
               (override));
   MOCK_METHOD(void,
-              UndoAutofill,
-              (const FormData& form,
-               mojom::AutofillActionPersistence action_persistence),
+              ApplyFieldAction,
+              (mojom::ActionPersistence action_persistence,
+               mojom::TextReplacement text_replacement,
+               FieldRendererId field,
+               const std::u16string& value),
               (override));
   MOCK_METHOD(void,
               FieldTypePredictionsAvailable,
@@ -95,14 +99,6 @@ class MockAutofillAgent : public mojom::AutofillAgent {
               TriggerSuggestions,
               (FieldRendererId field_id,
                AutofillSuggestionTriggerSource trigger_source),
-              (override));
-  MOCK_METHOD(void,
-              FillFieldWithValue,
-              (FieldRendererId field, const std::u16string& value),
-              (override));
-  MOCK_METHOD(void,
-              PreviewFieldWithValue,
-              (FieldRendererId field, const ::std::u16string& value),
               (override));
   MOCK_METHOD(void,
               SetSuggestionAvailability,
@@ -152,7 +148,7 @@ class ContentAutofillDriverFactoryTest
   void SetUp() override {
     content::RenderViewHostTestHarness::SetUp();
 
-    client_ = std::make_unique<MockAutofillClient>();
+    client_ = std::make_unique<TestAutofillClient>();
     client_->set_channel_for_testing(channel_);
 
     agent_ = std::make_unique<MockAutofillAgent>();
@@ -176,10 +172,6 @@ class ContentAutofillDriverFactoryTest
   }
 
   void NavigateMainFrame(base::StringPiece url) {
-    // One call of HideAutofillPopup() comes from ContentAutofillDriverFactory.
-    // A second one may come from BrowserAutofillManager::Reset().
-    EXPECT_CALL(*client_, HideAutofillPopup(PopupHidingReason::kNavigation))
-        .Times(Between(1, 2));
     content::NavigationSimulator::CreateBrowserInitiated(GURL(url),
                                                          web_contents())
         ->Commit();
@@ -188,7 +180,7 @@ class ContentAutofillDriverFactoryTest
  protected:
   version_info::Channel channel_;
   std::unique_ptr<MockAutofillAgent> agent_;
-  std::unique_ptr<MockAutofillClient> client_;
+  std::unique_ptr<TestAutofillClient> client_;
   std::unique_ptr<ContentAutofillDriverFactory> factory_;
 };
 
@@ -243,11 +235,6 @@ TEST_F(ContentAutofillDriverFactoryTest_WithTwoFrames, TwoDrivers) {
   EXPECT_EQ(factory_->DriverForFrame(main_rfh()), main_driver);
   EXPECT_EQ(factory_->DriverForFrame(child_rfh()), child_driver);
   EXPECT_EQ(test_api(*factory_).num_drivers(), 2u);
-  // TODO(crbug.com/1200511): Set the router's last source and target, and if
-  // the |child_driver| is destroyed, expect a call to
-  // AutofillManager::OnHidePopup(). For this to work, we need mock
-  // AutofillManagers instead of real BrowserAutofillManager, which are blocked
-  // by ContentAutofillDriver's use of the factory callback.
 }
 
 // Test case with two frames, where the parameter selects one of them.

@@ -17,7 +17,6 @@
 #include "base/vivaldi_switches.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/language/accept_languages_service_factory.h"
 #include "chrome/browser/language/language_model_manager_factory.h"
 #include "chrome/browser/language/url_language_histogram_factory.h"
@@ -410,7 +409,7 @@ ShowTranslateBubbleResult VivaldiTranslateClient::ShowBubble(
     const std::string& target_language,
     translate::TranslateErrors error_type) {
   DCHECK(translate_manager_);
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
+  Browser* browser = chrome::FindBrowserWithTab(web_contents());
 
   // |browser| might be NULL when testing. In this case, Show(...) should be
   // called because the implementation for testing is used.

@@ -87,6 +87,17 @@ std::unique_ptr<SessionCommand> CreateVivPageActionOverrideCommand(
       new SessionCommand(command_id, pickle));
 }
 
+std::unique_ptr<SessionCommand> CreateVivCreateThumbnailCommand(
+    SessionID::id_type command_id,
+    int image_format,
+    const char * data,
+    size_t size) {
+  base::Pickle pickle;
+  pickle.WriteInt(image_format);
+  pickle.WriteData(data, size);
+  return std::make_unique<SessionCommand>(command_id, pickle);
+}
+
 std::unique_ptr<SessionCommand> CreateRemoveVivPageActionOverrideCommand(
     SessionID::id_type command_id,
     SessionID tab_id,

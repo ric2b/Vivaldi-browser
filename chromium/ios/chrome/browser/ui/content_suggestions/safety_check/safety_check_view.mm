@@ -4,7 +4,7 @@
 
 #import "ios/chrome/browser/ui/content_suggestions/safety_check/safety_check_view.h"
 
-#import "ios/chrome/browser/safety_check/ios_chrome_safety_check_manager_constants.h"
+#import "ios/chrome/browser/safety_check/model/ios_chrome_safety_check_manager_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/multi_row_container_view.h"
 #import "ios/chrome/browser/ui/content_suggestions/safety_check/constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/safety_check/safety_check_item_view.h"
@@ -46,6 +46,7 @@
 
 #pragma mark - Private methods
 
+// Creates all views for the Safety Check (Magic Stack) module.
 - (void)createSubviews {
   // Return if the subviews have already been created and added.
   if (!(self.subviews.count == 0)) {

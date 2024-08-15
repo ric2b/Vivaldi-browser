@@ -5,7 +5,7 @@
 #import "base/strings/sys_string_conversions.h"
 #import "components/strings/grit/components_strings.h"
 #import "components/url_formatter/url_fixer.h"
-#import "ios/chrome/browser/drag_and_drop/url_drag_drop_handler.h"
+#import "ios/chrome/browser/drag_and_drop/model/url_drag_drop_handler.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_url_loader_delegate.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
@@ -284,7 +284,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 // Updates the height of the margins for the top and bottom toolbars.
 - (void)updateToolbarMargins {
   if (IsSplitToolbarMode(self)) {
-    _bottomToolbarMarginHeight.constant = kSecondaryToolbarHeight;
+    _bottomToolbarMarginHeight.constant = kSecondaryToolbarWithoutOmniboxHeight;
   } else {
     _bottomToolbarMarginHeight.constant = 0;
   }

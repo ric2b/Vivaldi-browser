@@ -1102,6 +1102,10 @@ TabDragController::StartSystemDragAndDropSessionIfNecessary(
       drag_image,
       gfx::Vector2d(drag_image.height() / 2, drag_image.width() / 2));
 
+  // Pull into a local to avoid use-after-free if RunShellDrag deletes |this|.
+  base::OnceClosure drag_loop_done_callback =
+      std::move(drag_loop_done_callback_);
+
   base::WeakPtr<TabDragController> ref(weak_factory_.GetWeakPtr());
   GetAttachedBrowserWidget()->RunShellDrag(
       attached_context_,
@@ -1114,6 +1118,10 @@ TabDragController::StartSystemDragAndDropSessionIfNecessary(
   // need to end the drag session ourselves.
   if (ref && attached_context_hidden_)
     EndDrag(END_DRAG_COMPLETE);
+
+  if (drag_loop_done_callback) {
+    std::move(drag_loop_done_callback).Run();
+  }
 
   return ref ? Liveness::ALIVE : Liveness::DELETED;
 }
@@ -2403,6 +2411,12 @@ Browser* TabDragController::CreateBrowserForDrag(
   // restore the newly created browser using the original browser's stored data.
   // See crbug.com/1208923 and crbug.com/1333562 for details.
   create_params.restore_id = Browser::kDefaultRestoreId;
+
+  // Open the window in the same display.
+  display::Display display =
+      display::Screen::GetScreen()->GetDisplayNearestWindow(
+          source->GetWidget()->GetNativeWindow());
+  create_params.display_id = display.id();
 #endif
   // Do not copy attached window's show state as the attached window might be a
   // maximized or fullscreen window and we do not want the newly created browser
@@ -2421,15 +2435,19 @@ Browser* TabDragController::CreateBrowserForDrag(
 
   Browser* browser = Browser::Create(create_params);
   is_dragging_new_browser_ = true;
+
+#if !BUILDFLAG(IS_CHROMEOS)
   // If the window is created maximized then the bounds we supplied are ignored.
-  // We need to reset them again so they are honored.
+  // We need to reset them again so they are honored. On ChromeOS, this is
+  // handled in NativeWidgetAura.
   browser->window()->SetBounds(new_bounds);
+#endif
 
   return browser;
 }
 
 gfx::Point TabDragController::GetCursorScreenPoint() {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   views::Widget* widget = GetAttachedBrowserWidget();
   DCHECK(widget);
   aura::Window* widget_window = widget->GetNativeWindow();

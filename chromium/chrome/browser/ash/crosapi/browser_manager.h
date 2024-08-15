@@ -348,6 +348,9 @@ class BrowserManager : public session_manager::SessionManagerObserver,
     // Set true if Lacros uses resource file sharing.
     bool enable_resource_file_sharing = false;
 
+    // Set true if Lacros uses a shared components directory.
+    bool enable_shared_components_dir = false;
+
     // Any additional args to start lacros with.
     std::vector<std::string> lacros_additional_args;
   };
@@ -450,6 +453,9 @@ class BrowserManager : public session_manager::SessionManagerObserver,
 
   // Called when lacros-chrome is terminated and successfully wait(2)ed.
   void OnLacrosChromeTerminated();
+
+  // Called as soon as the login prompt is visible.
+  void OnLoginPromptVisible();
 
   // ID for the current Crosapi connection.
   // Available only when lacros-chrome is running.
@@ -607,21 +613,23 @@ class BrowserManager : public session_manager::SessionManagerObserver,
   // Reload and possibly relaunch Lacros.
   void HandleReload();
 
-  // Called as soon as the login prompt is visible.
-  void OnLoginPromptVisible();
-
   // session_manager::SessionManagerObserver:
   void OnSessionStateChanged() override;
 
-  // Pre-launch Lacros at login screen.
-  void PrelaunchAtLoginScreen();
+  // Pre-launch Lacros at login screen. (Can be overridden by tests).
+  virtual void PrelaunchAtLoginScreen();
 
   // Resume Lacros startup process after login.
   void ResumeLaunch();
 
-  // Wait for the primary user profile to be fully created before
-  // resuming Lacros post-login.
-  void WaitForProfileAddedBeforeResuming();
+  // Executes actions needed to resume Lacros's launch post-login,
+  // and writes post login data to the Lacros process.
+  // This method is guaranteed to run after the profile has been added.
+  void ResumeLaunchAfterProfileAdded();
+
+  // Wait for the primary user profile to be fully created and then
+  // executes a callback.
+  void WaitForProfileAddedAndThen(base::OnceClosure cb);
 
   // Waits for the device owner being fetched from `UserManager` and then
   // executes a callback. If Lacros is launched at the login screen, this
@@ -632,9 +640,6 @@ class BrowserManager : public session_manager::SessionManagerObserver,
   // Called as soon as `LaunchParamsFromBackground` are fetched.
   void OnLaunchParamsFetched(bool launching_at_login_screens,
                              LaunchParamsFromBackground params);
-
-  // Writes post login data to the Lacros process after login.
-  void WritePostLoginData();
 
   // Launch "Go to files" if the migration error page was clicked.
   void HandleGoToFiles();

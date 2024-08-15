@@ -23,6 +23,7 @@
 #include "base/trace_event/common/trace_event_common.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
+#include "base/trace_event/typed_macros.h"
 #include "build/build_config.h"
 #include "cc/base/math_util.h"
 #include "cc/base/region.h"
@@ -613,7 +614,12 @@ namespace {
 
 DBG_FLAG_FBOOL("frame.debug.non_root_passes", debug_non_root_passes)
 
-void DebugDrawFrame(const AggregatedFrame& frame) {
+DBG_FLAG_FBOOL("frame.render_pass.non_root_passes_in_root_space",
+               non_root_passes_in_root_space)
+
+void DebugDrawFrame(
+    const AggregatedFrame& frame,
+    const std::unique_ptr<DisplayResourceProvider>& resource_provider) {
   bool is_debugger_connected = false;
   DBG_CONNECTED_OR_TRACING(is_debugger_connected);
   if (!is_debugger_connected) {
@@ -626,10 +632,16 @@ void DebugDrawFrame(const AggregatedFrame& frame) {
       continue;
     }
 
+    auto output_rect = render_pass->output_rect;
+    auto damage_rect = render_pass->damage_rect;
+    if (non_root_passes_in_root_space()) {
+      output_rect = render_pass->transform_to_root_target.MapRect(output_rect);
+      damage_rect = render_pass->transform_to_root_target.MapRect(damage_rect);
+    }
+
     DBG_DRAW_RECT_OPT("frame.render_pass.output_rect", DBG_OPT_BLUE,
-                      render_pass->output_rect);
-    DBG_DRAW_RECT_OPT("frame.render_pass.damage", DBG_OPT_RED,
-                      render_pass->damage_rect);
+                      output_rect);
+    DBG_DRAW_RECT_OPT("frame.render_pass.damage", DBG_OPT_RED, damage_rect);
 
     DBG_LOG_OPT("frame.render_pass.meta", DBG_OPT_BLUE,
                 "Render pass id=%" PRIu64
@@ -646,8 +658,13 @@ void DebugDrawFrame(const AggregatedFrame& frame) {
 
     for (auto* quad : render_pass->quad_list) {
       auto* sqs = quad->shared_quad_state;
-      auto& transform = sqs->quad_to_target_transform;
-      auto display_rect = transform.MapRect(gfx::RectF(quad->rect));
+      auto quad_to_root_transform = sqs->quad_to_target_transform;
+      if (non_root_passes_in_root_space()) {
+        quad_to_root_transform.PostConcat(
+            render_pass->transform_to_root_target);
+      }
+      auto display_rect =
+          quad_to_root_transform.MapRect(gfx::RectF(quad->rect));
       DBG_DRAW_TEXT_OPT("frame.render_pass.material", DBG_OPT_GREEN,
                         display_rect.origin(),
                         base::NumberToString(static_cast<int>(quad->material)));
@@ -660,6 +677,22 @@ void DebugDrawFrame(const AggregatedFrame& frame) {
           "frame.render_pass.resource_id", DBG_OPT_RED, display_rect.origin(),
           base::NumberToString(quad->resources.ids[0].GetUnsafeValue()));
 
+      if (quad->resources.ids[0] != kInvalidResourceId) {
+        DBG_DRAW_TEXT_OPT(
+            "frame.render_pass.buf_format", DBG_OPT_BLUE, display_rect.origin(),
+            base::NumberToString(static_cast<int>(
+                resource_provider->GetBufferFormat(quad->resources.ids[0]))));
+        DBG_DRAW_TEXT_OPT(
+            "frame.render_pass.buf_sampled_color_space", DBG_OPT_RED,
+            display_rect.origin(),
+            resource_provider->GetSamplerColorSpace(quad->resources.ids[0])
+                .ToString());
+        DBG_DRAW_TEXT_OPT(
+            "frame.render_pass.buf_overlay_color_space", DBG_OPT_GREEN,
+            display_rect.origin(),
+            resource_provider->GetOverlayColorSpace(quad->resources.ids[0])
+                .ToString());
+      }
       DBG_DRAW_RECT("frame.render_pass.quad", display_rect);
     }
   }
@@ -770,7 +803,6 @@ bool Display::DrawAndSwap(const DrawAndSwapParams& params) {
       resource_provider_.get(), /*allow_access_to_gpu_thread=*/true);
 
   base::ElapsedTimer aggregate_timer;
-  aggregate_timer.Begin();
   AggregatedFrame frame;
   {
     FrameRateDecider::ScopedAggregate scoped_aggregate(
@@ -794,7 +826,7 @@ bool Display::DrawAndSwap(const DrawAndSwapParams& params) {
       VLOG(3) << "Post-aggregation\n" << frame.ToString();
     }
   }
-  DebugDrawFrame(frame);
+  DebugDrawFrame(frame, resource_provider_);
 
   if (frame.delegated_ink_metadata) {
     TRACE_EVENT_INSTANT1(
@@ -910,7 +942,6 @@ bool Display::DrawAndSwap(const DrawAndSwapParams& params) {
 
     draw_timer.emplace();
     overlay_processor_->SetFrameSequenceNumber(frame_sequence_number_);
-    overlay_processor_->SetIsVideoCaptureEnabled(frame.video_capture_enabled);
     overlay_processor_->SetIsPageFullscreen(frame.page_fullscreen_mode);
     renderer_->DrawFrame(&frame.render_pass_list, device_scale_factor_,
                          current_surface_size, display_color_spaces_,
@@ -938,7 +969,8 @@ bool Display::DrawAndSwap(const DrawAndSwapParams& params) {
     if (IsScroll(frame.latency_info)) {
       boost_type = HintSession::BoostType::kScrollBoost;
     }
-    presentation_group_timing.OnDraw(params.frame_time, draw_timer->Begin(),
+    presentation_group_timing.OnDraw(params.frame_time,
+                                     draw_timer->start_time(),
                                      std::move(thread_ids), boost_type);
 
     for (const auto& surface_id : aggregator_->previous_contained_surfaces()) {
@@ -973,6 +1005,20 @@ bool Display::DrawAndSwap(const DrawAndSwapParams& params) {
           *frame.top_controls_visible_height;
       last_top_controls_visible_height_ = *frame.top_controls_visible_height;
     }
+
+    swap_frame_data.swap_trace_id = swapped_trace_id_;
+
+    TRACE_EVENT(
+        "viz,benchmark,graphics.pipeline", "Graphics.Pipeline",
+        perfetto::Flow::Global(swap_frame_data.swap_trace_id),
+        [swap_trace_id =
+             swap_frame_data.swap_trace_id](perfetto::EventContext ctx) {
+          auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
+          auto* data = event->set_chrome_graphics_pipeline();
+          data->set_step(perfetto::protos::pbzero::ChromeGraphicsPipeline::
+                             StepName::STEP_SEND_BUFFER_SWAP);
+          data->set_display_trace_id(swap_trace_id);
+        });
 
 #if BUILDFLAG(IS_APPLE)
     swap_frame_data.ca_layer_error_code =
@@ -1039,6 +1085,17 @@ void Display::DidReceiveSwapBuffersAck(
   // have been done in DrawAndSwap(), and should not be popped until
   // DidReceiveSwapBuffersAck.
   DCHECK(!pending_presentation_group_timings_.empty());
+
+  TRACE_EVENT(
+      "viz,benchmark,graphics.pipeline", "Graphics.Pipeline",
+      perfetto::TerminatingFlow::Global(params.swap_trace_id),
+      [&](perfetto::EventContext ctx) {
+        auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
+        auto* data = event->set_chrome_graphics_pipeline();
+        data->set_step(perfetto::protos::pbzero::ChromeGraphicsPipeline::
+                           StepName::STEP_SWAP_BUFFERS_ACK);
+        data->set_display_trace_id(params.swap_trace_id);
+      });
 
   if (params.swap_response.result ==
       gfx::SwapResult::SWAP_NAK_RECREATE_BUFFERS) {
@@ -1165,7 +1222,8 @@ void Display::DidReceivePresentationFeedback(
       "viz,benchmark", "Graphics.Pipeline.DrawAndSwap",
       last_presented_trace_id_, copy_feedback.timestamp);
   TRACE_EVENT_INSTANT_WITH_TIMESTAMP0(
-      "benchmark,viz", "Display::FrameDisplayed", TRACE_EVENT_SCOPE_THREAD,
+      "benchmark,viz," TRACE_DISABLED_BY_DEFAULT("display.framedisplayed"),
+      "Display::FrameDisplayed", TRACE_EVENT_SCOPE_THREAD,
       copy_feedback.timestamp);
 
   if (renderer_->CompositeTimeTracingEnabled()) {

@@ -25,6 +25,28 @@ imageset("widget_qr_icon") {
   ]
 }
 
+imageset("widget_lock_screen_search") {
+  sources = [
+    "widget_lock_screen_search.imageset/Contents.json",
+    "widget_lock_screen_search.imageset/widget_lock_screen_search.pdf",
+  ]
+}
+
+imageset("widget_lock_screen_private_search") {
+  sources = [
+    "widget_lock_screen_private_search.imageset/Contents.json",
+    "widget_lock_screen_private_search.imageset/widget_lock_screen_private_search.pdf",
+  ]
+}
+
+imageset("widget_password_manager_logo") {
+  sources = [
+    "widget_password_manager_logo.imageset/Contents.json",
+    "widget_password_manager_logo.imageset/widget_password_manager_logo@2x.png",
+    "widget_password_manager_logo.imageset/widget_password_manager_logo@3x.png",
+  ]
+}
+
 colorset("widget_search_bar_color") {
   sources = [ "widget_search_bar_color.colorset/Contents.json" ]
 }

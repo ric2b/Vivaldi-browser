@@ -7,6 +7,7 @@ import("//build/config/compiler/compiler.gni")
 import("//build/config/dcheck_always_on.gni")
 import("//build/config/python.gni")
 import("//build/config/ui.gni")
+import("//build/nocompile.gni")
 import("//build/toolchain/toolchain.gni")
 import("//media/media_options.gni")
 import("//printing/buildflags/buildflags.gni")
@@ -56,6 +57,7 @@ import("//third_party/blink/renderer/core/origin_trials/build.gni")
 import("//third_party/blink/renderer/core/page/build.gni")
 import("//third_party/blink/renderer/core/paint/build.gni")
 import("//third_party/blink/renderer/core/permissions_policy/build.gni")
+import("//third_party/blink/renderer/core/preferences/build.gni")
 import("//third_party/blink/renderer/core/resize_observer/build.gni")
 import(
     "//third_party/blink/renderer/core/scheduler_integration_tests/build.gni")
@@ -304,6 +306,7 @@ component("core") {
   sources +=
       rebase_path(blink_core_sources_xmlhttprequest, "", "xmlhttprequest")
   sources += rebase_path(blink_core_sources_speech, "", "speech")
+  sources += rebase_path(blink_core_sources_preferences, "", "preferences")
 
   configs -= core_config_remove
   configs += core_config_add
@@ -335,6 +338,10 @@ component("core") {
 
   if (is_mac) {
     public_deps += [ "//ui/gfx" ]
+  }
+
+  if (is_win) {
+    public_deps += [ "//third_party/re2" ]
   }
 
   deps = [
@@ -429,6 +436,7 @@ blink_core_sources("core_hot") {
 
   deps = [
     "//build:chromeos_buildflags",
+    "//components/miracle_parameter/common",
     "//services/metrics/public/cpp:ukm_builders",
     "//third_party/blink/public:image_resources_grit",
     "//third_party/blink/public/strings",
@@ -1432,6 +1440,10 @@ source_set("unit_tests") {
     "//ui/gfx:test_support",
   ]
 
+  if (enable_nocompile_tests_new) {
+    deps += [ "//third_party/blink/renderer/core/probe:probe_nocompile_tests" ]
+  }
+
   data_deps = [ ":unit_tests_data" ]
 
   if (use_aura) {
@@ -1521,6 +1533,8 @@ source_set("unit_test_support") {
     "html/media/html_media_test_helper.cc",
     "html/media/html_media_test_helper.h",
     "script/mock_script_element_base.h",
+    "speculation_rules/auto_speculation_rules_test_helper.cc",
+    "speculation_rules/auto_speculation_rules_test_helper.h",
     "testing/core_unit_test_helper.cc",
     "testing/core_unit_test_helper.h",
     "testing/fake_web_plugin.cc",
@@ -1696,6 +1710,17 @@ fuzzer_test("blink_html_tokenizer_fuzzer") {
     ":core",
     "//third_party/blink/renderer/platform:blink_fuzzer_test_support",
   ]
+}
+
+# Fuzzer for SVG path string parsing
+fuzzer_test("svg_path_parser_fuzzer") {
+  sources = [ "svg/svg_path_parser_fuzzer.cc" ]
+  deps = [
+    ":core",
+    "../platform:blink_fuzzer_test_support",
+  ]
+  dict = "//third_party/blink/renderer/core/svg/svg_path_parser.dict"
+  seed_corpus = "//third_party/blink/renderer/core/svg/svg_path_parser_corpus"
 }
 
 # Fuzzers for blink::PermissionsPolicy.

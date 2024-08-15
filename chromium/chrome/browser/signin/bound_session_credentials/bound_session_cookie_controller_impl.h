@@ -35,12 +35,25 @@ class BoundSessionCookieControllerImpl
     : public BoundSessionCookieController,
       public network::NetworkConnectionTracker::NetworkConnectionObserver {
  public:
+  // Event triggering a call to ResumeBlockedRequests().
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class ResumeBlockedRequestsTrigger {
+    kObservedFreshCookies = 0,
+    kCookieRefreshFetchSuccess = 1,
+    kCookieRefreshFetchFailure = 2,
+    kNetworkConnectionOffline = 3,
+    kTimeout = 4,
+    kShutdownOrSessionTermination = 5,
+
+    kMaxValue = kShutdownOrSessionTermination
+  };
+
   BoundSessionCookieControllerImpl(
       unexportable_keys::UnexportableKeyService& key_service,
       content::StoragePartition* storage_partition,
       network::NetworkConnectionTracker* network_connection_tracker,
       const bound_session_credentials::BoundSessionParams& bound_session_params,
-      const base::flat_set<std::string>& cookie_names,
       Delegate* delegate);
 
   ~BoundSessionCookieControllerImpl() override;
@@ -82,7 +95,7 @@ class BoundSessionCookieControllerImpl
                                         base::Time expiration_time);
   void OnCookieRefreshFetched(BoundSessionRefreshCookieFetcher::Result result);
   void MaybeScheduleCookieRotation();
-  void ResumeBlockedRequests();
+  void ResumeBlockedRequests(ResumeBlockedRequestsTrigger trigger);
   void OnResumeBlockedRequestsTimeout();
 
   void set_refresh_cookie_fetcher_factory_for_testing(

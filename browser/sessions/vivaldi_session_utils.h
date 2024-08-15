@@ -1,11 +1,12 @@
 // Copyright (c) 2023 Vivaldi Technologies AS. All rights reserved.
-
+#pragma once
 #include <string>
 #include <vector>
 
 #include "base/files/file.h"
 #include "base/values.h"
 #include "browser/sessions/vivaldi_session_service.h"
+#include "components/datasource/vivaldi_image_store.h"
 #include "components/sessions/vivaldi_session_service_commands.h"
 
 class Browser;
@@ -55,6 +56,9 @@ struct WriteSessionOptions {
   std::string filename;
   // Output
   base::FilePath path;
+
+  // thumbnails to be written
+  vivaldi_image_store::Batch thumbnails;
 };
 
 struct GroupAlias {
@@ -77,6 +81,16 @@ int SetNodeState(content::BrowserContext* browser_context,
 // Writes session file with content and location controlled by opts.
 int WriteSessionFile(content::BrowserContext* browser_context,
                      WriteSessionOptions& opts);
+
+// Returns list of the thumbnail referenced by opts.ids.
+std::vector<std::string>
+CollectThumbnailUrls(content::BrowserContext* browser_context,
+    const WriteSessionOptions& opts);
+
+// Returns list of all the thumbnail urls.
+std::vector<std::string>
+CollectAllThumbnailUrls(content::BrowserContext* browser_context);
+
 // Removes session file.
 int DeleteSessionFile(content::BrowserContext* browser_context,
                       Index_Node* node);

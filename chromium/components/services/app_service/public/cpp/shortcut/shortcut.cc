@@ -9,6 +9,7 @@
 
 #include "base/check.h"
 #include "base/strings/strcat.h"
+#include "components/app_constants/constants.h"
 #include "components/crx_file/id_util.h"
 
 namespace apps {
@@ -26,7 +27,8 @@ bool Shortcut::operator==(const Shortcut& rhs) const {
   return this->shortcut_id == rhs.shortcut_id &&
          this->host_app_id == rhs.host_app_id &&
          this->local_id == rhs.local_id && this->name == rhs.name &&
-         this->shortcut_source == rhs.shortcut_source;
+         this->shortcut_source == rhs.shortcut_source &&
+         this->icon_key == rhs.icon_key;
 }
 
 std::unique_ptr<Shortcut> Shortcut::Clone() const {
@@ -34,6 +36,9 @@ std::unique_ptr<Shortcut> Shortcut::Clone() const {
 
   shortcut->name = name;
   shortcut->shortcut_source = shortcut_source;
+  if (icon_key.has_value()) {
+    shortcut->icon_key = std::move(*icon_key->Clone());
+  }
 
   return shortcut;
 }
@@ -61,6 +66,13 @@ Shortcuts CloneShortcuts(const Shortcuts& source_shortcuts) {
 
 ShortcutId GenerateShortcutId(const std::string& host_app_id,
                               const std::string& local_id) {
+  // For web app based browser shortcut, we just use the local_id
+  // that is generated in the web app system, so that we can keep
+  // all the launcher and shelf locations without needing to migrate the sync
+  // data.
+  if (host_app_id == app_constants::kChromeAppId) {
+    return ShortcutId(local_id);
+  }
   const std::string input = base::StrCat({host_app_id, "#", local_id});
   return ShortcutId(crx_file::id_util::GenerateId(input));
 }

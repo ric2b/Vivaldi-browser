@@ -8,7 +8,7 @@
 #import <Foundation/Foundation.h>
 
 #import "ios/chrome/browser/shared/ui/table_view/table_view_favicon_data_source.h"
-#import "ios/chrome/browser/synced_sessions/synced_sessions_bridge.h"
+#import "ios/chrome/browser/synced_sessions/model/synced_sessions_bridge.h"
 #import "ios/chrome/browser/ui/recent_tabs/closed_tabs_observer_bridge.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_table_view_controller_delegate.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_page_mutator.h"
@@ -17,6 +17,7 @@ class BrowserList;
 class FaviconLoader;
 @protocol GridToolbarsMutator;
 @protocol RecentTabsConsumer;
+@protocol TabGridToolbarsActionWrangler;
 
 //Vivaldi
 class Browser;
@@ -53,6 +54,9 @@ class TabRestoreService;
 @property(nonatomic, strong) id<RecentTabsConsumer> consumer;
 // Mutator to handle toolbars modification.
 @property(nonatomic, weak) id<GridToolbarsMutator> toolbarsMutator;
+// Wrangler handling the TabGrid modifications.
+@property(nonatomic, weak) id<TabGridToolbarsActionWrangler>
+    toolbarActionWrangler;
 
 - (instancetype)
     initWithSessionSyncService:

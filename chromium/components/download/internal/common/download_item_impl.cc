@@ -1008,18 +1008,35 @@ DownloadFile* DownloadItemImpl::GetDownloadFile() {
 }
 
 bool DownloadItemImpl::IsDangerous() const {
-  return danger_type_ == DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE ||
-         danger_type_ == DOWNLOAD_DANGER_TYPE_DANGEROUS_URL ||
-         danger_type_ == DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT ||
-         danger_type_ == DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT ||
-         danger_type_ == DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST ||
-         danger_type_ == DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED ||
-         danger_type_ == DOWNLOAD_DANGER_TYPE_BLOCKED_PASSWORD_PROTECTED ||
-         danger_type_ == DOWNLOAD_DANGER_TYPE_BLOCKED_TOO_LARGE ||
-         danger_type_ == DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_WARNING ||
-         danger_type_ == DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_BLOCK ||
-         danger_type_ == DOWNLOAD_DANGER_TYPE_PROMPT_FOR_SCANNING ||
-         danger_type_ == DOWNLOAD_DANGER_TYPE_DANGEROUS_ACCOUNT_COMPROMISE;
+  switch (danger_type_) {
+    case DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE:
+    case DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:
+    case DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
+    case DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT:
+    case DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
+    case DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
+    case DOWNLOAD_DANGER_TYPE_BLOCKED_PASSWORD_PROTECTED:
+    case DOWNLOAD_DANGER_TYPE_BLOCKED_TOO_LARGE:
+    case DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_WARNING:
+    case DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_BLOCK:
+    case DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_OPENED_DANGEROUS:
+    case DOWNLOAD_DANGER_TYPE_PROMPT_FOR_SCANNING:
+    case DOWNLOAD_DANGER_TYPE_BLOCKED_UNSUPPORTED_FILETYPE:
+    case DOWNLOAD_DANGER_TYPE_DANGEROUS_ACCOUNT_COMPROMISE:
+    case DOWNLOAD_DANGER_TYPE_PROMPT_FOR_LOCAL_PASSWORD_SCANNING:
+      return true;
+    case DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:
+    case DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT:
+    case DOWNLOAD_DANGER_TYPE_USER_VALIDATED:
+    case DOWNLOAD_DANGER_TYPE_ALLOWLISTED_BY_POLICY:
+    case DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING:
+    case DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE:
+    case DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_FAILED:
+      return false;
+    case DOWNLOAD_DANGER_TYPE_MAX:
+      NOTREACHED();
+      return false;
+  }
 }
 
 bool DownloadItemImpl::IsInsecure() const {
@@ -1147,6 +1164,10 @@ DownloadItem::DownloadCreationType DownloadItemImpl::GetDownloadCreationType()
   return download_type_;
 }
 
+bool DownloadItemImpl::IsDlpManaged() const {
+  return is_dlp_managed_;
+}
+
 ::network::mojom::CredentialsMode DownloadItemImpl::GetCredentialsMode() const {
   return request_info_.credentials_mode;
 }
@@ -1207,6 +1228,10 @@ void DownloadItemImpl::SetLastAccessTime(base::Time last_access_time) {
 
 void DownloadItemImpl::SetDisplayName(const base::FilePath& name) {
   display_name_ = name;
+}
+
+void DownloadItemImpl::SetIsDlpManaged(bool is_managed) {
+  is_dlp_managed_ = is_managed;
 }
 
 std::string DownloadItemImpl::DebugString(bool verbose) const {
@@ -2001,14 +2026,6 @@ void DownloadItemImpl::Completed() {
     }
   }
 
-  // TODO(crbug.com/1372476): Remove these histograms after debugging.
-  if (!IsTemporary()) {
-    base::UmaHistogramBoolean("Download.Complete.IsOpenWhenCompleteSet",
-                              GetOpenWhenComplete());
-    base::UmaHistogramBoolean(
-        "Download.Complete.IsShouldOpenFileBasedOnExtensionSet",
-        ShouldOpenFileBasedOnExtension());
-  }
   if (auto_opened_) {
     // If it was already handled by the delegate, do nothing.
   } else if (GetOpenWhenComplete() || ShouldOpenFileBasedOnExtension() ||

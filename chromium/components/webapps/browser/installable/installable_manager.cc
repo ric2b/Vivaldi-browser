@@ -14,6 +14,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
+#include "build/build_config.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "components/webapps/browser/webapps_client.h"
 #include "content/public/browser/browser_context.h"
@@ -22,7 +23,6 @@
 #include "content/public/browser/page.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/storage_partition.h"
-// #include "content/public/common/origin_util.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
@@ -101,8 +101,7 @@ void InstallableManager::GetAllErrors(
   DCHECK(callback);
   InstallableParams params;
   params.check_eligibility = true;
-  params.valid_manifest = true;
-  params.check_webapp_manifest_display = true;
+  params.installable_criteria = InstallableCriteria::kValidManifestWithIcons;
   params.fetch_screenshots = true;
   params.valid_primary_icon = true;
   params.is_debug_mode = true;
@@ -125,23 +124,23 @@ void InstallableManager::SetSequencedTaskRunnerForTesting(
 }
 
 InstallableStatusCode InstallableManager::manifest_error() const {
-  return page_data_->manifest->error;
+  return page_data_->manifest_error();
 }
 
 InstallableStatusCode InstallableManager::worker_error() const {
-  return page_data_->worker->error;
+  return page_data_->worker_error();
 }
 
-InstallableStatusCode InstallableManager::icon_error() {
-  return page_data_->primary_icon->error;
+InstallableStatusCode InstallableManager::icon_error() const {
+  return page_data_->icon_error();
 }
 
-GURL& InstallableManager::icon_url() {
-  return page_data_->primary_icon->url;
+GURL InstallableManager::icon_url() const {
+  return page_data_->primary_icon_url();
 }
 
-const SkBitmap* InstallableManager::icon() {
-  return page_data_->primary_icon->icon.get();
+const SkBitmap* InstallableManager::icon() const {
+  return page_data_->primary_icon();
 }
 
 content::WebContents* InstallableManager::GetWebContents() {
@@ -234,15 +233,15 @@ void InstallableManager::WebContentsDestroyed() {
 }
 
 const GURL& InstallableManager::manifest_url() const {
-  return page_data_->manifest->url;
+  return page_data_->manifest_url();
 }
 
 const blink::mojom::Manifest& InstallableManager::manifest() const {
   return page_data_->GetManifest();
 }
 
-bool InstallableManager::has_worker() {
-  return page_data_->worker->has_worker;
+bool InstallableManager::has_worker() const {
+  return page_data_->has_worker();
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(InstallableManager);

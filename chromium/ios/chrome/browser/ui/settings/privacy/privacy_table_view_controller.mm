@@ -20,12 +20,13 @@
 #import "components/strings/grit/components_strings.h"
 #import "components/supervised_user/core/common/supervised_user_utils.h"
 #import "components/sync/service/sync_service.h"
-#import "ios/chrome/browser/browsing_data/browsing_data_features.h"
+#import "ios/chrome/browser/browsing_data/model/browsing_data_features.h"
 #import "ios/chrome/browser/net/crurl.h"
 #import "ios/chrome/browser/policy/policy_util.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
@@ -37,21 +38,21 @@
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_header_footer_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
-#import "ios/chrome/browser/sync/sync_service_factory.h"
+#import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/browser/ui/incognito_interstitial/incognito_interstitial_constants.h"
 #import "ios/chrome/browser/ui/settings/elements/enterprise_info_popover_view_controller.h"
 #import "ios/chrome/browser/ui/settings/elements/info_popover_view_controller.h"
 #import "ios/chrome/browser/ui/settings/elements/supervised_user_info_popover_view_controller.h"
 #import "ios/chrome/browser/ui/settings/privacy/privacy_constants.h"
+#import "ios/chrome/browser/ui/settings/privacy/privacy_guide/features.h"
 #import "ios/chrome/browser/ui/settings/privacy/privacy_navigation_commands.h"
 #import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
 #import "ios/chrome/browser/ui/settings/settings_table_view_controller_constants.h"
-#import "ios/chrome/browser/ui/settings/utils/pref_backed_boolean.h"
 #import "ios/chrome/browser/web/features.h"
 #import "ios/chrome/common/string_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/reauthentication/reauthentication_protocol.h"
-#import "ios/chrome/grit/ios_chromium_strings.h"
+#import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/components/security_interstitials/https_only_mode/feature.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -74,6 +75,7 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierIncognitoAuth,
   SectionIdentifierIncognitoInterstitial,
   SectionIdentifierLockdownMode,
+  SectionIdentifierPrivacyGuide,
 };
 
 typedef NS_ENUM(NSInteger, ItemType) {
@@ -88,6 +90,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeIncognitoInterstitial,
   ItemTypeIncognitoInterstitialDisabled,
   ItemTypeLockdownMode,
+  ItemTypePrivacyGuide,
 };
 
 // Used to open the Sync and Google Services settings.
@@ -213,6 +216,9 @@ const char kSyncSettingsURL[] = "settings://open_sync";
 
   TableViewModel* model = self.tableViewModel;
   [model addSectionWithIdentifier:SectionIdentifierPrivacyContent];
+  if (IsPrivacyGuideIosEnabled()) {
+    [model addSectionWithIdentifier:SectionIdentifierPrivacyGuide];
+  }
   [model addSectionWithIdentifier:SectionIdentifierSafeBrowsing];
 
   if (base::FeatureList::IsEnabled(
@@ -225,14 +231,17 @@ const char kSyncSettingsURL[] = "settings://open_sync";
   [model addSectionWithIdentifier:SectionIdentifierWebServices];
   [model addSectionWithIdentifier:SectionIdentifierIncognitoAuth];
   [model addSectionWithIdentifier:SectionIdentifierIncognitoInterstitial];
-
-  if (web::IsBrowserLockdownModeEnabled()) {
-    [model addSectionWithIdentifier:SectionIdentifierLockdownMode];
-  }
+  [model addSectionWithIdentifier:SectionIdentifierLockdownMode];
 
   // Clear Browsing item.
   [model addItem:[self clearBrowsingDetailItem]
       toSectionWithIdentifier:SectionIdentifierPrivacyContent];
+
+  // Privacy Guide item.
+  if (IsPrivacyGuideIosEnabled()) {
+    [model addItem:[self privacyGuideDetailItem]
+        toSectionWithIdentifier:SectionIdentifierPrivacyGuide];
+  }
 
   // Vivaldi: Skip safe browsing setting
   if (!IsVivaldiRunning()) {
@@ -269,15 +278,10 @@ const char kSyncSettingsURL[] = "settings://open_sync";
       toSectionWithIdentifier:SectionIdentifierIncognitoInterstitial];
 
   // Lockdown Mode item.
-  if (web::IsBrowserLockdownModeEnabled()) {
-    [model addItem:[self lockdownModeDetailItem]
-        toSectionWithIdentifier:SectionIdentifierLockdownMode];
-    [model setFooter:[self showPrivacyFooterItem]
-        forSectionWithIdentifier:SectionIdentifierLockdownMode];
-  } else {
-    [model setFooter:[self showPrivacyFooterItem]
-        forSectionWithIdentifier:SectionIdentifierIncognitoInterstitial];
-  }
+  [model addItem:[self lockdownModeDetailItem]
+      toSectionWithIdentifier:SectionIdentifierLockdownMode];
+  [model setFooter:[self showPrivacyFooterItem]
+      forSectionWithIdentifier:SectionIdentifierLockdownMode];
 }
 
 #pragma mark - Model Objects
@@ -400,6 +404,13 @@ const char kSyncSettingsURL[] = "settings://open_sync";
   return _lockdownModeDetailItem;
 }
 
+- (TableViewItem*)privacyGuideDetailItem {
+  return [self detailItemWithType:ItemTypePrivacyGuide
+                          titleId:IDS_IOS_PRIVACY_GUIDE_TITLE
+                       detailText:nil
+          accessibilityIdentifier:kSettingsPrivacyGuideCellId];
+}
+
 - (TableViewSwitchItem*)incognitoReauthItem {
   if (_incognitoReauthItem) {
     return _incognitoReauthItem;
@@ -509,6 +520,9 @@ const char kSyncSettingsURL[] = "settings://open_sync";
     case ItemTypeLockdownMode:
       [self.handler showLockdownMode];
       break;
+    case ItemTypePrivacyGuide:
+      [self.handler showPrivacyGuide];
+      break;
     default:
       break;
   }
@@ -615,9 +629,9 @@ const char kSyncSettingsURL[] = "settings://open_sync";
   if (URL.gurl == GURL(kGoogleServicesSettingsURL)) {
     // kGoogleServicesSettingsURL is not a realy link. It should be handled
     // with a special case.
-    [self.dispatcher showGoogleServicesSettingsFromViewController:self];
+    [self.settingsHandler showGoogleServicesSettingsFromViewController:self];
   } else if (URL.gurl == GURL(kSyncSettingsURL)) {
-    [self.dispatcher showSyncSettingsFromViewController:self];
+    [self.settingsHandler showSyncSettingsFromViewController:self];
   } else {
     [super view:view didTapLinkURL:URL];
   }

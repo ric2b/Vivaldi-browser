@@ -56,6 +56,11 @@ class ShellSurface : public ShellSurfaceBase, public ash::WindowStateObserver {
                                        float raster_scale)>;
   using OriginChangeCallback =
       base::RepeatingCallback<void(const gfx::Point& origin)>;
+  using RotateFocusCallback =
+      base::RepeatingCallback<uint32_t(ash::FocusCycler::Direction direction,
+                                       bool restart)>;
+  using OverviewChangeCallback =
+      base::RepeatingCallback<void(bool in_overview)>;
 
   void set_configure_callback(const ConfigureCallback& configure_callback) {
     configure_callback_ = configure_callback;
@@ -66,11 +71,12 @@ class ShellSurface : public ShellSurfaceBase, public ash::WindowStateObserver {
     origin_change_callback_ = origin_change_callback;
   }
 
-  using RotateFocusCallback =
-      base::RepeatingCallback<uint32_t(ash::FocusCycler::Direction direction,
-                                       bool restart)>;
   void set_rotate_focus_callback(const RotateFocusCallback callback) {
     rotate_focus_callback_ = callback;
+  }
+
+  void set_overview_change_callback(const OverviewChangeCallback callback) {
+    overview_change_callback_ = callback;
   }
 
   // When the client is asked to configure the surface, it should acknowledge
@@ -93,8 +99,11 @@ class ShellSurface : public ShellSurfaceBase, public ash::WindowStateObserver {
   // Restore the shell surface.
   void Restore();
 
-  // Set fullscreen state for shell surface.
-  void SetFullscreen(bool fullscreen);
+  // Set fullscreen state for shell surface. When `fullscreen` is true,
+  // `display_id` indicates the id of the display where the surface should be
+  // shown on, otherwise it gets ignored. When `display::kInvalidDisplayId` is
+  // specified the current display will be used.
+  void SetFullscreen(bool fullscreen, int64_t display_id);
 
   // Make the shell surface popup type.
   void SetPopup();
@@ -109,10 +118,10 @@ class ShellSurface : public ShellSurfaceBase, public ash::WindowStateObserver {
   // Start an interactive resize of surface. |component| is one of the windows
   // HT constants (see ui/base/hit_test.h) and describes in what direction the
   // surface should be resized.
-  void StartResize(int component);
+  bool StartResize(int component);
 
   // Start an interactive move of surface.
-  void StartMove();
+  bool StartMove();
 
   // Sends a wayland request to the surface to rotate focus within itself. If
   // the client was able to rotate, it will return a "handled" response,
@@ -212,7 +221,7 @@ class ShellSurface : public ShellSurfaceBase, public ash::WindowStateObserver {
 
   bool GetCanResizeFromSizeConstraints() const override;
 
-  void AttemptToStartDrag(int component);
+  bool AttemptToStartDrag(int component);
 
   // Utility methods to resolve the initial bounds for the first commit.
   gfx::Rect GetInitialBoundsForState(
@@ -222,9 +231,12 @@ class ShellSurface : public ShellSurfaceBase, public ash::WindowStateObserver {
   std::unique_ptr<ash::ScopedAnimationDisabler> animations_disabler_;
 
   std::unique_ptr<ui::CompositorLock> configure_compositor_lock_;
+
   ConfigureCallback configure_callback_;
   OriginChangeCallback origin_change_callback_;
   RotateFocusCallback rotate_focus_callback_;
+  OverviewChangeCallback overview_change_callback_;
+
   raw_ptr<ScopedConfigure, ExperimentalAsh> scoped_configure_ = nullptr;
   base::circular_deque<std::unique_ptr<Config>> pending_configs_;
   // Stores the config which is acked but not yet committed. This will keep the

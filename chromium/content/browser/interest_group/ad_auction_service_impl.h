@@ -14,6 +14,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/types/expected.h"
 #include "base/uuid.h"
 #include "content/browser/fenced_frame/fenced_frame_url_mapping.h"
 #include "content/browser/interest_group/auction_nonce_manager.h"
@@ -39,7 +40,6 @@
 
 namespace content {
 
-class AdAuctionPageData;
 class InterestGroupManagerImpl;
 struct BiddingAndAuctionServerKey;
 class RenderFrameHost;
@@ -65,6 +65,10 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
                           const std::string& name,
                           LeaveInterestGroupCallback callback) override;
   void LeaveInterestGroupForDocument() override;
+  void ClearOriginJoinedInterestGroups(
+      const url::Origin& owner,
+      const std::vector<std::string>& interest_groups_to_keep,
+      ClearOriginJoinedInterestGroupsCallback callback) override;
   void UpdateAdInterestGroups() override;
   void CreateAuctionNonce(CreateAuctionNonceCallback callback) override;
   void RunAdAuction(
@@ -81,6 +85,7 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
       DeprecatedReplaceInURNCallback callback) override;
   void GetInterestGroupAdAuctionData(
       const url::Origin& seller,
+      const absl::optional<url::Origin>& coordinator,
       GetInterestGroupAdAuctionDataCallback callback) override;
   void CreateAdRequest(blink::mojom::AdRequestConfigPtr config,
                        CreateAdRequestCallback callback) override;
@@ -118,6 +123,7 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
     BiddingAndAuctionData data;
     base::Uuid request_id;
     url::Origin seller;
+    absl::optional<url::Origin> coordinator;
     GetInterestGroupAdAuctionDataCallback callback;
   };
 
@@ -142,8 +148,6 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
                                      interest_group_api_operation,
                                  const url::Origin& origin) const;
 
-  AdAuctionPageData* GetAdAuctionPageData();
-
   // Deletes `auction`.
   void OnAuctionComplete(
       RunAdAuctionCallback callback,
@@ -152,7 +156,7 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
       GlobalRenderFrameHostId render_frame_host_id,
       const base::WeakPtr<PageImpl> page_impl,
       AuctionRunner* auction,
-      bool manually_aborted,
+      bool aborted_by_script,
       absl::optional<blink::InterestGroupKey> winning_group_key,
       absl::optional<blink::AdSize> requested_ad_size,
       absl::optional<blink::AdDescriptor> ad_descriptor,
@@ -170,11 +174,28 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
                         BiddingAndAuctionData data);
   void OnGotBiddingAndAuctionServerKey(
       BiddingAndAuctionDataConstructionState state,
-      absl::optional<BiddingAndAuctionServerKey> key);
+      scoped_refptr<network::WrapperSharedURLLoaderFactory> loader,
+      base::expected<BiddingAndAuctionServerKey, std::string> maybe_key);
 
   InterestGroupManagerImpl& GetInterestGroupManager() const;
 
   url::Origin GetTopWindowOrigin() const;
+
+  // Return whether the auction is expected to fail because any of
+  // RenderFrameHostImpl, PageImpl and FencedFrameUrlMapping has changed during
+  // the auction. If it is going to fail, set the crash key and dump without
+  // crashing. The crash key is a string that describes:
+  // 1. Whether RenderFrameHostImpl is different between the start of the
+  // auction and the end of the auction.
+  // 2. Same as above for PageImpl.
+  // 3. Same as above for FencedFrameUrlMapping.
+  // 4. The lifecycle state of the main frame. See
+  // `RenderFrameHostImpl::GetLifecycleState()`.
+  // 5. If there is a child frame, the lifecycle state of the child frame.
+  bool IsAuctionExpectedToFail(
+      FencedFrameURLMapping::Id fenced_frame_urls_map_id,
+      GlobalRenderFrameHostId render_frame_host_id,
+      const base::WeakPtr<PageImpl> page_impl);
 
   // To avoid race conditions associated with top frame navigations (mentioned
   // in document_service.h), we need to save the values of the main frame
@@ -210,10 +231,11 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
   const raw_ptr<PrivateAggregationManager> private_aggregation_manager_;
 
   // Whether a UseCounter has already been logged for usage of the Private
-  // Aggregation API in general and the extended Private Aggregation API,
-  // respectively.
+  // Aggregation API in general, the extended Private Aggregation API and the
+  // Private Aggregation API's enableDebugMode(), respectively.
   bool has_logged_private_aggregation_web_features_ = false;
   bool has_logged_extended_private_aggregation_web_feature_ = false;
+  bool has_logged_private_aggregation_enable_debug_mode_web_feature_ = false;
 
   base::WeakPtrFactory<AdAuctionServiceImpl> weak_ptr_factory_{this};
 };

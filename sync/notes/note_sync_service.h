@@ -14,6 +14,7 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/sync/model/wipe_model_upon_sync_disabled_behavior.h"
 #include "sync/notes/note_model_type_processor.h"
+#include "sync/notes/note_model_view.h"
 
 namespace syncer {
 class ModelTypeControllerDelegate;
@@ -48,7 +49,7 @@ class NoteSyncService : public KeyedService {
   void DecodeNoteSyncMetadata(
       const std::string& metadata_str,
       const base::RepeatingClosure& schedule_save_closure,
-      vivaldi::NotesModel* model);
+      std::unique_ptr<sync_notes::NoteModelView> model);
 
   // Returns the ModelTypeControllerDelegate for syncer::NOTES.
   virtual base::WeakPtr<syncer::ModelTypeControllerDelegate>
@@ -61,10 +62,18 @@ class NoteSyncService : public KeyedService {
   // sync could be paused due to an auth error.
   bool IsTrackingMetadata() const;
 
+  // Returns the NoteModelView representing the subset of notes that this
+  // service is dealing with (potentially sync-ing, but not necessarily). It
+  // returns null until notes are loaded, i.e. until DecodeNoteSyncMetadata() is
+  // invoked. It must not be invoked after Shutdown(), i.e. during profile
+  // destruction.
+  sync_notes::NoteModelView* note_model_view();
+
   // For integration tests.
   void SetNotesLimitForTesting(size_t limit);
 
  private:
+  std::unique_ptr<NoteModelView> note_model_view_;
   // NoteModelTypeProcessor handles communications between sync engine and
   // NotesModel.
   NoteModelTypeProcessor note_model_type_processor_;

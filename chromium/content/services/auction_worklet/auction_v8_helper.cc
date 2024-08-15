@@ -14,6 +14,7 @@
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
 #include "base/strings/strcat.h"
@@ -332,7 +333,7 @@ AuctionV8Helper::SerializedValue::SerializedValue(SerializedValue&& other) {
 }
 
 AuctionV8Helper::SerializedValue::~SerializedValue() {
-  free(buffer_);
+  free(buffer_.ExtractAsDangling());
 }
 
 AuctionV8Helper::SerializedValue& AuctionV8Helper::SerializedValue::operator=(
@@ -419,9 +420,8 @@ v8::MaybeLocal<v8::Value> AuctionV8Helper::CreateValueFromJson(
   return v8::JSON::Parse(context, v8_string);
 }
 
-bool AuctionV8Helper::AppendUtf8StringValue(
-    base::StringPiece utf8_string,
-    std::vector<v8::Local<v8::Value>>* args) {
+bool AuctionV8Helper::AppendUtf8StringValue(base::StringPiece utf8_string,
+                                            v8::LocalVector<v8::Value>* args) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   v8::Local<v8::String> value;
   if (!CreateUtf8String(utf8_string).ToLocal(&value))
@@ -432,7 +432,7 @@ bool AuctionV8Helper::AppendUtf8StringValue(
 
 bool AuctionV8Helper::AppendJsonValue(v8::Local<v8::Context> context,
                                       base::StringPiece utf8_json,
-                                      std::vector<v8::Local<v8::Value>>* args) {
+                                      v8::LocalVector<v8::Value>* args) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   v8::Local<v8::Value> value;
   if (!CreateValueFromJson(context, utf8_json).ToLocal(&value))
@@ -806,7 +806,7 @@ void AuctionV8Helper::ConnectDevToolsAgent(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!devtools_agent_) {
     devtools_agent_ = std::make_unique<AuctionV8DevToolsAgent>(
-        this, debug_command_queue_.get(), std::move(mojo_sequence));
+        this, debug_command_queue_, std::move(mojo_sequence));
     v8_inspector_ =
         v8_inspector::V8Inspector::create(isolate(), devtools_agent_.get());
   }

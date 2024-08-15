@@ -413,8 +413,10 @@ const char* const kWebAvailableFeatures[] = {
 }  // namespace
 
 NativeExtensionBindingsSystem::NativeExtensionBindingsSystem(
+    Delegate* delegate,
     std::unique_ptr<IPCMessageSender> ipc_message_sender)
-    : ipc_message_sender_(std::move(ipc_message_sender)),
+    : delegate_(delegate),
+      ipc_message_sender_(std::move(ipc_message_sender)),
       api_system_(
           base::BindRepeating(&GetAPISchema),
           base::BindRepeating(&IsAPIFeatureAvailable),
@@ -688,8 +690,15 @@ void NativeExtensionBindingsSystem::UpdateBindings(
     const ExtensionId& extension_id,
     bool permissions_changed,
     ScriptContextSetIterable* script_context_set) {
-  if (permissions_changed)
-    InvalidateFeatureCache(extension_id);
+  if (permissions_changed) {
+    // An empty extension ID indicates we update all extensions.
+    if (extension_id.empty()) {
+      feature_cache_.InvalidateAllExtensions();
+    } else {
+      feature_cache_.InvalidateExtension(extension_id);
+    }
+  }
+
   script_context_set->ForEach(
       extension_id,
       base::BindRepeating(
@@ -1020,11 +1029,6 @@ void NativeExtensionBindingsSystem::UpdateContentCapabilities(
     }
   }
   context->set_content_capabilities(std::move(permissions));
-}
-
-void NativeExtensionBindingsSystem::InvalidateFeatureCache(
-    const ExtensionId& extension_id) {
-  feature_cache_.InvalidateExtension(extension_id);
 }
 
 void NativeExtensionBindingsSystem::SetScriptingParams(ScriptContext* context) {

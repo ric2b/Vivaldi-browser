@@ -9,6 +9,7 @@
       "proprietary_codecs": true,
       "symbol_level": 1,
       "target_os": "android",
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -23,6 +24,7 @@
       "symbol_level": 1,
       "target_cpu": "arm64",
       "target_os": "android",
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -36,6 +38,7 @@
       "proprietary_codecs": true,
       "symbol_level": 1,
       "target_os": "android",
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -50,6 +53,7 @@
       "symbol_level": 1,
       "target_cpu": "arm64",
       "target_os": "android",
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -60,6 +64,7 @@
       "is_component_build": false,
       "is_debug": false,
       "symbol_level": 1,
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -70,6 +75,7 @@
       "is_component_build": false,
       "is_debug": false,
       "symbol_level": 1,
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -81,6 +87,7 @@
       "is_debug": false,
       "is_tsan": true,
       "symbol_level": 1,
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -91,6 +98,19 @@
       "is_component_build": false,
       "is_debug": false,
       "symbol_level": 1,
+      "use_dummy_lastchange": true,
+      "use_remoteexec": true
+    }
+  },
+  "dawn-try-mac-arm64-deps-rel": {
+    "gn_args": {
+      "dawn_enable_opengles": true,
+      "dcheck_always_on": true,
+      "is_component_build": false,
+      "is_debug": false,
+      "symbol_level": 1,
+      "target_cpu": "arm64",
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -102,6 +122,7 @@
       "is_debug": false,
       "symbol_level": 1,
       "target_cpu": "arm64",
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -112,6 +133,7 @@
       "is_component_build": false,
       "is_debug": false,
       "symbol_level": 1,
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -123,6 +145,7 @@
       "is_component_build": false,
       "is_debug": false,
       "symbol_level": 1,
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -134,6 +157,7 @@
       "is_debug": false,
       "symbol_level": 1,
       "target_cpu": "x86",
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -146,6 +170,7 @@
       "is_component_build": false,
       "is_debug": false,
       "symbol_level": 1,
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -158,6 +183,7 @@
       "is_component_build": false,
       "is_debug": false,
       "symbol_level": 1,
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -169,6 +195,7 @@
       "is_debug": false,
       "symbol_level": 1,
       "target_cpu": "x86",
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -180,6 +207,7 @@
       "is_component_build": false,
       "is_debug": false,
       "symbol_level": 1,
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -191,6 +219,7 @@
       "is_debug": false,
       "symbol_level": 1,
       "target_cpu": "x86",
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -201,6 +230,7 @@
       "is_component_build": false,
       "is_debug": false,
       "symbol_level": 1,
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -211,6 +241,7 @@
       "is_component_build": false,
       "is_debug": false,
       "symbol_level": 1,
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   },
@@ -222,6 +253,7 @@
       "is_component_build": false,
       "is_debug": false,
       "symbol_level": 1,
+      "use_dummy_lastchange": true,
       "use_remoteexec": true
     }
   }

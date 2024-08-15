@@ -51,15 +51,21 @@ class CORE_EXPORT LCPCriticalPathPredictor final
     return lcp_influencer_scripts_;
   }
 
-  void Reset() {
-    lcp_element_locators_.clear();
-    lcp_influencer_scripts_.clear();
-  }
+  void set_fetched_fonts(Vector<KURL> fonts);
+
+  const Vector<KURL>& fetched_fonts() { return fetched_fonts_; }
+
+  void Reset();
+
+  bool IsLcpInfluencerScript(const KURL& url);
 
   // Member functions invoked in LCPP hint production path (write path):
 
-  void OnLargestContentfulPaintUpdated(Element* lcp_element);
-  LCPScriptObserver* lcp_script_observer() { return lcp_script_observer_; }
+  void OnLargestContentfulPaintUpdated(const Element& lcp_element);
+  LCPScriptObserver* lcp_script_observer() {
+    return lcp_script_observer_.Get();
+  }
+  void OnFontFetched(const KURL& url);
   void Trace(Visitor*) const;
 
  private:
@@ -75,6 +81,7 @@ class CORE_EXPORT LCPCriticalPathPredictor final
 
   Vector<ElementLocator> lcp_element_locators_;
   HashSet<KURL> lcp_influencer_scripts_;
+  Vector<KURL> fetched_fonts_;
 };
 
 }  // namespace blink

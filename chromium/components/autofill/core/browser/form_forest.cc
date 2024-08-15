@@ -108,7 +108,7 @@ base::flat_set<FormGlobalId> FormForest::EraseForms(
   }
   base::flat_set<FormGlobalId> forms_with_removed_fields;
   for (const FormGlobalId renderer_form : renderer_forms) {
-    if (FrameData* frame = GetFrameData(renderer_form.frame_token)) {
+    if (GetFrameData(renderer_form.frame_token)) {
       EraseReferencesTo(renderer_form, &forms_with_removed_fields);
     }
   }
@@ -489,7 +489,7 @@ void FormForest::UpdateTreeOfRendererForm(FormData* form,
   // https://crrev.com/c/3055422 for a draft implementation.
   if (AutofillDriver* parent_driver = nullptr;
       !frame->parent_form && (parent_driver = driver->GetParent())) {
-    parent_driver->TriggerFormExtraction();
+    parent_driver->TriggerFormExtractionInDriverFrame();
   }
 }
 

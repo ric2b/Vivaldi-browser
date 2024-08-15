@@ -17,7 +17,6 @@
 #include "browser/translate/vivaldi_translate_client.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -91,6 +90,7 @@
 #if BUILDFLAG(IS_WIN)
 #include "ui/display/win/screen_win.h"
 #endif  // BUILDFLAG(IS_WIN)
+#include "url/origin.h"
 
 using content::WebContents;
 
@@ -138,6 +138,59 @@ absl::optional<double> GetTabWorkspaceId(const std::string& viv_extdata) {
   return value;
 }
 
+Browser* GetWorkspaceBrowser(const double workspace_id) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
+    if (browser == nullptr) {
+      continue;
+    }
+    TabStripModel* tab_strip = browser->tab_strip_model();
+    for (int i = 0; i < tab_strip->count(); ++i) {
+      WebContents* web_contents = tab_strip->GetWebContentsAt(i);
+      auto tabWorkspaceId = GetTabWorkspaceId(web_contents->GetVivExtData());
+      if (
+        tabWorkspaceId.has_value() &&
+        workspace_id == tabWorkspaceId.value()
+      ) {
+        return browser;
+      }
+    }
+  }
+  return nullptr;
+}
+
+absl::optional<double> GetActiveWorkspaceId(Browser* browser) {
+  base::JSONParserOptions options = base::JSON_PARSE_RFC;
+  absl::optional<base::Value> json =
+      base::JSONReader::Read(browser->viv_ext_data(), options);
+  absl::optional<double> value;
+  if (json && json->is_dict()) {
+    value = json->GetDict().FindDouble("activeWorkspaceId");
+  }
+  return value;
+}
+
+int CountTabsInWorkspace(TabStripModel* tab_strip,
+                         const double workspace_id) {
+  int counter = 0;
+  for (int i = 0; i < tab_strip->count(); ++i) {
+    WebContents* web_contents = tab_strip->GetWebContentsAt(i);
+    auto tabWorkspaceId = GetTabWorkspaceId(web_contents->GetVivExtData());
+    if (tabWorkspaceId.has_value() && workspace_id == tabWorkspaceId.value()) {
+      counter++;
+    }
+  }
+  return counter;
+}
+
+base::Value::List getLinkRoutes(content::WebContents* contents) {
+  Profile* profile =
+        Profile::FromBrowserContext(contents->GetBrowserContext());
+  PrefService* prefs = profile->GetPrefs();
+  base::Value::List link_routes =
+    prefs->GetList(vivaldiprefs::kWorkspacesLinkRoutes).Clone();
+  return link_routes;
+}
+
 namespace {
 
 class JSDialogObserver : public javascript_dialogs::AppModalDialogObserver {
@@ -161,8 +214,7 @@ class JSDialogObserver : public javascript_dialogs::AppModalDialogObserver {
     // We notify the UI which tab opened a beforeunload dialog so
     // it can make the tab active.
     int id = sessions::SessionTabHelper::IdForTab(dialog->web_contents()).id();
-    Browser* browser =
-        ::vivaldi::FindBrowserWithWebContents(dialog->web_contents());
+    Browser* browser = ::vivaldi::FindBrowserWithTab(dialog->web_contents());
     int window_id = 0;
     if (browser) {
       window_id = browser->session_id().id();
@@ -501,6 +553,23 @@ absl::optional<base::Value> GetDictValueFromVivExtData(
   return absl::nullopt;
 }
 
+bool SetTabWorkspaceId(content::WebContents* contents, double workspace_id) {
+  auto viv_ext_data = contents->GetVivExtData();
+  absl::optional<base::Value> json =
+    GetDictValueFromVivExtData(viv_ext_data);
+  if (json) {
+    json->GetDict().Set("workspaceId", workspace_id);
+    json->GetDict().Remove("group");
+    std::string json_string;
+    if (ValueToJSONString(*json, json_string)) {
+      contents->SetVivExtData(json_string);
+      return true;
+    }
+  }
+  return false;
+}
+
+
 void VivaldiPrivateTabObserver::RenderFrameCreated(
     content::RenderFrameHost* render_frame_host) {
   std::string viv_ext_data = web_contents()->GetVivExtData();
@@ -808,7 +877,7 @@ void VivaldiPrivateTabObserver::WebContentsDidAttach() {
 
 void VivaldiPrivateTabObserver::BeforeUnloadFired(bool proceed) {
   int tab_id = extensions::ExtensionTabUtil::GetTabId(web_contents());
-  Browser* browser = ::vivaldi::FindBrowserWithWebContents(web_contents());
+  Browser* browser = ::vivaldi::FindBrowserWithTab(web_contents());
   int window_id = browser->session_id().id();
 
   ::vivaldi::BroadcastEvent(
@@ -874,7 +943,7 @@ void VivaldiPrivateTabObserver::OnLanguageDetermined(
 }
 
 void VivaldiPrivateTabObserver::ActivateTab(content::WebContents* contents) {
-  Browser* browser = ::vivaldi::FindBrowserWithWebContents(contents);
+  Browser* browser = ::vivaldi::FindBrowserWithTab(contents);
   if (!browser) {
     return;
   }
@@ -1059,6 +1128,8 @@ ExtensionFunction::ResponseAction TabsPrivateStartDragFunction::Run() {
   image_offset_.set_x(params->drag_data.cursor_x);
   image_offset_.set_y(params->drag_data.cursor_y);
 
+  const url::Origin source_origin = url::Origin::Create(drop_data_.url);
+
   double width = params->drag_data.width;
   double height = params->drag_data.height;
   if (width <= 0.0 || height <= 0.0 || width > 10000.0 || height > 10000)
@@ -1100,7 +1171,7 @@ ExtensionFunction::ResponseAction TabsPrivateStartDragFunction::Run() {
     bool success = bitmap->installPixels(image_info, raw_image.data(),
                                          image_info.minRowBytes(),
                                          release_pixels, &raw_image);
-    OnCaptureDone(window_id, success, 1.0, *bitmap);
+    OnCaptureDone(window_id, source_origin, success, 1.0, *bitmap);
     return AlreadyResponded();
   }
 
@@ -1111,11 +1182,12 @@ ExtensionFunction::ResponseAction TabsPrivateStartDragFunction::Run() {
   ::vivaldi::CapturePage::CaptureVisible(
       window->web_contents(), rect,
       base::BindOnce(&TabsPrivateStartDragFunction::OnCaptureDone, this,
-                     window_id));
+                     window_id, source_origin));
   return RespondLater();
 }
 
 void TabsPrivateStartDragFunction::OnCaptureDone(SessionID::id_type window_id,
+                                                 const url::Origin source_origin,
                                                  bool success,
                                                  float device_scale_factor,
                                                  const SkBitmap& bitmapref) {
@@ -1148,7 +1220,8 @@ void TabsPrivateStartDragFunction::OnCaptureDone(SessionID::id_type window_id,
     // On Linux and Windows StartDragging is synchronous, so enable tab dragging
     // mode before calling it.
     ::vivaldi::SetTabDragInProgress(true);
-    view->StartDragging(drop_data_, allowed_ops, image, image_offset_, {},
+    view->StartDragging(drop_data_, source_origin, allowed_ops, image,
+                        image_offset_, {},
                         event_info_, rvh->GetWidget());
   } while (false);
 
@@ -1206,6 +1279,7 @@ void TabsPrivateMoveSpatnavRectFunction::SpatnavRectReceived(
   results.bottom = rect->y + rect->height;
   results.width = rect->width;
   results.height = rect->height;
+  results.href = rect->href;
 
   Respond(ArgumentList(Results::Create(results)));
 }

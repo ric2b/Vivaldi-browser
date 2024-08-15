@@ -8,19 +8,15 @@ import android.os.Bundle;
 
 import androidx.annotation.Nullable;
 import androidx.preference.Preference;
-import androidx.preference.PreferenceFragmentCompat;
 
 import org.chromium.chrome.browser.download.DownloadDialogBridge;
 import org.chromium.chrome.browser.download.DownloadPromptStatus;
 import org.chromium.chrome.browser.download.R;
-import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.settings.ChromeBaseSettingsFragment;
 import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
-import org.chromium.chrome.browser.settings.ProfileDependentSetting;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.ManagedPreferenceDelegate;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
-import org.chromium.components.prefs.PrefService;
-import org.chromium.components.user_prefs.UserPrefs;
 
 // Vivaldi
 import android.view.Gravity;
@@ -37,13 +33,11 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
 /**
  * Fragment containing Download settings.
  */
-public class DownloadSettings extends PreferenceFragmentCompat
-        implements Preference.OnPreferenceChangeListener, ProfileDependentSetting {
+public class DownloadSettings
+        extends ChromeBaseSettingsFragment implements Preference.OnPreferenceChangeListener {
     public static final String PREF_LOCATION_CHANGE = "location_change";
     public static final String PREF_LOCATION_PROMPT_ENABLED = "location_prompt_enabled";
 
-    private Profile mProfile;
-    private PrefService mPrefService;
     private DownloadLocationPreference mLocationChangePref;
     private ChromeSwitchPreference mLocationPromptEnabledPref;
     private ManagedPreferenceDelegate mLocationPromptEnabledPrefDelegate;
@@ -56,14 +50,11 @@ public class DownloadSettings extends PreferenceFragmentCompat
     public void onCreatePreferences(@Nullable Bundle savedInstanceState, String s) {
         getActivity().setTitle(R.string.menu_downloads);
         SettingsUtils.addPreferencesFromResource(this, R.xml.download_preferences);
-        mPrefService = UserPrefs.get(mProfile);
-
-        boolean locationManaged = DownloadDialogBridge.isLocationDialogManaged();
 
         mLocationPromptEnabledPref =
                 (ChromeSwitchPreference) findPreference(PREF_LOCATION_PROMPT_ENABLED);
         mLocationPromptEnabledPref.setOnPreferenceChangeListener(this);
-        mLocationPromptEnabledPrefDelegate = new ChromeManagedPreferenceDelegate() {
+        mLocationPromptEnabledPrefDelegate = new ChromeManagedPreferenceDelegate(getProfile()) {
             @Override
             public boolean isPreferenceControlledByPolicy(Preference preference) {
                 return DownloadDialogBridge.isLocationDialogManaged();
@@ -93,11 +84,6 @@ public class DownloadSettings extends PreferenceFragmentCompat
     public void onResume() {
         super.onResume();
         updateDownloadSettings();
-    }
-
-    @Override
-    public void setProfile(Profile profile) {
-        mProfile = profile;
     }
 
     private void updateDownloadSettings() {

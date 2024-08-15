@@ -13,8 +13,10 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/token.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "components/reporting/proto/synced/record.pb.h"
+#include "content/public/browser/browser_thread.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace reporting {
@@ -24,7 +26,8 @@ namespace {
 // UploadEncryptedReportingRequestBuilder list key
 constexpr char kEncryptedRecordListKey[] = "encryptedRecord";
 constexpr char kAttachEncryptionSettingsKey[] = "attachEncryptionSettings";
-constexpr char kAttachConfigurationFile[] = "attachConfigurationFile";
+constexpr std::string_view kConfigurationFileVersion =
+    "configurationFileVersion";
 constexpr char kSourcePath[] = "source";
 
 // EncryptedRecordDictionaryBuilder strings
@@ -57,17 +60,19 @@ BASE_FEATURE(kClientAutomatedTest,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 UploadEncryptedReportingRequestBuilder::UploadEncryptedReportingRequestBuilder(
-    bool attach_encryption_settings) {
+    bool attach_encryption_settings,
+    int config_file_version) {
   result_.emplace();
   if (attach_encryption_settings) {
     result_->Set(GetAttachEncryptionSettingsPath(), true);
   }
 
-  // Only request the configuration file from the server if the feature is
-  // enabled. The server will only return the configuration file if there is
-  // something to be blocked at that point.s
+  // Only attach the configuration file version to the request if the feature
+  // is enabled. The server will only return the configuration file if there is
+  // a mismatch between the version in the request and the version that it
+  // holds.
   if (base::FeatureList::IsEnabled(kShouldRequestConfigurationFile)) {
-    result_->Set(GetAttachConfigurationFilePath(), true);
+    result_->Set(GetConfigurationFileVersionPath(), config_file_version);
   }
 
   // This feature signals the server that this is an automated client test.
@@ -151,8 +156,8 @@ UploadEncryptedReportingRequestBuilder::GetAttachEncryptionSettingsPath() {
 
 // static
 std::string_view
-UploadEncryptedReportingRequestBuilder::GetAttachConfigurationFilePath() {
-  return kAttachConfigurationFile;
+UploadEncryptedReportingRequestBuilder::GetConfigurationFileVersionPath() {
+  return kConfigurationFileVersion;
 }
 
 // static
@@ -260,16 +265,22 @@ EncryptedRecordDictionaryBuilder::GetCompressionInformationPath() {
 
 SequenceInformationDictionaryBuilder::SequenceInformationDictionaryBuilder(
     const SequenceInformation& sequence_information) {
+  bool generation_guid_is_invalid = false;
+#if BUILDFLAG(IS_CHROMEOS)
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  //  Generation guid is required for unmanaged ChromeOS devices.
+  generation_guid_is_invalid =
+      !policy::ManagementServiceFactory::GetForPlatform()
+           ->HasManagementAuthority(
+               policy::EnterpriseManagementAuthority::CLOUD_DOMAIN) &&
+      !sequence_information.has_generation_guid();
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
   // SequenceInformation requires these fields be set. `generation_guid` is
-  // required only for unmanaged devices.
+  // required only for unmanaged ChromeOS devices.
   if (!sequence_information.has_sequencing_id() ||
       !sequence_information.has_generation_id() ||
-      !sequence_information.has_priority() ||
-      // Require generation guid for non ChromeOS-managed devices.
-      (!policy::ManagementServiceFactory::GetForPlatform()
-            ->HasManagementAuthority(
-                policy::EnterpriseManagementAuthority::CLOUD_DOMAIN) &&
-       !sequence_information.has_generation_guid())) {
+      !sequence_information.has_priority() || generation_guid_is_invalid) {
     return;
   }
 
@@ -279,7 +290,9 @@ SequenceInformationDictionaryBuilder::SequenceInformationDictionaryBuilder(
   result_->Set(GetGenerationIdPath(),
                base::NumberToString(sequence_information.generation_id()));
   result_->Set(GetPriorityPath(), sequence_information.priority());
+#if BUILDFLAG(IS_CHROMEOS)
   result_->Set(GetGenerationGuidPath(), sequence_information.generation_guid());
+#endif  // BUILDFLAG(IS_CHROMEOS)
 }
 
 SequenceInformationDictionaryBuilder::~SequenceInformationDictionaryBuilder() =
@@ -306,9 +319,11 @@ std::string_view SequenceInformationDictionaryBuilder::GetPriorityPath() {
 }
 
 // static
+#if BUILDFLAG(IS_CHROMEOS)
 std::string_view SequenceInformationDictionaryBuilder::GetGenerationGuidPath() {
   return UploadEncryptedReportingRequestBuilder::kGenerationGuid;
 }
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 EncryptionInfoDictionaryBuilder::EncryptionInfoDictionaryBuilder(
     const EncryptionInfo& encryption_info) {

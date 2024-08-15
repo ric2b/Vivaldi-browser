@@ -32,9 +32,11 @@
 
 #include <memory>
 
+#include "base/memory/raw_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "services/network/public/mojom/ip_address_space.mojom-blink.h"
@@ -69,7 +71,6 @@
 #include "third_party/blink/renderer/platform/loader/testing/mock_resource_client.h"
 #include "third_party/blink/renderer/platform/loader/testing/test_loader_factory.h"
 #include "third_party/blink/renderer/platform/loader/testing/test_resource_fetcher_properties.h"
-#include "third_party/blink/renderer/platform/testing/histogram_tester.h"
 #include "third_party/blink/renderer/platform/testing/mock_context_lifecycle_notifier.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/scoped_mocked_url.h"
@@ -232,7 +233,7 @@ TEST_F(ResourceFetcherTest, StartLoadAfterFrameDetach) {
 }
 
 TEST_F(ResourceFetcherTest, UseExistingResource) {
-  blink::HistogramTester histogram_tester;
+  base::HistogramTester histogram_tester;
   auto* fetcher = CreateFetcher();
 
   KURL url("http://127.0.0.1:8000/foo.html");
@@ -281,7 +282,7 @@ TEST_F(ResourceFetcherTest, UseExistingResource) {
 }
 
 TEST_F(ResourceFetcherTest, MemoryCachePerContextUseExistingResource) {
-  blink::HistogramTester histogram_tester;
+  base::HistogramTester histogram_tester;
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(
       features::kScopeMemoryCachePerContext);
@@ -352,7 +353,7 @@ TEST_F(ResourceFetcherTest, MemoryCachePerContextUseExistingResource) {
 }
 
 TEST_F(ResourceFetcherTest, MetricsPerTopFrameSite) {
-  blink::HistogramTester histogram_tester;
+  base::HistogramTester histogram_tester;
 
   KURL url("http://127.0.0.1:8000/foo.html");
   ResourceResponse response(url);
@@ -421,7 +422,7 @@ TEST_F(ResourceFetcherTest, MetricsPerTopFrameSite) {
 }
 
 TEST_F(ResourceFetcherTest, MetricsPerTopFrameSiteOpaqueOrigins) {
-  blink::HistogramTester histogram_tester;
+  base::HistogramTester histogram_tester;
 
   KURL url("http://127.0.0.1:8000/foo.html");
   ResourceResponse response(url);
@@ -662,7 +663,7 @@ class RequestSameResourceOnComplete
   String DebugName() const override { return "RequestSameResourceOnComplete"; }
 
  private:
-  URLLoaderMockFactory* mock_factory_;
+  raw_ptr<URLLoaderMockFactory, ExperimentalRenderer> mock_factory_;
   bool notify_finished_called_ = false;
   scoped_refptr<const SecurityOrigin> source_origin_;
 };
@@ -753,7 +754,7 @@ class ServeRequestsOnCompleteClient final
   String DebugName() const override { return "ServeRequestsOnCompleteClient"; }
 
  private:
-  URLLoaderMockFactory* mock_factory_;
+  raw_ptr<URLLoaderMockFactory, ExperimentalRenderer> mock_factory_;
 };
 
 // Regression test for http://crbug.com/594072.
@@ -1357,33 +1358,6 @@ TEST_F(ResourceFetcherTest, DeprioritizeSubframe) {
         RenderBlockingBehavior::kNonBlocking,
         mojom::blink::ScriptType::kClassic, false /* is_link_preload */);
     EXPECT_EQ(priority, ResourceLoadPriority::kLowest);
-  }
-}
-
-TEST_F(ResourceFetcherTest, PriorityIncremental) {
-  auto& properties = *MakeGarbageCollected<TestResourceFetcherProperties>();
-  auto* fetcher = CreateFetcher(properties);
-
-  // Check all of the resource types that are NOT supposed to be loaded
-  // incrementally
-  ResourceType res_not_incremental[] = {
-      ResourceType::kCSSStyleSheet, ResourceType::kScript, ResourceType::kFont,
-      ResourceType::kXSLStyleSheet, ResourceType::kManifest};
-  for (auto& res_type : res_not_incremental) {
-    const bool incremental = fetcher->ShouldLoadIncrementalForTesting(res_type);
-    EXPECT_EQ(incremental, false);
-  }
-
-  // Check all of the resource types that ARE supposed to be loaded
-  // incrementally
-  ResourceType res_incremental[] = {
-      ResourceType::kImage,       ResourceType::kRaw,
-      ResourceType::kSVGDocument, ResourceType::kLinkPrefetch,
-      ResourceType::kTextTrack,   ResourceType::kAudio,
-      ResourceType::kVideo,       ResourceType::kSpeculationRules};
-  for (auto& res_type : res_incremental) {
-    const bool incremental = fetcher->ShouldLoadIncrementalForTesting(res_type);
-    EXPECT_EQ(incremental, true);
   }
 }
 

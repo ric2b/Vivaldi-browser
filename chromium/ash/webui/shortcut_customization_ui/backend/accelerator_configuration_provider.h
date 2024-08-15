@@ -50,6 +50,16 @@ enum class ShortcutCustomizationAction {
   kMaxValue = kResetAll,
 };
 
+// Enum for histograms, must be kept in sync with the equivalent enum in
+// enums.xml - `ShortcutCustomizationModificationType`.
+enum class ModificationType {
+  kAdd,
+  kEdit,
+  kRemove,
+  kReset,
+  kMaxValue = kReset,
+};
+
 class AcceleratorConfigurationProvider
     : public shortcut_customization::mojom::AcceleratorConfigurationProvider,
       public ui::InputDeviceEventObserver,
@@ -87,6 +97,8 @@ class AcceleratorConfigurationProvider
   // shortcut_customization::mojom::AcceleratorConfigurationProvider:
   void IsMutable(ash::mojom::AcceleratorSource source,
                  IsMutableCallback callback) override;
+  void IsCustomizationAllowedByPolicy(
+      IsCustomizationAllowedByPolicyCallback callback) override;
   void HasLauncherButton(HasLauncherButtonCallback callback) override;
   void GetConflictAccelerator(mojom::AcceleratorSource source,
                               uint32_t action_id,
@@ -99,6 +111,9 @@ class AcceleratorConfigurationProvider
   void AddObserver(mojo::PendingRemote<
                    shortcut_customization::mojom::AcceleratorsUpdatedObserver>
                        observer) override;
+  void AddPolicyObserver(
+      mojo::PendingRemote<shortcut_customization::mojom::PolicyUpdatedObserver>
+          observer) override;
   void GetAcceleratorLayoutInfos(
       GetAcceleratorLayoutInfosCallback callback) override;
   void PreventProcessingAccelerators(
@@ -123,6 +138,15 @@ class AcceleratorConfigurationProvider
   void RestoreAllDefaults(RestoreAllDefaultsCallback callback) override;
   void RecordUserAction(
       shortcut_customization::mojom::UserAction user_action) override;
+  void RecordMainCategoryNavigation(
+      mojom::AcceleratorCategory category) override;
+  void RecordAddOrEditSubactions(
+      bool is_add,
+      shortcut_customization::mojom::Subactions subactions) override;
+
+  void RecordEditDialogCompletedActions(
+      shortcut_customization::mojom::EditDialogCompletedActions
+          completed_actions) override;
 
   // ui::InputDeviceEventObserver:
   void OnInputDeviceConfigurationChanged(uint8_t input_device_types) override;
@@ -280,6 +304,10 @@ class AcceleratorConfigurationProvider
       accelerators_updated_mojo_observer_;
   base::ObserverList<AcceleratorsUpdatedObserver>
       accelerators_updated_observers_;
+
+  // Policy update mojo observer:
+  mojo::Remote<shortcut_customization::mojom::PolicyUpdatedObserver>
+      policy_updated_mojo_observer;
 
   base::WeakPtrFactory<AcceleratorConfigurationProvider> weak_ptr_factory_{
       this};

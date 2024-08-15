@@ -32,3 +32,13 @@ std::unique_ptr<SessionCommand> CreateRemoveVivPageActionOverrideCommand(
   return vivaldi::CreateRemoveVivPageActionOverrideCommand(
       kCommandRemovePageActionOverrides, tab_id, script_path);
 }
+
+std::unique_ptr<SessionCommand> CreateVivCreateThumbnailCommand(int image_format,
+    const char * data,  size_t size) {
+  return vivaldi::CreateVivCreateThumbnailCommand(kCommandCreateThumbnail,
+    image_format, data, size);
+}
+
+uint8_t GetVivCreateThumbnailCommandId() {
+  return kCommandCreateThumbnail;
+}

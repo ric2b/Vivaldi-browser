@@ -10,9 +10,10 @@ import android.graphics.Bitmap;
 import android.text.TextUtils;
 import android.util.SparseArray;
 
-import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.annotations.JNINamespace;
-import org.chromium.base.annotations.NativeMethods;
+import org.jni_zero.CalledByNative;
+import org.jni_zero.JNINamespace;
+import org.jni_zero.NativeMethods;
+
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.layouts.content.TitleBitmapFactory;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -30,7 +31,6 @@ import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 import org.chromium.url.GURL;
 
 // Vivaldi
-import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
 import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
@@ -120,7 +120,7 @@ public class LayerTitleCache {
 
         // Note(david@vivaldi.com): Retrieve group title if applicable.
         if (VivaldiUtils.hasRelatedTabs(mTabModelSelector, tab.getId()) && !mIsStackStrip) {
-            int rootId = CriticalPersistedTabData.from(tab).getRootId();
+            int rootId = tab.getRootId();
             String rootString =
                     mContext.getSharedPreferences("tab_group_titles", Context.MODE_PRIVATE)
                             .getString(String.valueOf(rootId), null);

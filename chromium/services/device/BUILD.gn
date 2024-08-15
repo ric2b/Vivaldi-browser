@@ -7,12 +7,9 @@ import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/features.gni")
 import("//testing/test.gni")
 
-if (is_chromeos) {
-  import("//chromeos/components/sensors/buildflags.gni")
-}
-
 if (is_android) {
   import("//build/config/android/rules.gni")
+  import("//third_party/jni_zero/jni_zero.gni")
 }
 
 is_serial_enabled_platform =
@@ -217,7 +214,7 @@ source_set("tests") {
         [ "public/cpp/geolocation/geolocation_system_permissions_unittest.cc" ]
   }
 
-  if (is_chromeos && use_iioservice) {
+  if (is_chromeos) {
     sources += [
       "generic_sensor/platform_sensor_chromeos_unittest.cc",
       "generic_sensor/platform_sensor_provider_chromeos_unittest.cc",
@@ -226,7 +223,7 @@ source_set("tests") {
       "//chromeos/components/sensors:sensors",
       "//chromeos/components/sensors:test_support",
     ]
-  } else if ((is_linux || is_chromeos) && use_udev) {
+  } else if (is_linux && use_udev) {
     sources +=
         [ "generic_sensor/platform_sensor_and_provider_unittest_linux.cc" ]
   }
@@ -382,7 +379,10 @@ source_set("tests") {
   }
 
   if (is_mac) {
-    sources += [ "compute_pressure/cpu_probe_mac_unittest.cc" ]
+    sources += [
+      "compute_pressure/core_times_unittest.cc",
+      "compute_pressure/cpu_probe_mac_unittest.cc",
+    ]
   }
 
   # UsbContext is a libusb-specific object.
@@ -467,7 +467,6 @@ if (is_android) {
     ]
     srcjar_deps = [ ":device_service_jni_headers" ]
     deps = [
-      "//base:jni_java",
       "//mojo/public/java:bindings_java",
       "//mojo/public/java:system_java",
       "//mojo/public/java/system:system_impl_java",
@@ -484,6 +483,7 @@ if (is_android) {
       "//services/device/wake_lock/power_save_blocker:java",
       "//services/service_manager/public/java:service_manager_java",
       "//services/service_manager/public/mojom:mojom_java",
+      "//third_party/jni_zero:jni_zero_java",
     ]
   }
 }

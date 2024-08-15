@@ -56,6 +56,9 @@ class PrivacySandboxPromptHelper
   FRIEND_TEST_ALL_PREFIXES(PrivacySandboxPromptHelperTestWithParam,
                            MultipleBrowserWindows);
   FRIEND_TEST_ALL_PREFIXES(
+      PrivacySandboxPromptHelperTestWithSearchEngineChoiceEnabled,
+      NoPromptWhenSearchEngineChoiceDialogIsDisplayed);
+  FRIEND_TEST_ALL_PREFIXES(
       PrivacySandboxPromptNonNormalBrowserFeatureDisabledTest,
       NonNormalBrowserShowsPrompt);
   FRIEND_TEST_ALL_PREFIXES(PrivacySandboxPromptNonNormalBrowserTest,
@@ -77,6 +80,7 @@ class PrivacySandboxPromptHelper
     kPromptAlreadyExistsForBrowser = 7,
     kWindowTooSmall = 8,
     kPromptShown = 9,
+    kSearchEngineChoiceDialogShown = 10,
     kNonNormalBrowser = 11,
     // Add values above this line with a corresponding label in
     // tools/metrics/histograms/enums.xml

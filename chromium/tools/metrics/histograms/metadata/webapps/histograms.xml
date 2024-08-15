@@ -123,7 +123,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Launch.BrowserTab.WebAppLaunchHandlerClientMode"
-    enum="WebAppLaunchHandlerClientMode" expires_after="2024-01-21">
+    enum="WebAppLaunchHandlerClientMode" expires_after="2024-03-24">
   <owner>alancutter@chromium.org</owner>
   <owner>desktop-pwas-team@google.com</owner>
   <summary>
@@ -133,7 +133,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Launch.HomeScreen" enum="LaunchFromHomeScreen"
-    expires_after="2024-01-14">
+    expires_after="2024-03-17">
   <owner>dominickn@chromium.org</owner>
   <owner>hartmanng@chromium.org</owner>
   <owner>peconn@chromium.org</owner>
@@ -143,7 +143,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Launch.HomeScreenSource" enum="LaunchFromHomeScreenSource"
-    expires_after="2024-01-14">
+    expires_after="2024-03-17">
   <owner>dominickn@chromium.org</owner>
   <owner>hartmanng@chromium.org</owner>
   <owner>peconn@chromium.org</owner>
@@ -181,7 +181,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Launch.WebAppLaunchHandlerClientMode"
-    enum="WebAppLaunchHandlerClientMode" expires_after="2024-01-14">
+    enum="WebAppLaunchHandlerClientMode" expires_after="2024-03-17">
   <owner>alancutter@chromium.org</owner>
   <owner>desktop-pwas-team@google.com</owner>
   <summary>
@@ -367,7 +367,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Webapp.CheckServiceWorker.Time" units="ms"
-    expires_after="2024-01-14">
+    expires_after="2024-03-17">
   <owner>asamidoi@chromium.org</owner>
   <owner>chrome-worker@google.com</owner>
   <summary>
@@ -391,7 +391,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebApp.DedupeInstallUrls.AppsDeduped" units="apps"
-    expires_after="2024-01-14">
+    expires_after="2024-03-17">
   <owner>alancutter@chromium.org</owner>
   <owner>desktop-pwas-team@google.com</owner>
   <summary>
@@ -403,7 +403,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebApp.DedupeInstallUrls.InstallUrlsDeduped"
-    units="install URLs" expires_after="2024-01-14">
+    units="install URLs" expires_after="2024-03-17">
   <owner>alancutter@chromium.org</owner>
   <owner>desktop-pwas-team@google.com</owner>
   <summary>
@@ -415,7 +415,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebApp.DedupeInstallUrls.SessionRunCount" units="runs"
-    expires_after="2024-01-14">
+    expires_after="2024-03-17">
   <owner>alancutter@chromium.org</owner>
   <owner>desktop-pwas-team@google.com</owner>
   <summary>
@@ -455,7 +455,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram base="true" name="WebApp.Engagement"
-    enum="SiteEngagementServiceEngagementType" expires_after="2024-01-14">
+    enum="SiteEngagementServiceEngagementType" expires_after="2024-03-17">
   <owner>mgiuca@chromium.org</owner>
   <owner>desktop-pwas-team@google.com</owner>
   <summary>
@@ -488,6 +488,46 @@ chromium-metrics-reviews@google.com.
     triggered during uninstalls or updates, when set by policy changes in the
     web app settings policy or when an user modifies the file handling settings
     from the chrome://app-settings page per app.
+  </summary>
+</histogram>
+
+<histogram name="WebApp.GeneratedIconFix.AttemptCount" units="attempts"
+    expires_after="2024-06-01">
+  <owner>alancutter@chromium.org</owner>
+  <owner>desktop-pwas-team@google.com</owner>
+  <summary>
+    Records the number of generated icon fixes already attempted for each web
+    app that had an icon fix scheduled at start up. Recorded at start up.
+  </summary>
+</histogram>
+
+<histogram name="WebApp.GeneratedIconFix.Result" enum="GeneratedIconFixResult"
+    expires_after="2024-06-01">
+  <owner>alancutter@chromium.org</owner>
+  <owner>desktop-pwas-team@google.com</owner>
+  <summary>
+    Records the result of attempting to fix a web app's generated icon. Recorded
+    during start up and for all follow up daily retry events.
+  </summary>
+</histogram>
+
+<histogram name="WebApp.GeneratedIconFix.ScheduleDecision"
+    enum="GeneratedIconFixScheduleDecision" expires_after="2024-06-01">
+  <owner>alancutter@chromium.org</owner>
+  <owner>desktop-pwas-team@google.com</owner>
+  <summary>
+    Records the decision made for whether to fix a web app's generated icon.
+    Recorded during start up and for all follow up daily retry events.
+  </summary>
+</histogram>
+
+<histogram name="WebApp.GeneratedIconFix.StartUpAttemptCount"
+    units="start up attempts" expires_after="2024-06-01">
+  <owner>alancutter@chromium.org</owner>
+  <owner>desktop-pwas-team@google.com</owner>
+  <summary>
+    Records the number of background generated icon fix attempts initiated
+    during start up. Recorded at start up.
   </summary>
 </histogram>
 
@@ -689,7 +729,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebApp.IconDownloader.Result"
-    enum="WebAppIconDownloaderResult" expires_after="2024-01-14">
+    enum="WebAppIconDownloaderResult" expires_after="2024-03-31">
   <owner>dmurph@chromium.org</owner>
   <owner>desktop-pwas-team@google.com</owner>
   <summary>
@@ -708,6 +748,16 @@ chromium-metrics-reviews@google.com.
     Records the display mode (as defined in the Web App Manifest spec) at the
     install time of a WebApp. Fixes a bug in the data collection for desktop web
     apps.
+  </summary>
+</histogram>
+
+<histogram name="WebApp.Install.FaviconSize" units="pixels"
+    expires_after="2024-06-01">
+  <owner>eirage@chromium.org</owner>
+  <owner>src/chrome/android/webapk/OWNERS</owner>
+  <summary>
+    When PWA installable check is trying to download the favicon, records the
+    selected favicon size (concretely the width) in pixel.
   </summary>
 </histogram>
 
@@ -734,7 +784,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebApp.Install.Result" enum="BooleanSuccess"
-    expires_after="2024-01-21">
+    expires_after="2024-03-24">
   <owner>phillis@chromium.org</owner>
   <owner>desktop-pwas-team@google.com</owner>
   <summary>
@@ -787,10 +837,21 @@ chromium-metrics-reviews@google.com.
   <owner>dmurph@chromium.org</owner>
   <owner>desktop-pwas-team@google.com</owner>
   <summary>
-    Records the number of web apps that were installed by sync but not yet
-    locally installed by the user. This is recorded on the initialization of the
-    Profile object, which can happen either at chrome startup or when the user
-    switches profiles.
+    Records the number of fully installed web apps, installed by the user. This
+    is recorded on the initialization of the Profile object, which can happen
+    either at chrome startup or when the user switches profiles.
+  </summary>
+</histogram>
+
+<histogram name="WebApp.InstalledCount.ByUserInMultipleProfiles" units="count"
+    expires_after="2024-09-10">
+  <owner>mek@chromium.org</owner>
+  <owner>desktop-pwas-team@google.com</owner>
+  <summary>
+    Records the number of fully installed web apps, installed by the user in
+    multiple profiles. This is only recorded on macOS. This is recorded on the
+    initialization of the Profile object, which can happen either at chrome
+    startup or when the user switches profiles.
   </summary>
 </histogram>
 
@@ -799,9 +860,10 @@ chromium-metrics-reviews@google.com.
   <owner>dmurph@chromium.org</owner>
   <owner>desktop-pwas-team@google.com</owner>
   <summary>
-    Records the number of fully installed web apps, installed by the user. This
-    is recorded on the initialization of the Profile object, which can happen
-    either at chrome startup or when the user switches profiles.
+    Records the number of web apps that were installed by sync but not yet
+    locally installed by the user. This is recorded on the initialization of the
+    Profile object, which can happen either at chrome startup or when the user
+    switches profiles.
   </summary>
 </histogram>
 
@@ -855,7 +917,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebApp.Isolated.ResponseReaderCacheState"
-    enum="IsolatedWebAppResponseReaderCacheState" expires_after="2023-11-08">
+    enum="IsolatedWebAppResponseReaderCacheState" expires_after="2024-11-08">
   <owner>cmfcmf@chromium.org</owner>
   <owner>peletskyi@chromium.org</owner>
   <summary>
@@ -872,7 +934,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebApp.Isolated.SignatureVerificationDuration" units="ms"
-    expires_after="2024-01-21">
+    expires_after="2024-11-08">
   <owner>cmfcmf@chromium.org</owner>
   <owner>peletskyi@chromium.org</owner>
   <summary>
@@ -884,7 +946,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebApp.Isolated.SignatureVerificationFileLength" units="MiB"
-    expires_after="2024-01-21">
+    expires_after="2024-11-08">
   <owner>cmfcmf@chromium.org</owner>
   <owner>peletskyi@chromium.org</owner>
   <summary>
@@ -945,7 +1007,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebApp.LaunchSource" enum="LaunchSource"
-    expires_after="2024-01-14">
+    expires_after="2024-03-17">
   <owner>phillis@chromium.org</owner>
   <owner>desktop-pwas-team@google.com</owner>
   <summary>
@@ -1445,18 +1507,29 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebApp.ShortcutsMenuRegistration.Result" enum="BooleanSuccess"
-    expires_after="2024-01-14">
+    expires_after="2024-03-17">
   <owner>dibyapal@chromium.org</owner>
   <owner>desktop-pwas-team@google.com</owner>
   <summary>Records the result of shortcuts menu registration for PWAs.</summary>
 </histogram>
 
 <histogram name="WebApp.ShortcutsMenuUnregistered.Result" enum="BooleanSuccess"
-    expires_after="2024-01-14">
+    expires_after="2024-03-17">
   <owner>dibyapal@chromium.org</owner>
   <owner>desktop-pwas-team@google.com</owner>
   <summary>
     Records the result of shortcuts menu unregistration for PWAs.
+  </summary>
+</histogram>
+
+<histogram name="Webapp.Site.Intents.IntentPickerIconEvent"
+    enum="IntentPickerIconEvent" expires_after="2024-11-30">
+  <owner>dibyapal@chromium.org</owner>
+  <owner>cdesktop-pwas-team@google.com</owner>
+  <summary>
+    Records events associated with the intent picker icon in the omnibox.
+    Recorded when the icon is shown or interacted with on Windows, Mac and Linux
+    only.
   </summary>
 </histogram>
 
@@ -1502,7 +1575,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Webapp.SystemApps.IconsAreHealthyInSession"
-    enum="BooleanSuccess" expires_after="2024-01-14">
+    enum="BooleanSuccess" expires_after="2024-03-17">
   <owner>qjw@chromium.org</owner>
   <owner>dominicschulz@chromium.org</owner>
   <summary>
@@ -1513,7 +1586,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Webapp.SystemApps.IconsFixedOnReinstall" enum="BooleanSuccess"
-    expires_after="2024-01-14">
+    expires_after="2024-03-17">
   <owner>qjw@chromium.org</owner>
   <owner>clamclamyan@google.com</owner>
   <owner>dominicschulz@chromium.org</owner>
@@ -1524,19 +1597,8 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="WebApp.Uninstall.IconDataSuccess" enum="BooleanSuccess"
-    expires_after="2022-09-01">
-  <owner>dmurph@chromium.org</owner>
-  <owner>desktop-pwas-team@google.com</owner>
-  <summary>
-    Records if removing icon data from disk was successful during webapp
-    uninstall, before the webapp is removed from the database. Uninstall can
-    occur from the user, enterprise policy, device policy, or chrome sync.
-  </summary>
-</histogram>
-
 <histogram name="WebApp.Uninstall.NonSyncIncompleteCount"
-    units="Partially uninstalled webapps" expires_after="2024-01-15">
+    units="Partially uninstalled webapps" expires_after="2024-03-17">
   <owner>dmurph@chromium.org</owner>
   <owner>desktop-pwas-team@google.com</owner>
   <summary>
@@ -1547,19 +1609,11 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="WebApp.Uninstall.OsHookSuccess" enum="BooleanSuccess"
-    expires_after="2022-09-01">
-  <owner>dmurph@chromium.org</owner>
-  <owner>desktop-pwas-team@google.com</owner>
-  <summary>
-    Records if uninstalling OS hooks was successful during webapp uninstall,
-    before the webapp is removed from the database. Uninstall can occur from the
-    user, enterprise policy, device policy, or chrome sync.
-  </summary>
-</histogram>
-
 <histogram name="WebApp.Uninstall.Result" enum="BooleanSuccess"
-    expires_after="2022-09-01">
+    expires_after="never">
+<!-- expires-never: The dPWA team uses this in chirp alerts to ensure
+      uninstallation doesn't start failing. dmurph@ -->
+
   <owner>dmurph@chromium.org</owner>
   <owner>desktop-pwas-team@google.com</owner>
   <summary>

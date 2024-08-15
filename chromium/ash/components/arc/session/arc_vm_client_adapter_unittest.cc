@@ -424,15 +424,6 @@ class ArcVmClientAdapterTest : public testing::Test,
   void ExpectFalse(bool result) { EXPECT_FALSE(result); }
 
  protected:
-  enum class UpstartOperationType { START, STOP };
-
-  struct UpstartOperation {
-    std::string name;
-    std::vector<std::string> env;
-    UpstartOperationType type;
-  };
-  using UpstartOperations = std::vector<UpstartOperation>;
-
   void SetAccountId(const AccountId& account_id) {
     arc_service_manager_.set_account_id(account_id);
   }
@@ -568,24 +559,6 @@ class ArcVmClientAdapterTest : public testing::Test,
         }));
   }
 
-  void StartRecordingUpstartOperations() {
-    auto* upstart_client = ash::FakeUpstartClient::Get();
-    upstart_client->set_start_job_cb(
-        base::BindLambdaForTesting([this](const std::string& job_name,
-                                          const std::vector<std::string>& env) {
-          upstart_operations_.push_back(
-              {job_name, env, UpstartOperationType::START});
-          return ash::FakeUpstartClient::StartJobResult(true /* success */);
-        }));
-    upstart_client->set_stop_job_cb(
-        base::BindLambdaForTesting([this](const std::string& job_name,
-                                          const std::vector<std::string>& env) {
-          upstart_operations_.push_back(
-              {job_name, env, UpstartOperationType::STOP});
-          return true;
-        }));
-  }
-
   // We expect ConciergeClient::StopVm to have been called two times,
   // once to clear a stale VM in StartMiniArc(), and another on this
   // call to StopArcInstance().
@@ -627,9 +600,6 @@ class ArcVmClientAdapterTest : public testing::Test,
     return is_system_shutdown_;
   }
   void reset_is_system_shutdown() { is_system_shutdown_ = absl::nullopt; }
-  const UpstartOperations& upstart_operations() const {
-    return upstart_operations_;
-  }
   TestConciergeClient* GetTestConciergeClient() {
     return static_cast<TestConciergeClient*>(ash::ConciergeClient::Get());
   }
@@ -678,10 +648,6 @@ class ArcVmClientAdapterTest : public testing::Test,
   base::FilePath block_apex_path_;
   bool host_rootfs_writable_;
   bool system_image_ext_format_;
-
-  // List of upstart operations recorded. When it's "start" the boolean is set
-  // to true.
-  UpstartOperations upstart_operations_;
 
   std::unique_ptr<TestArcVmBootNotificationServer> boot_server_;
 
@@ -816,24 +782,15 @@ TEST_F(ArcVmClientAdapterTest, StartMiniArc_StopArcVmPreLoginServicesJobFail) {
 // Tests that |kArcVmPreLoginServicesJobName| is properly stopped and then
 // started in StartMiniArc().
 TEST_F(ArcVmClientAdapterTest, StartMiniArc_JobRestart) {
-  StartRecordingUpstartOperations();
+  ash::FakeUpstartClient::Get()->StartRecordingUpstartOperations();
   StartMiniArc();
 
-  const auto& ops = upstart_operations();
-  // Find the STOP operation for the job.
-  auto it = base::ranges::find_if(ops, [](const UpstartOperation& op) {
-    return op.type == UpstartOperationType::STOP &&
-           op.name == kArcVmPreLoginServicesJobName;
-  });
-  ASSERT_NE(it, ops.end());
-  ++it;
-  ASSERT_NE(it, ops.end());
-  // Find the START operation for the job.
-  it = base::ranges::find_if(it, ops.end(), [](const UpstartOperation& op) {
-    return op.type == UpstartOperationType::START &&
-           op.name == kArcVmPreLoginServicesJobName;
-  });
-  ASSERT_NE(it, ops.end());
+  const auto& ops =
+      ash::FakeUpstartClient::Get()->GetRecordedUpstartOperationsForJob(
+          kArcVmPreLoginServicesJobName);
+  ASSERT_EQ(ops.size(), 2u);
+  EXPECT_EQ(ops[0].type, ash::FakeUpstartClient::UpstartOperationType::STOP);
+  EXPECT_EQ(ops[1].type, ash::FakeUpstartClient::UpstartOperationType::START);
 }
 
 // Tests that StopArcInstance() eventually notifies the observer.
@@ -1054,16 +1011,16 @@ TEST_F(ArcVmClientAdapterTest, UpgradeArc_StartArcVmPostLoginServicesFailure) {
 // by default.
 TEST_F(ArcVmClientAdapterTest, StartMiniArc_UreadaheadByDefault) {
   StartParams start_params(GetPopulatedStartParams());
-  StartRecordingUpstartOperations();
+  ash::FakeUpstartClient::Get()->StartRecordingUpstartOperations();
   StartMiniArcWithParams(true, std::move(start_params));
 
-  const auto& ops = upstart_operations();
-  const auto it = base::ranges::find_if(ops, [](const UpstartOperation& op) {
-    return op.type == UpstartOperationType::START &&
-           kArcVmPreLoginServicesJobName == op.name;
-  });
-  ASSERT_NE(ops.end(), it);
-  EXPECT_TRUE(it->env.empty());
+  const auto& ops =
+      ash::FakeUpstartClient::Get()->GetRecordedUpstartOperationsForJob(
+          kArcVmPreLoginServicesJobName);
+  ASSERT_EQ(ops.size(), 2u);
+  EXPECT_EQ(ops[0].type, ash::FakeUpstartClient::UpstartOperationType::STOP);
+  EXPECT_EQ(ops[1].type, ash::FakeUpstartClient::UpstartOperationType::START);
+  EXPECT_TRUE(ops[1].env.empty());
 }
 
 // Tests that StartMiniArc()'s JOB_STOP_AND_START for
@@ -1071,18 +1028,18 @@ TEST_F(ArcVmClientAdapterTest, StartMiniArc_UreadaheadByDefault) {
 TEST_F(ArcVmClientAdapterTest, StartMiniArc_DisableUreadahead) {
   StartParams start_params(GetPopulatedStartParams());
   start_params.disable_ureadahead = true;
-  StartRecordingUpstartOperations();
+  ash::FakeUpstartClient::Get()->StartRecordingUpstartOperations();
   StartMiniArcWithParams(true, std::move(start_params));
 
-  const auto& ops = upstart_operations();
-  const auto it = base::ranges::find_if(ops, [](const UpstartOperation& op) {
-    return op.type == UpstartOperationType::START &&
-           kArcVmPreLoginServicesJobName == op.name;
-  });
-  ASSERT_NE(ops.end(), it);
+  const auto& ops =
+      ash::FakeUpstartClient::Get()->GetRecordedUpstartOperationsForJob(
+          kArcVmPreLoginServicesJobName);
+  ASSERT_EQ(ops.size(), 2u);
+  EXPECT_EQ(ops[0].type, ash::FakeUpstartClient::UpstartOperationType::STOP);
+  EXPECT_EQ(ops[1].type, ash::FakeUpstartClient::UpstartOperationType::START);
   const auto it_ureadahead =
-      base::ranges::find(it->env, "DISABLE_UREADAHEAD=1");
-  EXPECT_NE(it->env.end(), it_ureadahead);
+      base::ranges::find(ops[1].env, "DISABLE_UREADAHEAD=1");
+  EXPECT_NE(ops[1].env.end(), it_ureadahead);
 }
 
 // Tests that StartMiniArc() handles arcvm-post-vm-start-services stop failures
@@ -1639,11 +1596,19 @@ TEST_F(ArcVmClientAdapterTest, VirtioBlkForData_LvmSupported) {
   EXPECT_EQ(GetTestConciergeClient()->create_disk_image_call_count(), 0);
 
   // StartArcVmRequest should contain the LVM-provided disk path.
+  const auto& req = GetTestConciergeClient()->start_arc_vm_request();
+  EXPECT_TRUE(req.enable_virtio_blk_data());
   const std::string expected_lvm_disk_path =
       base::StringPrintf("/dev/mapper/vm/dmcrypt-%s-arcvm",
                          std::string(kUserIdHash).substr(0, 8).c_str());
-  const auto& req = GetTestConciergeClient()->start_arc_vm_request();
-  EXPECT_TRUE(HasDiskImage(req, expected_lvm_disk_path));
+  const auto& disks = req.disks();
+  auto it =
+      base::ranges::find_if(disks, [&expected_lvm_disk_path](const auto& disk) {
+        return disk.path() == expected_lvm_disk_path;
+      });
+  EXPECT_NE(it, disks.end());
+  // O_DIRECT option should always be enabled on LVM-provided disk images.
+  EXPECT_TRUE(it->o_direct());
 }
 
 TEST_F(ArcVmClientAdapterTest, VirtioBlkForData_OverrideUseLvm) {
@@ -1664,12 +1629,19 @@ TEST_F(ArcVmClientAdapterTest, VirtioBlkForData_OverrideUseLvm) {
   EXPECT_EQ(GetTestConciergeClient()->create_disk_image_call_count(), 0);
 
   // StartArcVmRequest should contain the LVM-provided disk path.
+  const auto& req = GetTestConciergeClient()->start_arc_vm_request();
+  EXPECT_TRUE(req.enable_virtio_blk_data());
   const std::string expected_lvm_disk_path =
       base::StringPrintf("/dev/mapper/vm/dmcrypt-%s-arcvm",
                          std::string(kUserIdHash).substr(0, 8).c_str());
-  const auto& req = GetTestConciergeClient()->start_arc_vm_request();
-  EXPECT_TRUE(HasDiskImage(req, expected_lvm_disk_path));
-  EXPECT_TRUE(req.enable_virtio_blk_data());
+  const auto& disks = req.disks();
+  auto it =
+      base::ranges::find_if(disks, [&expected_lvm_disk_path](const auto& disk) {
+        return disk.path() == expected_lvm_disk_path;
+      });
+  EXPECT_NE(it, disks.end());
+  // O_DIRECT option should always be enabled on LVM-provided disk images.
+  EXPECT_TRUE(it->o_direct());
 }
 
 TEST_F(ArcVmClientAdapterTest, VirtioBlkForData_NoLvmForEphemeralCryptohome) {
@@ -2140,6 +2112,37 @@ TEST_F(ArcVmClientAdapterTest, ArcVmMemorySizeEnabledMax) {
   StartMiniArcWithParams(true, std::move(start_params));
   const auto& request = GetTestConciergeClient()->start_arc_vm_request();
   EXPECT_EQ(request.memory_mib(), 2049u);
+}
+
+// Test that ARCMVM size is set by ram_percentage.
+TEST_F(ArcVmClientAdapterTest, ArcVmMemorySizeWithPercentageParam) {
+  base::test::ScopedFeatureList feature_list;
+  base::FieldTrialParams params;
+  params["ram_percentage"] = "25";
+  feature_list.InitAndEnableFeatureWithParameters(kVmMemorySize, params);
+  base::SystemMemoryInfoKB info;
+  ASSERT_TRUE(base::GetSystemMemoryInfo(&info));
+  const uint32_t total_mib = info.total / 1024;
+  StartParams start_params(GetPopulatedStartParams());
+  StartMiniArcWithParams(true, std::move(start_params));
+  const auto& request = GetTestConciergeClient()->start_arc_vm_request();
+  EXPECT_EQ(request.memory_mib(), total_mib / 4);
+}
+
+// Test that ARCMVM size is set by both ram_percentage and shift_mib.
+TEST_F(ArcVmClientAdapterTest, ArcVmMemorySizeWithPercentageParamAndShiftMiB) {
+  base::test::ScopedFeatureList feature_list;
+  base::FieldTrialParams params;
+  params["ram_percentage"] = "25";
+  params["shift_mib"] = "-512";
+  feature_list.InitAndEnableFeatureWithParameters(kVmMemorySize, params);
+  base::SystemMemoryInfoKB info;
+  ASSERT_TRUE(base::GetSystemMemoryInfo(&info));
+  const uint32_t total_mib = info.total / 1024;
+  StartParams start_params(GetPopulatedStartParams());
+  StartMiniArcWithParams(true, std::move(start_params));
+  const auto& request = GetTestConciergeClient()->start_arc_vm_request();
+  EXPECT_EQ(request.memory_mib(), total_mib / 4 - 512);
 }
 
 // Test that StartArcVmRequest has no memory_mib field when getting system

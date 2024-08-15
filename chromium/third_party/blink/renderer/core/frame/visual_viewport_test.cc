@@ -2135,7 +2135,7 @@ TEST_P(VisualViewportTest, ResizeNonFixedBackgroundNoLayoutOrInvalidation) {
 
   // A resize will do a layout synchronously so manually check that we don't
   // setNeedsLayout from viewportSizeChanged.
-  document->View()->ViewportSizeChanged(false, true);
+  document->View()->ViewportSizeChanged();
   unsigned needs_layout_objects = 0;
   unsigned total_objects = 0;
   bool is_subtree = false;
@@ -2555,7 +2555,7 @@ TEST_P(VisualViewportTest, PaintScrollbar) {
               scrollbar->hit_test_opaqueness());
     EXPECT_TRUE(scrollbar->IsScrollbarLayerForTesting());
     EXPECT_EQ(
-        cc::ScrollbarOrientation::VERTICAL,
+        cc::ScrollbarOrientation::kVertical,
         static_cast<const cc::ScrollbarLayerBase*>(scrollbar)->orientation());
     EXPECT_EQ(gfx::Size(7, 393), scrollbar->bounds());
     EXPECT_EQ(gfx::Vector2dF(393, 0), scrollbar->offset_to_transform_parent());
@@ -2689,6 +2689,27 @@ TEST_F(VisualViewportSimTest, UsedColorSchemeFromRootElement) {
 
   EXPECT_EQ(mojom::blink::ColorScheme::kDark,
             visual_viewport.UsedColorSchemeScrollbars());
+}
+
+TEST_F(VisualViewportSimTest, ScrollbarThumbColorFromRootElement) {
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(400, 600));
+
+  const VisualViewport& visual_viewport =
+      WebView().GetPage()->GetVisualViewport();
+
+  EXPECT_EQ(absl::nullopt, visual_viewport.CSSScrollbarThumbColor());
+
+  SimRequest request("https://example.com/test.html", "text/html");
+  LoadURL("https://example.com/test.html");
+  request.Complete(R"HTML(
+          <!DOCTYPE html>
+          <style>
+            html { scrollbar-color: rgb(255 0 0) transparent }
+          </style>
+      )HTML");
+  Compositor().BeginFrame();
+
+  EXPECT_EQ(blink::Color(255, 0, 0), visual_viewport.CSSScrollbarThumbColor());
 }
 
 TEST_P(VisualViewportTest, SetLocationBeforePrePaint) {

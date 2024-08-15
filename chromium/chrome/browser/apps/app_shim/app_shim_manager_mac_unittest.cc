@@ -19,7 +19,6 @@
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/apps/app_shim/app_shim_host_bootstrap_mac.h"
 #include "chrome/browser/apps/app_shim/app_shim_host_mac.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/avatar_menu.h"
 #include "chrome/browser/web_applications/app_shim_registry_mac.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
@@ -144,7 +143,7 @@ class TestingAppShimManager : public AppShimManager {
 
   MOCK_METHOD1(ProfileForPath, Profile*(const base::FilePath&));
   MOCK_METHOD1(ProfileForBackgroundShimLaunch,
-               Profile*(const web_app::AppId& app_id));
+               Profile*(const webapps::AppId& app_id));
   void LoadProfileAsync(const base::FilePath& path,
                         base::OnceCallback<void(Profile*)> callback) override {
     CaptureLoadProfileCallback(path, std::move(callback));

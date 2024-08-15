@@ -47,6 +47,8 @@ const char kShadowDelegatesFocusAttributeName[] = "shadowdelegatesfocus";
 
 }  // namespace
 
+using mojom::blink::FormControlType;
+
 // static
 String FrameSerializerDelegateImpl::GetContentID(Frame* frame) {
   DCHECK(frame);
@@ -96,8 +98,8 @@ bool FrameSerializerDelegateImpl::ShouldIgnoreHiddenElement(
 
   // Do not include the hidden form element.
   auto* html_element_element = DynamicTo<HTMLInputElement>(&element);
-  return html_element_element &&
-         html_element_element->type() == input_type_names::kHidden;
+  return html_element_element && html_element_element->FormControlType() ==
+                                     FormControlType::kInputHidden;
 }
 
 bool FrameSerializerDelegateImpl::ShouldIgnoreMetaElement(
@@ -136,16 +138,9 @@ bool FrameSerializerDelegateImpl::ShouldIgnorePopupOverlayElement(
     center_y = page->GetChromeClient().WindowToViewportScalar(
         window->GetFrame(), center_y);
   }
-  if (RuntimeEnabledFeatures::LayoutNGNoLocationEnabled()) {
-    if (!PhysicalRect(box->PhysicalLocation(), box->Size())
-             .Contains(LayoutUnit(center_x), LayoutUnit(center_y))) {
-      return false;
-    }
-  } else {
-    LayoutPoint center_point(center_x, center_y);
-    if (!box->FrameRect().Contains(center_point)) {
-      return false;
-    }
+  if (!PhysicalRect(box->PhysicalLocation(), box->Size())
+           .Contains(LayoutUnit(center_x), LayoutUnit(center_y))) {
+    return false;
   }
 
   // The z-index should be greater than the threshold.

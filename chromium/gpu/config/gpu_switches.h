@@ -50,6 +50,9 @@ GPU_EXPORT extern const char kSkiaGraphiteBackendDawnMetal[];
 GPU_EXPORT extern const char kSkiaGraphiteBackendDawnSwiftshader[];
 GPU_EXPORT extern const char kSkiaGraphiteBackendDawnVulkan[];
 GPU_EXPORT extern const char kSkiaGraphiteBackendMetal[];
+GPU_EXPORT extern const char kShaderCachePath[];
+GPU_EXPORT extern const char kDisableSkiaGraphite[];
+GPU_EXPORT extern const char kEnableSkiaGraphite[];
 
 }  // namespace switches
 

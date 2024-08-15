@@ -40,6 +40,9 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/geometry/size.h"
 
+#include "app/vivaldi_apptools.h"
+#include "extensions/api/extension_action_utils/extension_action_utils_api.h"
+
 // ExtensionDisabledGlobalError -----------------------------------------------
 
 namespace extensions {
@@ -286,9 +289,16 @@ void AddExtensionDisabledError(ExtensionService* service,
                                const Extension* extension,
                                bool is_remote_install) {
   if (extension) {
+    if (::vivaldi::IsVivaldiRunning()) {
+      GlobalErrorServiceFactory::GetForProfile(service->profile())
+          ->AddGlobalError(
+              std::make_unique<VivaldiExtensionDisabledGlobalError>(service,
+                                                                    extension));
+    } else {
     GlobalErrorServiceFactory::GetForProfile(service->profile())
         ->AddGlobalError(std::make_unique<ExtensionDisabledGlobalError>(
             service, extension, is_remote_install));
+    }
   }
 }
 

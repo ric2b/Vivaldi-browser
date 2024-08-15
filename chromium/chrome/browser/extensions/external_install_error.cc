@@ -13,7 +13,6 @@
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
-#include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
@@ -22,7 +21,6 @@
 #include "chrome/browser/extensions/extension_install_error_menu_item_id_provider.h"
 #include "chrome/browser/extensions/extension_install_prompt_show_params.h"
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/extensions/external_install_error_constants.h"
 #include "chrome/browser/extensions/external_install_manager.h"
 #include "chrome/browser/extensions/webstore_data_fetcher.h"
 #include "chrome/browser/profiles/profile.h"
@@ -32,7 +30,6 @@
 #include "chrome/browser/ui/global_error/global_error_service.h"
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "content/public/browser/storage_partition.h"
@@ -45,6 +42,9 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_operations.h"
+
+#include "app/vivaldi_apptools.h"
+#include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 
 namespace extensions {
 
@@ -64,19 +64,6 @@ std::u16string GetMenuItemLabel(const Extension* extension) {
     id = IDS_EXTENSION_EXTERNAL_INSTALL_ALERT_EXTENSION;
 
   return l10n_util::GetStringFUTF16(id, base::UTF8ToUTF16(extension->name()));
-}
-
-ExternalInstallError::DefaultDialogButtonSetting
-MapDefaultButtonStringToSetting(const std::string& button_setting_string) {
-  if (button_setting_string == kDefaultDialogButtonSettingOk)
-    return ExternalInstallError::DIALOG_BUTTON_OK;
-  if (button_setting_string == kDefaultDialogButtonSettingCancel)
-    return ExternalInstallError::DIALOG_BUTTON_CANCEL;
-  if (button_setting_string == kDefaultDialogButtonSettingNoDefault)
-    return ExternalInstallError::NO_DEFAULT_DIALOG_BUTTON;
-
-  NOTREACHED() << "Unexpected default button string: " << button_setting_string;
-  return ExternalInstallError::NOT_SPECIFIED;
 }
 
 // A global error that spawns a dialog when the menu item is clicked.
@@ -133,7 +120,6 @@ class ExternalInstallBubbleAlert : public GlobalErrorWithStandardBubble {
   std::vector<std::u16string> GetBubbleViewMessages() override;
   std::u16string GetBubbleViewAcceptButtonLabel() override;
   std::u16string GetBubbleViewCancelButtonLabel() override;
-  int GetDefaultDialogButton() const override;
   void OnBubbleViewDidClose(Browser* browser) override;
   void BubbleViewAcceptButtonPressed(Browser* browser) override;
   void BubbleViewCancelButtonPressed(Browser* browser) override;
@@ -259,20 +245,6 @@ ExternalInstallBubbleAlert::GetBubbleViewMessages() {
   return messages;
 }
 
-int ExternalInstallBubbleAlert::GetDefaultDialogButton() const {
-  switch (error_->default_dialog_button_setting()) {
-    case ExternalInstallError::DIALOG_BUTTON_OK:
-      return ui::DIALOG_BUTTON_OK;
-    case ExternalInstallError::DIALOG_BUTTON_CANCEL:
-      return ui::DIALOG_BUTTON_CANCEL;
-    case ExternalInstallError::NO_DEFAULT_DIALOG_BUTTON:
-      return ui::DIALOG_BUTTON_NONE;
-    case ExternalInstallError::NOT_SPECIFIED:
-      break;
-  }
-  return GlobalErrorWithStandardBubble::GetDefaultDialogButton();
-}
-
 std::u16string ExternalInstallBubbleAlert::GetBubbleViewAcceptButtonLabel() {
   return prompt_->GetAcceptButtonLabel();
 }
@@ -301,29 +273,6 @@ void ExternalInstallBubbleAlert::BubbleViewCancelButtonPressed(
 
 ////////////////////////////////////////////////////////////////////////////////
 // ExternalInstallError
-
-// static
-ExternalInstallError::DefaultDialogButtonSetting
-ExternalInstallError::GetDefaultDialogButton(
-    const base::Value::Dict& webstore_response) {
-  const std::string* value_str =
-      webstore_response.FindString(kExternalInstallDefaultButtonKey);
-  if (value_str) {
-    return MapDefaultButtonStringToSetting(*value_str);
-  }
-
-  if (base::FeatureList::IsEnabled(
-          ::features::kExternalExtensionDefaultButtonControl)) {
-    std::string default_button = base::GetFieldTrialParamValueByFeature(
-        ::features::kExternalExtensionDefaultButtonControl,
-        kExternalInstallDefaultButtonKey);
-    if (!default_button.empty()) {
-      return MapDefaultButtonStringToSetting(default_button);
-    }
-  }
-
-  return NOT_SPECIFIED;
-}
 
 ExternalInstallError::ExternalInstallError(
     content::BrowserContext* browser_context,
@@ -443,8 +392,6 @@ void ExternalInstallError::OnWebstoreResponseParseSuccess(
     return;
   }
 
-  default_dialog_button_setting_ = GetDefaultDialogButton(webstore_data);
-
   absl::optional<bool> show_user_count =
       webstore_data.FindBool(kShowUserCountKey);
 
@@ -484,6 +431,15 @@ void ExternalInstallError::OnDialogReady(
     std::unique_ptr<ExtensionInstallPrompt::Prompt> prompt) {
   prompt_ = std::move(prompt);
 
+  if (::vivaldi::IsVivaldiRunning()) {
+    // Check if there are some new dialogs we need to implement.
+    DCHECK(alert_type_ == MENU_ALERT || alert_type_ == BUBBLE_ALERT);
+    global_error_ = std::make_unique<VivaldiExtensionDisabledGlobalError>(
+        browser_context_, this);
+    error_service_->AddUnownedGlobalError(global_error_.get());
+    return;
+  }
+
   if (alert_type_ == BUBBLE_ALERT) {
     global_error_ =
         std::make_unique<ExternalInstallBubbleAlert>(this, prompt_.get());
@@ -496,7 +452,7 @@ void ExternalInstallError::OnDialogReady(
       manager_->DidChangeInstallAlertVisibility(this, true);
       Browser* browser = chrome::FindTabbedBrowser(
           Profile::FromBrowserContext(browser_context_), true);
-      if (browser && !browser->is_vivaldi())
+      if (browser)
         global_error_->ShowBubbleView(browser);
     }
   } else {

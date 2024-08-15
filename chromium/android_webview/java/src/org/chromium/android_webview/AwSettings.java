@@ -17,19 +17,21 @@ import android.webkit.WebSettings;
 
 import androidx.annotation.IntDef;
 
+import org.jni_zero.CalledByNative;
+import org.jni_zero.JNINamespace;
+import org.jni_zero.NativeMethods;
+
 import org.chromium.android_webview.autofill.ChromeAutocompleteSafeModeAction;
 import org.chromium.android_webview.client_hints.AwUserAgentMetadata;
 import org.chromium.android_webview.common.AwFeatures;
 import org.chromium.android_webview.common.Lifetime;
 import org.chromium.android_webview.safe_browsing.AwSafeBrowsingConfigHelper;
+import org.chromium.android_webview.settings.AttributionBehavior;
 import org.chromium.android_webview.settings.ForceDarkBehavior;
 import org.chromium.android_webview.settings.ForceDarkMode;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.annotations.JNINamespace;
-import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.content_public.browser.WebContents;
 
@@ -87,6 +89,18 @@ public class AwSettings {
     @ForceDarkBehavior
     private int mForceDarkBehavior = ForceDarkBehavior.PREFER_MEDIA_QUERY_OVER_FORCE_DARK;
 
+    @AttributionBehavior
+    public static final int ATTRIBUTION_DISABLED = AttributionBehavior.DISABLED;
+    @AttributionBehavior
+    public static final int ATTRIBUTION_APP_SOURCE_AND_WEB_TRIGGER =
+            AttributionBehavior.APP_SOURCE_AND_WEB_TRIGGER;
+    @AttributionBehavior
+    public static final int ATTRIBUTION_WEB_SOURCE_AND_WEB_TRIGGER =
+            AttributionBehavior.WEB_SOURCE_AND_WEB_TRIGGER;
+    @AttributionBehavior
+    public static final int ATTRIBUTION_APP_SOURCE_AND_APP_TRIGGER =
+            AttributionBehavior.APP_SOURCE_AND_APP_TRIGGER;
+
     private Set<String> mRequestedWithHeaderAllowedOriginRules;
 
     private Context mContext;
@@ -140,6 +154,7 @@ public class AwSettings {
     private boolean mSpatialNavigationEnabled;  // Default depends on device features.
     private boolean mEnableSupportedHardwareAcceleratedFeatures;
     private int mMixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW;
+    private int mAttributionBehavior = AttributionBehavior.APP_SOURCE_AND_WEB_TRIGGER;
     private boolean mCSSHexAlphaColorEnabled;
     private boolean mScrollTopLeftInteropEnabled;
     private boolean mWillSuppressErrorPage;
@@ -1818,6 +1833,23 @@ public class AwSettings {
     public int getMixedContentMode() {
         synchronized (mAwSettingsLock) {
             return mMixedContentMode;
+        }
+    }
+
+    public void setAttributionBehavior(@AttributionBehavior int behavior) {
+        synchronized (mAwSettingsLock) {
+            if (mAttributionBehavior != behavior) {
+                mAttributionBehavior = behavior;
+                mEventHandler.updateWebkitPreferencesLocked();
+            }
+        }
+    }
+
+    @CalledByNative
+    @AttributionBehavior
+    public int getAttributionBehavior() {
+        synchronized (mAwSettingsLock) {
+            return mAttributionBehavior;
         }
     }
 

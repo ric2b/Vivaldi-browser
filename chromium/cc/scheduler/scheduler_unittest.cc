@@ -172,7 +172,7 @@ class FakeSchedulerClient : public SchedulerClient,
     PushAction("ScheduledActionDrawIfPossible");
     num_draws_++;
     if (!draw_will_happen_)
-      return DRAW_ABORTED_CHECKERBOARD_ANIMATIONS;
+      return DrawResult::kAbortedCheckerboardAnimations;
 
     if (swap_will_happen_if_draw_happens_) {
       last_begin_frame_ack_ = scheduler_->CurrentBeginFrameAckForActiveTree();
@@ -183,14 +183,14 @@ class FakeSchedulerClient : public SchedulerClient,
       if (automatic_ack_)
         scheduler_->DidReceiveCompositorFrameAck();
     }
-    return DRAW_SUCCESS;
+    return DrawResult::kSuccess;
   }
   DrawResult ScheduledActionDrawForced() override {
     EXPECT_FALSE(inside_action_);
     base::AutoReset<bool> mark_inside(&inside_action_, true);
     PushAction("ScheduledActionDrawForced");
     last_begin_frame_ack_ = scheduler_->CurrentBeginFrameAckForActiveTree();
-    return DRAW_SUCCESS;
+    return DrawResult::kSuccess;
   }
   void ScheduledActionCommit() override {
     EXPECT_FALSE(inside_action_);
@@ -858,7 +858,7 @@ class SchedulerClientThatsetNeedsDrawInsideDraw : public FakeSchedulerClient {
 
   DrawResult ScheduledActionDrawForced() override {
     NOTREACHED();
-    return DRAW_SUCCESS;
+    return DrawResult::kSuccess;
   }
 
  private:
@@ -965,7 +965,7 @@ class SchedulerClientThatSetNeedsBeginMainFrameInsideDraw
 
   DrawResult ScheduledActionDrawForced() override {
     NOTREACHED();
-    return DRAW_SUCCESS;
+    return DrawResult::kSuccess;
   }
 
   void SetNeedsBeginMainFrameOnNextDraw() {
@@ -1674,7 +1674,7 @@ TEST_F(SchedulerTest, MainFrameNotSkippedAfterLateBeginMainFrameAbort) {
   // After aborting the frame, make sure we don't skip the
   // next BeginMainFrame.
   client_->Reset();
-  scheduler_->BeginMainFrameAborted(CommitEarlyOutReason::FINISHED_NO_UPDATES);
+  scheduler_->BeginMainFrameAborted(CommitEarlyOutReason::kFinishedNoUpdates);
   EXPECT_FALSE(scheduler_->MainThreadMissedLastDeadline());
   scheduler_->SetNeedsBeginMainFrame();
   EXPECT_FALSE(scheduler_->MainThreadMissedLastDeadline());
@@ -3348,7 +3348,7 @@ TEST_F(SchedulerTest, NoLayerTreeFrameSinkCreationWhileCommitPending) {
   client_->Reset();
   scheduler_->NotifyBeginMainFrameStarted(task_runner_->NowTicks());
   scheduler_->BeginMainFrameAborted(
-      CommitEarlyOutReason::ABORTED_DEFERRED_COMMIT);
+      CommitEarlyOutReason::kAbortedDeferredCommit);
   EXPECT_ACTIONS("ScheduledActionBeginLayerTreeFrameSinkCreation");
 }
 
@@ -3405,7 +3405,7 @@ TEST_F(SchedulerTest, AbortedCommitsTriggerImplSideInvalidations) {
   client_->Reset();
   scheduler_->SetNeedsBeginMainFrame();
   scheduler_->NotifyBeginMainFrameStarted(task_runner_->NowTicks());
-  scheduler_->BeginMainFrameAborted(CommitEarlyOutReason::FINISHED_NO_UPDATES);
+  scheduler_->BeginMainFrameAborted(CommitEarlyOutReason::kFinishedNoUpdates);
   EXPECT_ACTIONS("ScheduledActionPerformImplSideInvalidation");
 }
 
@@ -3995,7 +3995,7 @@ TEST_F(SchedulerTest, SendEarlyDidNotProduceFrameIfIdle) {
   // Request a new commit before finishing the current one to simulate behavior
   // seen in certain OOPIF renderers.
   scheduler_->SetNeedsBeginMainFrame();
-  scheduler_->BeginMainFrameAborted(CommitEarlyOutReason::FINISHED_NO_UPDATES);
+  scheduler_->BeginMainFrameAborted(CommitEarlyOutReason::kFinishedNoUpdates);
   EXPECT_EQ(client_->last_begin_frame_ack().frame_id.sequence_number,
             begin_main_frame_args.frame_id.sequence_number);
 }

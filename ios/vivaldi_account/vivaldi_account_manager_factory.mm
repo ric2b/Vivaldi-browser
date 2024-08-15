@@ -4,7 +4,7 @@
 
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
-#include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
+#import "ios/chrome/browser/passwords/model/ios_chrome_profile_password_store_factory.h"
 #include "ios/chrome/browser/shared/model/application_context/application_context.h"
 #include "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -29,7 +29,7 @@ VivaldiAccountManagerFactory::VivaldiAccountManagerFactory()
     : BrowserStateKeyedServiceFactory(
           "VivaldiAccountManager",
           BrowserStateDependencyManager::GetInstance()) {
-  DependsOn(IOSChromePasswordStoreFactory::GetInstance());
+  DependsOn(IOSChromeProfilePasswordStoreFactory::GetInstance());
 }
 
 VivaldiAccountManagerFactory::~VivaldiAccountManagerFactory() {}
@@ -41,7 +41,7 @@ VivaldiAccountManagerFactory::BuildServiceInstanceFor(
       ChromeBrowserState::FromBrowserState(context);
 
   auto url_loader_factory = browser_state->GetSharedURLLoaderFactory();
-  auto password_store = IOSChromePasswordStoreFactory::GetForBrowserState(
+  auto password_store = IOSChromeProfilePasswordStoreFactory::GetForBrowserState(
       browser_state, ServiceAccessType::IMPLICIT_ACCESS);
 
   return std::make_unique<VivaldiAccountManager>(

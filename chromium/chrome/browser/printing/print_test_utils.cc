@@ -11,12 +11,12 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/printing/print_view_manager_common.h"
-#include "chrome/browser/ui/webui/print_preview/print_preview_handler.h"
 #include "printing/buildflags/buildflags.h"
 #include "printing/mojom/print.mojom.h"
 #include "printing/print_job_constants.h"
 
 #if BUILDFLAG(ENABLE_OOP_PRINTING_NO_OOP_BASIC_PRINT_DIALOG)
+#include "chrome/browser/printing/prefs_util.h"
 #include "printing/printing_features.h"
 #endif
 
@@ -116,7 +116,7 @@ std::unique_ptr<PrintSettings> MakeUserModifiedPrintSettings(
       MakeDefaultPrintSettings(printer_name);
   settings->set_copies(kPrintSettingsCopies + 1);
 #if BUILDFLAG(ENABLE_OOP_PRINTING_NO_OOP_BASIC_PRINT_DIALOG)
-  if (features::kEnableOopPrintDriversJobPrint.Get()) {
+  if (ShouldPrintJobOop()) {
     // Supply fake data to mimic what might be collected from the system print
     // dialog.  Platform-specific since the fake data still has to be able to
     // pass mojom data validation.

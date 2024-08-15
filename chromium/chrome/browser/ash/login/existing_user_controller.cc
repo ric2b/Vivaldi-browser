@@ -66,9 +66,9 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/ash/system/device_disabling_manager.h"
+#include "chrome/browser/auth_notification_types.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/lifetime/application_lifetime_chromeos.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/net/system_network_context_manager.h"
@@ -155,7 +155,8 @@ const long int kSafeModeRestartUiDelayMs = 30000;
 // authentication change.
 void RefreshPoliciesOnUIThread() {
   if (g_browser_process->policy_service())
-    g_browser_process->policy_service()->RefreshPolicies(base::OnceClosure());
+    g_browser_process->policy_service()->RefreshPolicies(
+        base::OnceClosure(), policy::PolicyFetchReason::kSignin);
 }
 
 void OnTranferredHttpAuthCaches() {

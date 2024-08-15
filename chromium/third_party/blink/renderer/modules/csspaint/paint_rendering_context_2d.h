@@ -33,7 +33,6 @@ class MODULES_EXPORT PaintRenderingContext2D : public ScriptWrappable,
       const gfx::Size& container_size,
       const PaintRenderingContext2DSettings*,
       float zoom,
-      float device_scale_factor,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       PaintWorkletGlobalScope* global_scope = nullptr);
 
@@ -80,7 +79,6 @@ class MODULES_EXPORT PaintRenderingContext2D : public ScriptWrappable,
   // PaintRenderingContext2D uses a recording canvas, so it should never
   // allocate a pixel buffer and is not accelerated.
   bool CanCreateCanvas2dResourceProvider() const final { return false; }
-  bool IsAccelerated() const final { return false; }
 
   // CSS Paint doesn't have any notion of image orientation.
   RespectImageOrientationEnum RespectImageOrientation() const final {
@@ -90,7 +88,7 @@ class MODULES_EXPORT PaintRenderingContext2D : public ScriptWrappable,
   DOMMatrix* getTransform() final;
   void resetTransform() final;
 
-  void FlushCanvas(CanvasResourceProvider::FlushReason) final {}
+  void FlushCanvas(FlushReason) final {}
 
   PaintRecord GetRecord();
 

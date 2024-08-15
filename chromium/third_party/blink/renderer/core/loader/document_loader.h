@@ -54,6 +54,7 @@
 #include "third_party/blink/public/mojom/navigation/navigation_params.mojom-shared.h"
 #include "third_party/blink/public/mojom/page/page.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/page_state/page_state.mojom-blink.h"
+#include "third_party/blink/public/mojom/runtime_feature_state/runtime_feature.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/service_worker/controller_service_worker_mode.mojom-blink.h"
 #include "third_party/blink/public/mojom/timing/resource_timing.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/scheduler/web_scoped_virtual_time_pauser.h"
@@ -102,6 +103,7 @@ class ContentSecurityPolicy;
 class CodeCacheHost;
 class Document;
 class DocumentParser;
+class Element;
 class Frame;
 class FrameLoader;
 class HistoryItem;
@@ -150,9 +152,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
 
   static bool WillLoadUrlAsEmpty(const KURL&);
 
-  LocalFrame* GetFrame() const { return frame_; }
-
-  mojom::blink::ResourceTimingInfoPtr TakeNavigationTimingInfo();
+  LocalFrame* GetFrame() const { return frame_.Get(); }
 
   void DetachFromFrame(bool flush_microtask_queue);
 
@@ -196,7 +196,9 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   // same number of time than BlockParser().
   void BlockParser() override;
   void ResumeParser() override;
-  bool HasBeenLoadedAsWebArchive() const override { return archive_; }
+  bool HasBeenLoadedAsWebArchive() const override {
+    return archive_ != nullptr;
+  }
   WebArchiveInfo GetArchiveInfo() const override;
   bool LastNavigationHadTransientUserActivation() const override {
     return last_navigation_had_transient_user_activation_;
@@ -207,6 +209,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   WebString OriginCalculationDebugInfo() const override {
     return origin_calculation_debug_info_;
   }
+  bool HasLoadedNonInitialEmptyDocument() const override;
 
   MHTMLArchive* Archive() const { return archive_.Get(); }
 
@@ -227,7 +230,6 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
       const;
 
   void DidChangePerformanceTiming();
-  void DidObserveInputDelay(base::TimeDelta input_delay);
   void DidObserveLoadingBehavior(LoadingBehaviorFlag);
   void DidObserveJavaScriptFrameworks(
       const JavaScriptFrameworkDetectionResult&);
@@ -271,7 +273,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
     navigation_type_ = navigation_type;
   }
 
-  HistoryItem* GetHistoryItem() const { return history_item_; }
+  HistoryItem* GetHistoryItem() const { return history_item_.Get(); }
 
   void StartLoading();
   void StopLoading();
@@ -300,6 +302,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
       bool has_transient_user_activation,
       const SecurityOrigin* initiator_origin,
       bool is_synchronously_committed,
+      Element* source_element,
       mojom::blink::TriggeringEventInfo,
       bool is_browser_initiated,
       absl::optional<scheduler::TaskAttributionId>
@@ -323,6 +326,8 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
 
   void DispatchLinkHeaderPreloads(const ViewportDescription*,
                                   PreloadHelper::LoadLinksFromHeaderMode);
+  void DispatchLcppFontPreloads(const ViewportDescription*,
+                                PreloadHelper::LoadLinksFromHeaderMode);
 
   void LoadFailed(const ResourceError&);
 
@@ -467,6 +472,10 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   void UpdateSubresourceLoadMetrics(
       const SubresourceLoadMetrics& subresource_load_metrics);
 
+  const AtomicString& GetCookieDeprecationLabel() const {
+    return cookie_deprecation_label_;
+  }
+
  protected:
   // Based on its MIME type, if the main document's response corresponds to an
   // MHTML archive, then every resources will be loaded from this archive.
@@ -604,6 +613,11 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   // This initiates a view transition if the `view_transition_state_` has been
   // specified.
   void StartViewTransitionIfNeeded(Document& document);
+
+  // Injects speculation rules automatically for some pages based on their
+  // contents (currently only detected JavaScript frameworks). Configured by the
+  // AutoSpeculationRules feature.
+  void InjectAutoSpeculationRules(const JavaScriptFrameworkDetectionResult&);
 
   // Params are saved in constructor and are cleared after StartLoading().
   // TODO(dgozman): remove once StartLoading is merged with constructor.
@@ -769,7 +783,8 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
 
   const base::TickClock* clock_;
 
-  const Vector<OriginTrialFeature> initiator_origin_trial_features_;
+  const Vector<mojom::blink::OriginTrialFeature>
+      initiator_origin_trial_features_;
 
   const Vector<String> force_enabled_origin_trials_;
 
@@ -822,6 +837,16 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   // Indicates which browsing context group this frame belongs to. It is only
   // set for a main frame committing in another browsing context group.
   const absl::optional<BrowsingContextGroupInfo> browsing_context_group_info_;
+
+  // Runtime feature state override is applied to the document. They are applied
+  // before JavaScript context creation (i.e. CreateParserPostCommit).
+  const base::flat_map<mojom::blink::RuntimeFeature, bool>
+      modified_runtime_features_;
+
+  // The cookie deprecation label for cookie deprecation facilitated testing.
+  // Will be used in
+  // //third_party/blink/renderer/modules/cookie_deprecation_label.
+  const AtomicString cookie_deprecation_label_;
 };
 
 DECLARE_WEAK_IDENTIFIER_MAP(DocumentLoader);

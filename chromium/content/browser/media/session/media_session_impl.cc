@@ -1039,7 +1039,13 @@ MediaSessionImpl::GetMediaSessionInfoSync() {
   info->is_controllable = IsControllable();
 
   // If the browser context is off the record then it should be sensitive.
-  info->is_sensitive = web_contents()->GetBrowserContext()->IsOffTheRecord();
+  // This is used as a proxy to hide the metadata from sensitive surfaces such
+  // as the lock screen.
+  // TODO(1484490): Remove this field once the new feature to hide metadata from
+  // sensitive profiles is launched.
+  info->is_sensitive =
+      web_contents()->GetBrowserContext()->IsOffTheRecord() &&
+      !base::FeatureList::IsEnabled(media::kHideIncognitoMediaMetadata);
 
   info->picture_in_picture_state =
       web_contents()->HasPictureInPictureVideo() ||
@@ -1068,8 +1074,9 @@ MediaSessionImpl::GetMediaSessionInfoSync() {
 
   // Disable Remote Playback by passing empty RemotePlaybackMetadata when there
   // are multiple media players.
-  if (normal_players_.size() == 1u) {
-    info->remote_playback_metadata = remote_playback_metadata_.Clone();
+  info->remote_playback_metadata = remote_playback_metadata_.Clone();
+  if (normal_players_.size() > 1u && info->remote_playback_metadata) {
+    info->remote_playback_metadata->remote_playback_disabled = true;
   }
 
   MediaSessionClient* media_session_client = MediaSessionClient::Get();
@@ -1194,10 +1201,9 @@ void MediaSessionImpl::EnterPictureInPicture() {
       ShouldRouteAction(
           media_session::mojom::MediaSessionAction::kEnterPictureInPicture)) {
     DidReceiveAction(
-        media_session::mojom::MediaSessionAction::kEnterPictureInPicture,
-        blink::mojom::MediaSessionActionDetails::NewPictureInPicture(
-            blink::mojom::MediaSessionPictureInPictureActionDetails::New(
-                /*automatic=*/false)));
+        media_session::mojom::MediaSessionAction::kEnterPictureInPicture);
+    uma_helper_.RecordEnterPictureInPicture(
+        MediaSessionUmaHelper::EnterPictureInPictureType::kRegisteredManual);
     return;
   }
 
@@ -1205,6 +1211,8 @@ void MediaSessionImpl::EnterPictureInPicture() {
   DCHECK_EQ(normal_players_.size(), 1u);
   normal_players_.begin()->first.observer->OnEnterPictureInPicture(
       normal_players_.begin()->first.player_id);
+  uma_helper_.RecordEnterPictureInPicture(
+      MediaSessionUmaHelper::EnterPictureInPictureType::kDefaultHandler);
 }
 
 void MediaSessionImpl::ExitPictureInPicture() {
@@ -1222,10 +1230,9 @@ void MediaSessionImpl::EnterAutoPictureInPicture() {
   }
 
   DidReceiveAction(
-      media_session::mojom::MediaSessionAction::kEnterPictureInPicture,
-      blink::mojom::MediaSessionActionDetails::NewPictureInPicture(
-          blink::mojom::MediaSessionPictureInPictureActionDetails::New(
-              /*automatic=*/true)));
+      media_session::mojom::MediaSessionAction::kEnterPictureInPicture);
+  uma_helper_.RecordEnterPictureInPicture(
+      MediaSessionUmaHelper::EnterPictureInPictureType::kRegisteredAutomatic);
 }
 
 void MediaSessionImpl::SetAudioSinkId(const absl::optional<std::string>& id) {
@@ -1278,8 +1285,9 @@ void MediaSessionImpl::GetMediaImageBitmap(
 // We want to hide the media image from ChromeOS' media controls.
 #if BUILDFLAG(IS_CHROMEOS)
   if (session_info_ && session_info_->hide_metadata) {
-    std::move(callback).Run(
-        MediaSessionClient::Get()->GetThumbnailPlaceholder());
+    MediaSessionClient* media_session_client = MediaSessionClient::Get();
+    CHECK(media_session_client);
+    std::move(callback).Run(media_session_client->GetThumbnailPlaceholder());
     return;
   }
 #endif
@@ -1381,6 +1389,15 @@ void MediaSessionImpl::RebuildAndNotifyMediaSessionInfoChanged() {
   delegate_->MediaSessionInfoChanged(current_info);
 
   session_info_ = std::move(current_info);
+
+#if BUILDFLAG(IS_CHROMEOS)
+  // If we need to hide the metadata, then we need to notify the metadata
+  // observers with the hidden metadata. They might have received the metadata
+  // before the info has been updated.
+  if (session_info_->hide_metadata) {
+    RebuildAndNotifyMetadataChanged();
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS)
 }
 
 bool MediaSessionImpl::AddPepperPlayer(MediaSessionPlayerObserver* observer,
@@ -1671,6 +1688,8 @@ void MediaSessionImpl::RebuildAndNotifyActionsChanged() {
           media_session::mojom::MediaSessionAction::kEnterPictureInPicture)) {
     actions.insert(
         media_session::mojom::MediaSessionAction::kEnterAutoPictureInPicture);
+    actions.insert(
+        media_session::mojom::MediaSessionAction::kExitPictureInPicture);
   }
 
   if (base::FeatureList::IsEnabled(
@@ -1703,34 +1722,12 @@ void MediaSessionImpl::RebuildAndNotifyActionsChanged() {
 void MediaSessionImpl::RebuildAndNotifyMetadataChanged() {
   std::vector<media_session::MediaImage> artwork;
   media_session::MediaMetadata metadata;
-
-  bool images_changed = false;
-
-  // We may want to hide metadata only from ChromeOS' media controls here. For
-  // other platforms, metadata is hidden in the SystemMediaControlsNotifier. We
-  // can't hide the metadata for other platforms here because it would affect
-  // their respective global media controls, which we don't want to do.
-#if BUILDFLAG(IS_CHROMEOS)
-  if (session_info_ && session_info_->hide_metadata) {
-    BuildPlaceholderMetadata(metadata);
-
-    // If hiding the image metadata, we need to manually notify the observers
-    // that the image has changed. This is because we aren't directly changing
-    // the artwork, but instead it's being changed in the
-    // MediaSessionImpl::GetMediaImageBitmap method.
-    images_changed = true;
-  } else {
-    BuildMetadata(metadata, artwork);
-  }
-#else
   BuildMetadata(metadata, artwork);
-#endif
 
   // If we have no artwork in |images_| or the arwork has changed then we should
   // update it with the latest artwork from the routed service.
   auto it = images_.find(MediaSessionImageType::kArtwork);
-  images_changed =
-      images_changed || it == images_.end() || it->second != artwork;
+  bool images_changed = it == images_.end() || it->second != artwork;
   if (images_changed) {
     images_.insert_or_assign(MediaSessionImageType::kArtwork, artwork);
   }
@@ -1755,18 +1752,41 @@ void MediaSessionImpl::RebuildAndNotifyMetadataChanged() {
 
 #if BUILDFLAG(IS_CHROMEOS)
 void MediaSessionImpl::BuildPlaceholderMetadata(
-    media_session::MediaMetadata& metadata) {
-  MediaSessionClient* media_session_client = MediaSessionClient::Get();
-  metadata.title = media_session_client->GetTitlePlaceholder();
-  metadata.artist = media_session_client->GetArtistPlaceholder();
-  metadata.album = media_session_client->GetAlbumPlaceholder();
-  metadata.source_title = media_session_client->GetSourceTitlePlaceholder();
+    media_session::MediaMetadata& metadata,
+    std::vector<media_session::MediaImage>& artwork) {
+  if ((routed_service_ && routed_service_->metadata()) ||
+      !metadata_.IsEmpty()) {
+    MediaSessionClient* media_session_client = MediaSessionClient::Get();
+    CHECK(media_session_client);
+
+    metadata.title = media_session_client->GetTitlePlaceholder();
+    metadata.artist = media_session_client->GetArtistPlaceholder();
+    metadata.album = media_session_client->GetAlbumPlaceholder();
+    metadata.source_title = media_session_client->GetSourceTitlePlaceholder();
+
+    // Always make sure the metadata replacement is accompanied by the thumbnail
+    // replacement.
+    // An empty `MediaImage` so `GetMediaImageBitmap` is eventually triggered.
+    // That is where we replace the artwork with the placeholder `Bitmap`.
+    artwork.push_back(media_session::MediaImage());
+  }
 }
 #endif
 
 void MediaSessionImpl::BuildMetadata(
     media_session::MediaMetadata& metadata,
     std::vector<media_session::MediaImage>& artwork) {
+  // We need to hide the metadata for ChromeOS here because the
+  // `MediaNotificationItem` lives in //components which cannot depend on
+  // //content. For other platforms, metadata is hidden in the
+  // `SystemMediaControlsNotifier`.
+#if BUILDFLAG(IS_CHROMEOS)
+  if (session_info_ && session_info_->hide_metadata) {
+    BuildPlaceholderMetadata(metadata, artwork);
+    return;
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
   if (routed_service_ && routed_service_->metadata()) {
     metadata.title = routed_service_->metadata()->title;
     metadata.artist = routed_service_->metadata()->artist;

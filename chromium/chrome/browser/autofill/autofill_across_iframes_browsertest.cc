@@ -126,7 +126,7 @@ void FillCard(content::RenderFrameHost* rfh,
   test::SetCreditCardInfo(&card, kNameFull, kNumber, kExpMonth, kExpYear, "",
                           base::ASCIIToUTF16(base::StringPiece(kCvc)));
   auto& manager = TestAutofillManager::GetForRenderFrameHost(rfh);
-  manager.FillCreditCardFormImpl(
+  manager.FillCreditCardForm(
       form, triggered_field, card, base::ASCIIToUTF16(base::StringPiece(kCvc)),
       AutofillTriggerDetails(AutofillTriggerSource::kPopup));
 }
@@ -202,9 +202,9 @@ auto HasValue(base::StringPiece value) {
 
 }  // namespace
 
-// Test fixture for all tests of AutofillAcrossIframes. A particular goal is is
-// to test that ContentAutofillRouter and FormForest handle the race conditions
-// that arise during page load correctly; see
+// Test fixture for all tests of AutofillAcrossIframes. A particular goal is to
+// test that AutofillDriverRouter and FormForest handle the race conditions that
+// arise during page load correctly; see
 // go/autofill-iframes-race-condition-explainer for some explanation.
 class AutofillAcrossIframesTest : public InProcessBrowserTest {
  public:
@@ -545,8 +545,15 @@ class AutofillAcrossIframesTest_Dynamic : public AutofillAcrossIframesTest {
 };
 
 // Tests that a newly emerging frame with a field triggers a refill.
+// TODO(crbug.com/1486516): Test is flaky on Windows.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_RefillDynamicFormWithNewFrame \
+  DISABLED_RefillDynamicFormWithNewFrame
+#else
+#define MAYBE_RefillDynamicFormWithNewFrame RefillDynamicFormWithNewFrame
+#endif
 IN_PROC_BROWSER_TEST_F(AutofillAcrossIframesTest_Dynamic,
-                       RefillDynamicFormWithNewFrame) {
+                       MAYBE_RefillDynamicFormWithNewFrame) {
   const FormStructure* form = LoadFormWithAppearingFrame();
   ASSERT_TRUE(form);
   EXPECT_THAT(FillForm(*form, *form->field(1)),
@@ -624,8 +631,16 @@ class AutofillAcrossIframesTest_NestedAndLargeForm
 // Tests that a large and deeply nested form is extracted and filled correctly.
 // The test makes heavy use of abbreviations to make it easier to spot the
 // pattern in the form.
+
+// TODO(crbug.com/1486267): Test is flaky on Windows.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_FillAllFieldsOnTriggeredOrigin \
+  DISABLED_FillAllFieldsOnTriggeredOrigin
+#else
+#define MAYBE_FillAllFieldsOnTriggeredOrigin FillAllFieldsOnTriggeredOrigin
+#endif
 IN_PROC_BROWSER_TEST_F(AutofillAcrossIframesTest_NestedAndLargeForm,
-                       FillAllFieldsOnTriggeredOrigin) {
+                       MAYBE_FillAllFieldsOnTriggeredOrigin) {
   // The `n` in `n.html` is the height of the frame sub-tree, i.e., a frame that
   // loads `1.html` is a leaf frame, `2.html` has child frames but no
   // grandchildren, and so on.

@@ -40,25 +40,6 @@ extern const char kVivaldiClientHintsBrandAppendVivaldi[];
 extern const char kVivaldiClientHintsBrandCustomBrand[];
 extern const char kVivaldiClientHintsBrandCustomBrandVersion[];
 
-
-// Old pref names that have been changed during the migration
-// to the new prefs api.
-extern const char kOldAlwaysLoadPinnedTabAfterRestore[];
-extern const char kOldDeferredTabLoadingAfterRestore[];
-#if defined(USE_AURA)
-extern const char kOldHideMouseCursorInFullscreen[];
-#endif  // USE_AURA
-extern const char kOldMousegesturesEnabled[];
-extern const char kOldPluginsWidevideEnabled[];
-extern const char kOldRockerGesturesEnabled[];
-extern const char kOldSmoothScrollingEnabled[];
-extern const char kOldVivaldiCaptureDirectory[];
-extern const char kOldVivaldiHomepage[];
-extern const char kOldVivaldiNumberOfDaysToKeepVisits[];
-extern const char kOldVivaldiTabZoom[];
-extern const char kOldVivaldiTabsToLinks[];
-extern const char kOldVivaldiUseNativeWindowDecoration[];
-
 #if BUILDFLAG(IS_IOS)
 extern const char kVivaldiNoteFolderDefault[];
 extern const char kVivaldiNoteCachedTopMostRow[];
@@ -76,6 +57,13 @@ extern const char kVivaldiBookmarkFoldersViewMode[];
 extern const char kVivaldiDesktopTabsEnabled[];
 // Tab stack use status
 extern const char kVivaldiTabStackEnabled[];
+
+// Apearance
+// Startup wallpaper name
+extern const char kVivaldiStartupWallpaper[];
+// Selected Appearance Mode
+extern const char kVivaldiAppearanceMode[];
+
 #endif
 
 #if BUILDFLAG(IS_ANDROID)

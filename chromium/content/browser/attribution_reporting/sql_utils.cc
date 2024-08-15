@@ -6,11 +6,12 @@
 
 #include <string>
 
-#include "base/check.h"
 #include "base/check_op.h"
 #include "base/time/time.h"
 #include "components/attribution_reporting/event_report_windows.h"
 #include "components/attribution_reporting/source_type.mojom.h"
+#include "components/attribution_reporting/trigger_config.h"
+#include "components/attribution_reporting/trigger_data_matching.mojom.h"
 #include "content/browser/attribution_reporting/attribution_reporting.pb.h"
 #include "sql/statement.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -21,6 +22,7 @@ namespace content {
 
 namespace {
 using ::attribution_reporting::mojom::SourceType;
+using ::attribution_reporting::mojom::TriggerDataMatching;
 }  // namespace
 
 url::Origin DeserializeOrigin(const std::string& origin) {
@@ -41,7 +43,9 @@ absl::optional<SourceType> DeserializeSourceType(int val) {
 std::string SerializeReadOnlySourceData(
     const attribution_reporting::EventReportWindows& event_report_windows,
     int max_event_level_reports,
-    double randomized_response_rate) {
+    double randomized_response_rate,
+    const attribution_reporting::TriggerConfig* trigger_config,
+    const bool* debug_cookie_set) {
   DCHECK_GE(max_event_level_reports, 0);
   proto::AttributionReadOnlySourceData msg;
 
@@ -57,10 +61,24 @@ std::string SerializeReadOnlySourceData(
     msg.set_randomized_response_rate(randomized_response_rate);
   }
 
-  std::string str;
-  bool success = msg.SerializeToString(&str);
-  DCHECK(success);
-  return str;
+  if (trigger_config) {
+    switch (trigger_config->trigger_data_matching()) {
+      case TriggerDataMatching::kExact:
+        msg.set_trigger_data_matching(
+            proto::AttributionReadOnlySourceData::EXACT);
+        break;
+      case TriggerDataMatching::kModulus:
+        msg.set_trigger_data_matching(
+            proto::AttributionReadOnlySourceData::MODULUS);
+        break;
+    }
+  }
+
+  if (debug_cookie_set) {
+    msg.set_debug_cookie_set(*debug_cookie_set);
+  }
+
+  return msg.SerializeAsString();
 }
 
 absl::optional<proto::AttributionReadOnlySourceData>

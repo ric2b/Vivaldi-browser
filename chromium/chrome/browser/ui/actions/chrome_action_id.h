@@ -110,9 +110,6 @@
   E(kActionGroupTargetTab, IDC_GROUP_TARGET_TAB) \
   E(kActionDuplicateTargetTab, IDC_DUPLICATE_TARGET_TAB) \
   /* Clipboard commands */ \
-  E(kActionCut, IDC_CUT) \
-  E(kActionCopy, IDC_COPY) \
-  E(kActionPaste, IDC_PASTE) \
   E(kActionEditMenu, IDC_EDIT_MENU) \
   /* Find-in-page */ \
   E(kActionFind, IDC_FIND) \
@@ -217,9 +214,6 @@
     IDC_EXTENSIONS_SUBMENU_VISIT_CHROME_WEB_STORE) \
   E(kActionReadingListMenu, IDC_READING_LIST_MENU) \
   E(kActionReadingListMenuAddTab, IDC_READING_LIST_MENU_ADD_TAB) \
-  E(kActionReadingListMenuShowUi, IDC_READING_LIST_MENU_SHOW_UI) \
-  E(kActionShowBookmarkSidePanel, IDC_SHOW_BOOKMARK_SIDE_PANEL) \
-  E(kActionShowSearchCompanion, IDC_SHOW_SEARCH_COMPANION) \
   E(kActionShowChromeLabs, IDC_SHOW_CHROME_LABS) \
   E(kActionRecentTabsLoginForDeviceTabs, \
     IDC_RECENT_TABS_LOGIN_FOR_DEVICE_TABS) \
@@ -486,8 +480,6 @@
     IDC_CONTENT_CONTEXT_ACCESSIBILITY_LABELS) \
   E(kActionContentContextAccessibilityLabelsToggleOnce, \
     IDC_CONTENT_CONTEXT_ACCESSIBILITY_LABELS_TOGGLE_ONCE) \
-  /* Orca feature context menu items. */ \
-  E(kActionContentContextOrca, IDC_CONTENT_CONTEXT_ORCA) \
   /* Screen AI layout extraction. */ \
   E(kActionContentContextRunLayoutExtraction, \
     IDC_CONTENT_CONTEXT_RUN_LAYOUT_EXTRACTION) \
@@ -506,8 +498,10 @@
   E(kActionContentContextAutofillFeedback, \
     IDC_CONTENT_CONTEXT_AUTOFILL_FEEDBACK) \
   /* Autofill context menu commands */ \
-  E(kActionContentContextAutofillFallbackAutocompleteUnrecognized, \
-    IDC_CONTENT_CONTEXT_AUTOFILL_FALLBACK_AUTOCOMPLETE_UNRECOGNIZED) \
+  E(kActionContentContextAutofillFallbackAddress, \
+    IDC_CONTENT_CONTEXT_AUTOFILL_FALLBACK_ADDRESS) \
+  E(kActionContentContextAutofillFallbackPayments, \
+    IDC_CONTENT_CONTEXT_AUTOFILL_FALLBACK_PAYMENTS) \
   /* Live Caption */ \
   E(kActionLiveCaption, IDC_LIVE_CAPTION) \
   /* Device API system tray icon */ \
@@ -554,6 +548,26 @@
 #define CHROME_GOOGLE_BRANDED_ACTION_IDS
 #endif // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
+// TODO(crbug.com/1491976): Adding temporarily to unblock the side panel team.
+// Should be reinserted into CHROME_COMMON_ACTION_IDS when general solution to
+// add action id mappings is implemented.
+#define SIDE_PANEL_ACTION_IDS \
+  /* Side Panel items */ \
+  E(kActionSidePanelShowAboutThisSite) \
+  E(kActionSidePanelShowAssistant) \
+  E(kActionSidePanelShowBookmarks, IDC_SHOW_BOOKMARK_SIDE_PANEL) \
+  E(kActionSidePanelShowCustomizeChrome) \
+  E(kActionSidePanelShowFeed) \
+  E(kActionSidePanelShowHistoryCluster) \
+  E(kActionSidePanelShowLens) \
+  E(kActionSidePanelShowPerformance) \
+  E(kActionSidePanelShowReadAnything) \
+  E(kActionSidePanelShowReadingList, IDC_READING_LIST_MENU_SHOW_UI) \
+  E(kActionSidePanelShowSearchCompanion, IDC_SHOW_SEARCH_COMPANION) \
+  E(kActionSidePanelShowShoppingInsights) \
+  E(kActionSidePanelShowSideSearch) \
+  E(kActionSidePanelShowUserNote) \
+
 #define CHROME_ACTION_IDS \
     CHROME_COMMON_ACTION_IDS \
     CHROME_PLATFORM_SPECIFIC_ACTION_IDS \
@@ -565,6 +579,7 @@ enum ChromeActionIds : actions::ActionId {
   kChromeActionsStart = actions::kActionsEnd,
 
   CHROME_ACTION_IDS
+  SIDE_PANEL_ACTION_IDS
 
   kChromeActionsEnd,
 };

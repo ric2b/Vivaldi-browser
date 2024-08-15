@@ -140,25 +140,43 @@ base::RepeatingClosure UpdateEngine::InvokeOperation(
     return base::DoNothing();
   }
 
-  // Calls out to get the corresponding CrxComponent data for the components.
-  const std::vector<absl::optional<CrxComponent>> crx_components =
-      std::move(crx_data_callback).Run(ids);
-  if (crx_components.size() < ids.size()) {
-    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE,
-        base::BindOnce(std::move(callback), Error::BAD_CRX_DATA_CALLBACK));
-    return base::DoNothing();
-  }
-
-  const auto update_context = base::MakeRefCounted<UpdateContext>(
-      config_, crx_cache_, is_foreground, is_install, ids,
-      crx_state_change_callback, notify_observers_callback_,
-      std::move(callback), metadata_.get(), is_update_check_only);
+  scoped_refptr<UpdateContext> update_context =
+      base::MakeRefCounted<UpdateContext>(
+          config_, crx_cache_, is_foreground, is_install, ids,
+          crx_state_change_callback, notify_observers_callback_,
+          std::move(callback), metadata_.get(), is_update_check_only);
   CHECK(!update_context->session_id.empty());
 
   const auto result = update_contexts_.insert(
       std::make_pair(update_context->session_id, update_context));
   CHECK(result.second);
+
+  // Calls out to get the corresponding CrxComponent data for the components.
+  std::move(crx_data_callback)
+      .Run(ids,
+           base::BindOnce(&UpdateEngine::StartOperation, this, update_context));
+  return is_update_check_only
+             ? base::DoNothing()
+             : base::BindRepeating(
+                   [](scoped_refptr<UpdateContext> context) {
+                     context->is_cancelled = true;
+                     for (const auto& entry : context->components) {
+                       entry.second->Cancel();
+                     }
+                   },
+                   update_context);
+}
+
+void UpdateEngine::StartOperation(
+    scoped_refptr<UpdateContext> update_context,
+    const std::vector<absl::optional<CrxComponent>>& crx_components) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (crx_components.size() != update_context->ids.size()) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(update_context->callback),
+                                  Error::BAD_CRX_DATA_CALLBACK));
+    return;
+  }
 
   for (size_t i = 0; i != update_context->ids.size(); ++i) {
     const auto& id = update_context->ids[i];
@@ -187,12 +205,6 @@ base::RepeatingClosure UpdateEngine::InvokeOperation(
                          ? &UpdateEngine::HandleComponent
                          : &UpdateEngine::DoUpdateCheck,
                      this, update_context));
-  return is_update_check_only ? base::DoNothing()
-                              : base::BindRepeating(
-                                    [](scoped_refptr<UpdateContext> context) {
-                                      context->is_cancelled = true;
-                                    },
-                                    update_context);
 }
 
 void UpdateEngine::DoUpdateCheck(scoped_refptr<UpdateContext> update_context) {
@@ -431,9 +443,12 @@ bool UpdateEngine::IsThrottled(bool is_foreground) const {
          now < throttle_updates_until;
 }
 
-void UpdateEngine::SendUninstallPing(const CrxComponent& crx_component,
-                                     int reason,
-                                     Callback callback) {
+void UpdateEngine::SendPing(const CrxComponent& crx_component,
+                            int event_type,
+                            int result_code,
+                            int error_code,
+                            int extra_code1,
+                            Callback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   const std::string& id = crx_component.app_id;
@@ -454,7 +469,8 @@ void UpdateEngine::SendUninstallPing(const CrxComponent& crx_component,
   CHECK_EQ(1u, update_context->components.count(id));
   const auto& component = update_context->components.at(id);
 
-  component->Uninstall(crx_component, reason);
+  component->PingOnly(crx_component, event_type, result_code, error_code,
+                      extra_code1);
 
   update_context->component_queue.push(id);
 

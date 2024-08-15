@@ -15,7 +15,7 @@
 #import "ios/chrome/browser/ui/history/history_table_view_controller.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_coordinator.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_coordinator_delegate.h"
-#import "ios/chrome/browser/url_loading/url_loading_params.h"
+#import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/panel/panel_constants.h"
@@ -31,12 +31,8 @@
 #import "ui/base/l10n/l10n_util.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
-
 using l10n_util::GetNSString;
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 /**
   PanelInteractionController
  */
@@ -276,12 +272,14 @@ enum class PresentedState {
     self.panelController = nil;
   }
   if (self.sidebarPanelController) {
-    [self.sidebarPanelController panelDismissed];
-    if (self.showSidePanel) {
-      [self.sidebarPanelController.view removeFromSuperview];
-      [self.sidebarPanelController removeFromParentViewController];
-      self.sidebarPanelController = nil;
-    }
+    [self.sidebarPanelController dismissViewControllerAnimated:YES completion:^{
+      [self.sidebarPanelController panelDismissed];
+      if (self.showSidePanel) {
+        [self.sidebarPanelController.view removeFromSuperview];
+        [self.sidebarPanelController removeFromParentViewController];
+        self.sidebarPanelController = nil;
+      }
+    }];
   }
 }
 

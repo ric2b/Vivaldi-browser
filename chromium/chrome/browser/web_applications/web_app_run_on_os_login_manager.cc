@@ -54,7 +54,7 @@ void WebAppRunOnOsLoginManager::Start() {
 void WebAppRunOnOsLoginManager::RunAppsOnOsLogin(AllAppsLock& lock) {
   std::vector<std::string> app_names;
 
-  for (const AppId& app_id : lock.registrar().GetAppIds()) {
+  for (const webapps::AppId& app_id : lock.registrar().GetAppIds()) {
     if (!IsRunOnOsLoginModeEnabledForAutostart(
             lock.registrar().GetAppRunOnOsLoginMode(app_id).value)) {
       continue;
@@ -75,22 +75,27 @@ void WebAppRunOnOsLoginManager::RunAppsOnOsLogin(AllAppsLock& lock) {
 
     std::string app_name = lock.registrar().GetAppShortName(app_id);
     app_names.push_back(std::move(app_name));
-    // Schedule launch here, show notification together below (async)
-    provider_->scheduler().LaunchAppWithCustomParams(std::move(params),
-                                                     base::DoNothing());
+
+    // Schedule launch here, show notification when the app window pops up.
+    provider_->scheduler().LaunchAppWithCustomParams(
+        std::move(params),
+        base::BindOnce(
+            [](base::WeakPtr<WebAppProvider> provider,
+               base::WeakPtr<Profile> profile,
+               std::vector<std::string> app_names,
+               base::WeakPtr<Browser> browser,
+               base::WeakPtr<content::WebContents> web_contents,
+               apps::LaunchContainer container) {
+              if (app_names.empty()) {
+                return;
+              }
+              provider->ui_manager().DisplayRunOnOsLoginNotification(
+                  app_names, std::move(profile));
+            },
+            provider_->AsWeakPtr(), profile_->GetWeakPtr(),
+            std::move(app_names)));
   }
 
-  if (app_names.empty()) {
-    return;
-  }
-
-  ShowAppLaunchedNotification(std::move(app_names));
-}
-
-void WebAppRunOnOsLoginManager::ShowAppLaunchedNotification(
-    const std::vector<std::string>& app_names) {
-  provider_->ui_manager().DisplayRunOnOsLoginNotification(
-      app_names, profile_->GetWeakPtr());
 }
 
 base::WeakPtr<WebAppRunOnOsLoginManager>

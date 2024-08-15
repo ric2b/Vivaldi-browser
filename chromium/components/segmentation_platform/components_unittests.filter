@@ -28,6 +28,7 @@ ModelExecutionSchedulerTest.*
 ModelExecutorTest.*
 ModelManagerTest.*
 ModelProviderFactoryImplTest.*
+MostVisitedTilesUserTest.*
 OptimizationGuideSegmentationModelProviderTest.*
 OptimizationTargetSegmentationDummyTest.*
 PasswordManagerUserModelTest.*
@@ -60,6 +61,7 @@ SignalDatabaseImplTest.*
 SignalFilterProcessorTest.*
 SignalKeyInternalTest.*
 SignalKeyTest.*
+SignalSampleViewTest.*
 SignalStorageConfigTest.*
 SqlFeatureProcessorTest.*
 StatsTest.*
@@ -76,5 +78,6 @@ UkmDatabaseBackendTest.*
 UkmMetricsTableTest.*
 UkmObserverTest.*
 UkmUrlTableTest.*
+UmaFeatureProcessorTest.*
 UrlSignalHandlerTest.*
 UserActionSignalHandlerTest.*

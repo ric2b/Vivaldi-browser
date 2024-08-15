@@ -12,17 +12,18 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.base.Log;
 import org.chromium.components.browser_ui.accessibility.AccessibilitySettingsDelegate.BooleanPreferenceDelegate;
 import org.chromium.components.browser_ui.accessibility.FontSizePrefs.FontSizePrefsObserver;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.CustomDividerFragment;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
-import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.ContentFeatureList;
 import org.chromium.content_public.browser.ContentFeatureMap;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
  * Fragment to keep track of all the accessibility related preferences.
@@ -35,6 +36,9 @@ public class AccessibilitySettings extends PreferenceFragmentCompat
     public static final String PREF_FORCE_ENABLE_ZOOM = "force_enable_zoom";
     public static final String PREF_READER_FOR_ACCESSIBILITY = "reader_for_accessibility";
     public static final String PREF_CAPTIONS = "captions";
+    public static final String PREF_ZOOM_INFO = "zoom_info";
+    public static final String RESET_UI_SCALE = "reset_ui_scale";
+    public static final String RESET_ZOOM = "reset_zoom";
 
     private TextScalePreference mTextScalePref;
     private PageZoomPreference mPageZoomDefaultZoomPref;
@@ -87,21 +91,17 @@ public class AccessibilitySettings extends PreferenceFragmentCompat
 
         if (mDelegate.showPageZoomSettingsUI()) {
             mTextScalePref.setVisible(false);
-            // Set the initial values for page zoom and text contrast.
-            // TODO(crbug.com/1459631): Edit this initial value when we propagate text contrast
-            // changes to the backend.
+            // Set the initial values for the page zoom settings, and set change listeners.
             mPageZoomDefaultZoomPref.setInitialValue(PageZoomUtils.getDefaultZoomAsSeekBarValue(
                     mDelegate.getBrowserContextHandle()));
-            mPageZoomDefaultZoomPref.setmBrowserContextHandle(mDelegate.getBrowserContextHandle());
-            if (ContentFeatureMap.isEnabled(ContentFeatureList.SMART_ZOOM)) {
-                mPageZoomDefaultZoomPref.setInitialTextSizeContrastValue(
-                        PageZoomUtils.TEXT_SIZE_CONTRAST_MAX_LEVEL
-                        - UserPrefs.get(mDelegate.getBrowserContextHandle())
-                                  .getInteger("settings.a11y.text_size_contrast_factor"));
-            }
             mPageZoomDefaultZoomPref.setOnPreferenceChangeListener(this);
             mPageZoomAlwaysShowPref.setChecked(PageZoomUtils.shouldShowZoomMenuItem());
             mPageZoomAlwaysShowPref.setOnPreferenceChangeListener(this);
+            // When Smart Zoom feature is enabled, set the required delegate.
+            if (ContentFeatureMap.isEnabled(ContentFeatureList.SMART_ZOOM)) {
+                mPageZoomDefaultZoomPref.setTextSizeContrastDelegate(
+                        mDelegate.getTextSizeContrastAccessibilityDelegate());
+            }
         } else {
             mPageZoomDefaultZoomPref.setVisible(false);
             mPageZoomAlwaysShowPref.setVisible(false);
@@ -140,6 +140,39 @@ public class AccessibilitySettings extends PreferenceFragmentCompat
             return true;
         });
         } // Vivaldi
+        // Vivaldi: Resets the UI scale within Accessibility settings
+        Preference resetUiScale = findPreference(RESET_UI_SCALE);
+        resetUiScale.setOnPreferenceClickListener(preference -> {
+
+            int ui_dpi = VivaldiPreferences.getSharedPreferencesManager().readInt(
+                    VivaldiPreferences.UI_SCALE_DEFAULT_VALUE, 440);
+            VivaldiPreferences.getSharedPreferencesManager().writeInt(
+                    VivaldiPreferences.UI_SCALE_VALUE, ui_dpi);
+            return true;
+        }); // Vivaldi
+
+        // Vivaldi: Resets the Zoom within Accessibility settings
+        Preference resetZoom = findPreference(RESET_ZOOM);
+        resetZoom.setOnPreferenceClickListener(preference -> {
+            mPageZoomLatestDefaultZoomPrefValue =
+                    PageZoomUtils.PAGE_ZOOM_DEFAULT_SEEK_VALUE;
+            Log.i("ResetZoom", "Get default zoom value: "+mPageZoomDefaultZoomPref);
+            PageZoomUtils.setDefaultZoomBySeekBarValue(
+                    mDelegate.getBrowserContextHandle(), (int) mPageZoomLatestDefaultZoomPrefValue);
+            mPageZoomDefaultZoomPref.setZoomValueForTesting((int) mPageZoomLatestDefaultZoomPrefValue);
+            return true;
+        });
+
+        Preference zoomInfo = findPreference(PREF_ZOOM_INFO);
+        if (ContentFeatureMap.isEnabled(ContentFeatureList.SMART_ZOOM)) {
+            zoomInfo.setVisible(true);
+            zoomInfo.setOnPreferenceClickListener(preference -> {
+                mDelegate.launchSiteSettingsZoomActivity(getContext());
+                return true;
+            });
+        } else {
+            zoomInfo.setVisible(false);
+        }
 
         mDelegate.addExtraPreferences(this);
     }

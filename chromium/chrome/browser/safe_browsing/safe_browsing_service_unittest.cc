@@ -253,16 +253,6 @@ TEST_F(
       /*show_download_in_folder=*/true));
 }
 
-TEST_F(SafeBrowsingServiceTest, SendPhishyInteractionsReport_Disabled) {
-  SetExtendedReportingPrefForTests(profile_->GetPrefs(), true);
-  GURL test_url("http://phishing.com");
-  GURL test_page_url("http://page_url.com");
-  PhishySiteInteractionMap test_map = PhishySiteInteractionMap();
-
-  EXPECT_FALSE(sb_service_->SendPhishyInteractionsReport(
-      profile(), test_url, test_page_url, test_map));
-}
-
 class SafeBrowsingServiceTestWithCsbrrNewTriggerDisabled
     : public SafeBrowsingServiceTest {
  public:
@@ -317,25 +307,28 @@ class SafeBrowsingServiceTestWithAntiPhishingTelemetryEnabled
       new_map.insert_or_assign(
           ClientSafeBrowsingReportRequest::PhishySiteInteraction::
               PHISHY_CLICK_EVENT,
-          PhishyPageInteractionDetails(expected_click_occurrences,
-                                       base::Time::Now().ToJavaTime(),
-                                       base::Time::Now().ToJavaTime()));
+          PhishyPageInteractionDetails(
+              expected_click_occurrences,
+              base::Time::Now().InMillisecondsSinceUnixEpoch(),
+              base::Time::Now().InMillisecondsSinceUnixEpoch()));
     }
     if (expected_key_occurrences > 0) {
       new_map.insert_or_assign(
           ClientSafeBrowsingReportRequest::PhishySiteInteraction::
               PHISHY_KEY_EVENT,
-          PhishyPageInteractionDetails(expected_key_occurrences,
-                                       base::Time::Now().ToJavaTime(),
-                                       base::Time::Now().ToJavaTime()));
+          PhishyPageInteractionDetails(
+              expected_key_occurrences,
+              base::Time::Now().InMillisecondsSinceUnixEpoch(),
+              base::Time::Now().InMillisecondsSinceUnixEpoch()));
     }
     if (expected_paste_occurrences > 0) {
       new_map.insert_or_assign(
           ClientSafeBrowsingReportRequest::PhishySiteInteraction::
               PHISHY_PASTE_EVENT,
-          PhishyPageInteractionDetails(expected_paste_occurrences,
-                                       base::Time::Now().ToJavaTime(),
-                                       base::Time::Now().ToJavaTime()));
+          PhishyPageInteractionDetails(
+              expected_paste_occurrences,
+              base::Time::Now().InMillisecondsSinceUnixEpoch(),
+              base::Time::Now().InMillisecondsSinceUnixEpoch()));
     }
     return new_map;
   }

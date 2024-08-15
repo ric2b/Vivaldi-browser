@@ -16,6 +16,7 @@
 #include "components/page_info/page_info_ui.h"
 #include "device/vr/buildflags/buildflags.h"
 #include "ui/base/interaction/element_identifier.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/view.h"
 
 namespace views {
@@ -42,6 +43,7 @@ class PageInfoMainView : public views::View,
                          public PermissionToggleRowViewObserver,
                          public ChosenObjectViewObserver {
  public:
+  METADATA_HEADER(PageInfoMainView);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kCookieButtonElementId);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kMainLayoutElementId);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kPermissionsElementId);
@@ -49,6 +51,7 @@ class PageInfoMainView : public views::View,
   // updating the layout.
   class ContainerView : public views::View {
    public:
+    METADATA_HEADER(ContainerView);
     ContainerView();
 
     // Notifies that preferred size changed and updates the layout.
@@ -68,6 +71,7 @@ class PageInfoMainView : public views::View,
   void SetIdentityInfo(const IdentityInfo& identity_info) override;
   void SetPageFeatureInfo(const PageFeatureInfo& info) override;
   void SetAdPersonalizationInfo(const AdPersonalizationInfo& info) override;
+  void SetCookieInfo(const CookiesNewInfo& cookie_info) override;
 
   gfx::Size CalculatePreferredSize() const override;
   void ChildPreferredSizeChanged(views::View* child) override;
@@ -90,10 +94,6 @@ class PageInfoMainView : public views::View,
  private:
   friend class PageInfoBubbleViewDialogBrowserTest;
   friend class test::PageInfoBubbleViewTestApi;
-
-  // Ensures the cookie information UI is present, with placeholder information
-  // if necessary.
-  void EnsureCookieInfo();
 
   // Creates a view with vertical box layout that will used a container for
   // other views.

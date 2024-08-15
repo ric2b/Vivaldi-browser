@@ -71,7 +71,7 @@ class EventDatabase {
   "uid, event_type_id, task, complete, trash, trash_time, sequence, ical, " \
   "rrule, organizer, timezone, priority, status, percentage_complete, "     \
   "categories, component_class, attachment, completed, sync_pending, "      \
-  "delete_pending "
+  "delete_pending, end_recurring "
 
 }  // namespace calendar
 

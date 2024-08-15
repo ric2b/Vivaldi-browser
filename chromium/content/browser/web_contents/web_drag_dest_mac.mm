@@ -7,6 +7,7 @@
 #include <AppKit/AppKit.h>
 #import <Carbon/Carbon.h>
 
+#include "base/containers/span.h"
 #include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/sys_string_conversions.h"
@@ -15,6 +16,7 @@
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/browser/web_contents/web_contents_view_drag_security_info.h"
 #include "content/common/web_contents_ns_view_bridge.mojom.h"
 #include "content/public/browser/child_process_host.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -30,7 +32,6 @@
 #include "ui/gfx/geometry/point.h"
 
 #include "app/vivaldi_apptools.h"
-#include "url/gurl.h"
 
 using blink::DragOperationsMask;
 using content::DropData;
@@ -88,11 +89,6 @@ int GetModifierFlags() {
   return modifier_state;
 }
 
-content::GlobalRoutingID GetRenderViewHostID(content::RenderViewHost* rvh) {
-  return content::GlobalRoutingID(rvh->GetProcess()->GetID(),
-                                  rvh->GetRoutingID());
-}
-
 void DropCompletionCallback(WebDragDest* drag_dest,
                             const content::DropContext context,
                             absl::optional<content::DropData> drop_data) {
@@ -112,10 +108,6 @@ void DropCompletionCallback(WebDragDest* drag_dest,
   // Delegate; weak.
   raw_ptr<content::WebDragDestDelegate, DanglingUntriaged> _delegate;
 
-  // Updated asynchronously during a drag to tell us whether or not we should
-  // allow the drop.
-  NSDragOperation _currentOperation;
-
   // Tracks the current RenderWidgetHost we're dragging over.
   base::WeakPtr<content::RenderWidgetHostImpl> _currentRWHForDrag;
 
@@ -123,14 +115,8 @@ void DropCompletionCallback(WebDragDest* drag_dest,
   // during a drag, we need to re-send the DragEnter message.
   RenderViewHostIdentifier _currentRVH;
 
-  // Tracks the IDs of the source RenderProcessHost and RenderViewHost from
-  // which the current drag originated. These are set in
-  // -setDragStartTrackersForProcess:, and are used to ensure that drag events
-  // do not fire over a cross-site frame (with respect to the source frame) in
-  // the same page (see crbug.com/666858). See
-  // WebContentsViewAura::drag_start_process_id_ for additional information.
-  int _dragStartProcessID;
-  content::GlobalRoutingID _dragStartViewID;
+  // Holds the security info for the current drag.
+  content::WebContentsViewDragSecurityInfo _dragSecurityInfo;
 
   // The unfiltered data for the current drag, or nullptr if none is in
   // progress.
@@ -150,9 +136,6 @@ void DropCompletionCallback(WebDragDest* drag_dest,
   if ((self = [super init])) {
     _webContents = contents;
     _canceled = false;
-    _dragStartProcessID = content::ChildProcessHost::kInvalidUniqueID;
-    _dragStartViewID = content::GlobalRoutingID(
-        content::ChildProcessHost::kInvalidUniqueID, MSG_ROUTING_NONE);
   }
   return self;
 }
@@ -167,8 +150,16 @@ void DropCompletionCallback(WebDragDest* drag_dest,
 
 // Call to set whether or not we should allow the drop. Takes effect the
 // next time |-draggingUpdated:| is called.
-- (void)setCurrentOperation:(NSDragOperation)operation {
-  _currentOperation = operation;
+- (void)setCurrentOperation:(ui::mojom::DragOperation)operation
+     documentIsHandlingDrag:(bool)documentIsHandlingDrag {
+  if (_dropDataUnfiltered) {
+    _dropDataUnfiltered->operation = operation;
+    _dropDataUnfiltered->document_is_handling_drag = documentIsHandlingDrag;
+  }
+  if (_dropDataFiltered) {
+    _dropDataFiltered->operation = operation;
+    _dropDataFiltered->document_is_handling_drag = documentIsHandlingDrag;
+  }
 }
 
 // Given a point in window coordinates and a view in that window, return a
@@ -220,8 +211,9 @@ void DropCompletionCallback(WebDragDest* drag_dest,
   content::RenderWidgetHostImpl* targetRWH =
       [self GetRenderWidgetHostAtPoint:info->location_in_view
                          transformedPt:&transformedPt];
-  if (![self isValidDragTarget:targetRWH])
+  if (!_dragSecurityInfo.IsValidDragTarget(targetRWH)) {
     return NSDragOperationNone;
+  }
 
   // Filter |dropDataUnfiltered_| by currentRWHForDrag_ to populate
   // |dropDataFiltered_|.
@@ -256,8 +248,9 @@ void DropCompletionCallback(WebDragDest* drag_dest,
 
   // We won't know the true operation (whether the drag is allowed) until we
   // hear back from the renderer. For now, be optimistic:
-  _currentOperation = NSDragOperationCopy;
-  return _currentOperation;
+  _dropDataUnfiltered->operation = ui::mojom::DragOperation::kCopy;
+  _dropDataUnfiltered->document_is_handling_drag = true;
+  return static_cast<NSDragOperation>(_dropDataUnfiltered->operation);
 }
 
 - (void)draggingExited {
@@ -303,8 +296,9 @@ void DropCompletionCallback(WebDragDest* drag_dest,
       [self GetRenderWidgetHostAtPoint:info->location_in_view
                          transformedPt:&transformedPt];
 
-  if (![self isValidDragTarget:targetRWH])
+  if (!_dragSecurityInfo.IsValidDragTarget(targetRWH)) {
     return NSDragOperationNone;
+  }
 
   // TODO(paulmeyer): The dragging delegates may now by invoked multiple times
   // per drag, even without the drag ever leaving the window.
@@ -339,7 +333,7 @@ void DropCompletionCallback(WebDragDest* drag_dest,
   if (_delegate)
     _delegate->OnDragOver();
 
-  return _currentOperation;
+  return static_cast<NSDragOperation>(_dropDataUnfiltered->operation);
 }
 
 - (BOOL)performDragOperation:(const DraggingInfo*)info
@@ -353,8 +347,9 @@ void DropCompletionCallback(WebDragDest* drag_dest,
       [self GetRenderWidgetHostAtPoint:info->location_in_view
                          transformedPt:&transformedPt];
 
-  if (![self isValidDragTarget:targetRWH])
+  if (!_dragSecurityInfo.IsValidDragTarget(targetRWH)) {
     return NO;
+  }
 
   if (targetRWH != _currentRWHForDrag.get()) {
     if (_currentRWHForDrag)
@@ -374,7 +369,7 @@ void DropCompletionCallback(WebDragDest* drag_dest,
                                  /*target_rwh=*/targetRWH->GetWeakPtr());
     // Use a separate variable since `context` is about to move.
     content::DropData drop_data = context.drop_data;
-    webContentsViewDelegate->OnPerformDrop(
+    webContentsViewDelegate->OnPerformingDrop(
         std::move(drop_data),
         base::BindOnce(&DropCompletionCallback, self, std::move(context)));
   } else {
@@ -421,28 +416,22 @@ void DropCompletionCallback(WebDragDest* drag_dest,
       transformedPt);
 }
 
-- (void)setDragStartTrackersForProcess:(int)processID {
-  _dragStartProcessID = processID;
-  _dragStartViewID = GetRenderViewHostID(_webContents->GetRenderViewHost());
+- (void)initiateDragWithRenderWidgetHost:(content::RenderWidgetHostImpl*)rwhi
+                                dropData:(const content::DropData&)dropData {
+  _dragSecurityInfo.OnDragInitiated(rwhi, dropData);
 }
 
-- (void)resetDragStartTrackers {
-  _dragStartProcessID = content::ChildProcessHost::kInvalidUniqueID;
-  _dragStartViewID = content::GlobalRoutingID(
-      content::ChildProcessHost::kInvalidUniqueID, MSG_ROUTING_NONE);
+- (void)endDrag {
+  _dragSecurityInfo.OnDragEnded();
 }
 
-- (bool)isValidDragTarget:(content::RenderWidgetHostImpl*)targetRWH {
-  if (vivaldi::IsVivaldiRunning()) {
-    // NOTE: In Vivaldi we allow dragging between guests and our app-window.
-    GURL url = _webContents->GetURL();
-    if (vivaldi::IsVivaldiApp(url.host())) {
-      return true;
-    }
-  }
-  return targetRWH->GetProcess()->GetID() == _dragStartProcessID ||
-         GetRenderViewHostID(_webContents->GetRenderViewHost()) !=
-             _dragStartViewID;
+- (content::WebContentsViewDragSecurityInfo)dragSecurityInfo {
+  return _dragSecurityInfo;
+}
+
+- (void)setDragSecurityInfo:
+    (content::WebContentsViewDragSecurityInfo)dragSecurityInfo {
+  _dragSecurityInfo = dragSecurityInfo;
 }
 
 @end
@@ -497,8 +486,13 @@ DropData PopulateDropDataFromPasteboard(NSPasteboard* pboard) {
   // Get custom MIME data.
   if ([types containsObject:ui::kUTTypeChromiumWebCustomData]) {
     NSData* customData = [pboard dataForType:ui::kUTTypeChromiumWebCustomData];
-    ui::ReadCustomDataIntoMap(customData.bytes, customData.length,
-                              &drop_data.custom_data);
+    if (absl::optional<std::unordered_map<std::u16string, std::u16string>>
+            maybe_custom_data = ui::ReadCustomDataIntoMap(
+                base::span(reinterpret_cast<const uint8_t*>([customData bytes]),
+                           [customData length]));
+        maybe_custom_data) {
+      drop_data.custom_data = std::move(*maybe_custom_data);
+    }
   }
 
   return drop_data;

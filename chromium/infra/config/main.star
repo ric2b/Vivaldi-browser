@@ -11,7 +11,7 @@ load("//lib/chrome_settings.star", "chrome_settings")
 load("//project.star", "settings")
 
 lucicfg.check_version(
-    min = "1.39.14",
+    min = "1.40.0",
     message = "Update depot_tools",
 )
 
@@ -23,13 +23,16 @@ lucicfg.config(
     config_dir = "generated",
     tracked_files = [
         "builders/*/*/*",
+        "builders/gn_args_locations.json",
         "cq-builders.md",
         "cq-usage/default.cfg",
         "cq-usage/full.cfg",
+        "cq-usage/mega_cq_bots.txt",
         "health-specs/health-specs.json",
         "luci/commit-queue.cfg",
         "luci/cr-buildbucket.cfg",
         "luci/luci-analysis.cfg",
+        "luci/luci-bisection.cfg",
         "luci/luci-logdog.cfg",
         "luci/luci-milo.cfg",
         "luci/luci-notify.cfg",
@@ -65,6 +68,12 @@ lucicfg.emit(
 lucicfg.emit(
     dest = "luci/luci-analysis.cfg",
     data = io.read_file("luci-analysis.cfg"),
+)
+
+# Just copy LUCI Bisection config to generated outputs.
+lucicfg.emit(
+    dest = "luci/luci-bisection.cfg",
+    data = io.read_file("luci-bisection.cfg"),
 )
 
 luci.project(
@@ -237,6 +246,10 @@ luci.builder.defaults.test_presentation.set(resultdb.test_presentation(grouping_
 exec("//swarming.star")
 
 exec("//recipes.star")
+exec("//gn_args/gn_args.star")
+exec("//targets/basic_suites.star")
+exec("//targets/compound_suites.star")
+exec("//targets/matrix_compound_suites.star")
 exec("//targets/mixins.star")
 exec("//targets/targets.star")
 exec("//targets/variants.star")
@@ -245,7 +258,6 @@ exec("//notifiers.star")
 
 exec("//subprojects/chromium/subproject.star")
 exec("//subprojects/chrome/subproject.star")
-exec("//subprojects/crossbench/subproject.star")
 exec("//subprojects/infra.star")
 branches.exec("//subprojects/codesearch/subproject.star")
 branches.exec("//subprojects/findit/subproject.star")

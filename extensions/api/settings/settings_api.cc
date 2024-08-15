@@ -30,8 +30,6 @@
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/schema/settings.h"
-#include "prefs/vivaldi_browser_prefs.h"
-#include "prefs/vivaldi_pref_names.h"
 
 namespace extensions {
 

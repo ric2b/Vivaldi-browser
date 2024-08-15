@@ -62,11 +62,6 @@ using vivaldi::kVivaldiReservedApiError;
 namespace extensions {
 
 namespace {
-
-// Give Chromium little pause to write bookmark file before checking for unused
-// data urls to minimize disk IO spikes.
-constexpr base::TimeDelta kDataUrlGCSTrashDelay = base::Milliseconds(100);
-
 // Generates a default path (including a default filename) that will be
 // used for pre-populating the "Export Bookmarks" file chooser dialog box.
 base::FilePath GetDefaultFilepathForBookmarkExport() {
@@ -174,15 +169,9 @@ BookmarksPrivateEmptyTrashFunction::RunOnReady() {
   BookmarkModel* model = GetBookmarkModel();
   const BookmarkNode* trash_node = model->trash_node();
   if (trash_node) {
-    bool removed = false;
     while (!trash_node->children().empty()) {
       const BookmarkNode* remove_node = trash_node->children()[0].get();
       model->Remove(remove_node, {});
-      removed = true;
-    }
-    if (removed) {
-      VivaldiImageStore::ScheduleRemovalOfUnusedUrlData(browser_context(),
-                                                        kDataUrlGCSTrashDelay);
     }
     success = true;
   }

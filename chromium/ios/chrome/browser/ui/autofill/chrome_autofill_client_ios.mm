@@ -17,7 +17,6 @@
 #import "base/strings/utf_string_conversions.h"
 #import "components/autofill/core/browser/autofill_save_update_address_profile_delegate_ios.h"
 #import "components/autofill/core/browser/form_data_importer.h"
-#import "components/autofill/core/browser/form_structure.h"
 #import "components/autofill/core/browser/logging/log_manager.h"
 #import "components/autofill/core/browser/payments/autofill_credit_card_filling_infobar_delegate_mobile.h"
 #import "components/autofill/core/browser/payments/autofill_save_card_delegate.h"
@@ -30,12 +29,12 @@
 #import "components/autofill/core/browser/ui/popup_item_ids.h"
 #import "components/autofill/core/common/autofill_features.h"
 #import "components/autofill/core/common/autofill_prefs.h"
-#import "components/autofill/ios/browser/autofill_driver_ios.h"
 #import "components/autofill/ios/browser/autofill_util.h"
 #import "components/infobars/core/infobar.h"
 #import "components/infobars/core/infobar_manager.h"
 #import "components/keyed_service/core/service_access_type.h"
 #import "components/password_manager/core/common/password_manager_pref_names.h"
+#import "components/plus_addresses/plus_address_service.h"
 #import "components/security_state/ios/security_state_utils.h"
 #import "components/sync/service/sync_service.h"
 #import "components/translate/core/browser/translate_manager.h"
@@ -47,19 +46,22 @@
 #import "ios/chrome/browser/autofill/bottom_sheet/autofill_bottom_sheet_tab_helper.h"
 #import "ios/chrome/browser/autofill/personal_data_manager_factory.h"
 #import "ios/chrome/browser/autofill/strike_database_factory.h"
+#import "ios/chrome/browser/device_reauth/ios_device_authenticator.h"
+#import "ios/chrome/browser/device_reauth/ios_device_authenticator_factory.h"
 #import "ios/chrome/browser/infobars/infobar_ios.h"
 #import "ios/chrome/browser/infobars/infobar_utils.h"
-#import "ios/chrome/browser/passwords/password_tab_helper.h"
+#import "ios/chrome/browser/passwords/model/password_tab_helper.h"
+#import "ios/chrome/browser/plus_addresses/model/plus_address_service_factory.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
-#import "ios/chrome/browser/sync/sync_service_factory.h"
-#import "ios/chrome/browser/translate/chrome_ios_translate_client.h"
+#import "ios/chrome/browser/sync/model/sync_service_factory.h"
+#import "ios/chrome/browser/translate/model/chrome_ios_translate_client.h"
 #import "ios/chrome/browser/ui/autofill/card_expiration_date_fix_flow_view_bridge.h"
 #import "ios/chrome/browser/ui/autofill/card_name_fix_flow_view_bridge.h"
 #import "ios/chrome/browser/ui/autofill/create_card_unmask_prompt_view_bridge.h"
-#import "ios/chrome/browser/webdata_services/web_data_service_factory.h"
+#import "ios/chrome/browser/webdata_services/model/web_data_service_factory.h"
 #import "ios/chrome/common/channel_info.h"
 #import "ios/public/provider/chrome/browser/risk_data/risk_data_api.h"
 #import "ios/web/public/web_state.h"
@@ -356,10 +358,10 @@ void ChromeAutofillClientIOS::ConfirmSaveAddressProfile(
     SaveAddressProfilePromptOptions options,
     AddressProfileSavePromptCallback callback) {
   // TODO(crbug.com/1167062): Respect SaveAddressProfilePromptOptions.
-  for (size_t i = 0; i < infobar_manager_->infobar_count(); ++i) {
+  for (auto* infobar : infobar_manager_->infobars()) {
     AutofillSaveUpdateAddressProfileDelegateIOS* existing_delegate =
         AutofillSaveUpdateAddressProfileDelegateIOS::FromInfobarDelegate(
-            infobar_manager_->infobar_at(i)->delegate());
+            infobar->delegate());
 
     if (existing_delegate) {
       if (existing_delegate->is_infobar_visible()) {
@@ -377,7 +379,7 @@ void ChromeAutofillClientIOS::ConfirmSaveAddressProfile(
         // saved data is shown to user. In both the cases, the original prompt
         // is replaced by the new one provided that the modal view of the
         // original infobar is not visible to the user.
-        infobar_manager_->RemoveInfoBar(infobar_manager_->infobar_at(i));
+        infobar_manager_->RemoveInfoBar(infobar);
         break;
       }
     }
@@ -394,11 +396,14 @@ void ChromeAutofillClientIOS::ConfirmSaveAddressProfile(
 }
 
 void ChromeAutofillClientIOS::ShowEditAddressProfileDialog(
-    const AutofillProfile& profile) {
+    const AutofillProfile& profile,
+    AddressProfileSavePromptCallback on_user_decision_callback) {
   NOTREACHED_NORETURN();
 }
 
-void ChromeAutofillClientIOS::ShowDeleteAddressProfileDialog() {
+void ChromeAutofillClientIOS::ShowDeleteAddressProfileDialog(
+    const AutofillProfile& profile,
+    AddressProfileDeleteDialogCallback delete_dialog_callback) {
   NOTREACHED_NORETURN();
 }
 
@@ -431,9 +436,26 @@ void ChromeAutofillClientIOS::ShowAutofillPopup(
   [bridge_ showAutofillPopup:open_args.suggestions popupDelegate:delegate];
 }
 
+plus_addresses::PlusAddressService*
+ChromeAutofillClientIOS::GetPlusAddressService() {
+  return PlusAddressServiceFactory::GetForBrowserState(browser_state_);
+}
+
+void ChromeAutofillClientIOS::OfferPlusAddressCreation(
+    const url::Origin& main_frame_origin,
+    plus_addresses::PlusAddressCallback callback) {
+  plus_addresses::PlusAddressService* service = GetPlusAddressService();
+  // This code path should have set up the service. If not, something is badly
+  // wrong, so bail out.
+  CHECK(service);
+  // TODO(crbug.com/1467623): Run UI orchestration here rather than filling
+  // directly in response to the eventual service call. This will eventually
+  // trigger a bottom sheet.
+  service->OfferPlusAddressCreation(main_frame_origin, std::move(callback));
+}
+
 void ChromeAutofillClientIOS::UpdateAutofillPopupDataListValues(
-    const std::vector<std::u16string>& values,
-    const std::vector<std::u16string>& labels) {
+    base::span<const autofill::SelectOption> datalist) {
   // No op. ios/web_view does not support display datalist.
 }
 
@@ -472,13 +494,8 @@ bool ChromeAutofillClientIOS::IsPasswordManagerEnabled() {
       password_manager::prefs::kCredentialsEnableService);
 }
 
-void ChromeAutofillClientIOS::PropagateAutofillPredictionsDeprecated(
-    AutofillDriver* driver,
-    const std::vector<FormStructure*>& forms) {
-}
-
 void ChromeAutofillClientIOS::DidFillOrPreviewForm(
-    mojom::AutofillActionPersistence action_persistence,
+    mojom::ActionPersistence action_persistence,
     AutofillTriggerSource trigger_source,
     bool is_refill) {}
 
@@ -510,6 +527,15 @@ LogManager* ChromeAutofillClientIOS::GetLogManager() const {
 
 bool ChromeAutofillClientIOS::IsLastQueriedField(FieldGlobalId field_id) {
   return [bridge_ isLastQueriedField:field_id];
+}
+
+std::unique_ptr<device_reauth::DeviceAuthenticator>
+ChromeAutofillClientIOS::GetDeviceAuthenticator() {
+  device_reauth::DeviceAuthParams params(
+      base::Seconds(60), device_reauth::DeviceAuthSource::kAutofill);
+  id<ReauthenticationProtocol> reauthModule =
+      [[ReauthenticationModule alloc] init];
+  return CreateIOSDeviceAuthenticator(reauthModule, browser_state_, params);
 }
 
 void ChromeAutofillClientIOS::LoadRiskData(

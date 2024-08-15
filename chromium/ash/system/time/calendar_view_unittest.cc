@@ -39,7 +39,6 @@
 #include "base/time/time.h"
 #include "base/time/time_override.h"
 #include "chromeos/ash/components/settings/scoped_timezone_settings.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "google_apis/common/api_error_codes.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/layer.h"
@@ -1454,8 +1453,8 @@ class CalendarViewAnimationTest : public AshTestBase {
     event_generator->ClickLeftButton();
   }
 
-  base::Time GetSelectedDate() {
-    return calendar_view_->calendar_view_controller()->selected_date_.value();
+  absl::optional<base::Time> GetSelectedDate() {
+    return calendar_view_->calendar_view_controller()->selected_date_;
   }
 
   void CloseEventList() { calendar_view_->CloseEventList(); }
@@ -1518,8 +1517,15 @@ class CalendarViewAnimationTest : public AshTestBase {
   views::ScrollView* scroll_view() { return calendar_view_->scroll_view_; }
   views::View* event_list_view() { return calendar_view_->event_list_view_; }
   CalendarModel* calendar_model() { return calendar_model_; }
+  views::View* calendar_sliding_surface_view() {
+    return calendar_view_->calendar_sliding_surface_;
+  }
   calendar_test_utils::CalendarClientTestImpl* calendar_client() {
     return calendar_client_.get();
+  }
+
+  bool should_months_animate() {
+    return calendar_view_->should_months_animate_;
   }
 
   std::map<base::Time, CalendarModel::FetchingStatus> on_screen_month() {
@@ -1866,44 +1872,97 @@ TEST_F(CalendarViewAnimationTest, NotScrollableWhenAnimating) {
   EXPECT_EQ(u"2021", header_year()->GetText());
 }
 
-//  Disabled due to excessive flakiness. http://crbug.com/1337168
-TEST_F(CalendarViewAnimationTest, DISABLED_ResetToTodayWithAnimation) {
+TEST_F(CalendarViewAnimationTest, ResetToTodayWithAnimation) {
   ui::ScopedAnimationDurationScaleMode test_duration_mode(
-      ui::ScopedAnimationDurationScaleMode::NORMAL_DURATION);
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
 
   // Create calendar view and wait for the animation to finish.
   CreateCalendarView();
-  task_environment()->FastForwardBy(
-      calendar_test_utils::kAnimationSettleDownDuration);
+  ui::LayerAnimationStoppedWaiter animation_waiter;
+  animation_waiter.Wait(header()->layer());
 
   // Expect header visible before starting ResetToToday animation.
   EXPECT_EQ(1.0f, header()->layer()->opacity());
 
-  // Expect header visible after resetting to today.
   ResetToTodayWithAnimation();
-  task_environment()->FastForwardBy(
-      calendar_test_utils::kAnimationSettleDownDuration);
+  // The header starts to animate.
+  EXPECT_TRUE(header()->layer()->GetAnimator()->is_animating());
+
+  // The header's opacity should be between 0~1 after the first animator
+  // finished and in the middle of the second animation.
+  animation_waiter.Wait(header()->layer());
+  EXPECT_TRUE(header()->layer()->GetAnimator()->is_animating());
+  EXPECT_GT(1.0f, header()->layer()->opacity());
+
+  // The header's opacity should be 1 after the second animator finished.
+  animation_waiter.Wait(header()->layer());
+  EXPECT_FALSE(header()->layer()->GetAnimator()->is_animating());
   EXPECT_EQ(1.0f, header()->layer()->opacity());
 
   // Open event list by selecting the next month's first cell.
   const auto* date_cell = GetDateCell(/*month=*/next_month(), /*day=*/u"1");
   ClickDateCell(date_cell);
-  task_environment()->FastForwardBy(
-      calendar_test_utils::kAnimationSettleDownDuration);
 
-  // Expect today's date in `selected_date_` after resetting to today.
-  ResetToTodayWithAnimation();
+  // Event list view starts to animate.
+  EXPECT_TRUE(
+      calendar_sliding_surface_view()->layer()->GetAnimator()->is_animating());
+  animation_waiter.Wait(current_label()->layer());
+  animation_waiter.Wait(calendar_sliding_surface_view()->layer());
+
+  // Event list view just finished animating.
+  EXPECT_FALSE(
+      calendar_sliding_surface_view()->layer()->GetAnimator()->is_animating());
+  EXPECT_FALSE(should_months_animate());
+  // The cool-down time for enabling animation. Otherwise the next reset to
+  // today animation will not be enabled.
   task_environment()->FastForwardBy(
       calendar_test_utils::kAnimationSettleDownDuration);
+  EXPECT_TRUE(should_months_animate());
+  EXPECT_TRUE(event_list_view());
+  EXPECT_EQ(1.0f, event_list_view()->layer()->opacity());
+
+  ResetToTodayWithAnimation();
+  // The header starts to animate.
+  EXPECT_TRUE(header()->layer()->GetAnimator()->is_animating());
+
+  // The header's opacity should be between 0~1 after the first animator
+  // finished and in the middle of the second animation.
+  animation_waiter.Wait(header()->layer());
+  EXPECT_TRUE(header()->layer()->GetAnimator()->is_animating());
+  EXPECT_GT(1.0f, header()->layer()->opacity());
+
+  // The header's opacity should be 1 after the second animator finished.
+  animation_waiter.Wait(header()->layer());
+  EXPECT_FALSE(header()->layer()->GetAnimator()->is_animating());
   EXPECT_EQ(1.0f, header()->layer()->opacity());
+  // Expect today's date in `selected_date_` after resetting to today.
   EXPECT_EQ(calendar_utils::GetMonthDayYear(base::Time::Now()),
-            calendar_utils::GetMonthDayYear(GetSelectedDate()));
+            calendar_utils::GetMonthDayYear(GetSelectedDate().value()));
 
   // Expect header visible after closing event list and resetting to today.
   CloseEventList();
+  EXPECT_TRUE(
+      calendar_sliding_surface_view()->layer()->GetAnimator()->is_animating());
+  // Wait `event_list_view()`'s layer first since it can be deleted after the
+  // animation finished.
+  animation_waiter.Wait(event_list_view()->layer());
+  animation_waiter.Wait(calendar_sliding_surface_view()->layer());
+  EXPECT_FALSE(
+      calendar_sliding_surface_view()->layer()->GetAnimator()->is_animating());
+
   ResetToTodayWithAnimation();
-  task_environment()->FastForwardBy(
-      calendar_test_utils::kAnimationSettleDownDuration);
+  // The header starts to animate.
+  EXPECT_TRUE(header()->layer()->GetAnimator()->is_animating());
+
+  // The header's opacity should be between 0~1 after the first animator
+  // finished and in the middle of the second animation.
+  animation_waiter.Wait(header()->layer());
+  EXPECT_TRUE(header()->layer()->GetAnimator()->is_animating());
+  EXPECT_GT(1.0f, header()->layer()->opacity());
+
+  // The header's opacity should be 1 after the second animator finished.
+  animation_waiter.Wait(header()->layer());
+  EXPECT_FALSE(header()->layer()->GetAnimator()->is_animating());
   EXPECT_EQ(1.0f, header()->layer()->opacity());
 }
 
@@ -2160,130 +2219,67 @@ TEST_F(CalendarViewAnimationTest, DontShowEventListDuringMonthAnimation) {
   EXPECT_FALSE(event_list_view());
 }
 
-// Test class for testing the `CalendarView` together with the message center
-// bubble.
-class CalendarViewWithMessageCenterTest : public AshTestBase {
- public:
-  CalendarViewWithMessageCenterTest() {
-    // This test case is only valid without `kQsRevamp` enabled. Once the
-    // `kQsRevamp` feature flag is deleted, this test can be deleted.
-    scoped_feature_list_.InitAndDisableFeature(features::kQsRevamp);
-  }
-  CalendarViewWithMessageCenterTest(const CalendarViewWithMessageCenterTest&) =
-      delete;
-  CalendarViewWithMessageCenterTest& operator=(
-      const CalendarViewWithMessageCenterTest&) = delete;
-  ~CalendarViewWithMessageCenterTest() override = default;
+// Regression test for b/265203105
+// Tests open/close the `CalendarEventListView`. Also tests one corner case:
+// when closing the event list right after opening it, do nothing since the
+// animation is not finished.
+TEST_F(CalendarViewAnimationTest, OpenAndCloseEventList) {
+  ui::ScopedAnimationDurationScaleMode test_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
 
-  views::FocusManager* message_center_focus_manager() {
-    return GetPrimaryUnifiedSystemTray()
-        ->message_center_bubble()
-        ->notification_center_view()
-        ->GetFocusManager();
-  }
+  CreateCalendarView();
+  ui::LayerAnimationStoppedWaiter animation_waiter;
+  animation_waiter.Wait(header()->layer());
 
-  views::FocusManager* calendar_focus_manager() {
-    return GetPrimaryUnifiedSystemTray()
-        ->bubble()
-        ->unified_view()
-        ->detailed_view_container()
-        ->GetFocusManager();
-  }
+  // Opens the `CalendarEventListView`.
+  const std::u16string kDateNumber = u"10";
+  const auto* valid_date_cell =
+      GetDateCell(/*month=*/current_month(), /*day=*/kDateNumber);
+  ClickDateCell(valid_date_cell);
 
-  void AddNotification() {
-    message_center::MessageCenter::Get()->AddNotification(
-        std::make_unique<message_center::Notification>(
-            message_center::NOTIFICATION_TYPE_SIMPLE, "test_notification_id",
-            u"test title", u"test message", ui::ImageModel(), std::u16string(),
-            GURL(), message_center::NotifierId(),
-            message_center::RichNotificationData(),
-            new message_center::NotificationDelegate()));
-  }
+  EXPECT_TRUE(IsAnimating());
+  EXPECT_TRUE(event_list_view());
+  EXPECT_TRUE(GetSelectedDate().has_value());
+  EXPECT_EQ(kDateNumber,
+            calendar_utils::GetDayIntOfMonth(GetSelectedDate().value()));
 
-  void ShowCalendarView() {
-    ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
-                         ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
-                         ui::EF_LEFT_MOUSE_BUTTON);
-    GetPrimaryUnifiedSystemTray()->OnDateTrayActionPerformed(event);
-  }
+  // Should not close the event list before showing up animation is finished.
+  CloseEventList();
+  EXPECT_TRUE(IsAnimating());
+  EXPECT_TRUE(event_list_view());
+  EXPECT_TRUE(GetSelectedDate().has_value());
+  EXPECT_EQ(kDateNumber,
+            calendar_utils::GetDayIntOfMonth(GetSelectedDate().value()));
 
-  // Calculates the number of focusable views inside the message center bubble
-  // in order to avoid hardcoding that number / be independent from
-  // implementation details of another widget.
-  int GetNumberOfFocusableViewsInMessageCenter() {
-    int count = 0;
-    auto* widget = GetPrimaryUnifiedSystemTray()
-                       ->message_center_bubble()
-                       ->GetBubbleWidget();
-    views::View* current_focusable_view = nullptr;
-    while ((current_focusable_view =
-                message_center_focus_manager()->GetNextFocusableView(
-                    current_focusable_view, widget, /*reverse=*/false,
-                    /*dont_loop=*/true))) {
-      count++;
-    }
-    return count;
-  }
+  // After the showing up animation is finished, the event list view should be
+  // up.
+  animation_waiter.Wait(event_list_view()->layer());
+  animation_waiter.Wait(calendar_sliding_surface_view()->layer());
+  animation_waiter.Wait(current_label()->layer());
+  EXPECT_FALSE(IsAnimating());
+  EXPECT_TRUE(event_list_view());
+  EXPECT_TRUE(GetSelectedDate().has_value());
+  EXPECT_EQ(kDateNumber,
+            calendar_utils::GetDayIntOfMonth(GetSelectedDate().value()));
 
-  void PressTab() {
-    ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow());
-    generator.PressKey(ui::KeyboardCode::VKEY_TAB, ui::EF_NONE);
-  }
+  // Should close the event list now.
+  CloseEventList();
 
-  void PressShiftTab() {
-    ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow());
-    generator.PressKey(ui::KeyboardCode::VKEY_TAB, ui::EF_SHIFT_DOWN);
-  }
+  // The event list the view is still showing and `selected_date_` value is
+  // still set during the animation.
+  EXPECT_TRUE(IsAnimating());
+  EXPECT_TRUE(event_list_view());
+  EXPECT_TRUE(GetSelectedDate().has_value());
+  EXPECT_EQ(kDateNumber,
+            calendar_utils::GetDayIntOfMonth(GetSelectedDate().value()));
 
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-// Tests `Tab` / `Shift+Tab` navigation within two bubbles.
-TEST_F(CalendarViewWithMessageCenterTest,
-       CalendarViewFocusingWithMessageCenterOpened) {
-  EXPECT_FALSE(GetPrimaryUnifiedSystemTray()->IsShowingCalendarView());
-  EXPECT_FALSE(GetPrimaryUnifiedSystemTray()->IsMessageCenterBubbleShown());
-
-  AddNotification();
-  ShowCalendarView();
-
-  EXPECT_TRUE(GetPrimaryUnifiedSystemTray()->IsShowingCalendarView());
-  EXPECT_TRUE(GetPrimaryUnifiedSystemTray()->IsMessageCenterBubbleShown());
-
-  // Today's date cell should be focused now.
-  PressTab();
-  auto* current_date_cell_view = calendar_focus_manager()->GetFocusedView();
-  ASSERT_TRUE(calendar_focus_manager()->GetFocusedView());
-  EXPECT_STREQ(current_date_cell_view->GetClassName(), "CalendarDateCellView");
-
-  // Enter the message center.
-  while (calendar_focus_manager()->GetFocusedView()) {
-    PressTab();
-  }
-
-  // Keep tabbing until exiting the message center.
-  while (!calendar_focus_manager()->GetFocusedView()) {
-    PressTab();
-  }
-
-  // Focus moves to calendar - the current date view is the first focused view.
-  EXPECT_STREQ(calendar_focus_manager()->GetFocusedView()->GetClassName(),
-               "CalendarDateCellView");
-
-  // Move back to the message center.
-  PressShiftTab();
-  ASSERT_FALSE(calendar_focus_manager()->GetFocusedView());
-
-  // Keep tabbing backwards until exiting the message center.
-  while (!calendar_focus_manager()->GetFocusedView()) {
-    PressShiftTab();
-  }
-
-  // Focus moves to the last view in the calendar's focus order - the calendar
-  // view's `down_button_`.
-  EXPECT_STREQ("IconButton",
-               calendar_focus_manager()->GetFocusedView()->GetClassName());
+  // Resets the `selected_date_` after the fading out animation is done.
+  animation_waiter.Wait(event_list_view()->layer());
+  animation_waiter.Wait(calendar_sliding_surface_view()->layer());
+  animation_waiter.Wait(current_label()->layer());
+  EXPECT_FALSE(IsAnimating());
+  EXPECT_FALSE(event_list_view());
+  EXPECT_FALSE(GetSelectedDate().has_value());
 }
 
 class CalendarViewWithJellyEnabledTest : public CalendarViewTest {
@@ -2294,12 +2290,6 @@ class CalendarViewWithJellyEnabledTest : public CalendarViewTest {
   CalendarViewWithJellyEnabledTest& operator=(
       const CalendarViewWithJellyEnabledTest&) = delete;
   ~CalendarViewWithJellyEnabledTest() override = default;
-
-  void SetUp() override {
-    scoped_feature_list_ = std::make_unique<base::test::ScopedFeatureList>();
-    scoped_feature_list_->InitWithFeatures({features::kCalendarJelly}, {});
-    CalendarViewTest::SetUp();
-  }
 
   // Assumes current time is "18 Nov 2021 10:00 GMT".
   std::unique_ptr<google_apis::calendar::EventList>
@@ -2354,9 +2344,6 @@ class CalendarViewWithJellyEnabledTest : public CalendarViewTest {
         calendar_utils::GetStartOfMonthUTC(date),
         google_apis::ApiErrorCode::HTTP_SUCCESS, event_list.get());
   }
-
- private:
-  std::unique_ptr<base::test::ScopedFeatureList> scoped_feature_list_;
 };
 
 TEST_F(CalendarViewWithJellyEnabledTest,
@@ -2894,13 +2881,6 @@ class CalendarViewAnimationWithJellyEnabledTest
       const CalendarViewAnimationWithJellyEnabledTest&) = delete;
   ~CalendarViewAnimationWithJellyEnabledTest() override = default;
 
-  void SetUp() override {
-    scoped_feature_list_ = std::make_unique<base::test::ScopedFeatureList>();
-    scoped_feature_list_->InitWithFeatures(
-        {features::kCalendarJelly, chromeos::features::kJelly}, {});
-    CalendarViewAnimationTest::SetUp();
-  }
-
   std::unique_ptr<google_apis::calendar::EventList> CreateUpcomingEvents(
       base::Time date) {
     const auto start_time = date + base::Minutes(5);
@@ -2920,9 +2900,6 @@ class CalendarViewAnimationWithJellyEnabledTest
         calendar_utils::GetStartOfMonthUTC(date),
         google_apis::ApiErrorCode::HTTP_SUCCESS, event_list.get());
   }
-
- private:
-  std::unique_ptr<base::test::ScopedFeatureList> scoped_feature_list_;
 };
 
 TEST_F(CalendarViewAnimationWithJellyEnabledTest,

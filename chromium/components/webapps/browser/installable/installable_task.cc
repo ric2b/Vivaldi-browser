@@ -25,7 +25,7 @@ InstallableTask::InstallableTask(
   fetcher_ = std::make_unique<InstallableDataFetcher>(
       web_contents, service_worker_context, page_data);
   evaluator_ = std::make_unique<InstallableEvaluator>(
-      page_data, params_.check_webapp_manifest_display);
+      web_contents, page_data, params_.installable_criteria);
 }
 
 InstallableTask::InstallableTask(const InstallableParams params,
@@ -42,14 +42,14 @@ void InstallableTask::RunCallback() {
   if (callback_) {
     InstallableData data = {
         std::move(errors_),
-        page_data_->manifest->url,
+        page_data_->manifest_url(),
         page_data_->GetManifest(),
-        *page_data_->web_page_metadata->metadata,
-        page_data_->primary_icon->url,
-        page_data_->primary_icon->icon.get(),
-        page_data_->primary_icon->purpose ==
+        page_data_->WebPageMetadata(),
+        page_data_->primary_icon_url(),
+        page_data_->primary_icon(),
+        page_data_->primary_icon_purpose() ==
             blink::mojom::ManifestImageResource_Purpose::MASKABLE,
-        page_data_->screenshots,
+        page_data_->screenshots(),
         valid_manifest_,
     };
     std::move(callback_).Run(data);
@@ -80,9 +80,9 @@ void InstallableTask::IncrementStateAndWorkOnNextTask() {
   CHECK(kInactive < state_ && state_ < kMaxState);
 
   switch (state_) {
-    case kCheckEligiblity:
+    case kCheckEligibility:
       if (params_.check_eligibility) {
-        CheckEligiblity();
+        CheckEligibility();
         return;
       }
       break;
@@ -97,12 +97,9 @@ void InstallableTask::IncrementStateAndWorkOnNextTask() {
       fetcher_->FetchManifest(base::BindOnce(&InstallableTask::OnFetchedData,
                                              base::Unretained(this)));
       return;
-    case kValidManifest:
-      if (params_.valid_manifest) {
-        CheckManifestValid();
-        return;
-      }
-      break;
+    case kCheckInstallability:
+      CheckInstallability();
+      return;
     case kFetchPrimaryIcon:
       if (params_.valid_primary_icon) {
         fetcher_->CheckAndFetchBestPrimaryIcon(
@@ -134,7 +131,7 @@ void InstallableTask::IncrementStateAndWorkOnNextTask() {
 }
 
 void InstallableTask::OnFetchedData(InstallableStatusCode error) {
-  if (error != NO_ERROR_DETECTED && error != MANIFEST_DEPENDENT_TASK_NOT_RUN) {
+  if (error != NO_ERROR_DETECTED) {
     errors_.push_back(error);
   }
   IncrementStateAndWorkOnNextTask();
@@ -149,20 +146,30 @@ void InstallableTask::OnWaitingForServiceWorker() {
   manager_->OnTaskPaused();
 }
 
-void InstallableTask::CheckEligiblity() {
-  auto errors = evaluator_->CheckEligiblity(web_contents_.get());
+void InstallableTask::CheckEligibility() {
+  auto errors = evaluator_->CheckEligibility(web_contents_.get());
   if (!errors.empty()) {
     errors_.insert(errors_.end(), errors.begin(), errors.end());
   }
   IncrementStateAndWorkOnNextTask();
 }
 
-void InstallableTask::CheckManifestValid() {
-  if (!blink::IsEmptyManifest(page_data_->GetManifest())) {
-    auto errors = evaluator_->CheckManifestValid();
-    valid_manifest_ = errors.empty();
-    errors_.insert(errors_.end(), errors.begin(), errors.end());
+void InstallableTask::CheckInstallability() {
+  auto new_errors = evaluator_->CheckInstallability();
+  if (new_errors.has_value()) {
+    for (auto error : new_errors.value()) {
+      if (error == MANIFEST_EMPTY &&
+          std::any_of(errors_.begin(), errors_.end(), [](int x) {
+            return x == NO_MANIFEST || x == MANIFEST_EMPTY;
+          })) {
+        // Skip if |errors_| already contains an empty manifest related error.
+        continue;
+      }
+      errors_.push_back(error);
+    }
   }
+  valid_manifest_ = new_errors.has_value() && new_errors->empty();
+
   IncrementStateAndWorkOnNextTask();
 }
 

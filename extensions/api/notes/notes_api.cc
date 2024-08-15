@@ -14,13 +14,13 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/notes/note_node.h"
+#include "components/notes/notes_factory.h"
+#include "components/notes/notes_model.h"
 #include "content/public/browser/browser_context.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/schema/notes.h"
 #include "extensions/tools/vivaldi_tools.h"
-#include "notes/note_node.h"
-#include "notes/notes_factory.h"
-#include "notes/notes_model.h"
 #include "ui/base/models/tree_node_iterator.h"
 
 using extensions::vivaldi::notes::NoteTreeNode;
@@ -95,9 +95,9 @@ NoteTreeNode MakeTreeNode(const NoteNode* node) {
     }
   }
 
-  // Javascript Date wants milliseconds since the epoch, ToDoubleT is seconds.
-  double timedouble = node->GetCreationTime().ToDoubleT();
-  notes_tree_node.date_added = floor(timedouble * 1000);
+  // Javascript Date wants milliseconds since the epoch.
+  notes_tree_node.date_added =
+      node->GetCreationTime().InMillisecondsFSinceUnixEpoch();
 
   if (node->is_folder() || node->is_note()) {
     notes_tree_node.children.emplace();

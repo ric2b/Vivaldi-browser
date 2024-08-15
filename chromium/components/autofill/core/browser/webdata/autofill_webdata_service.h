@@ -29,7 +29,7 @@ class SequencedTaskRunner;
 
 namespace autofill {
 
-class AutofillEntry;
+class AutocompleteEntry;
 class AutofillWebDataBackend;
 class AutofillWebDataBackendImpl;
 class AutofillWebDataServiceObserverOnDBSequence;
@@ -93,15 +93,6 @@ class AutofillWebDataService : public WebDataServiceBase {
   WebDataServiceBase::Handle GetServerProfiles(
       WebDataServiceConsumer* consumer);
 
-  // Schedules a task to convert server profiles to local profiles, comparing
-  // profiles using |app_locale| and filling in |primary_account_email| into
-  // newly converted profiles. The task only converts profiles that have not
-  // been converted before.
-  // TODO(crbug.com/1348294): Delete this function, which is unused.
-  void ConvertWalletAddressesAndUpdateWalletCards(
-      const std::string& app_locale,
-      const std::string& primary_account_email);
-
   // Schedules a task to count the number of unique autofill values contained
   // in the time interval [|begin|, |end|). |begin| and |end| can be null
   // to indicate no time limitation.
@@ -110,35 +101,38 @@ class AutofillWebDataService : public WebDataServiceBase {
       const base::Time& end,
       WebDataServiceConsumer* consumer);
 
-  // Schedules a task to update autofill entries in the web database.
-  void UpdateAutofillEntries(
-      const std::vector<AutofillEntry>& autofill_entries);
+  // Schedules a task to update autocomplete entries in the web database.
+  void UpdateAutocompleteEntries(
+      const std::vector<AutocompleteEntry>& autocomplete_entries);
 
   void SetAutofillProfileChangedCallback(
-      base::RepeatingCallback<void(const AutofillProfileDeepChange&)>
-          change_cb);
+      base::RepeatingCallback<void(const AutofillProfileChange&)> change_cb);
 
-  // Schedules a task to add IBAN to the web database.
-  void AddIban(const Iban& iban);
+  // Schedules a task to add a local IBAN to the web database.
+  void AddLocalIban(const Iban& iban);
 
-  // Initiates the request for local IBANs. The method
+  // Initiates the request for local/server IBANs. The method
   // OnWebDataServiceRequestDone of |consumer| gets called when the request is
   // finished, with the IBAN included in the argument |result|. The consumer
   // owns the IBAN.
-  WebDataServiceBase::Handle GetIbans(WebDataServiceConsumer* consumer);
+  WebDataServiceBase::Handle GetLocalIbans(WebDataServiceConsumer* consumer);
+  WebDataServiceBase::Handle GetServerIbans(WebDataServiceConsumer* consumer);
 
-  // Schedules a task to update iban in the web database.
-  void UpdateIban(const Iban& iban);
+  // Schedules a task to update a local IBAN in the web database.
+  void UpdateLocalIban(const Iban& iban);
 
-  // Schedules a task to remove an IBAN from the web database.
-  // |guid| is the identifier of the IBAN to remove.
-  void RemoveIban(const std::string& guid);
+  // Schedules a task to remove an existing local IBAN from the web database.
+  // `guid` is the identifier of the IBAN to remove.
+  void RemoveLocalIban(const std::string& guid);
 
   // Schedules a task to add credit card to the web database.
   void AddCreditCard(const CreditCard& credit_card);
 
   // Schedules a task to update credit card in the web database.
   void UpdateCreditCard(const CreditCard& credit_card);
+
+  // Schedules a task to update a local CVC in the web database.
+  void UpdateLocalCvc(const std::string& guid, const std::u16string& cvc);
 
   // Schedules a task to remove a credit card from the web database.
   // |guid| is identifier of the credit card to remove.
@@ -167,9 +161,6 @@ class AutofillWebDataService : public WebDataServiceBase {
   void UnmaskServerCreditCard(const CreditCard& card,
                               const std::u16string& full_number);
   void MaskServerCreditCard(const std::string& id);
-
-  // Store a UPI ID.
-  void AddUpiId(const std::string& upi_id);
 
   // Initiates the request for Payments customer data.  The method
   // OnWebDataServiceRequestDone of |consumer| gets called when the request is
@@ -247,9 +238,7 @@ class AutofillWebDataService : public WebDataServiceBase {
  protected:
   ~AutofillWebDataService() override;
 
-  void NotifyAutofillMultipleChangedOnUISequence();
-  void NotifyAutofillAddressConversionCompletedOnUISequence();
-  void NotifySyncStartedOnUISequence(syncer::ModelType model_type);
+  void NotifyOnAutofillChangedBySyncOnUISequence(syncer::ModelType model_type);
 
   base::WeakPtr<AutofillWebDataService> AsWeakPtr() {
     return weak_ptr_factory_.GetWeakPtr();

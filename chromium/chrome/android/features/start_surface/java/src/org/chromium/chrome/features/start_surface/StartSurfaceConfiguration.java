@@ -6,15 +6,16 @@ package org.chromium.chrome.features.start_surface;
 
 import androidx.annotation.VisibleForTesting;
 
+import org.jni_zero.CalledByNative;
+
 import org.chromium.base.Log;
 import org.chromium.base.SysUtils;
-import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.flags.BooleanCachedFieldTrialParameter;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.IntCachedFieldTrialParameter;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -102,6 +103,11 @@ public class StartSurfaceConfiguration {
             new BooleanCachedFieldTrialParameter(
                     ChromeFeatureList.SURFACE_POLISH, SURFACE_POLISH_LESS_BRAND_SPACE_PARAM, false);
 
+    private static final String SURFACE_POLISH_SCROLLABLE_MVT_PARAM = "scrollable_mvt";
+    public static final BooleanCachedFieldTrialParameter SURFACE_POLISH_SCROLLABLE_MVT =
+            new BooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.SURFACE_POLISH, SURFACE_POLISH_SCROLLABLE_MVT_PARAM, false);
+
     public static final BooleanCachedFieldTrialParameter SURFACE_POLISH_USE_MAGIC_SPACE =
             new BooleanCachedFieldTrialParameter(
                     ChromeFeatureList.SURFACE_POLISH, "use_magic_space", false);
@@ -125,7 +131,10 @@ public class StartSurfaceConfiguration {
      * Returns whether showing a NTP as the home surface is enabled in the given context.
      */
     public static boolean isNtpAsHomeSurfaceEnabled(boolean isTablet) {
-        return isTablet && ChromeFeatureList.sStartSurfaceOnTablet.isEnabled();
+        // ReturnToChromeUtil#isStartSurfaceEnabled() will return false when
+        // ChromeFeatureList.SHOW_NTP_AT_STARTUP_ANDROID is enabled.
+        return (isTablet && ChromeFeatureList.sStartSurfaceOnTablet.isEnabled())
+                || !isTablet && ChromeFeatureList.sShowNtpAtStartupAndroid.isEnabled();
     }
 
     /**
@@ -160,7 +169,7 @@ public class StartSurfaceConfiguration {
     }
 
     static void setFeedVisibilityForTesting(boolean isVisible) {
-        SharedPreferencesManager.getInstance().writeBoolean(
+        ChromeSharedPreferences.getInstance().writeBoolean(
                 ChromePreferenceKeys.FEED_ARTICLES_LIST_VISIBLE, isVisible);
     }
 }

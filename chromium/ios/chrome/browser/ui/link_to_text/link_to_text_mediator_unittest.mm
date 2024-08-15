@@ -15,13 +15,13 @@
 #import "components/shared_highlighting/core/common/text_fragment.h"
 #import "components/ukm/ios/ukm_url_recorder.h"
 #import "components/ukm/test_ukm_recorder.h"
-#import "ios/chrome/browser/link_to_text/link_generation_outcome.h"
-#import "ios/chrome/browser/link_to_text/link_to_text_constants.h"
-#import "ios/chrome/browser/link_to_text/link_to_text_java_script_feature.h"
-#import "ios/chrome/browser/link_to_text/link_to_text_payload.h"
-#import "ios/chrome/browser/link_to_text/link_to_text_tab_helper.h"
+#import "ios/chrome/browser/link_to_text/model/link_generation_outcome.h"
+#import "ios/chrome/browser/link_to_text/model/link_to_text_constants.h"
+#import "ios/chrome/browser/link_to_text/model/link_to_text_java_script_feature.h"
+#import "ios/chrome/browser/link_to_text/model/link_to_text_payload.h"
+#import "ios/chrome/browser/link_to_text/model/link_to_text_tab_helper.h"
+#import "ios/chrome/browser/shared/model/web_state_list/test/fake_web_state_list_delegate.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
-#import "ios/chrome/browser/shared/model/web_state_list/web_state_list_delegate.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/chrome/browser/shared/public/commands/activity_service_commands.h"
 #import "ios/chrome/browser/shared/public/commands/share_highlight_command.h"
@@ -58,10 +58,6 @@ const TextFragment kTestTextFragment = TextFragment("selected text");
 const char kSuccessUkmMetric[] = "Success";
 const char kErrorUkmMetric[] = "Error";
 
-class FakeWebStateListDelegate : public WebStateListDelegate {
-  void WillAddWebState(web::WebState* web_state) override {}
-};
-
 // Fake version of JS Feature which directly invokes the passed callback using
 // the provided latency and response values, without actually invoking JS (or
 // a mocked replacement).
@@ -88,8 +84,7 @@ class FakeJSFeature : public LinkToTextJavaScriptFeature {
 
 class LinkToTextMediatorTest : public PlatformTest {
  protected:
-  LinkToTextMediatorTest()
-      : web_state_list_delegate_(), web_state_list_(&web_state_list_delegate_) {
+  LinkToTextMediatorTest() : web_state_list_(&web_state_list_delegate_) {
     feature_list_.InitAndEnableFeature(kSharedHighlightingIOS);
 
     mocked_activity_service_commands_ =

@@ -7,9 +7,11 @@ package org.chromium.chrome.browser.ui.hats;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.annotations.JNINamespace;
-import org.chromium.base.annotations.NativeMethods;
+import org.jni_zero.CalledByNative;
+import org.jni_zero.JNINamespace;
+import org.jni_zero.NativeMethods;
+
+import org.chromium.base.ResettersForTesting;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -21,6 +23,7 @@ import java.util.Map;
  */
 @JNINamespace("hats")
 public class SurveyConfig {
+    private static SurveyConfig sConfigForTesting;
     /**
      * Unique key associate with the config.
      */
@@ -55,11 +58,19 @@ public class SurveyConfig {
      */
     @Nullable
     public static SurveyConfig get(String trigger) {
+        if (sConfigForTesting != null && sConfigForTesting.mTrigger.equals(trigger)) {
+            return sConfigForTesting;
+        }
         return Holder.getInstance().getSurveyConfig(trigger);
     }
 
+    static void setSurveyConfigForTesting(SurveyConfig config) {
+        sConfigForTesting = config;
+        ResettersForTesting.register(() -> sConfigForTesting = null);
+    }
+
     /** Clear all the initialized configs. */
-    public static void clearAll() {
+    static void clearAll() {
         Holder.getInstance().destroy();
     }
 
@@ -90,7 +101,7 @@ public class SurveyConfig {
     static class Holder {
         private static Holder sInstance;
         private long mNativeInstance;
-        private Map<String, SurveyConfig> mTriggers;
+        private final Map<String, SurveyConfig> mTriggers;
 
         static Holder getInstance() {
             if (sInstance == null) {

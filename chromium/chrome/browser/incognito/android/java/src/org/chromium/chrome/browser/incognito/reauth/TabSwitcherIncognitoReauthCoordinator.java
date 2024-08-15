@@ -13,6 +13,9 @@ import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthManager.Incog
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcherCustomViewManager;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * The coordinator responsible for showing the tab-switcher re-auth screen.
  */
@@ -67,6 +70,8 @@ class TabSwitcherIncognitoReauthCoordinator extends IncognitoReauthCoordinatorBa
         boolean success = mTabSwitcherCustomViewManager.requestView(
                 getIncognitoReauthView(), mBackPressRunnable, /*clearTabList=*/true);
         assert success : "Unable to signal showing the re-auth screen to tab switcher.";
+        // Note(david@vivaldi.com): In Vivaldi there is no |IncognitoReauthTopToolbarDelegate|.
+        if (!BuildConfig.IS_VIVALDI)
         mNewTabInteractabilityToken = mIncognitoReauthTopToolbarDelegate.disableNewTabButton();
     }
 
@@ -81,8 +86,11 @@ class TabSwitcherIncognitoReauthCoordinator extends IncognitoReauthCoordinatorBa
         boolean success = mTabSwitcherCustomViewManager.releaseView();
         assert success : "Unable to signal removing the re-auth screen from tab switcher.";
 
+        // Note(david@vivaldi.com): In Vivaldi there is no |IncognitoReauthTopToolbarDelegate|.
+        if (!BuildConfig.IS_VIVALDI) {
         assert mNewTabInteractabilityToken != null : "Top toolbar manager was not acquired.";
         mIncognitoReauthTopToolbarDelegate.enableNewTabButton(mNewTabInteractabilityToken);
+        }
         mNewTabInteractabilityToken = null;
 
         destroy();

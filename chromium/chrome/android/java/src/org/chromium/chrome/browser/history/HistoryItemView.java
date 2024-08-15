@@ -18,16 +18,12 @@ import androidx.core.widget.ImageViewCompat;
 import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.preferences.Pref;
-import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper.DefaultFaviconHelper;
 import org.chromium.chrome.browser.ui.favicon.FaviconUtils;
 import org.chromium.components.browser_ui.util.TraceEventVectorDrawableCompat;
 import org.chromium.components.browser_ui.widget.RoundedIconGenerator;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableItemView;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListUtils;
-import org.chromium.components.prefs.PrefService;
-import org.chromium.components.user_prefs.UserPrefs;
 
 // Vivaldi
 import android.graphics.Bitmap;
@@ -49,7 +45,6 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
     private final int mDisplayedIconSize;
     private final int mEndPadding;
 
-    private boolean mRemoveButtonVisible;
     private boolean mIsItemRemoved;
 
     public HistoryItemView(Context context, AttributeSet attrs) {
@@ -82,8 +77,6 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
                 getResources().getDimensionPixelSize(
                         R.dimen.history_item_remove_button_lateral_padding),
                 getPaddingBottom());
-
-        updateRemoveButtonVisibility();
     }
 
     @Override
@@ -136,22 +129,13 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
     }
 
     /**
-     * Should be called when the user's sign in state changes.
+     * @param visibility The visibility (VISIBLE, INVISIBLE, GONE) for the remove button.
      */
-    public void onSignInStateChange() {
-        updateRemoveButtonVisibility();
-    }
-
-    /**
-     * @param visible Whether the remove button should be visible. Note that this method will have
-     *                no effect if the button is GONE because the signed in user is not allowed to
-     *                delete browsing history.
-     */
-    public void setRemoveButtonVisible(boolean visible) {
-        mRemoveButtonVisible = visible;
-        if (!getPrefService().getBoolean(Pref.ALLOW_DELETING_BROWSER_HISTORY)) return;
-
-        mRemoveButton.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
+    public void setRemoveButtonVisiblity(int visibility) {
+        mRemoveButton.setVisibility(visibility);
+        int endPadding = visibility == View.GONE ? mEndPadding : 0;
+        ViewCompat.setPaddingRelative(mContentView, ViewCompat.getPaddingStart(mContentView),
+                mContentView.getPaddingTop(), endPadding, mContentView.getPaddingBottom());
     }
 
     @Override
@@ -181,24 +165,8 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
                 });
     }
 
-    private void updateRemoveButtonVisibility() {
-        int removeButtonVisibility =
-                !getPrefService().getBoolean(Pref.ALLOW_DELETING_BROWSER_HISTORY)
-                ? View.GONE
-                : mRemoveButtonVisible ? View.VISIBLE : View.INVISIBLE;
-        mRemoveButton.setVisibility(removeButtonVisibility);
-
-        int endPadding = removeButtonVisibility == View.GONE ? mEndPadding : 0;
-        ViewCompat.setPaddingRelative(mContentView, ViewCompat.getPaddingStart(mContentView),
-                mContentView.getPaddingTop(), endPadding, mContentView.getPaddingBottom());
-    }
-
     View getRemoveButtonForTests() {
         return mRemoveButton;
-    }
-
-    private PrefService getPrefService() {
-        return UserPrefs.get(Profile.getLastUsedRegularProfile());
     }
 
     // Vivaldi

@@ -75,7 +75,7 @@ class DefaultConfigurator : public DMClient::Configurator {
   GURL GetDMServerUrl() const override { return server_url_; }
 
   std::string GetAgentParameter() const override {
-    return base::StrCat({"Updater-", kUpdaterVersion});
+    return GetUpdaterUserAgent();
   }
 
   std::string GetPlatformParameter() const override;
@@ -438,6 +438,7 @@ std::ostream& operator<<(std::ostream& os,
     SWITCH_ENTRY(DMClient::RequestResult::kSerializationError);
     SWITCH_ENTRY(DMClient::RequestResult::kUnexpectedResponse);
     SWITCH_ENTRY(DMClient::RequestResult::kNoPayload);
+    SWITCH_ENTRY(DMClient::RequestResult::kNoDefaultDMStorage);
   }
 #undef SWITCH_ENTRY
 }

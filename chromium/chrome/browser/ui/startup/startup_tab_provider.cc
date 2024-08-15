@@ -107,14 +107,6 @@ bool ValidateUrl(const GURL& url) {
   const GURL reset_settings_url =
       settings_url.Resolve(chrome::kResetProfileSettingsSubPage);
   url_points_to_an_approved_settings_page = url == reset_settings_url;
-#if BUILDFLAG(IS_WIN)
-  // On Windows, also allow a hash for the Chrome Cleanup Tool.
-  const GURL reset_settings_url_with_cct_hash = reset_settings_url.Resolve(
-      std::string("#") + settings::ResetSettingsHandler::kCctResetSettingsHash);
-  url_points_to_an_approved_settings_page =
-      url_points_to_an_approved_settings_page ||
-      url == reset_settings_url_with_cct_hash;
-#endif  // BUILDFLAG(IS_WIN)
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
   auto* policy = content::ChildProcessSecurityPolicy::GetInstance();
@@ -188,25 +180,6 @@ StartupTabs StartupTabProviderImpl::GetOnboardingTabs(Profile* profile) const {
   return GetStandardOnboardingTabsForState(standard_params);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
-
-#if BUILDFLAG(IS_WIN)
-StartupTabs StartupTabProviderImpl::GetWelcomeBackTabs(
-    Profile* profile,
-    StartupBrowserCreator* browser_creator,
-    chrome::startup::IsProcessStartup process_startup) const {
-  StartupTabs tabs;
-  if (process_startup == chrome::startup::IsProcessStartup::kNo ||
-      !browser_creator) {
-    return tabs;
-  }
-  if (browser_creator->welcome_back_page() &&
-      CanShowWelcome(SyncServiceFactory::IsSyncAllowed(profile),
-                     profile->IsChild(), signin_util::IsForceSigninEnabled())) {
-    tabs.emplace_back(GetWelcomePageUrl(false));
-  }
-  return tabs;
-}
-#endif  // BUILDFLAG(IS_WIN)
 
 StartupTabs StartupTabProviderImpl::GetDistributionFirstRunTabs(
     StartupBrowserCreator* browser_creator) const {

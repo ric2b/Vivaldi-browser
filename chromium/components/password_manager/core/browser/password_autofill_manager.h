@@ -62,6 +62,8 @@ class PasswordAutofillManager : public autofill::AutofillPopupDelegate {
       int position,
       autofill::AutofillSuggestionTriggerSource trigger_source =
           autofill::AutofillSuggestionTriggerSource::kPasswordManager) override;
+  void DidPerformButtonActionForSuggestion(
+      const autofill::Suggestion&) override;
   bool GetDeletionConfirmationText(const std::u16string& value,
                                    autofill::PopupItemId popup_item_id,
                                    autofill::Suggestion::BackendId backend_id,
@@ -226,7 +228,7 @@ class PasswordAutofillManager : public autofill::AutofillPopupDelegate {
   // Used to trigger a reauthentication prompt based on biometrics that needs
   // to be cleared before the password is filled. Currently only used
   // on Android, Mac and Windows.
-  scoped_refptr<device_reauth::DeviceAuthenticator> authenticator_;
+  std::unique_ptr<device_reauth::DeviceAuthenticator> authenticator_;
 
   base::WeakPtrFactory<PasswordAutofillManager> weak_ptr_factory_{this};
 };

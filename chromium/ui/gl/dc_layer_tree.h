@@ -14,8 +14,8 @@
 
 #include "base/check_is_test.h"
 #include "base/containers/flat_map.h"
+#include "base/moving_window.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "ui/base/moving_max.h"
 #include "ui/gfx/color_space_win.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gl/dc_layer_overlay_params.h"
@@ -48,6 +48,11 @@ struct VideoProcessorWrapper {
   gfx::Size video_input_size;
   gfx::Size video_output_size;
 
+  bool GetDriverSupportsVpAutoHdr() { return driver_supports_vp_auto_hdr; }
+  void SetDriverSupportsVpAutoHdr(bool value) {
+    driver_supports_vp_auto_hdr = value;
+  }
+
   // The video processor is cached so SwapChains don't have to recreate it
   // whenever they're created.
   Microsoft::WRL::ComPtr<ID3D11VideoDevice> video_device;
@@ -55,6 +60,10 @@ struct VideoProcessorWrapper {
   Microsoft::WRL::ComPtr<ID3D11VideoProcessor> video_processor;
   Microsoft::WRL::ComPtr<ID3D11VideoProcessorEnumerator>
       video_processor_enumerator;
+
+ private:
+  // Whether the GPU driver supports video processor auto HDR.
+  bool driver_supports_vp_auto_hdr = false;
 };
 
 class SolidColorSurface;
@@ -145,8 +154,10 @@ class GL_EXPORT DCLayerTree {
   // at least given input and output size.  The video processor is shared across
   // layers so the same one can be reused if it's large enough.  Returns true on
   // success.
-  VideoProcessorWrapper* InitializeVideoProcessor(const gfx::Size& input_size,
-                                                  const gfx::Size& output_size);
+  VideoProcessorWrapper* InitializeVideoProcessor(
+      const gfx::Size& input_size,
+      const gfx::Size& output_size,
+      bool& video_processor_recreated);
 
   bool disable_nv12_dynamic_textures() const {
     return disable_nv12_dynamic_textures_;
@@ -525,13 +536,14 @@ class GL_EXPORT DCLayerTree {
   // Store the largest video processor to avoid problems in
   // (http://crbug.com/1121061) and (http://crbug.com/1472975).
   VideoProcessorWrapper video_processor_wrapper_;
+
   // To reduce resource usage, we keep track of the largest input/output
   // dimensions for several last VideoProcessor usages. All 4 dimensions must be
   // tracked separately.
-  ui::MovingMax max_video_processor_input_height_;
-  ui::MovingMax max_video_processor_input_width_;
-  ui::MovingMax max_video_processor_output_height_;
-  ui::MovingMax max_video_processor_output_width_;
+  base::MovingMax<int> max_video_processor_input_height_;
+  base::MovingMax<int> max_video_processor_input_width_;
+  base::MovingMax<int> max_video_processor_output_height_;
+  base::MovingMax<int> max_video_processor_output_width_;
 
   // Current video processor input and output colorspace.
   gfx::ColorSpace video_input_color_space_;

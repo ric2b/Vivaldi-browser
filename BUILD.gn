@@ -46,7 +46,7 @@ group("All") {
   }
   if (is_android) {
     deps += [
-        "//vivaldi/notes",
+        "//vivaldi/components/notes",
         "//build/android:prepare_android_lint_cache", # Needed to generate build_vars.txt, used by merge_manifest
     ]
   }

@@ -38,7 +38,7 @@
 #include "third_party/blink/renderer/core/css/part_names.h"
 #include "third_party/blink/renderer/core/css/post_style_update_scope.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
-#include "third_party/blink/renderer/core/dom/css_toggle.h"
+#include "third_party/blink/renderer/core/css/style_scope_data.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
@@ -47,6 +47,7 @@
 #include "third_party/blink/renderer/core/dom/nth_index_cache.h"
 #include "third_party/blink/renderer/core/dom/popover_data.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
+#include "third_party/blink/renderer/core/dom/slot_assignment_engine.h"
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -54,6 +55,7 @@
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 #include "third_party/blink/renderer/core/html/custom/element_internals.h"
+#include "third_party/blink/renderer/core/html/forms/html_button_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_field_set_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_control_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
@@ -62,6 +64,7 @@
 #include "third_party/blink/renderer/core/html/html_dialog_element.h"
 #include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/html_frame_element_base.h"
+#include "third_party/blink/renderer/core/html/html_permission_element.h"
 #include "third_party/blink/renderer/core/html/html_slot_element.h"
 #include "third_party/blink/renderer/core/html/media/html_video_element.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
@@ -1269,6 +1272,24 @@ bool SelectorChecker::CheckPseudoHas(const SelectorCheckingContext& context,
     CheckPseudoHasCacheScope::Context cache_scope_context(&document,
                                                           argument_context);
 
+    // In case that the :has() pseudo class checks a relationship to a sibling
+    // element at fixed distance (e.g. '.a:has(+ .b)') or a sibling subtree at
+    // fixed distance (e.g. '.a:has(+ .b .c)'), set the parent of the :has()
+    // anchor element as ChildrenAffectedByDirectAdjacentRules to indicate
+    // that removing a child from the parent may affect a :has() testing result
+    // on a child of the parent.
+    // (e.g. When we have a style rule '.a:has(+ .b) {}' we always need :has()
+    // invalidation if the preceding element of '.b' is removed)
+    // Please refer the :has() invalidation for element removal:
+    //  - StyleEngine::ScheduleInvalidationsForHasPseudoAffectedByRemoval()
+    if (argument_context.AdjacentDistanceLimit() > 0 &&
+        argument_context.AdjacentDistanceFixed()) {
+      if (ContainerNode* parent =
+              has_anchor_element->ParentElementOrShadowRoot()) {
+        parent->SetChildrenAffectedByDirectAdjacentRules();
+      }
+    }
+
     if (update_affected_by_has_flags) {
       SetAffectedByHasFlagsForHasAnchorElement(argument_context,
                                                has_anchor_element);
@@ -1434,7 +1455,7 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
         DCHECK(context.pseudo_argument);
 
         auto* transition =
-            ViewTransitionUtils::GetActiveTransition(element.GetDocument());
+            ViewTransitionUtils::GetTransition(element.GetDocument());
         DCHECK(transition);
         return transition->MatchForOnlyChild(context.pseudo_id,
                                              *context.pseudo_argument);
@@ -1746,10 +1767,16 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
         break;
       }
 
-      if (auto* html_element = DynamicTo<HTMLElement>(element)) {
-        return html_element->CachedDirectionality() == direction;
+      // Recomputing the slot assignment can update cached directionality.  In
+      // most cases it's OK for this code to be run when slot assignments are
+      // dirty; however for API calls like Element.matches() we should recalc
+      // them now.
+      Document& document = element.GetDocument();
+      if (mode_ == kQueryingRules && document.IsSlotAssignmentDirty()) {
+        document.GetSlotAssignmentEngine().RecalcSlotAssignments();
       }
-      break;
+
+      return element.CachedDirectionality() == direction;
     }
     case CSSSelector::kPseudoDialogInTopLayer:
       if (auto* dialog = DynamicTo<HTMLDialogElement>(element)) {
@@ -1813,6 +1840,11 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
       DCHECK(RuntimeEnabledFeatures::CSSPseudoPlayingPausedEnabled());
       auto* media_element = DynamicTo<HTMLMediaElement>(element);
       return media_element && media_element->paused();
+    }
+    case CSSSelector::kPseudoPermissionGranted: {
+      DCHECK(RuntimeEnabledFeatures::PermissionElementEnabled());
+      auto* permission_element = DynamicTo<HTMLPermissionElement>(element);
+      return permission_element && permission_element->granted();
     }
     case CSSSelector::kPseudoPictureInPicture:
       return PictureInPictureController::IsElementInPictureInPicture(&element);
@@ -1944,29 +1976,6 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
     case CSSSelector::kPseudoRelativeAnchor:
       DCHECK(context.relative_anchor_element);
       return context.relative_anchor_element == &element;
-    case CSSSelector::kPseudoToggle: {
-      using State = ToggleRoot::State;
-
-      const AtomicString& name = selector.Argument();
-      const State* value = selector.ToggleValue();
-
-      CSSToggle* toggle = CSSToggle::FindToggleInScope(element, name);
-      // An element matches :toggle() if the element is in scope for a toggle
-      // with the name given by <custom-ident>, and ...
-      if (!toggle) {
-        return false;
-      }
-
-      if (value) {
-        // ... either the toggle’s value matches the provided <toggle-value>,
-        // ...
-        return toggle->ValueMatches(*value);
-      } else {
-        // ... or the <toggle-value> is omitted and the toggle is in any
-        // active value.
-        return !toggle->ValueMatches(State(0));
-      }
-    }
     case CSSSelector::kPseudoUnparsed:
       // Only kept around for parsing; can never match anything
       // (because we don't know what it's supposed to mean).
@@ -1988,29 +1997,27 @@ static bool MatchesUAShadowElement(Element& element, const AtomicString& id) {
 
 bool SelectorChecker::CheckPseudoAutofill(CSSSelector::PseudoType pseudo_type,
                                           Element& element) const {
-  HTMLFormControlElement* html_form_element = nullptr;
-  HTMLSelectListElement* owner_html_select_list_element =
-      HTMLSelectListElement::OwnerSelectList(&element);
-  if (owner_html_select_list_element &&
-      owner_html_select_list_element->AssignedPartType(&element) ==
-          HTMLSelectListElement::PartType::kButton) {
-    html_form_element = owner_html_select_list_element;
-  } else {
-    html_form_element = DynamicTo<HTMLFormControlElement>(&element);
+  HTMLFormControlElement* form_control_element =
+      DynamicTo<HTMLFormControlElement>(&element);
+  if (auto* button = DynamicTo<HTMLButtonElement>(&element)) {
+    if (auto* selectlist = button->OwnerSelectList()) {
+      form_control_element = selectlist;
+    }
   }
 
-  if (!html_form_element) {
+  if (!form_control_element) {
     return false;
   }
   switch (pseudo_type) {
     case CSSSelector::kPseudoAutofill:
     case CSSSelector::kPseudoWebKitAutofill:
-      return html_form_element->IsAutofilled();
+      return form_control_element->IsAutofilled() ||
+             form_control_element->IsPreviewed();
     case CSSSelector::kPseudoAutofillPreviewed:
-      return html_form_element->GetAutofillState() ==
+      return form_control_element->GetAutofillState() ==
              WebAutofillState::kPreviewed;
     case CSSSelector::kPseudoAutofillSelected:
-      return html_form_element->HighlightAutofilled();
+      return form_control_element->HighlightAutofilled();
     default:
       NOTREACHED();
   }
@@ -2048,7 +2055,7 @@ bool SelectorChecker::CheckPseudoElement(const SelectorCheckingContext& context,
     }
     case CSSSelector::kPseudoPart:
       DCHECK(part_names_);
-      for (const auto& part_name : *selector.PartNames()) {
+      for (const auto& part_name : selector.IdentList()) {
         if (!part_names_->Contains(part_name)) {
           return false;
         }
@@ -2411,6 +2418,15 @@ const Element* ActivationCeiling(const StyleScopeActivation& activation) {
   return shadow_root ? &shadow_root->host() : nullptr;
 }
 
+// True if this StyleScope has an implicit root at the specified element.
+// This is used to find the roots for prelude-less @scope rules.
+bool HasImplicitRoot(const StyleScope& style_scope, Element& element) {
+  if (const StyleScopeData* style_scope_data = element.GetStyleScopeData()) {
+    return style_scope_data->TriggersScope(style_scope);
+  }
+  return false;
+}
+
 }  // namespace
 
 const StyleScopeActivations& SelectorChecker::EnsureActivations(
@@ -2527,7 +2543,7 @@ const StyleScopeActivations* SelectorChecker::CalculateActivations(
               ? MatchesWithScope(element, *style_scope.From(),
                                  outer_activation.root, match_visited,
                                  activations->match_flags)
-              : style_scope.HasImplicitRoot(&element)) {
+              : HasImplicitRoot(style_scope, element)) {
         StyleScopeActivation activation{&element, 0};
         // It's possible for a newly created activation to be immediately
         // limited (e.g. @scope (.x) to (.x)).

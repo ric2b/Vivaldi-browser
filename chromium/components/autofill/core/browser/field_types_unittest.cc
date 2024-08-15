@@ -4,18 +4,19 @@
 
 #include "components/autofill/core/browser/field_types.h"
 
+#include "components/autofill/core/browser/field_type_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace autofill {
 
 TEST(FieldTypesTest, TypeStringConversion) {
-  EXPECT_EQ(TypeNameToFieldType(FieldTypeToStringPiece(NO_SERVER_DATA)),
+  EXPECT_EQ(TypeNameToFieldType(FieldTypeToStringView(NO_SERVER_DATA)),
             NO_SERVER_DATA);
   for (int i = 0; i < MAX_VALID_FIELD_TYPE; ++i) {
     if (ServerFieldType raw_value = static_cast<ServerFieldType>(i);
         ToSafeServerFieldType(raw_value, NO_SERVER_DATA) != NO_SERVER_DATA) {
-      EXPECT_EQ(TypeNameToFieldType(FieldTypeToStringPiece(raw_value)),
+      EXPECT_EQ(TypeNameToFieldType(FieldTypeToStringView(raw_value)),
                 raw_value);
     }
   }
@@ -85,7 +86,6 @@ TEST(FieldTypesTest, IsValidServerFieldType) {
       NOT_PASSWORD,
       SINGLE_USERNAME,
       NOT_USERNAME,
-      UPI_VPA,
       IBAN_VALUE,
       ADDRESS_HOME_STREET_NAME,
       ADDRESS_HOME_HOUSE_NUMBER,
@@ -122,6 +122,20 @@ TEST(FieldTypesTest, IsValidServerFieldType) {
     EXPECT_EQ(ToSafeServerFieldType(raw_value, kInvalidValue),
               kValidFieldTypes.count(raw_value) ? raw_value : kInvalidValue);
   }
+}
+
+TEST(FieldTypesTest, TestWith2DigitExpirationYear) {
+  ServerFieldType assumed_field_type =
+      ToSafeServerFieldType(CREDIT_CARD_EXP_2_DIGIT_YEAR, NO_SERVER_DATA);
+  size_t result = DetermineExpirationYearLength(assumed_field_type);
+  EXPECT_EQ(result, static_cast<size_t>(2));
+}
+
+TEST(FieldTypesTest, TestWith4DigitExpirationYear) {
+  ServerFieldType assumed_field_type =
+      ToSafeServerFieldType(CREDIT_CARD_EXP_4_DIGIT_YEAR, NO_SERVER_DATA);
+  size_t result = DetermineExpirationYearLength(assumed_field_type);
+  EXPECT_EQ(result, static_cast<size_t>(4));
 }
 
 }  // namespace autofill

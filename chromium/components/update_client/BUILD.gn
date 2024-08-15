@@ -136,8 +136,8 @@ static_library("update_client") {
     "task.h",
     "task_check_for_update.cc",
     "task_check_for_update.h",
-    "task_send_uninstall_ping.cc",
-    "task_send_uninstall_ping.h",
+    "task_send_ping.cc",
+    "task_send_ping.h",
     "task_traits.h",
     "task_update.cc",
     "task_update.h",
@@ -148,6 +148,8 @@ static_library("update_client") {
     "update_client.h",
     "update_client_errors.h",
     "update_client_internal.h",
+    "update_client_metrics.cc",
+    "update_client_metrics.h",
     "update_engine.cc",
     "update_engine.h",
     "update_query_params.cc",
@@ -173,6 +175,14 @@ static_library("update_client") {
     "//third_party/zlib/google:compression_utils",
     "//url",
   ]
+
+  if (is_mac) {
+    sources += [
+      "background_downloader_mac.h",
+      "background_downloader_mac.mm",
+    ]
+    frameworks = [ "Foundation.framework" ]
+  }
 
   if (is_win) {
     sources += [
@@ -282,6 +292,14 @@ source_set("unit_tests") {
 
   if (!disable_file_support) {
     sources += [ "crx_downloader_unittest.cc" ]
+
+    if (is_win) {
+      sources += [ "background_downloader_win_unittest.cc" ]
+    }
+
+    if (is_mac) {
+      sources += [ "background_downloader_mac_unittest.cc" ]
+    }
   }
 
   deps = [

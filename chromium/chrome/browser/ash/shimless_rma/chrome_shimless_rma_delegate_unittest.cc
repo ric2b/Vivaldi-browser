@@ -22,6 +22,7 @@
 #include "chrome/browser/extensions/extension_service_test_base.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/services/qrcode_generator/public/cpp/qrcode_generator_service.h"
@@ -34,6 +35,7 @@
 #include "content/public/test/fake_service_worker_context.h"
 #include "extensions/common/constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/permissions_policy/permissions_policy_declaration.h"
 
 namespace ash::shimless_rma {
 namespace {
@@ -134,10 +136,14 @@ class FakeWebAppCommandScheduler : public web_app::WebAppCommandScheduler {
       std::unique_ptr<ScopedProfileKeepAlive> profile_keep_alive,
       web_app::WebAppCommandScheduler::InstallIsolatedWebAppCallback callback,
       const base::Location& call_location) override {
+    web_app::IsolatedWebAppLocation destination_location =
+        web_app::InstalledBundle{
+            .path = base::FilePath{FILE_PATH_LITERAL("/some/random/path")}};
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(std::move(callback),
-                                  web_app::InstallIsolatedWebAppCommandSuccess{
-                                      base::Version{}}));
+        FROM_HERE,
+        base::BindOnce(std::move(callback),
+                       web_app::InstallIsolatedWebAppCommandSuccess(
+                           base::Version{}, std::move(destination_location))));
   }
 };
 
@@ -161,13 +167,22 @@ class FakeDiagnosticsAppProfileHelperDelegate
     return &web_app_command_scheduler_;
   }
 
+  const web_app::WebApp* GetWebAppById(
+      const webapps::AppId& app_id,
+      content::BrowserContext* browser_context) override {
+    return &web_app_;
+  }
+
   FakeServiceWorkerContext& fake_service_worker_context() {
     return fake_service_worker_context_;
   }
 
+  web_app::WebApp& web_app() { return web_app_; }
+
  protected:
   FakeServiceWorkerContext fake_service_worker_context_;
   FakeWebAppCommandScheduler web_app_command_scheduler_;
+  web_app::WebApp web_app_{/*AppId=*/""};
 };
 
 class ChromeShimlessRmaDelegatePrepareDiagnosticsAppProfileTest
@@ -188,7 +203,7 @@ class ChromeShimlessRmaDelegatePrepareDiagnosticsAppProfileTest
             chromeos::features::kIWAForTelemetryExtensionAPI,
         },
         {});
-    testing_profile_manager_.SetUp();
+    ASSERT_TRUE(testing_profile_manager_.SetUp());
     TestingProfile* profile = testing_profile_manager_.CreateTestingProfile(
         kShimlessRmaAppBrowserContextBaseName);
 
@@ -257,6 +272,8 @@ class ChromeShimlessRmaDelegatePrepareDiagnosticsAppProfileTest
 
 // Verify the whole flow of `PrepareDiagnosticsAppProfile`.
 TEST_F(ChromeShimlessRmaDelegatePrepareDiagnosticsAppProfileTest, Success) {
+  fake_diagnostics_app_profile_helper_delegate_->web_app().SetName("App Name");
+
   // Call this twice to verify that even if the profile has already been loaded
   // it still works.
   for (int i = 0; i < 2; ++i) {
@@ -265,6 +282,13 @@ TEST_F(ChromeShimlessRmaDelegatePrepareDiagnosticsAppProfileTest, Success) {
             .Append(kTestCrxPath));
 
     EXPECT_TRUE(result.has_value());
+    EXPECT_EQ(result->extension_id, "jmalcmbicpnakfkncbgbcmlmgpfkhdca");
+    EXPECT_EQ(result->iwa_id.id(),
+              "pt2jysa7yu326m2cbu5mce4rrajvguagronrsqwn5dhbaris6eaaaaic");
+    EXPECT_EQ(result->name, "App Name");
+    EXPECT_EQ(result->permission_message,
+              "Run ChromeOS diagnostic tests\nRead ChromeOS device information "
+              "and data\nRead ChromeOS device and component serial numbers\n");
 
     content::BrowserContext* context = result->context;
     EXPECT_FALSE(context->IsOffTheRecord());
@@ -304,6 +328,21 @@ TEST_F(ChromeShimlessRmaDelegatePrepareDiagnosticsAppProfileTest,
 
   EXPECT_FALSE(result.has_value());
   EXPECT_EQ(result.error(), k3pDiagErrorCannotActivateExtension);
+}
+
+// Verify that IWA with permission policy will be blocked.
+TEST_F(ChromeShimlessRmaDelegatePrepareDiagnosticsAppProfileTest,
+       IWACannotHavePermissionsPolicy) {
+  fake_diagnostics_app_profile_helper_delegate_->web_app().SetPermissionsPolicy(
+      blink::ParsedPermissionsPolicy{
+          {blink::ParsedPermissionsPolicyDeclaration{}}});
+
+  auto result = PrepareDiagnosticsAppBrowserContext(
+      base::PathService::CheckedGet(base::DIR_SRC_TEST_DATA_ROOT)
+          .Append(kTestCrxPath));
+
+  EXPECT_FALSE(result.has_value());
+  EXPECT_EQ(result.error(), k3pDiagErrorIWACannotHasPermissionPolicy);
 }
 
 }  // namespace ash::shimless_rma

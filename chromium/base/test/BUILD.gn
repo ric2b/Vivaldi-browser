@@ -12,6 +12,7 @@ import("//third_party/protobuf/proto_library.gni")
 
 if (is_android) {
   import("//build/config/android/rules.gni")
+  import("//third_party/jni_zero/jni_zero.gni")
 }
 
 if (is_ios) {
@@ -102,6 +103,7 @@ static_library("test_support") {
     "power_monitor_test.h",
     "power_monitor_test_utils.cc",
     "power_monitor_test_utils.h",
+    "protobuf_matchers.h",
     "rectify_callback.h",
     "rectify_callback_internal.h",
     "repeating_test_future.h",
@@ -109,6 +111,8 @@ static_library("test_support") {
     "run_until.h",
     "scoped_amount_of_physical_memory_override.cc",
     "scoped_amount_of_physical_memory_override.h",
+    "scoped_block_tests_writing_to_special_dirs.cc",
+    "scoped_block_tests_writing_to_special_dirs.h",
     "scoped_command_line.cc",
     "scoped_command_line.h",
     "scoped_feature_list.cc",
@@ -190,7 +194,10 @@ static_library("test_support") {
       "test_trace_processor.cc",
       "test_trace_processor.h",
     ]
-    deps += [ ":gen_cc_chrome_track_event_descriptor" ]
+    deps += [
+      ":amalgamated_perfetto_sql_stdlib",
+      ":gen_cc_chrome_track_event_descriptor",
+    ]
     if (is_ios) {
       deps += [
         ":test_trace_processor+bundle",
@@ -428,8 +435,10 @@ shared_library("test_shared_library") {
 if (is_fuchsia || is_linux || is_chromeos) {
   shared_library("malloc_wrapper") {
     testonly = true
-    sources = [ "malloc_wrapper.cc" ]
-    deps = [ "//base" ]
+    sources = [
+      "malloc_wrapper.cc",
+      "malloc_wrapper.h",
+    ]
   }
 }
 
@@ -458,10 +467,10 @@ if (is_android) {
 
     deps = [
       "//base:base_java",
-      "//base:jni_java",
       "//base:process_launcher_java",
       "//testing/android/native_test:native_main_runner_java",
       "//third_party/android_deps:com_google_code_findbugs_jsr305_java",
+      "//third_party/jni_zero:jni_zero_java",
     ]
 
     srcjar_deps = [ ":test_support_java_aidl" ]
@@ -504,10 +513,7 @@ if (is_ios) {
 
   source_set("google_test_runner") {
     sources = [ "ios/google_test_runner.mm" ]
-    deps = [
-      ":google_test_runner_shared_headers",
-      "//base",
-    ]
+    deps = [ ":google_test_runner_shared_headers" ]
     frameworks = [ "UIKit.framework" ]
     configs += [ "//build/config/ios:xctest_config" ]
   }
@@ -524,6 +530,22 @@ if (enable_base_tracing) {
   perfetto_cc_proto_descriptor("gen_cc_chrome_track_event_descriptor") {
     descriptor_name = "chrome_track_event.descriptor"
     descriptor_target = "//base/tracing/protos:chrome_track_event"
+  }
+
+  import("//base/tracing/stdlib/chrome/perfetto_sql_files.gni")
+  action("amalgamated_perfetto_sql_stdlib") {
+    script = "//third_party/perfetto/tools/gen_amalgamated_sql.py"
+    sources = rebase_path(chrome_stdlib_sql_files,
+                          ".",
+                          "//base/tracing/stdlib/chrome")
+    stdlib_header = "$root_gen_dir/base/test/perfetto_sql_stdlib.h"
+    outputs = [ stdlib_header ]
+    args = [
+             "--namespace",
+             "chrome_stdlib",
+             "--cpp-out",
+             rebase_path(stdlib_header, root_build_dir),
+           ] + rebase_path(sources, root_build_dir)
   }
 
   # We encapsulate the trace processor in a separate shared library to prevent
@@ -593,5 +615,45 @@ if (enable_base_tracing) {
   # the dependency.
   group("test_trace_processor_bundle_data") {
     testonly = true
+  }
+}
+
+if (is_android) {
+  android_library("public_transit_java") {
+    testonly = true
+
+    deps = [
+      "//base:base_java",
+      "//base:base_java_test_support",
+      "//build/android:build_java",
+      "//third_party/android_deps:espresso_java",
+      "//third_party/android_deps:guava_android_java",
+      "//third_party/androidx:androidx_annotation_annotation_java",
+      "//third_party/androidx:androidx_core_core_java",
+      "//third_party/androidx:androidx_test_monitor_java",
+      "//third_party/hamcrest:hamcrest_java",
+      "//third_party/junit",
+    ]
+
+    sources = [
+      "android/javatests/src/org/chromium/base/test/transit/CallbackCondition.java",
+      "android/javatests/src/org/chromium/base/test/transit/Condition.java",
+      "android/javatests/src/org/chromium/base/test/transit/ConditionChecker.java",
+      "android/javatests/src/org/chromium/base/test/transit/ConditionWaiter.java",
+      "android/javatests/src/org/chromium/base/test/transit/ConditionalState.java",
+      "android/javatests/src/org/chromium/base/test/transit/Elements.java",
+      "android/javatests/src/org/chromium/base/test/transit/FacilityCheckIn.java",
+      "android/javatests/src/org/chromium/base/test/transit/FacilityCheckOut.java",
+      "android/javatests/src/org/chromium/base/test/transit/InstrumentationThreadCondition.java",
+      "android/javatests/src/org/chromium/base/test/transit/PublicTransitConfig.java",
+      "android/javatests/src/org/chromium/base/test/transit/StationFacility.java",
+      "android/javatests/src/org/chromium/base/test/transit/TransitAsserts.java",
+      "android/javatests/src/org/chromium/base/test/transit/TransitStation.java",
+      "android/javatests/src/org/chromium/base/test/transit/Transition.java",
+      "android/javatests/src/org/chromium/base/test/transit/TravelException.java",
+      "android/javatests/src/org/chromium/base/test/transit/Trip.java",
+      "android/javatests/src/org/chromium/base/test/transit/UiThreadCondition.java",
+      "android/javatests/src/org/chromium/base/test/transit/ViewConditions.java",
+    ]
   }
 }

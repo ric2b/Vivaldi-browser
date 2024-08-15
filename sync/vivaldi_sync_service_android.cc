@@ -94,8 +94,8 @@ void VivaldiSyncServiceAndroid::SendCycleData() {
 
   Java_VivaldiSyncService_onCycleData(
       env, obj, cycle_data.download_updates_status, cycle_data.commit_status,
-      cycle_data.cycle_start_time.ToJavaTime(),
-      cycle_data.next_retry_time.ToJavaTime());
+      cycle_data.cycle_start_time.InMillisecondsSinceUnixEpoch(),
+      cycle_data.next_retry_time.InMillisecondsSinceUnixEpoch());
 }
 
 void VivaldiSyncServiceAndroid::OnSyncCycleCompleted(

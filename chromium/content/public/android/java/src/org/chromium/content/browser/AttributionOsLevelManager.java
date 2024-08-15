@@ -24,13 +24,17 @@ import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 
+import org.jni_zero.CalledByNative;
+import org.jni_zero.JNINamespace;
+import org.jni_zero.NativeMethods;
+
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
+import org.chromium.base.ResettersForTesting;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.annotations.JNINamespace;
-import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.url.GURL;
 
 import java.io.IOException;
@@ -52,6 +56,10 @@ public class AttributionOsLevelManager {
     // TODO: replace with constant in android.Manifest.permission once it becomes available in U.
     private static final String PERMISSION_ACCESS_ADSERVICES_ATTRIBUTION =
             "android.permission.ACCESS_ADSERVICES_ATTRIBUTION";
+
+    // Used for testing
+    private static MeasurementManagerFutures sManagerForTesting;
+
     private long mNativePtr;
     private MeasurementManagerFutures mManager;
 
@@ -90,12 +98,26 @@ public class AttributionOsLevelManager {
         mNativePtr = nativePtr;
     }
 
+    private static boolean supportsAttribution() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.R;
+    }
+
     private MeasurementManagerFutures getManager() {
-        if (mManager != null) return mManager;
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        if (sManagerForTesting != null) {
+            return sManagerForTesting;
+        }
+        if (mManager != null) {
+            return mManager;
+        }
+        if (!supportsAttribution()) {
             return null;
         }
-        mManager = MeasurementManagerFutures.from(ContextUtils.getApplicationContext());
+        try {
+            mManager = MeasurementManagerFutures.from(ContextUtils.getApplicationContext());
+        } catch (Throwable t) {
+            // An error may be thrown if android.ext.adservices is not loaded.
+            Log.i(TAG, "Failed to get measurement manager", t);
+        }
         return mManager;
     }
 
@@ -123,7 +145,7 @@ public class AttributionOsLevelManager {
 
     private void addRegistrationFutureCallback(
             int requestId, @RegistrationType int type, ListenableFuture<?> future) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        if (!supportsAttribution()) {
             return;
         }
         Futures.addCallback(future, new FutureCallback<Object>() {
@@ -168,7 +190,7 @@ public class AttributionOsLevelManager {
     @CalledByNative
     private void registerWebAttributionSource(int requestId, GURL registrationUrl,
             GURL topLevelOrigin, boolean isDebugKeyAllowed, MotionEvent event) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        if (!supportsAttribution()) {
             onRegistrationCompleted(
                     requestId, RegistrationType.SOURCE, RegistrationResult.ERROR_INTERNAL);
             return;
@@ -194,7 +216,7 @@ public class AttributionOsLevelManager {
      */
     @CalledByNative
     private void registerAttributionSource(int requestId, GURL registrationUrl, MotionEvent event) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        if (!supportsAttribution()) {
             onRegistrationCompleted(
                     requestId, RegistrationType.SOURCE, RegistrationResult.ERROR_INTERNAL);
             return;
@@ -217,7 +239,7 @@ public class AttributionOsLevelManager {
     @CalledByNative
     private void registerWebAttributionTrigger(
             int requestId, GURL registrationUrl, GURL topLevelOrigin, boolean isDebugKeyAllowed) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        if (!supportsAttribution()) {
             onRegistrationCompleted(
                     requestId, RegistrationType.TRIGGER, RegistrationResult.ERROR_INTERNAL);
             return;
@@ -236,6 +258,28 @@ public class AttributionOsLevelManager {
         addRegistrationFutureCallback(requestId, RegistrationType.TRIGGER, future);
     }
 
+    /**
+     * Registers an attribution trigger with native, see `registerTriggerAsync()`:
+     * https://developer.android.com/reference/androidx/privacysandbox/ads/adservices/java/measurement/MeasurementManagerFutures.
+     */
+    @CalledByNative
+    private void registerAttributionTrigger(int requestId, GURL registrationUrl) {
+        if (!supportsAttribution()) {
+            onRegistrationCompleted(
+                    requestId, RegistrationType.TRIGGER, RegistrationResult.ERROR_INTERNAL);
+            return;
+        }
+
+        MeasurementManagerFutures mm = getManager();
+        if (mm == null) {
+            onRegistrationCompleted(
+                    requestId, RegistrationType.TRIGGER, RegistrationResult.ERROR_INTERNAL);
+            return;
+        }
+        ListenableFuture<?> future = mm.registerTriggerAsync(Uri.parse(registrationUrl.getSpec()));
+        addRegistrationFutureCallback(requestId, RegistrationType.TRIGGER, future);
+    }
+
     private void onDataDeletionCompleted(int requestId) {
         if (mNativePtr != 0) {
             AttributionOsLevelManagerJni.get().onDataDeletionCompleted(mNativePtr, requestId);
@@ -249,7 +293,7 @@ public class AttributionOsLevelManager {
     @CalledByNative
     private void deleteRegistrations(int requestId, long startMs, long endMs, GURL[] origins,
             String[] domains, int deletionMode, int matchBehavior) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        if (!supportsAttribution()) {
             onDataDeletionCompleted(requestId);
             return;
         }
@@ -339,7 +383,12 @@ public class AttributionOsLevelManager {
     private static void getMeasurementApiStatus() {
         ThreadUtils.assertOnBackgroundThread();
 
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        if (sManagerForTesting != null) {
+            AttributionOsLevelManagerJni.get().onMeasurementStateReturned(1);
+            return;
+        }
+
+        if (!supportsAttribution()) {
             AttributionOsLevelManagerJni.get().onMeasurementStateReturned(0);
             return;
         }
@@ -350,8 +399,14 @@ public class AttributionOsLevelManager {
             AttributionOsLevelManagerJni.get().onMeasurementStateReturned(0);
             return;
         }
-        MeasurementManagerFutures mm =
-                MeasurementManagerFutures.from(ContextUtils.getApplicationContext());
+        MeasurementManagerFutures mm = null;
+        try {
+            mm = MeasurementManagerFutures.from(ContextUtils.getApplicationContext());
+        } catch (Throwable t) {
+            // An error may be thrown if android.ext.adservices is not loaded.
+            Log.i(TAG, "Failed to get measurement manager", t);
+        }
+
         if (mm == null) {
             AttributionOsLevelManagerJni.get().onMeasurementStateReturned(0);
             return;
@@ -387,6 +442,17 @@ public class AttributionOsLevelManager {
     @CalledByNative
     private void nativeDestroyed() {
         mNativePtr = 0;
+    }
+
+    public static void setManagerForTesting(MeasurementManagerFutures manager) {
+        sManagerForTesting = manager;
+        PostTask.postTask(
+                TaskTraits.BEST_EFFORT, () -> AttributionOsLevelManager.getMeasurementApiStatus());
+        ResettersForTesting.register(() -> {
+            sManagerForTesting = null;
+            PostTask.postTask(TaskTraits.BEST_EFFORT,
+                    () -> AttributionOsLevelManager.getMeasurementApiStatus());
+        });
     }
 
     @NativeMethods

@@ -20,6 +20,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_ui_utils.h"
+#include "components/password_manager/core/browser/ui/credential_ui_entry.h"
 #include "components/password_manager/core/common/password_manager_constants.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/vector_icons/vector_icons.h"
@@ -35,6 +36,7 @@
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/flex_layout_view.h"
 #include "ui/views/style/typography.h"
+#include "ui/views/style/typography_provider.h"
 #include "ui/views/vector_icons.h"
 
 namespace {
@@ -112,8 +114,8 @@ std::unique_ptr<views::Label> CreateErrorLabel(std::u16string error_msg) {
 // multiline textarea, the first line in the contents is vertically aligned with
 // the icon.
 void AlignTextfieldWithRowIcon(views::Textfield* textfield) {
-  int line_height = views::style::GetLineHeight(views::style::CONTEXT_TEXTFIELD,
-                                                views::style::STYLE_PRIMARY);
+  int line_height = views::TypographyProvider::Get().GetLineHeight(
+      views::style::CONTEXT_TEXTFIELD, views::style::STYLE_PRIMARY);
   int vertical_padding_inside_textfield =
       2 * ChromeLayoutProvider::Get()->GetDistanceMetric(
               views::DISTANCE_CONTROL_VERTICAL_TEXT_PADDING);
@@ -355,8 +357,8 @@ std::unique_ptr<views::View> CreateNoteLabel(
   note_label->SetMaximumWidth(kNoteLabelMaxWidth);
   note_label->SetID(static_cast<int>(ManagePasswordsViewIDs::kNoteLabel));
 
-  int line_height = views::style::GetLineHeight(note_label->GetTextContext(),
-                                                note_label->GetTextStyle());
+  int line_height = views::TypographyProvider::Get().GetLineHeight(
+      note_label->GetTextContext(), note_label->GetTextStyle());
   int vertical_margin = (kDetailRowHeight - line_height) / 2;
   auto scroll_view = std::make_unique<views::ScrollView>(
       views::ScrollView::ScrollWithLayers::kEnabled);
@@ -443,8 +445,8 @@ std::unique_ptr<views::View> CreateEditNoteRow(
   (*textarea)->SetText(form.GetNoteWithEmptyUniqueDisplayName());
   (*textarea)->SetAccessibleName(
       l10n_util::GetStringUTF16(IDS_MANAGE_PASSWORDS_NOTE_TEXTFIELD));
-  int line_height = views::style::GetLineHeight(views::style::CONTEXT_TEXTFIELD,
-                                                views::style::STYLE_PRIMARY);
+  int line_height = views::TypographyProvider::Get().GetLineHeight(
+      views::style::CONTEXT_TEXTFIELD, views::style::STYLE_PRIMARY);
   (*textarea)->SetPreferredSize(
       gfx::Size(0, kMaxLinesVisibleFromPasswordNote * line_height +
                        2 * ChromeLayoutProvider::Get()->GetDistanceMetric(
@@ -487,8 +489,8 @@ std::unique_ptr<views::View> ManagePasswordsDetailsView::CreateTitleView(
   views::InstallCircleHighlightPathGenerator(back_button.get());
   header->AddChildView(std::move(back_button));
 
-  std::string shown_origin =
-      password_manager::GetShownOriginAndLinkUrl(password_form).first;
+  std::string shown_origin = password_manager::GetShownOrigin(
+      password_manager::CredentialUIEntry(password_form));
   header->AddChildView(views::BubbleFrameView::CreateDefaultTitleLabel(
       base::UTF8ToUTF16(shown_origin)));
   return header;

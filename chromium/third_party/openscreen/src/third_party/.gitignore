@@ -1,0 +1,4 @@
+*/src/
+llvm-build
+modp_b64
+ninja/ninja*

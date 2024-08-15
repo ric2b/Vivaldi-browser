@@ -27,13 +27,9 @@ PersonalDataManagerCleaner::PersonalDataManagerCleaner(
       pref_service_(pref_service),
       alternative_state_name_map_updater_(alternative_state_name_map_updater) {
   // Check if profile cleanup has already been performed this major version.
-  is_autofill_profile_cleanup_pending_ =
+  is_autofill_profile_dedupe_pending_ =
       pref_service_->GetInteger(prefs::kAutofillLastVersionDeduped) <
       CHROME_VERSION_MAJOR;
-  DVLOG(1) << "Autofill profile cleanup "
-           << (is_autofill_profile_cleanup_pending_ ? "needs to be"
-                                                    : "has already been")
-           << " performed for this version";
 }
 
 PersonalDataManagerCleaner::~PersonalDataManagerCleaner() = default;
@@ -45,7 +41,7 @@ void PersonalDataManagerCleaner::CleanupDataAndNotifyPersonalDataObservers() {
   // defer the insertion to when the observers are notified.
   if (!alternative_state_name_map_updater_
            ->is_alternative_state_name_map_populated() &&
-      is_autofill_profile_cleanup_pending_) {
+      is_autofill_profile_dedupe_pending_) {
     alternative_state_name_map_updater_->PopulateAlternativeStateNameMap(
         base::BindOnce(&PersonalDataManagerCleaner::
                            CleanupDataAndNotifyPersonalDataObservers,
@@ -53,13 +49,16 @@ void PersonalDataManagerCleaner::CleanupDataAndNotifyPersonalDataObservers() {
     return;
   }
 
-  // If sync is enabled for autofill, defer running cleanups until address
-  // sync and card sync have started; otherwise, do it now.
-  // TODO(crbug.com/1477292): This should also cover Sync-the-transport (not
-  // only Sync-the-feature), and for the credit card fixes, it should check
-  // whether Payments specifically is enabled, not the overall Autofill.
-  if (!personal_data_manager_->IsSyncFeatureEnabledForAutofill()) {
+  // If the user has chosen to sync addresses, wait for sync to start before
+  // performing cleanups. Otherwise do them now.
+  if (!personal_data_manager_->IsUserSelectableTypeEnabled(
+          syncer::UserSelectableType::kAutofill)) {
     ApplyAddressFixesAndCleanups();
+  }
+  // If the user has chosen to sync payments, wait for sync to start before
+  // performing cleanups. Otherwise do them now.
+  if (!personal_data_manager_->IsUserSelectableTypeEnabled(
+          syncer::UserSelectableType::kPayments)) {
     ApplyCardFixesAndCleanups();
   }
 
@@ -69,7 +68,10 @@ void PersonalDataManagerCleaner::CleanupDataAndNotifyPersonalDataObservers() {
   personal_data_manager_->NotifyPersonalDataObserver();
 }
 
-void PersonalDataManagerCleaner::SyncStarted(syncer::ModelType model_type) {
+void PersonalDataManagerCleaner::SyncStarted(syncer::ModelType model_type) {}
+
+void PersonalDataManagerCleaner::ApplyAddressAndCardFixesAndCleanups(
+    syncer::ModelType model_type) {
   // The profile de-duplication is run once every major chrome version. If the
   // profile de-duplication has not run for the |CHROME_VERSION_MAJOR| yet,
   // |AlternativeStateNameMap| needs to be populated first. Otherwise,
@@ -78,45 +80,62 @@ void PersonalDataManagerCleaner::SyncStarted(syncer::ModelType model_type) {
   // alternative state name map should be re-populated. This is currently not
   // the case due to the `is_alternative_state_name_map_populated()` check. This
   // state should be reset when sync is disabled, together with
-  // `autofill_profile_sync_started` and `contact_info_sync_started`.
-  autofill_profile_sync_started |= model_type == syncer::AUTOFILL_PROFILE;
-  contact_info_sync_started |= model_type == syncer::CONTACT_INFO;
-  if (autofill_profile_sync_started && contact_info_sync_started &&
+  // `autofill_profile_sync_started_` and `contact_info_sync_started_`.
+  autofill_profile_sync_started_ |= model_type == syncer::AUTOFILL_PROFILE;
+  contact_info_sync_started_ |= model_type == syncer::CONTACT_INFO;
+  if (autofill_profile_sync_started_ && contact_info_sync_started_ &&
       !alternative_state_name_map_updater_
            ->is_alternative_state_name_map_populated() &&
-      is_autofill_profile_cleanup_pending_) {
+      is_autofill_profile_dedupe_pending_) {
     alternative_state_name_map_updater_->PopulateAlternativeStateNameMap(
-        base::BindOnce(&PersonalDataManagerCleaner::SyncStarted,
-                       weak_ptr_factory_.GetWeakPtr(), model_type));
+        base::BindOnce(
+            &PersonalDataManagerCleaner::ApplyAddressAndCardFixesAndCleanups,
+            weak_ptr_factory_.GetWeakPtr(), model_type));
     return;
   }
 
   // Run deferred autofill address profile startup code.
-  if (model_type == syncer::AUTOFILL_PROFILE)
+  if (autofill_profile_sync_started_ && contact_info_sync_started_ &&
+      (model_type == syncer::AUTOFILL_PROFILE ||
+       model_type == syncer::CONTACT_INFO)) {
     ApplyAddressFixesAndCleanups();
+  }
 
   // Run deferred credit card startup code.
-  if (model_type == syncer::AUTOFILL_WALLET_DATA)
+  if (model_type == syncer::AUTOFILL_WALLET_DATA) {
     ApplyCardFixesAndCleanups();
+  }
 }
 
 void PersonalDataManagerCleaner::ApplyAddressFixesAndCleanups() {
+  if (!is_profile_cleanup_pending_) {
+    return;
+  }
+
   // Once per major version, otherwise NOP.
   ApplyDedupingRoutine();
 
-  // Once per major version, otherwise NOP.
+  // Ran once on browser startup.
   DeleteDisusedAddresses();
 
-  // Once per user profile startup.
+  // Ran once on browser startup.
   RemoveInaccessibleProfileValues();
+
+  is_profile_cleanup_pending_ = false;
 }
 
 void PersonalDataManagerCleaner::ApplyCardFixesAndCleanups() {
-  // Once per major version, otherwise NOP.
+  if (!is_credit_card_cleanup_pending_) {
+    return;
+  }
+
+  // Ran once on browser startup.
   DeleteDisusedCreditCards();
 
-  // Ran everytime it is called.
+  // Ran once on browser startup.
   ClearCreditCardNonSettingsOrigins();
+
+  is_credit_card_cleanup_pending_ = true;
 }
 
 void PersonalDataManagerCleaner::RemoveInaccessibleProfileValues() {
@@ -143,9 +162,7 @@ void PersonalDataManagerCleaner::RemoveInaccessibleProfileValues() {
 
 bool PersonalDataManagerCleaner::ApplyDedupingRoutine() {
   // Check if de-duplication has already been performed on this major version.
-  if (!is_autofill_profile_cleanup_pending_) {
-    DVLOG(1)
-        << "Autofill profile de-duplication already performed for this version";
+  if (!is_autofill_profile_dedupe_pending_) {
     return false;
   }
 
@@ -159,14 +176,14 @@ bool PersonalDataManagerCleaner::ApplyDedupingRoutine() {
   // No need to de-duplicate if there are less than two profiles.
   if (profiles.size() < 2) {
     DVLOG(1) << "Autofill profile de-duplication not needed.";
+    pref_service_->SetInteger(prefs::kAutofillLastVersionDeduped,
+                              CHROME_VERSION_MAJOR);
     return false;
   }
 
   DVLOG(1) << "Starting autofill profile de-duplication.";
   std::unordered_set<std::string> profiles_to_delete;
   profiles_to_delete.reserve(profiles.size());
-  // Used to update credit card's billing addresses after the dedupe.
-  std::unordered_map<std::string, std::string> guids_merge_map;
 
   // `profiles` contains pointers to the PDM's state. Modifying them directly
   // won't update them in the database and calling `PDM:UpdateProfile()`
@@ -176,7 +193,7 @@ bool PersonalDataManagerCleaner::ApplyDedupingRoutine() {
     new_profiles.push_back(std::make_unique<AutofillProfile>(*profile));
   }
 
-  DedupeProfiles(&new_profiles, &profiles_to_delete, &guids_merge_map);
+  DedupeProfiles(&new_profiles, &profiles_to_delete);
 
   // Apply the profile changes to the database.
   for (const auto& profile : new_profiles) {
@@ -189,9 +206,7 @@ bool PersonalDataManagerCleaner::ApplyDedupingRoutine() {
     }
   }
 
-  UpdateCardsBillingAddressReference(guids_merge_map);
-
-  is_autofill_profile_cleanup_pending_ = false;
+  is_autofill_profile_dedupe_pending_ = false;
   // Set the pref to the current major version.
   pref_service_->SetInteger(prefs::kAutofillLastVersionDeduped,
                             CHROME_VERSION_MAJOR);
@@ -201,8 +216,7 @@ bool PersonalDataManagerCleaner::ApplyDedupingRoutine() {
 
 void PersonalDataManagerCleaner::DedupeProfiles(
     std::vector<std::unique_ptr<AutofillProfile>>* existing_profiles,
-    std::unordered_set<std::string>* profiles_to_delete,
-    std::unordered_map<std::string, std::string>* guids_merge_map) const {
+    std::unordered_set<std::string>* profiles_to_delete) const {
   AutofillMetrics::LogNumberOfProfilesConsideredForDedupe(
       existing_profiles->size());
 
@@ -265,8 +279,6 @@ void PersonalDataManagerCleaner::DedupeProfiles(
       // and will not accept updates from `profile_to_merge`.
       if (existing_profile.SaveAdditionalInfo(
               *profile_to_merge, personal_data_manager_->app_locale())) {
-        guids_merge_map->emplace(profile_to_merge->guid(),
-                                 existing_profile.guid());
         profiles_to_delete->insert(profile_to_merge->guid());
 
         // Account profiles track from which service they originate. This allows
@@ -299,63 +311,6 @@ void PersonalDataManagerCleaner::DedupeProfiles(
       profiles_to_delete->size());
 }
 
-void PersonalDataManagerCleaner::UpdateCardsBillingAddressReference(
-    const std::unordered_map<std::string, std::string>& guids_merge_map) {
-  /*  Here is an example of what the graph might look like.
-
-      A -> B
-             \
-               -> E
-             /
-      C -> D
-  */
-
-  std::vector<CreditCard> server_cards_to_be_updated;
-  for (auto* credit_card : personal_data_manager_->GetCreditCards()) {
-    // If the credit card is not associated with a billing address, skip it.
-    if (credit_card->billing_address_id().empty())
-      continue;
-
-    // If the billing address profile associated with the card has been merged,
-    // replace it by the id of the profile in which it was merged. Repeat the
-    // process until the billing address has not been merged into another one.
-    std::unordered_map<std::string, std::string>::size_type nb_guid_changes = 0;
-    bool was_modified = false;
-    auto it = guids_merge_map.find(credit_card->billing_address_id());
-    while (it != guids_merge_map.end()) {
-      was_modified = true;
-      credit_card->set_billing_address_id(it->second);
-      it = guids_merge_map.find(credit_card->billing_address_id());
-
-      // Out of abundance of caution.
-      if (nb_guid_changes > guids_merge_map.size()) {
-        NOTREACHED();
-        // Cancel the changes for that card.
-        was_modified = false;
-        break;
-      }
-    }
-
-    // If the card was modified, apply the changes to the database.
-    if (was_modified) {
-      if (credit_card->record_type() == CreditCard::RecordType::kLocalCard) {
-        personal_data_manager_->GetLocalDatabase()->UpdateCreditCard(
-            *credit_card);
-      } else {
-        server_cards_to_be_updated.push_back(*credit_card);
-      }
-    }
-  }
-
-  // In case, there are server cards that need to be updated,
-  // |PersonalDataManager::Refresh()| is called after they are updated.
-  if (server_cards_to_be_updated.empty())
-    personal_data_manager_->Refresh();
-  else
-    personal_data_manager_->UpdateServerCardsMetadata(
-        server_cards_to_be_updated);
-}
-
 bool PersonalDataManagerCleaner::DeleteDisusedAddresses() {
   const std::vector<AutofillProfile*>& profiles =
       personal_data_manager_->GetProfilesFromSource(
@@ -367,17 +322,11 @@ bool PersonalDataManagerCleaner::DeleteDisusedAddresses() {
     return true;
   }
 
-  std::unordered_set<std::string> used_billing_address_guids;
-  for (CreditCard* card : personal_data_manager_->GetCreditCards()) {
-    if (!card->IsDeletable()) {
-      used_billing_address_guids.insert(card->billing_address_id());
-    }
-  }
-
+  // Don't call `PDM::RemoveByGUID()` directly, since this can invalidate the
+  // pointers in `profiles`.
   std::vector<std::string> guids_to_delete;
   for (AutofillProfile* profile : profiles) {
-    if (profile->IsDeletable() &&
-        !used_billing_address_guids.count(profile->guid())) {
+    if (profile->IsDeletable()) {
       guids_to_delete.push_back(profile->guid());
     }
   }
@@ -385,12 +334,7 @@ bool PersonalDataManagerCleaner::DeleteDisusedAddresses() {
   size_t num_deleted_addresses = guids_to_delete.size();
 
   for (auto const& guid : guids_to_delete) {
-    personal_data_manager_
-        ->RemoveAutofillProfileByGUIDAndBlankCreditCardReference(guid);
-  }
-
-  if (num_deleted_addresses > 0) {
-    personal_data_manager_->Refresh();
+    personal_data_manager_->RemoveByGUID(guid);
   }
 
   AutofillMetrics::LogNumberOfAddressesDeletedForDisuse(num_deleted_addresses);

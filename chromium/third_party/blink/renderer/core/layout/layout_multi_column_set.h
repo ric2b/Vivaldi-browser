@@ -71,6 +71,8 @@ class CORE_EXPORT LayoutMultiColumnSet final : public LayoutBlockFlow {
 
   void Trace(Visitor*) const override;
 
+  bool IsLayoutNGObject() const final;
+
   const MultiColumnFragmentainerGroup& FirstFragmentainerGroup() const {
     NOT_DESTROYED();
     UpdateGeometryIfNeeded();
@@ -105,7 +107,7 @@ class CORE_EXPORT LayoutMultiColumnSet final : public LayoutBlockFlow {
         flow_thread_offset, rule)];
   }
   const MultiColumnFragmentainerGroup& FragmentainerGroupAtVisualPoint(
-      const LayoutPoint&) const;
+      const LogicalOffset&) const;
   const MultiColumnFragmentainerGroupList& FragmentainerGroups() const {
     NOT_DESTROYED();
     UpdateGeometryIfNeeded();
@@ -131,7 +133,7 @@ class CORE_EXPORT LayoutMultiColumnSet final : public LayoutBlockFlow {
 
   LayoutFlowThread* FlowThread() const {
     NOT_DESTROYED();
-    return flow_thread_;
+    return flow_thread_.Get();
   }
 
   LayoutBlockFlow* MultiColumnBlockFlow() const {
@@ -183,8 +185,8 @@ class CORE_EXPORT LayoutMultiColumnSet final : public LayoutBlockFlow {
                                                PageBoundaryRule,
                                                CoordinateSpaceConversion) const;
 
-  LayoutPoint VisualPointToFlowThreadPoint(
-      const LayoutPoint& visual_point) const;
+  LogicalOffset VisualPointToFlowThreadPoint(
+      const PhysicalOffset& visual_point) const;
 
   // Reset previously calculated column height. Will mark for layout if needed.
   void ResetColumnHeight();
@@ -200,7 +202,6 @@ class CORE_EXPORT LayoutMultiColumnSet final : public LayoutBlockFlow {
   void EndFlow(LayoutUnit offset_in_flow_thread);
 
   void StyleDidChange(StyleDifference, const ComputedStyle* old_style) override;
-  void UpdateLayout() override;
 
   void AttachToFlowThread();
   void DetachFromFlowThread();

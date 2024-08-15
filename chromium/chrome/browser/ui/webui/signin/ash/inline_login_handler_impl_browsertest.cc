@@ -26,6 +26,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chromeos/ash/components/standalone_browser/feature_refs.h"
+#include "chromeos/ash/components/standalone_browser/standalone_browser_features.h"
 #include "components/account_manager_core/account_manager_facade.h"
 #include "components/account_manager_core/chromeos/account_manager_facade_factory.h"
 #include "components/account_manager_core/mock_account_manager_facade.h"
@@ -235,11 +236,11 @@ class InlineLoginHandlerTest
     EXPECT_TRUE(future.Wait());
 
     // Setup fake Gaia.
-    FakeGaia::MergeSessionParams params;
+    FakeGaia::Configuration params;
     params.email = kSecondaryAccount1Email;
     params.refresh_token = kSecondaryAccountRefreshToken;
     params.auth_code = kSecondaryAccountOAuthCode;
-    fake_gaia_.UpdateMergeSessionParams(params);
+    fake_gaia_.UpdateConfiguration(params);
 
     // Setup handlers.
     handler_ =
@@ -363,7 +364,8 @@ class InlineLoginHandlerTestWithArcRestrictions
  public:
   InlineLoginHandlerTestWithArcRestrictions() {
     auto lacros = ash::standalone_browser::GetFeatureRefs();
-    lacros.push_back(crosapi::browser_util::kLacrosForSupervisedUsers);
+    lacros.push_back(
+        ash::standalone_browser::features::kLacrosForSupervisedUsers);
     feature_list_.InitWithFeatures(/*enabled=*/lacros, /*disabled=*/{});
   }
 

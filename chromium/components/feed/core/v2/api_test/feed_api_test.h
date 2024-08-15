@@ -41,6 +41,8 @@
 #include "components/prefs/testing_pref_service.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/signin/public/base/signin_pref_names.h"
+#include "components/supervised_user/core/common/buildflags.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "net/http/http_status_code.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -218,6 +220,10 @@ class TestSingleWebFeedSurface : public TestSurfaceBase {
       std::string = "",
       SingleWebFeedEntryPoint entry_point = SingleWebFeedEntryPoint::kOther);
 };
+class TestSupervisedFeedSurface : public TestSurfaceBase {
+ public:
+  explicit TestSupervisedFeedSurface(FeedStream* stream = nullptr);
+};
 
 class TestImageFetcher : public ImageFetcher {
  public:
@@ -251,6 +257,14 @@ class TestFeedNetwork : public FeedNetwork {
       const feedwire::Request& request,
       const AccountInfo& account_info,
       base::OnceCallback<void(QueryRequestResult)> callback) override;
+
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+  void SendKidFriendlyApiRequest(
+      const supervised_user::GetDiscoverFeedRequest& request,
+      const AccountInfo& account_info,
+      base::OnceCallback<void(KidFriendlyQueryRequestResult)> callback)
+      override;
+#endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
   void SendDiscoverApiRequest(
       NetworkRequestType request_type,
@@ -519,17 +533,18 @@ class FeedApiTest : public testing::Test, public FeedStream::Delegate {
   void ClearAll() override;
   AccountInfo GetAccountInfo() override;
   bool IsSigninAllowed() override;
-  bool IsSyncOn() override;
   void PrefetchImage(const GURL& url) override;
   void RegisterExperiments(const Experiments& experiments) override {}
   void RegisterFollowingFeedFollowCountFieldTrial(size_t follow_count) override;
   void RegisterFeedUserSettingsFieldTrial(base::StringPiece group) override;
+  std::string GetCountry() override;
 
   // For tests.
 
   // Replace stream_.
   void CreateStream(bool wait_for_initialization = true,
-                    bool start_surface = false);
+                    bool start_surface = false,
+                    bool is_new_tab_search_engine_url_android_enabled = false);
   std::unique_ptr<StreamModel> CreateStreamModel();
   bool IsTaskQueueIdle() const;
   void WaitForIdleTaskQueue();
@@ -550,7 +565,7 @@ class FeedApiTest : public testing::Test, public FeedStream::Delegate {
  protected:
   base::test::TaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
-  TestingPrefServiceSimple profile_prefs_;
+  sync_preferences::TestingPrefServiceSyncable profile_prefs_;
   std::unique_ptr<TestMetricsReporter> metrics_reporter_;
   TestFeedNetwork network_;
   TestWireResponseTranslator response_translator_;
@@ -580,7 +595,6 @@ class FeedApiTest : public testing::Test, public FeedStream::Delegate {
   bool is_offline_ = false;
   AccountInfo account_info_ = TestAccountInfo();
   bool is_signin_allowed_ = true;
-  bool is_sync_on_ = false;
   int prefetch_image_call_count_ = 0;
   std::vector<GURL> prefetched_images_;
   base::RepeatingClosure on_clear_all_;

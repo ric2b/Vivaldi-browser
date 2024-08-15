@@ -66,4 +66,9 @@ extern const CGFloat vRecentTabsEmptyStateLoginButtonCornerRadius;
 // Button height for login button in empty state
 extern const CGFloat vRecentTabsEmptyStateLoginButtonHeight;
 
+// Pinned tabs view dimension
+extern const CGFloat vPinnedViewHorizontalPadding;
+extern const CGFloat vPinnedCellHeight;
+extern const CGFloat vPinnedCellHorizontalLayoutInsets;
+
 #endif  // IOS_CHROME_BROWSER_UI_TAB_SWITCHER_TAB_GRID_TAB_GRID_CONSTANTS_VIVALDI_H_

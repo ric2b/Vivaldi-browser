@@ -11,6 +11,7 @@
 
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -495,13 +496,10 @@ class FakeServiceWorkerContainerHost
     std::move(callback).Run();
   }
   void OnExecutionReady() override {}
-  void GetRunningStatus(GetRunningStatusCallback callback) override {
-    NOTIMPLEMENTED();
-  }
 
  private:
   int get_controller_service_worker_count_ = 0;
-  FakeControllerServiceWorker* fake_controller_;
+  raw_ptr<FakeControllerServiceWorker, ExperimentalRenderer> fake_controller_;
   mojo::ReceiverSet<blink::mojom::ServiceWorkerContainerHost> receivers_;
 };
 
@@ -564,7 +562,8 @@ class ServiceWorkerSubresourceLoaderTest : public ::testing::Test {
           mojo::NullRemote() /*remote_controller*/,
           mojo::NullRemote() /*remote_cache_storage*/, "" /*client_id*/,
           blink::mojom::ServiceWorkerFetchHandlerBypassOption::kDefault,
-          absl::nullopt, blink::EmbeddedWorkerStatus::STOPPED);
+          absl::nullopt, blink::EmbeddedWorkerStatus::kStopped,
+          mojo::NullReceiver() /*running_status_receiver*/);
     }
     mojo::Remote<network::mojom::URLLoaderFactory>
         service_worker_url_loader_factory;

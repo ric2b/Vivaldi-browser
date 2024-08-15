@@ -10,8 +10,8 @@
 
 namespace blink {
 
-class LayoutNGRubyBase;
-class LayoutNGRubyText;
+class LayoutRubyBase;
+class LayoutRubyText;
 
 // LayoutRubyColumn represents 'inline-block/table' like objects, and wrap a
 // single pairing of a ruby base with its ruby text(s).
@@ -32,23 +32,22 @@ class CORE_EXPORT LayoutRubyColumn final : public LayoutNGBlockFlow {
 
   bool HasRubyText() const;
   bool HasRubyBase() const;
-  LayoutNGRubyText* RubyText() const;
-  LayoutNGRubyBase* RubyBase() const;
+  LayoutRubyText* RubyText() const;
+  LayoutRubyBase* RubyBase() const;
   // Creates the base if it doesn't already exist
-  LayoutNGRubyBase& EnsureRubyBase();
+  LayoutRubyBase& EnsureRubyBase();
 
   bool IsChildAllowed(LayoutObject*, const ComputedStyle&) const override;
   void AddChild(LayoutObject* child,
                 LayoutObject* before_child = nullptr) override;
   void RemoveChild(LayoutObject* child) override;
   bool IsOfType(LayoutObjectType type) const override;
-  bool CreatesAnonymousWrapper() const override;
   void RemoveLeftoverAnonymousBlock(LayoutBlock*) override;
   void UpdateAnonymousChildStyle(const LayoutObject* child,
                                  ComputedStyleBuilder& builder) const override;
 
  private:
-  LayoutNGRubyBase& CreateRubyBase() const;
+  LayoutRubyBase& CreateRubyBase() const;
 };
 
 template <>

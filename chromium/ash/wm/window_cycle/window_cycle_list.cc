@@ -27,6 +27,7 @@
 #include "base/location.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/ranges/algorithm.h"
+#include "base/trace_event/trace_event.h"
 #include "ui/aura/scoped_window_targeter.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_targeter.h"
@@ -128,8 +129,8 @@ size_t GetCycleItemsCount(const std::vector<aura::Window*>& windows) {
   for (auto* window : windows) {
     if (SnapGroup* snap_group =
             snap_group_controller->GetSnapGroupForGivenWindow(window)) {
-      size_t increment = visited.insert(snap_group).second ? 0 : 1;
-      count += increment;
+      size_t addend = visited.insert(snap_group).second ? 0 : 1;
+      count += addend;
     } else {
       count++;
     }

@@ -22,7 +22,6 @@
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/webapps/browser/install_result_code.h"
-#include "content/public/browser/notification_types.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -34,7 +33,6 @@
 class OSFeedbackAppIntegrationTest : public ash::SystemWebAppIntegrationTest {
  public:
   OSFeedbackAppIntegrationTest() {
-    scoped_feature_list_.InitWithFeatures({ash::features::kOsFeedback}, {});
     feedback_url_ = GURL(ash::kChromeUIOSFeedbackUrl);
   }
 
@@ -99,9 +97,6 @@ class OSFeedbackAppIntegrationTest : public ash::SystemWebAppIntegrationTest {
 
   GURL feedback_url_;
   base::HistogramTester histogram_tester_;
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 // This test verifies that the Feedback app is opened in a new browser window.

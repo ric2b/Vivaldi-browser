@@ -227,8 +227,8 @@ void CloseSigninManagedAccountDialogIfAny(FakeSystemIdentity* fakeIdentity) {
   // If the history type isn't enabled yet, the history opt-in dialog should
   // show up now. Tap the "Yes, I'm In" button.
   if (![ChromeEarlGrey isSyncHistoryDataTypeSelected]) {
-    [[EarlGrey selectElementWithMatcher:chrome_test_util::
-                                            HistoryOptInPrimaryButtonMatcher()]
+    [[EarlGrey selectElementWithMatcher:
+                   chrome_test_util::SigninScreenPromoPrimaryButtonMatcher()]
         performAction:grey_tap()];
   }
 }
@@ -319,17 +319,6 @@ void CloseSigninManagedAccountDialogIfAny(FakeSystemIdentity* fakeIdentity) {
                                    l10n_util::GetNSString(
                                        IDS_IOS_REMOVE_GOOGLE_ACCOUNT_TITLE))]
       performAction:grey_tap()];
-}
-
-+ (void)openMyGoogleDialogWithFakeIdentity:(FakeSystemIdentity*)fakeIdentity {
-  [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabel(
-                                          fakeIdentity.userEmail)]
-      performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:
-                 ButtonWithAccessibilityLabel(l10n_util::GetNSString(
-                     IDS_IOS_MANAGE_YOUR_GOOGLE_ACCOUNT_TITLE))]
-      performAction:grey_tap()];
-  [ChromeEarlGreyUI waitForAppToIdle];
 }
 
 + (void)tapRemoveAccountFromDeviceWithFakeIdentity:

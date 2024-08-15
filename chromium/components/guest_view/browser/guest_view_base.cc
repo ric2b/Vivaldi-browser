@@ -443,14 +443,12 @@ GuestViewManager* GuestViewBase::GetGuestViewManager() {
 }
 
 std::unique_ptr<WebContents> GuestViewBase::CreateNewGuestWindow(
-    const WebContents::CreateParams& create_params,
-    int disposition) {
+    const WebContents::CreateParams& create_params) {
   if( !owner_web_contents())
     return nullptr;
 
   return GetGuestViewManager()->CreateGuestWithWebContentsParams(
-      GetViewType(), owner_rfh(), create_params,
-      disposition);
+      GetViewType(), owner_rfh(), create_params);
 }
 
 void GuestViewBase::DidAttach() {
@@ -481,7 +479,11 @@ WebContents* GuestViewBase::GetOwnerWebContents() {
 }
 
 content::RenderFrameHost* GuestViewBase::GetProspectiveOuterDocument() {
+  if (vivaldi::IsVivaldiRunning()) {
+    // In Vivaldi, a guest is not always attached. We support moving between
+    // windows.
   DCHECK(!attached());
+  }
   return owner_rfh();
 }
 
@@ -544,6 +546,9 @@ void GuestViewBase::AttachToOuterWebContentsFrame(
   std::unique_ptr<WebContents> owned_guest_contents =
       std::move(owned_guest_contents_);
   DCHECK_EQ(owned_guest_contents.get(), web_contents());
+  if (owned_guest_contents) {
+    owned_guest_contents->SetOwnerLocationForDebug(absl::nullopt);
+  }
 
   // Since this inner WebContents is created from the browser side we do
   // not have RemoteFrame mojo channels so we pass in
@@ -673,7 +678,7 @@ void GuestViewBase::LoadingStateChanged(WebContents* source,
                                         bool should_show_loading_ui) {
   // NOTE(andre@vivaldi.com): Added check for embedder_web_contents as loading
   // can happen in an unattached guest.
-  if (!attached() ||
+  if (!attached() || !embedder_web_contents() ||
       (embedder_web_contents() && !embedder_web_contents()->GetDelegate()))
     return;
 
@@ -699,7 +704,7 @@ void GuestViewBase::RunFileChooser(
       render_frame_host, std::move(listener), params);
 }
 
-bool GuestViewBase::ShouldFocusPageAfterCrash() {
+bool GuestViewBase::ShouldFocusPageAfterCrash(content::WebContents* source) {
   // Focus is managed elsewhere.
   return false;
 }
@@ -736,13 +741,6 @@ void GuestViewBase::UpdateTargetURL(WebContents* source, const GURL& url) {
 
   embedder_web_contents()->GetDelegate()->UpdateTargetURL(
       embedder_web_contents(), url);
-}
-
-bool GuestViewBase::ShouldResumeRequestsForCreatedWindow() {
-  // Delay so that the embedder page has a chance to call APIs such as
-  // webRequest in time to be applied to the initial navigation in the new guest
-  // contents. We resume during AttachToOuterWebContentsFrame.
-  return false;
 }
 
 void GuestViewBase::OnZoomControllerDestroyed(zoom::ZoomController* source) {
@@ -839,6 +837,9 @@ void GuestViewBase::TakeGuestContentsOwnership(
     std::unique_ptr<WebContents> guest_web_contents) {
   DCHECK(!owned_guest_contents_);
   owned_guest_contents_ = std::move(guest_web_contents);
+  if (owned_guest_contents_) {
+    owned_guest_contents_->SetOwnerLocationForDebug(FROM_HERE);
+  }
 }
 
 void GuestViewBase::ClearOwnedGuestContents() {

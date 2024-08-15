@@ -115,8 +115,7 @@ class FormStructure {
       const ServerFieldTypeSet& available_field_types,
       bool form_was_autofilled,
       const base::StringPiece& login_form_signature,
-      bool observed_submission,
-      bool is_raw_metadata_uploading_enabled) const;
+      bool observed_submission) const;
 
   // Encodes the proto |query| request for the list of |forms| and their fields
   // that are valid. The queried FormSignatures and FieldSignatures are stored
@@ -235,7 +234,7 @@ class FormStructure {
     //   kFormParsing the value is persisted. During import, however, we want to
     //   store the last observed value. Furthermore, if the submitted value of a
     //   field has never been changed, we ignore the previous value from import
-    //   (unless it's a state or country as websites can find meanigful default
+    //   (unless it's a state or country as websites can find meaningful default
     //   values via GeoIP).
     kFormImport,
   };
@@ -442,14 +441,6 @@ class FormStructure {
     current_page_language_ = std::move(language);
   }
 
-  bool value_from_dynamic_change_form() const {
-    return value_from_dynamic_change_form_;
-  }
-
-  void set_value_from_dynamic_change_form(bool v) {
-    value_from_dynamic_change_form_ = v;
-  }
-
   FormGlobalId global_id() const { return {host_frame_, unique_renderer_id_}; }
 
   FormVersion version() const { return version_; }
@@ -515,7 +506,6 @@ class FormStructure {
   // from the given renderer form are encoded. See EncodeUploadRequest() for
   // details.
   void EncodeFormFieldsForUpload(
-      bool is_raw_metadata_uploading_enabled,
       absl::optional<FormGlobalId> filter_renderer_form_id,
       AutofillUploadContents* upload) const;
 
@@ -643,7 +633,7 @@ class FormStructure {
   absl::optional<std::pair<PasswordAttribute, bool>> password_attributes_vote_;
 
   // If |password_attribute_vote_| contains (kHasSpecialSymbol, true), this
-  // field contains nosified information about a special symbol in a
+  // field contains noisified information about a special symbol in a
   // user-created password stored as ASCII code. The default value of 0
   // indicates that no symbol was set.
   int password_symbol_vote_ = 0;
@@ -666,8 +656,6 @@ class FormStructure {
   // True iff queries encoded from this form structure should include rich
   // form/field metadata.
   bool is_rich_query_enabled_ = false;
-
-  bool value_from_dynamic_change_form_ = false;
 
   // A unique identifier of the containing frame.
   // This value must not be leaked to other renderer processes.
@@ -693,7 +681,6 @@ class FormStructure {
 LogBuffer& operator<<(LogBuffer& buffer, const FormStructure& form);
 std::ostream& operator<<(std::ostream& buffer, const FormStructure& form);
 
-// TODO(crbug.com/1466435): Remove once the refactoring is complete.
 // Helper struct for `GetFormDataAndServerPredictions`.
 struct FormDataAndServerPredictions {
   FormDataAndServerPredictions();
@@ -703,14 +690,13 @@ struct FormDataAndServerPredictions {
   FormDataAndServerPredictions& operator=(FormDataAndServerPredictions&&);
   ~FormDataAndServerPredictions();
 
-  std::vector<FormData> form_datas;
+  FormData form_data;
   base::flat_map<FieldGlobalId, AutofillType::ServerPrediction> predictions;
 };
 
-// Returns the `FormData` and `ServerPrediction` objects underlying
-// `form_structures`.
+// Returns the `FormData` and `ServerPrediction` objects underlying `form`.
 FormDataAndServerPredictions GetFormDataAndServerPredictions(
-    base::span<const FormStructure* const> form_structures);
+    const FormStructure& form);
 
 }  // namespace autofill
 

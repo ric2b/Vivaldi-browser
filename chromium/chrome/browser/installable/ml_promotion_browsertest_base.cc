@@ -21,21 +21,20 @@
 #else  // BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/banners/test_app_banner_manager_desktop.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/ui/web_applications/web_app_dialog_utils.h"
+#include "chrome/browser/ui/web_applications/web_app_dialogs.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/test/web_app_test_utils.h"
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
-#include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/webapps/browser/install_result_code.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
-#include "net/test/embedded_test_server/embedded_test_server.h"
+#include "components/webapps/common/web_app_id.h"
 #include "ui/views/test/dialog_test.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/widget/any_widget_observer.h"
@@ -84,12 +83,11 @@ bool MLPromotionBrowserTestBase::InstallAppForCurrentWebContents(
 #else
   web_app::WebAppProvider* provider =
       web_app::WebAppProvider::GetForTest(browser()->profile());
-  base::test::TestFuture<const web_app::AppId&, InstallResultCode>
+  base::test::TestFuture<const webapps::AppId&, InstallResultCode>
       install_future;
 
   provider->scheduler().FetchManifestAndInstall(
       WebappInstallSource::OMNIBOX_INSTALL_ICON, web_contents()->GetWeakPtr(),
-      /*bypass_service_worker_check=*/true,
       base::BindOnce(web_app::test::TestAcceptDialogCallback),
       install_future.GetCallback(), /*use_fallback=*/false);
 
@@ -98,7 +96,7 @@ bool MLPromotionBrowserTestBase::InstallAppForCurrentWebContents(
     return success;
   }
 
-  const web_app::AppId& app_id = install_future.Get<web_app::AppId>();
+  const webapps::AppId& app_id = install_future.Get<webapps::AppId>();
   provider->sync_bridge_unsafe().SetAppIsLocallyInstalledForTesting(
       app_id, /*is_locally_installed=*/install_locally);
   return success;
@@ -112,15 +110,14 @@ bool MLPromotionBrowserTestBase::InstallAppFromUserInitiation(
   // TODO(b/287255120) : Build functionalities for Android.
   return false;
 #else
-  base::test::TestFuture<const web_app::AppId&, InstallResultCode>
+  base::test::TestFuture<const webapps::AppId&, InstallResultCode>
       install_future;
   views::NamedWidgetShownWaiter waiter(views::test::AnyWidgetTestPasskey{},
                                        dialog_name);
   web_app::CreateWebAppFromManifest(
       web_contents(),
-      /*bypass_service_worker_check=*/true,
       webapps::WebappInstallSource::OMNIBOX_INSTALL_ICON,
-      install_future.GetCallback(), chrome::PwaInProductHelpState::kNotShown);
+      install_future.GetCallback(), web_app::PwaInProductHelpState::kNotShown);
   views::Widget* widget = waiter.WaitIfNeededAndGet();
   views::test::WidgetDestroyedWaiter destroyed(widget);
   if (accept_install) {

@@ -217,15 +217,10 @@ void BroadcastEventToAllProfiles(const std::string& eventname,
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-double MilliSecondsFromTime(const base::Time& time) {
-  return 1000 * time.ToDoubleT();
-}
-
 base::Time GetTime(double ms_from_epoch) {
-  double seconds_from_epoch = ms_from_epoch / 1000.0;
-  return (seconds_from_epoch == 0)
+  return (ms_from_epoch == 0)
              ? base::Time::UnixEpoch()
-             : base::Time::FromDoubleT(seconds_from_epoch);
+             : base::Time::FromMillisecondsSinceUnixEpoch(ms_from_epoch);
 }
 
 gfx::PointF FromUICoordinates(content::WebContents* web_contents,
@@ -462,7 +457,8 @@ std::string GetImagePathFromProfilePath(const std::string& preferences_path,
       if (item.is_dict()) {
         const std::string* value = item.GetDict().FindString(kProfilePathKey);
         if (value && *value == profile_path) {
-          const std::string* image_path = item.GetDict().FindString(kImagePathKey);
+          const std::string* image_path =
+              item.GetDict().FindString(kImagePathKey);
           if (image_path) {
             return *image_path;
           }

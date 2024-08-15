@@ -37,11 +37,13 @@
 #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_select_list_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
-#include "third_party/blink/renderer/core/layout/ng/layout_ng_button.h"
+#include "third_party/blink/renderer/core/layout/forms/layout_button.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 
 namespace blink {
+
+using mojom::blink::FormControlType;
 
 HTMLButtonElement::HTMLButtonElement(Document& document)
     : HTMLFormControlElement(html_names::kButtonTag, document) {}
@@ -59,33 +61,35 @@ LayoutObject* HTMLButtonElement::CreateLayoutObject(
       display == EDisplay::kInlineLayoutCustom ||
       display == EDisplay::kLayoutCustom)
     return HTMLFormControlElement::CreateLayoutObject(style);
-  return MakeGarbageCollected<LayoutNGButton>(this);
+  return MakeGarbageCollected<LayoutButton>(this);
 }
 
-const AtomicString& HTMLButtonElement::FormControlType() const {
+FormControlType HTMLButtonElement::FormControlType() const {
+  return static_cast<mojom::blink::FormControlType>(base::to_underlying(type_));
+}
+
+const AtomicString& HTMLButtonElement::FormControlTypeAsString() const {
   switch (type_) {
-    case kSubmit: {
-      DEFINE_STATIC_LOCAL(const AtomicString, submit, ("submit"));
-      return submit;
-    }
-    case kButton: {
+    case Type::kButton: {
       DEFINE_STATIC_LOCAL(const AtomicString, button, ("button"));
       return button;
     }
-    case kReset: {
+    case Type::kSubmit: {
+      DEFINE_STATIC_LOCAL(const AtomicString, submit, ("submit"));
+      return submit;
+    }
+    case Type::kReset: {
       DEFINE_STATIC_LOCAL(const AtomicString, reset, ("reset"));
       return reset;
     }
-    case kSelectlist: {
+    case Type::kSelectlist: {
       if (RuntimeEnabledFeatures::HTMLSelectListElementEnabled()) {
         DEFINE_STATIC_LOCAL(const AtomicString, selectlist, ("selectlist"));
         return selectlist;
       }
     }
   }
-
-  NOTREACHED();
-  return g_empty_atom;
+  NOTREACHED_NORETURN();
 }
 
 bool HTMLButtonElement::IsPresentationAttribute(
@@ -138,16 +142,16 @@ void HTMLButtonElement::DefaultEventHandler(Event& event) {
 
   if (type_ == kSelectlist) {
     CHECK(RuntimeEnabledFeatures::HTMLSelectListElementEnabled());
-    for (auto& ancestor : FlatTreeTraversal::AncestorsOf(*this)) {
-      if (auto* selectlist = DynamicTo<HTMLSelectListElement>(ancestor)) {
-        selectlist->HandleButtonEvent(event);
-        break;
-      }
+    if (auto* selectlist = OwnerSelectList()) {
+      selectlist->HandleButtonEvent(event);
     }
   }
 
-  if (HandleKeyboardActivation(event))
+  // type=selectlist should not open the listbox when enter is pressed, which
+  // HandleKeyboardActivation would do via simulated click.
+  if (type_ != kSelectlist && HandleKeyboardActivation(event)) {
     return;
+  }
 
   HTMLFormControlElement::DefaultEventHandler(event);
 }
@@ -231,6 +235,22 @@ void HTMLButtonElement::DispatchBlurEvent(
   SetActive(false);
   HTMLFormControlElement::DispatchBlurEvent(new_focused_element, type,
                                             source_capabilities);
+}
+
+HTMLSelectListElement* HTMLButtonElement::OwnerSelectList() const {
+  if (type_ != kSelectlist) {
+    return nullptr;
+  }
+  for (auto& ancestor : FlatTreeTraversal::AncestorsOf(*this)) {
+    if (IsA<HTMLListboxElement>(ancestor)) {
+      // Buttons inside listboxes are excluded from triggering the listbox.
+      return nullptr;
+    }
+    if (auto* selectlist = DynamicTo<HTMLSelectListElement>(ancestor)) {
+      return selectlist;
+    }
+  }
+  return nullptr;
 }
 
 }  // namespace blink

@@ -7,7 +7,7 @@
 #import "base/strings/sys_string_conversions.h"
 #import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/vivaldi_bookmark_kit.h"
-#import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
+#import "ios/chrome/browser/snapshots/model/snapshot_tab_helper.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_item.h"
 #import "ios/web/public/web_state.h"
 

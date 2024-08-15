@@ -39,7 +39,6 @@ export const QuickStartUIState = {
 // The size of each tile in pixels.
 const QR_CODE_TILE_SIZE = 5;
 
-// TODO(b/246698826) Figure out the dark light modes.
 // Styling for filled tiles in the QR code.
 const QR_CODE_FILL_STYLE = '#000000';
 
@@ -150,12 +149,6 @@ class QuickStartScreen extends QuickStartScreenBase {
 
   showConnectingToWifi() {
     this.setUIStep(QuickStartUIState.CONNECTING_TO_WIFI);
-    this.$.spinnerWifi.playing = true;
-  }
-
-  onBeforeHide() {
-    this.$.spinnerWifi.playing = false;
-    this.$.spinnerGaia.playing = false;
   }
 
   /**
@@ -206,7 +199,6 @@ class QuickStartScreen extends QuickStartScreenBase {
   }
 
   showTransferringGaiaCredentials() {
-    this.$.spinnerGaia.playing = true;
     this.setUIStep(QuickStartUIState.GAIA_CREDENTIALS);
   }
 

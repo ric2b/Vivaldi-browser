@@ -16,7 +16,6 @@ import("//chrome/version.gni")
 import("//components/crash/android/silent_java_assert_reporting.gni")
 import("//components/optimization_guide/features.gni")
 import("//device/vr/buildflags/buildflags.gni")
-import("//weblayer/variables.gni")
 import("channel.gni")
 
 declare_args() {
@@ -197,6 +196,10 @@ template("chrome_common_apk_or_module_tmpl") {
     _version_code = chrome_version_code
   }
 
+  if (defined(invoker.version_code)) {
+    _version_code = invoker.version_code
+  }
+
   # Need to apply override explicitly to have it apply to library version.
   if (android_override_version_code != "") {
     _version_code = android_override_version_code
@@ -316,10 +319,6 @@ template("chrome_common_apk_or_module_tmpl") {
       shared_resources_allowlist_locales = platform_pak_locales
 
       product_config_java_packages += [ webview_product_config_java_package ]
-
-      if (webview_includes_weblayer) {
-        product_config_java_packages += [ weblayer_product_config_java_package ]
-      }
     }
 
     if (enable_silent_java_assert_reporting) {

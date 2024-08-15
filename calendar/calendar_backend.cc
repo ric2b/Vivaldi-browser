@@ -642,6 +642,10 @@ EventResultCB CalendarBackend::UpdateEvent(EventID event_id,
       event_row.delete_pending = event.delete_pending;
     }
 
+    if (event.updateFields & calendar::END_RECURRING) {
+      event_row.end_recurring = event.end_recurring;
+    }
+
     result.success = db_->UpdateEventRow(event_row);
 
     EventResult updatedEvent = FillEvent(event_id);

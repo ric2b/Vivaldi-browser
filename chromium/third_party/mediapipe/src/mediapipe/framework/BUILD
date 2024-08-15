@@ -191,7 +191,10 @@ cc_library(
     name = "calculator_context",
     srcs = ["calculator_context.cc"],
     hdrs = ["calculator_context.h"],
-    visibility = [":mediapipe_internal"],
+    visibility = [
+        ":mediapipe_internal",
+        "//speech/videos/mediapipe/calculator:__pkg__",
+    ],
     deps = [
         ":calculator_state",
         ":counter",
@@ -233,6 +236,7 @@ cc_library(
     hdrs = ["calculator_contract.h"],
     visibility = [
         ":mediapipe_internal",
+        "//speech/videos/mediapipe/calculator:__pkg__",
     ],
     deps = [
         ":calculator_cc_proto",
@@ -895,6 +899,7 @@ cc_library(
         "@com_google_absl//absl/log:absl_check",
         "@com_google_absl//absl/log:absl_log",
         "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
     ],
@@ -996,14 +1001,15 @@ cc_library(
     name = "port",
     hdrs = ["port.h"],
     defines = select({
-        "//conditions:default": [],
-    }) + select({
-        "//conditions:default": [],
-        "//mediapipe/gpu:disable_gpu": ["MEDIAPIPE_DISABLE_GPU=1"],
-    }) + select({
-        "//conditions:default": [],
-        "//mediapipe/framework/port:disable_opencv": ["MEDIAPIPE_DISABLE_OPENCV=1"],
-    }) + select({
+                  "//conditions:default": [],
+              }) + select({
+                  "//conditions:default": [],
+                  "//mediapipe/gpu:disable_gpu": ["MEDIAPIPE_DISABLE_GPU=1"],
+              }) +
+              select({
+                  "//conditions:default": [],
+                  "//mediapipe/framework/port:disable_opencv": ["MEDIAPIPE_DISABLE_OPENCV=1"],
+              }) + select({
         "//conditions:default": [],
         # TODO: Improve this. This only sets MEDIAPIPE_DISABLE_OPENCV as a "defines" Make
         # value, not as a bazel "--define" variable, which has effects in C++ code but not in

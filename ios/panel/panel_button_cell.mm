@@ -42,11 +42,7 @@
   _imageView.clipsToBounds = YES;
 
   [container addSubview:_imageView];
-  [_imageView anchorTop:  container.topAnchor
-                 leading: container.leadingAnchor
-                  bottom: nil
-                trailing: container.trailingAnchor
-                 padding: UIEdgeInsetsZero];
+  [_imageView fillSuperview];
 }
 
 #pragma mark - SETTERS

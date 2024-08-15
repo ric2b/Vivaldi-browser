@@ -11,7 +11,6 @@
 
 #include "base/containers/contains.h"
 #include "base/containers/span.h"
-#include "base/uuid.h"
 #include "base/hash/sha1.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
@@ -19,14 +18,15 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/uuid.h"
+#include "components/notes/note_node.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/protocol/entity_data.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
 #include "components/sync/protocol/notes_specifics.pb.h"
 #include "components/sync_bookmarks/switches.h"
-#include "notes/note_node.h"
-#include "notes/notes_model.h"
 #include "url/gurl.h"
+#include "sync/notes/note_model_view.h"
 
 namespace sync_notes {
 
@@ -109,7 +109,7 @@ std::u16string NodeTitleFromSpecifics(
   return base::UTF8ToUTF16(node_title);
 }
 
-void MoveAllChildren(vivaldi::NotesModel* model,
+void MoveAllChildren(NoteModelView* model,
                      const vivaldi::NoteNode* old_parent,
                      const vivaldi::NoteNode* new_parent) {
   DCHECK(old_parent && (old_parent->is_folder() || old_parent->is_note()));
@@ -169,7 +169,7 @@ bool IsNoteEntityReuploadNeeded(const syncer::EntityData& remote_entity_data) {
 
 sync_pb::EntitySpecifics CreateSpecificsFromNoteNode(
     const vivaldi::NoteNode* node,
-    vivaldi::NotesModel* model,
+    NoteModelView* model,
     const sync_pb::UniquePosition& unique_position) {
   sync_pb::EntitySpecifics specifics;
   sync_pb::NotesSpecifics* notes_specifics = specifics.mutable_notes();
@@ -203,7 +203,7 @@ const vivaldi::NoteNode* CreateNoteNodeFromSpecifics(
     const sync_pb::NotesSpecifics& specifics,
     const vivaldi::NoteNode* parent,
     size_t index,
-    vivaldi::NotesModel* model) {
+    NoteModelView* model) {
   DCHECK(parent);
   DCHECK(model);
   DCHECK(IsValidNotesSpecifics(specifics));
@@ -249,7 +249,7 @@ const vivaldi::NoteNode* CreateNoteNodeFromSpecifics(
 
 void UpdateNoteNodeFromSpecifics(const sync_pb::NotesSpecifics& specifics,
                                  const vivaldi::NoteNode* node,
-                                 vivaldi::NotesModel* model) {
+                                 NoteModelView* model) {
   DCHECK(node);
   DCHECK(model);
   // We shouldn't try to update the properties of the NoteNode before
@@ -291,7 +291,7 @@ sync_pb::NotesSpecifics::VivaldiSpecialNotesType GetProtoTypeFromNoteNode(
 
 const vivaldi::NoteNode* ReplaceNoteNodeUuid(const vivaldi::NoteNode* node,
                                              const base::Uuid& guid,
-                                             vivaldi::NotesModel* model) {
+                                             NoteModelView* model) {
   DCHECK(guid.is_valid());
 
   if (node->uuid() == guid) {

@@ -401,10 +401,6 @@ void NativeWidgetNSWindowBridge::SetParent(uint64_t new_parent_id) {
       NativeWidgetNSWindowBridge::GetFromId(new_parent_id);
   DCHECK(new_parent);
 
-  // If the parent is another NativeWidgetNSWindowBridge, just add to the
-  // collection of child windows it owns and manages. Otherwise, create an
-  // adapter to anchor the child widget and observe when the parent NSWindow is
-  // closed.
   parent_ = new_parent;
   parent_->child_windows_.push_back(this);
 
@@ -986,14 +982,14 @@ void NativeWidgetNSWindowBridge::EnableImmersiveFullscreen(
   if (tab_widget_bridge) {
     NSWindow* tab_window = tab_widget_bridge->ns_window();
     immersive_mode_controller_ =
-        std::make_unique<ImmersiveModeTabbedController>(
+        std::make_unique<ImmersiveModeTabbedControllerCocoa>(
             ns_window(), GetFromId(fullscreen_overlay_widget_id)->ns_window(),
             tab_window);
   } else {
-    immersive_mode_controller_ = std::make_unique<ImmersiveModeController>(
+    immersive_mode_controller_ = std::make_unique<ImmersiveModeControllerCocoa>(
         ns_window(), GetFromId(fullscreen_overlay_widget_id)->ns_window());
   }
-  immersive_mode_controller_->Enable();
+  immersive_mode_controller_->Init();
 
   // It is possible for the fullscreen transition to complete before the
   // immersive mode controller is created. Mark the transition as complete as
@@ -1043,26 +1039,27 @@ void NativeWidgetNSWindowBridge::ImmersiveFullscreenRevealUnlock() {
   }
 }
 
-bool NativeWidgetNSWindowBridge::ImmersiveFullscreenIsEnabled() {
-  if (!immersive_mode_controller_) {
-    return false;
-  }
-  return immersive_mode_controller_->is_enabled();
+bool NativeWidgetNSWindowBridge::ShouldUseCustomTitlebarHeightForFullscreen()
+    const {
+  return immersive_mode_controller_ &&
+         immersive_mode_controller_->is_initialized() &&
+         immersive_mode_controller_->IsTabbed() &&
+         !immersive_mode_controller_->IsContentFullscreen();
 }
 
-bool NativeWidgetNSWindowBridge::ImmersiveFullscreenIsTabbed() {
-  if (!immersive_mode_controller_) {
-    return false;
-  }
-  return immersive_mode_controller_->IsTabbed();
+void NativeWidgetNSWindowBridge::OnImmersiveFullscreenToolbarRevealChanged(
+    bool is_revealed) {
+  host_->OnImmersiveFullscreenToolbarRevealChanged(is_revealed);
 }
 
-mojom::ToolbarVisibilityStyle
-NativeWidgetNSWindowBridge::ImmersiveFullscreenLastUsedStyle() {
-  if (!immersive_mode_controller_) {
-    return mojom::ToolbarVisibilityStyle::kAlways;
-  }
-  return immersive_mode_controller_->last_used_style();
+void NativeWidgetNSWindowBridge::OnImmersiveFullscreenMenuBarRevealChanged(
+    float reveal_amount) {
+  host_->OnImmersiveFullscreenMenuBarRevealChanged(reveal_amount);
+}
+
+void NativeWidgetNSWindowBridge::OnAutohidingMenuBarHeightChanged(
+    int menu_bar_height) {
+  host_->OnAutohidingMenuBarHeightChanged(menu_bar_height);
 }
 
 void NativeWidgetNSWindowBridge::SetCanGoBack(bool can_go_back) {

@@ -101,6 +101,7 @@ sebsg@chromium.org
 # content
 dewittj@chromium.org
 harrisonsean@chromium.org
+jeffreycohen@chromium.org
 tbansal@chromium.org
 guiperez@google.com
 # cookie
@@ -114,6 +115,7 @@ tby@chromium.org
 nigeltao@chromium.org
 # cross_device
 crisrael@google.com
+dclasson@google.com
 hansberry@chromium.org
 julietlevesque@google.com
 bhartmire@google.com
@@ -149,6 +151,7 @@ igorruvinov@chromium.org
 jonross@chromium.org
 # extensions
 kelvinjiang@chromium.org
+jlulejian@chromium.org
 # families
 courtneywong@chromium.org
 ljjlee@google.com
@@ -224,6 +227,7 @@ toyoshim@chromium.org
 wanderview@chromium.org
 # nearby
 crisrael@google.com
+dclasson@google.com
 hansberry@chromium.org
 julietlevesque@google.com
 # net
@@ -267,6 +271,7 @@ dullweber@chromium.org
 olivierli@chromium.org
 alemate@chromium.org
 bzielinski@google.com
+orrb@google.com
 # page
 csharrison@chromium.org
 iclelland@chromium.org
@@ -343,6 +348,8 @@ schenney@chromium.org
 schenney@chromium.org
 # safe_browsing
 drubery@chromium.org
+jacastro@chromium.org
+skrakowi@chromium.org
 thefrog@chromium.org
 xinghuilu@chromium.org
 # sb_client
@@ -377,6 +384,7 @@ harrisonsean@chromium.org
 khorimoto@chromium.org
 # sharing
 ellyjones@chromium.org
+jeffreycohen@chromium.org
 knollr@chromium.org
 # signin
 alexilin@chromium.org

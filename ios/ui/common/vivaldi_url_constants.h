@@ -18,6 +18,8 @@ extern NSString* const vVivaldiPrivacyAndSecurity;
 extern NSString* const vVivaldiRecoverUsernameUrl;
 extern NSString* const vVivaldiRecoverPasswordUrl;
 
+extern const char vVivaldiBugReportURL[];
+
 // Help
 extern const char vVivaldiHelpCopyLinkToHightlightUrl[];
 

@@ -33,13 +33,15 @@ void PasswordManagerClient::ShowPasswordManagerErrorMessage(
     ErrorMessageFlowType flow_type,
     password_manager::PasswordStoreBackendErrorType error_type) {}
 
-void PasswordManagerClient::ShowKeyboardReplacingSurface(
+bool PasswordManagerClient::ShowKeyboardReplacingSurface(
     PasswordManagerDriver* driver,
     const SubmissionReadinessParams& submission_readiness_params,
-    bool is_webauthn_form) {}
+    bool is_webauthn_form) {
+  return false;
+}
 #endif
 
-scoped_refptr<device_reauth::DeviceAuthenticator>
+std::unique_ptr<device_reauth::DeviceAuthenticator>
 PasswordManagerClient::GetDeviceAuthenticator() {
   return nullptr;
 }

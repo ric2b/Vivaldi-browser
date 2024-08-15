@@ -207,6 +207,7 @@ std::string YandexSearchPathFromDeviceFormFactor() {
     case ui::DEVICE_FORM_FACTOR_PHONE:
       return "search/touch/";
     case ui::DEVICE_FORM_FACTOR_TABLET:
+    case ui::DEVICE_FORM_FACTOR_FOLDABLE:
     case ui::DEVICE_FORM_FACTOR_AUTOMOTIVE:
       return "search/pad/";
   }
@@ -1500,13 +1501,14 @@ std::string TemplateURLRef::HandleReplacements(
 
       case VIVALDI_BING_PTAG: {
         std::bitset<40> ptag_value;
-        if (search_terms_args.vivaldi_ad_blocking_state) {
-          ptag_value.set(0);
-          for (size_t i = 0;
-               i < search_terms_args.vivaldi_ad_blocking_state->size(); i++)
-            ptag_value[i + 1] =
-                search_terms_args.vivaldi_ad_blocking_state.value()[i];
-        }
+        /* /!\ These bits were used in previous versions with and are now
+               reserved with the following meanings:
+
+          0: PTAG has data about the adblocker state (bit 1-3 are valid)
+          1: The tracker blocker is enabled.
+          2: The adblocker is enabled.
+          3: Some extensions are installed.
+        */
 
         char ptag_bytes[8];
         base::WriteBigEndian(ptag_bytes, ptag_value.to_ullong());

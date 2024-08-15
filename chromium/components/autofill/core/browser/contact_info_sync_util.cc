@@ -4,11 +4,14 @@
 
 #include "components/autofill/core/browser/contact_info_sync_util.h"
 
+#include "base/hash/hash.h"
 #include "base/memory/raw_ref.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
+#include "components/autofill/core/browser/country_type.h"
 #include "components/autofill/core/browser/field_types.h"
+#include "components/autofill/core/browser/geo/country_names.h"
 #include "components/autofill/core/browser/profile_token_quality.h"
 #include "components/autofill/core/common/autofill_features.h"
 
@@ -86,9 +89,20 @@ class EntryTokenDeleter {
   bool DeleteMetadata(ContactInfoSpecifics::TokenMetadata* metadata) {
     metadata->clear_status();
     metadata->clear_observations();
+    metadata->clear_value_hash();
     return metadata->ByteSize() == 0;
   }
 };
+
+// Returns a hash of the `profile`'s value for the given `type`. This hash is
+// not persisted on the Autofill side, but used to detect changes by external
+// integrators when the data gets synced back.
+// Since the uploaded data contains the raw value too, this is not a privacy
+// concern.
+uint32_t GetProfileValueHash(const AutofillProfile& profile,
+                             ServerFieldType type) {
+  return base::PersistentHash(base::UTF16ToUTF8(profile.GetRawInfo(type)));
+}
 
 }  // namespace
 
@@ -131,6 +145,7 @@ class ContactInfoEntryDataSetter {
         proto_observation->set_form_hash(observation.form_hash.value());
       }
     }
+    metadata->set_value_hash(GetProfileValueHash(*profile_, type));
   }
 
   const raw_ref<const AutofillProfile> profile_;
@@ -149,7 +164,7 @@ class ContactInfoProfileSetter {
     profile_->SetRawInfoWithVerificationStatus(
         type, base::UTF8ToUTF16(token.value()),
         ConvertSpecificsToProfileVerificationStatus(token.metadata().status()));
-    SetObservations(token.metadata().observations(), type);
+    SetObservations(token.metadata(), type);
   }
 
   void Set(const ContactInfoSpecifics::IntegerToken& token,
@@ -157,26 +172,35 @@ class ContactInfoProfileSetter {
     profile_->SetRawInfoAsIntWithVerificationStatus(
         type, token.value(),
         ConvertSpecificsToProfileVerificationStatus(token.metadata().status()));
-    SetObservations(token.metadata().observations(), type);
+    SetObservations(token.metadata(), type);
   }
 
  private:
-  void SetObservations(
-      const google::protobuf::RepeatedPtrField<
-          ContactInfoSpecifics::Observation>& proto_observations,
-      ServerFieldType type) const {
-    if (proto_observations.empty() ||
+  void SetObservations(const ContactInfoSpecifics::TokenMetadata& metadata,
+                       ServerFieldType type) const {
+    if (metadata.observations().empty() ||
         !base::FeatureList::IsEnabled(
             features::kAutofillTrackProfileTokenQuality)) {
       return;
     }
-    auto& observations = profile_->token_quality().observations_[type];
-    CHECK(observations.empty());
-    for (const sync_pb::ContactInfoSpecifics::Observation& proto_observation :
-         proto_observations) {
-      observations.emplace_back(proto_observation.type(),
-                                ProfileTokenQuality::FormSignatureHash(
-                                    proto_observation.form_hash()));
+    // If the value of the `type` was changed by an external integrator, the
+    // associated observations are no longer valid. In this case, they are left
+    // empty and effectively dropped.
+    // There is no need to re-upload to sync without the observations, since
+    // all Chrome clients drop them by themselves. If new observations get
+    // collected by another Chrome client, these get synced and other clients
+    // overwrite their local state unconditionally.
+    // Not syncing back has the additional advantage that it makes deprecating
+    // these fields (should this ever happen) easier.
+    if (GetProfileValueHash(*profile_, type) == metadata.value_hash()) {
+      auto& observations = profile_->token_quality().observations_[type];
+      CHECK(observations.empty());
+      for (const sync_pb::ContactInfoSpecifics::Observation& proto_observation :
+           metadata.observations()) {
+        observations.emplace_back(proto_observation.type(),
+                                  ProfileTokenQuality::FormSignatureHash(
+                                      proto_observation.form_hash()));
+      }
     }
   }
 
@@ -190,9 +214,10 @@ sync_pb::ContactInfoSpecifics ContactInfoSpecificsFromAutofillProfile(
 
   specifics.set_guid(profile.guid());
   specifics.set_use_count(profile.use_count());
-  specifics.set_use_date_windows_epoch_micros(profile.use_date().ToTimeT());
-  specifics.set_date_modified_windows_epoch_micros(
-      profile.modification_date().ToTimeT());
+  specifics.set_use_date_unix_epoch_seconds(
+      (profile.use_date() - base::Time::UnixEpoch()).InSeconds());
+  specifics.set_date_modified_unix_epoch_seconds(
+      (profile.modification_date() - base::Time::UnixEpoch()).InSeconds());
   specifics.set_language_code(profile.language_code());
   specifics.set_profile_label(profile.profile_label());
 
@@ -298,14 +323,21 @@ std::unique_ptr<AutofillProfile> CreateAutofillProfileFromContactInfoSpecifics(
   if (!AreContactInfoSpecificsValid(specifics))
     return nullptr;
 
+  std::u16string country_name_or_code =
+      base::ASCIIToUTF16(specifics.address_country().value());
+  std::string country_code =
+      CountryNames::GetInstance()->GetCountryCode(country_name_or_code);
+
   std::unique_ptr<AutofillProfile> profile = std::make_unique<AutofillProfile>(
-      specifics.guid(), AutofillProfile::Source::kAccount);
+      specifics.guid(), AutofillProfile::Source::kAccount,
+      AddressCountryCode(country_code));
 
   profile->set_use_count(specifics.use_count());
-  profile->set_use_date(
-      base::Time::FromTimeT(specifics.use_date_windows_epoch_micros()));
+  profile->set_use_date(base::Time::UnixEpoch() +
+                        base::Seconds(specifics.use_date_unix_epoch_seconds()));
   profile->set_modification_date(
-      base::Time::FromTimeT(specifics.date_modified_windows_epoch_micros()));
+      base::Time::UnixEpoch() +
+      base::Seconds(specifics.date_modified_unix_epoch_seconds()));
   profile->set_language_code(specifics.language_code());
   profile->set_profile_label(specifics.profile_label());
   profile->set_initial_creator_id(specifics.initial_creator_id());
@@ -327,7 +359,6 @@ std::unique_ptr<AutofillProfile> CreateAutofillProfileFromContactInfoSpecifics(
   s.Set(specifics.address_city(), ADDRESS_HOME_CITY);
   s.Set(specifics.address_state(), ADDRESS_HOME_STATE);
   s.Set(specifics.address_zip(), ADDRESS_HOME_ZIP);
-  s.Set(specifics.address_country(), ADDRESS_HOME_COUNTRY);
   s.Set(specifics.address_street_address(), ADDRESS_HOME_STREET_ADDRESS);
   s.Set(specifics.address_sorting_code(), ADDRESS_HOME_SORTING_CODE);
   s.Set(specifics.address_dependent_locality(),
@@ -377,8 +408,8 @@ sync_pb::ContactInfoSpecifics TrimContactInfoSpecificsDataForCaching(
 
   trimmed_specifics.clear_guid();
   trimmed_specifics.clear_use_count();
-  trimmed_specifics.clear_use_date_windows_epoch_micros();
-  trimmed_specifics.clear_date_modified_windows_epoch_micros();
+  trimmed_specifics.clear_use_date_unix_epoch_seconds();
+  trimmed_specifics.clear_date_modified_unix_epoch_seconds();
   trimmed_specifics.clear_language_code();
   trimmed_specifics.clear_profile_label();
   trimmed_specifics.clear_initial_creator_id();

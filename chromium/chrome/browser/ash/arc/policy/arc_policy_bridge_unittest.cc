@@ -16,7 +16,6 @@
 #include "ash/components/arc/test/connection_holder_util.h"
 #include "ash/components/arc/test/fake_arc_session.h"
 #include "ash/components/arc/test/fake_policy_instance.h"
-#include "ash/constants/ash_switches.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
@@ -219,13 +218,11 @@ class ArcPolicyBridgeTestBase {
         .Times(1);
 
     // Set up user profile for ReportCompliance() tests.
-    auto* const fake_user_manager = new ash::FakeChromeUserManager();
-    user_manager_enabler_ = std::make_unique<user_manager::ScopedUserManager>(
-        base::WrapUnique(fake_user_manager));
+    fake_user_manager_.Reset(std::make_unique<ash::FakeChromeUserManager>());
     const AccountId account_id(
         AccountId::FromUserEmailGaiaId(kTestUserEmail, "1111111111"));
-    fake_user_manager->AddUserWithAffiliation(account_id, is_affiliated);
-    fake_user_manager->LoginUser(account_id);
+    fake_user_manager_->AddUserWithAffiliation(account_id, is_affiliated);
+    fake_user_manager_->LoginUser(account_id);
     testing_profile_manager_ = std::make_unique<TestingProfileManager>(
         TestingBrowserProcess::GetGlobal());
     ASSERT_TRUE(testing_profile_manager_->SetUp());
@@ -348,7 +345,8 @@ class ArcPolicyBridgeTestBase {
  private:
   content::BrowserTaskEnvironment task_environment_;
   data_decoder::test::InProcessDataDecoder in_process_data_decoder_;
-  std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
+  user_manager::TypedScopedUserManager<ash::FakeChromeUserManager>
+      fake_user_manager_;
   std::unique_ptr<TestingProfileManager> testing_profile_manager_;
   base::RunLoop run_loop_;
   raw_ptr<TestingProfile, DanglingUntriaged | ExperimentalAsh> profile_;
@@ -780,22 +778,6 @@ TEST_F(ArcPolicyBridgeTest, ManualChildUserPoliciesSet) {
       base::StrCat({"{\"apkCacheEnabled\":true,\"guid\":\"", instance_guid(),
                     "\",", kMountPhysicalMediaDisabledPolicySetting, ",",
                     kSupervisedUserPlayStoreModePolicySetting, "}"}));
-}
-
-TEST_P(ArcPolicyBridgeAffiliatedTest, ForceEnableApkCacheTest) {
-  base::test::ScopedCommandLine command_line;
-  command_line.GetProcessCommandLine()->AppendSwitch(
-      ash::switches::kArcForceEnableApkCache);
-
-  const std::string expected_apk_cache_enabled_result(
-      "{\"apkCacheEnabled\":true,\"guid\":\"" + instance_guid() + "\"," +
-      kMountPhysicalMediaDisabledPolicySetting + "}");
-
-  // Cache should be enabled regardless of affiliation
-  GetPoliciesAndVerifyResultWithAffiliation(
-      /* expected_policy_json_affiliated */ expected_apk_cache_enabled_result,
-      /* expected_policy_json_not_affiliated */
-      expected_apk_cache_enabled_result);
 }
 
 TEST_P(ArcPolicyBridgeAffiliatedTest, ApkCacheEnabledTest) {

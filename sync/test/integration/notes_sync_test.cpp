@@ -5,10 +5,10 @@
 #include "app/vivaldi_apptools.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/current_thread.h"
+#include "components/notes/notes_factory.h"
+#include "components/notes/notes_model.h"
+#include "components/notes/notes_model_observer.h"
 #include "components/sync/test/fake_server_verifier.h"
-#include "notes/notes_factory.h"
-#include "notes/notes_model.h"
-#include "notes/notes_model_observer.h"
 #include "sync/test/integration/notes_helper.h"
 
 using notes_helper::GetNotesModel;

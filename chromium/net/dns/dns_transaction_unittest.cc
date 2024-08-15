@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include <algorithm>
 #include <limits>
 #include <memory>
 #include <utility>
@@ -590,12 +591,12 @@ class URLRequestMockDohJob : public URLRequestJob, public AsyncSocket {
                    IOBuffer* buf,
                    int buf_size) {
     if (data_len > buf_size) {
-      memcpy(buf->data(), data, buf_size);
+      std::copy(data, data + buf_size, buf->data());
       leftover_data_ = data + buf_size;
       leftover_data_len_ = data_len - buf_size;
       return buf_size;
     }
-    memcpy(buf->data(), data, data_len);
+    std::copy(data, data + data_len, buf->data());
     return data_len;
   }
 
@@ -1026,8 +1027,8 @@ TEST_F(DnsTransactionTest, LookupWithLog) {
   helper0.StartTransaction(transaction_factory_.get(), kT0HostName, kT0Qtype,
                            false /* secure */, resolve_context_.get());
   helper0.RunUntilComplete();
-  EXPECT_EQ(observer.count(), 6);
-  EXPECT_EQ(observer.dict_count(), 4);
+  EXPECT_EQ(observer.count(), 7);
+  EXPECT_EQ(observer.dict_count(), 5);
 }
 
 TEST_F(DnsTransactionTest, LookupWithEDNSOption) {
@@ -2609,6 +2610,39 @@ TEST_F(DnsTransactionTest, HttpsGetRedirectToInsecureProtocol) {
   ASSERT_EQ(helper0.response(), nullptr);
 }
 
+TEST_F(DnsTransactionTest, HttpsGetContentLengthTooLarge) {
+  ConfigureDohServers(/*use_post=*/false);
+  AddQueryAndResponse(0, kT0HostName, kT0Qtype, kT0ResponseDatagram,
+                      std::size(kT0ResponseDatagram), SYNCHRONOUS,
+                      Transport::HTTPS, /*opt_rdata=*/nullptr,
+                      DnsQuery::PaddingStrategy::BLOCK_LENGTH_128,
+                      /*enqueue_transaction_id=*/false);
+  TransactionHelper helper0(ERR_DNS_MALFORMED_RESPONSE);
+  SetResponseModifierCallback(base::BindLambdaForTesting(
+      [](URLRequest* request, HttpResponseInfo* info) {
+        info->headers->AddHeader("Content-Length", "65536");
+      }));
+  helper0.StartTransaction(transaction_factory_.get(), kT0HostName, kT0Qtype,
+                           /*secure=*/true, resolve_context_.get());
+  helper0.RunUntilComplete();
+  ASSERT_EQ(helper0.response(), nullptr);
+}
+
+TEST_F(DnsTransactionTest, HttpsGetResponseTooLargeWithoutContentLength) {
+  ConfigureDohServers(/*use_post=*/false);
+  std::vector<uint8_t> large_response(65536, 0);
+  AddQueryAndResponse(0, kT0HostName, kT0Qtype, large_response.data(),
+                      large_response.size(), SYNCHRONOUS, Transport::HTTPS,
+                      /*opt_rdata=*/nullptr,
+                      DnsQuery::PaddingStrategy::BLOCK_LENGTH_128,
+                      /*enqueue_transaction_id=*/false);
+  TransactionHelper helper0(ERR_DNS_MALFORMED_RESPONSE);
+  helper0.StartTransaction(transaction_factory_.get(), kT0HostName, kT0Qtype,
+                           /*secure=*/true, resolve_context_.get());
+  helper0.RunUntilComplete();
+  ASSERT_EQ(helper0.response(), nullptr);
+}
+
 void MakeResponseNoType(URLRequest* request, HttpResponseInfo* info) {
   info->headers->RemoveHeader("Content-Type");
 }
@@ -2656,8 +2690,8 @@ TEST_F(DnsTransactionTest, HttpsPostLookupWithLog) {
                            true /* secure */, resolve_context_.get());
   helper0.RunUntilComplete();
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(observer.count(), 18);
-  EXPECT_EQ(observer.dict_count(), 9);
+  EXPECT_EQ(observer.count(), 19);
+  EXPECT_EQ(observer.dict_count(), 10);
 }
 
 // Test for when a slow DoH response is delayed until after the initial fallback
@@ -3121,8 +3155,8 @@ TEST_F(DnsTransactionTest, TcpLookup_UdpRetry_WithLog) {
   helper0.StartTransaction(transaction_factory_.get(), kT0HostName, kT0Qtype,
                            false /* secure */, resolve_context_.get());
   helper0.RunUntilComplete();
-  EXPECT_EQ(observer.count(), 8);
-  EXPECT_EQ(observer.dict_count(), 6);
+  EXPECT_EQ(observer.count(), 9);
+  EXPECT_EQ(observer.dict_count(), 7);
 }
 
 TEST_F(DnsTransactionTest, TcpLookup_LowEntropy) {

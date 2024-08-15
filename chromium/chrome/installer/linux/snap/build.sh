@@ -25,6 +25,8 @@ VERSION="$3"
 SNAP_ARCH="$4"
 TARGET_OS="$5"
 
+ARCHITECTURE="$SNAP_ARCH"
+
 # call cleanup() on exit
 trap cleanup 0
 
@@ -47,7 +49,7 @@ fi
 
 prep_staging_common
 PACKAGE_ORIG= # unused, but needs to be set
-USR_BIN_SYMLINK_NAME= # unused, but needs to be set
+USR_BIN_SYMLINK_NAME="$SNAPNAME"
 SHLIB_PERMS=644
 BRANDING="$(echo ${SNAPNAME} | tr '-' '_')"
 stage_install_common

@@ -7,9 +7,9 @@
 #include <stddef.h>
 #include <stdlib.h>
 
-#include "base/allocator/partition_allocator/page_allocator.h"
-#include "base/allocator/partition_allocator/partition_alloc.h"
-#include "base/allocator/partition_allocator/partition_root.h"
+#include "base/allocator/partition_allocator/src/partition_alloc/page_allocator.h"
+#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc.h"
+#include "base/allocator/partition_allocator/src/partition_alloc/partition_root.h"
 #include "base/bits.h"
 #include "base/check_op.h"
 #include "base/no_destructor.h"
@@ -34,17 +34,19 @@ static_assert(V8_ARRAY_BUFFER_INTERNAL_FIELD_COUNT == 2,
 partition_alloc::PartitionRoot* ArrayBufferAllocator::partition_ = nullptr;
 
 void* ArrayBufferAllocator::Allocate(size_t length) {
-  constexpr unsigned int flags = partition_alloc::AllocFlags::kZeroFill |
-                                 partition_alloc::AllocFlags::kReturnNull;
+  constexpr partition_alloc::AllocFlags flags =
+      partition_alloc::AllocFlags::kZeroFill |
+      partition_alloc::AllocFlags::kReturnNull;
   return AllocateInternal<flags>(length);
 }
 
 void* ArrayBufferAllocator::AllocateUninitialized(size_t length) {
-  constexpr unsigned int flags = partition_alloc::AllocFlags::kReturnNull;
+  constexpr partition_alloc::AllocFlags flags =
+      partition_alloc::AllocFlags::kReturnNull;
   return AllocateInternal<flags>(length);
 }
 
-template <unsigned int flags>
+template <partition_alloc::AllocFlags flags>
 void* ArrayBufferAllocator::AllocateInternal(size_t length) {
 #ifdef V8_ENABLE_SANDBOX
   // The V8 sandbox requires all ArrayBuffer backing stores to be allocated

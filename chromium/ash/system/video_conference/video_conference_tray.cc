@@ -233,9 +233,8 @@ void VideoConferenceTrayButton::UpdateTooltip() {
 VideoConferenceTray::VideoConferenceTray(Shelf* shelf)
     : TrayBackgroundView(shelf,
                          TrayBackgroundViewCatalogName::kVideoConferenceTray) {
-  // If the user pressed the body of the tray, just toggle the bubble.
-  SetPressedCallback(base::BindRepeating(&VideoConferenceTray::ToggleBubble,
-                                         weak_ptr_factory_.GetWeakPtr()));
+  SetCallback(base::BindRepeating(&VideoConferenceTray::ToggleBubble,
+                                  weak_ptr_factory_.GetWeakPtr()));
 
   tray_container()->SetSpacingBetweenChildren(kTrayButtonsSpacing);
 
@@ -324,6 +323,12 @@ void VideoConferenceTray::HideBubbleWithView(
   }
 }
 
+void VideoConferenceTray::HideBubble(const TrayBubbleView* bubble_view) {
+  if (bubble_ && bubble_->bubble_view() == bubble_view) {
+    CloseBubble();
+  }
+}
+
 void VideoConferenceTray::ClickedOutsideBubble() {
   CloseBubble();
 }
@@ -347,7 +352,7 @@ void VideoConferenceTray::OnAnimationEnded() {
 
   auto* controller = VideoConferenceTrayController::Get();
   controller->MaybeRunNudgeRequest();
-  controller->MaybeShowSpeakOnMuteOptInNudge(this);
+  controller->MaybeShowSpeakOnMuteOptInNudge();
 }
 
 bool VideoConferenceTray::ShouldEnterPushedState(const ui::Event& event) {

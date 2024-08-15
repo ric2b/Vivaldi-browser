@@ -16,7 +16,7 @@ import {afterNextRender, html, mixinBehaviors, PolymerElement} from 'chrome://re
 
 import {getShimlessRmaService} from './mojo_interface_provider.js';
 import {FeatureLevel, ShimlessRmaServiceInterface, StateResult} from './shimless_rma_types.js';
-import {disableNextButton, enableNextButton, focusPageTitle, isComplianceCheckEnabled} from './shimless_rma_util.js';
+import {disableNextButton, enableNextButton, focusPageTitle, isComplianceCheckEnabled, isSkuDescriptionEnabled} from './shimless_rma_util.js';
 
 /**
  * @fileoverview
@@ -56,7 +56,7 @@ export class ReimagingDeviceInformationPage extends
   static get observers() {
     return [
       'updateNextButtonDisabledState_(serialNumber_, skuIndex_, regionIndex_,' +
-          ' whiteLabelIndex_, isChassisBranded_, hwComplianceVersion_,' +
+          ' customLabelIndex_, isChassisBranded_, hwComplianceVersion_,' +
           ' featureLevel_)',
     ];
   }
@@ -92,10 +92,10 @@ export class ReimagingDeviceInformationPage extends
       },
 
       /** @protected */
-      disableResetWhiteLabel_: {
+      disableResetCustomLabel_: {
         type: Boolean,
-        computed: 'getDisableResetWhiteLabel_(' +
-            'originalWhiteLabelIndex_, whiteLabelIndex_, allButtonsDisabled)',
+        computed: 'getDisableResetCustomLabel_(' +
+            'originalCustomLabelIndex_, customLabelIndex_, allButtonsDisabled)',
       },
 
       /** @protected */
@@ -154,19 +154,19 @@ export class ReimagingDeviceInformationPage extends
       },
 
       /** @protected {!Array<string>} */
-      whiteLabels_: {
+      customLabels_: {
         type: Array,
         value: () => [],
       },
 
       /** @protected */
-      originalWhiteLabelIndex_: {
+      originalCustomLabelIndex_: {
         type: Number,
         value: 0,
       },
 
       /** @protected */
-      whiteLabelIndex_: {
+      customLabelIndex_: {
         type: Number,
         value: 0,
       },
@@ -225,7 +225,7 @@ export class ReimagingDeviceInformationPage extends
     this.getOriginalSerialNumber_();
     this.getOriginalRegionAndRegionList_();
     this.getOriginalSkuAndSkuList_();
-    this.getOriginalWhiteLabelAndWhiteLabelList_();
+    this.getOriginalCustomLabelAndCustomLabelList_();
     this.getOriginalDramPartNumber_();
 
     if (isComplianceCheckEnabled()) {
@@ -245,7 +245,7 @@ export class ReimagingDeviceInformationPage extends
       return false;
     }
     return (this.serialNumber_ !== '') && (this.skuIndex_ >= 0) &&
-        (this.regionIndex_ >= 0) && (this.whiteLabelIndex_ >= 0);
+        (this.regionIndex_ >= 0) && (this.customLabelIndex_ >= 0);
   }
 
   /** @private */
@@ -296,6 +296,16 @@ export class ReimagingDeviceInformationPage extends
         .then((result) => {
           this.skus_ = result.skus;
           this.skuIndex_ = this.originalSkuIndex_;
+          return this.shimlessRmaService_.getSkuDescriptionList();
+        })
+        .then((result) => {
+          // The SKU description list can be empty if the backend disables this
+          // feature.
+          if (isSkuDescriptionEnabled() &&
+              this.skus_.length === result.skuDescriptions.length) {
+            this.skus_ = this.skus_.map(
+                (sku, index) => `${sku}: ${result.skuDescriptions[index]}`);
+          }
 
           // Need to wait for the select options to render before setting the
           // selected index.
@@ -307,29 +317,29 @@ export class ReimagingDeviceInformationPage extends
   }
 
   /** @private */
-  getOriginalWhiteLabelAndWhiteLabelList_() {
-    this.shimlessRmaService_.getOriginalWhiteLabel()
+  getOriginalCustomLabelAndCustomLabelList_() {
+    this.shimlessRmaService_.getOriginalCustomLabel()
         .then((result) => {
-          this.originalWhiteLabelIndex_ = result.whiteLabelIndex;
-          return this.shimlessRmaService_.getWhiteLabelList();
+          this.originalCustomLabelIndex_ = result.customLabelIndex;
+          return this.shimlessRmaService_.getCustomLabelList();
         })
         .then((result) => {
-          this.whiteLabels_ = result.whiteLabels;
-          const blankIndex = this.whiteLabels_.indexOf('');
+          this.customLabels_ = result.customLabels;
+          const blankIndex = this.customLabels_.indexOf('');
           if (blankIndex >= 0) {
-            this.whiteLabels_[blankIndex] =
-                this.i18n('confirmDeviceInfoEmptyWhiteLabelLabel');
-            if (this.originalWhiteLabelIndex_ < 0) {
-              this.originalWhiteLabelIndex_ = blankIndex;
+            this.customLabels_[blankIndex] =
+                this.i18n('confirmDeviceInfoEmptyCustomLabelLabel');
+            if (this.originalCustomLabelIndex_ < 0) {
+              this.originalCustomLabelIndex_ = blankIndex;
             }
           }
-          this.whiteLabelIndex_ = this.originalWhiteLabelIndex_;
+          this.customLabelIndex_ = this.originalCustomLabelIndex_;
 
           // Need to wait for the select options to render before setting the
           // selected index.
           afterNextRender(this, () => {
-            this.shadowRoot.querySelector('#whiteLabelSelect').selectedIndex =
-                this.whiteLabelIndex_;
+            this.shadowRoot.querySelector('#customLabelSelect').selectedIndex =
+                this.customLabelIndex_;
           });
         });
   }
@@ -367,8 +377,8 @@ export class ReimagingDeviceInformationPage extends
   }
 
   /** @protected */
-  getDisableResetWhiteLabel_() {
-    return this.originalWhiteLabelIndex_ === this.whiteLabelIndex_ ||
+  getDisableResetCustomLabel_() {
+    return this.originalCustomLabelIndex_ === this.customLabelIndex_ ||
         this.allButtonsDisabled;
   }
 
@@ -390,9 +400,9 @@ export class ReimagingDeviceInformationPage extends
   }
 
   /** @protected */
-  onSelectedWhiteLabelChange_(event) {
-    this.whiteLabelIndex_ =
-        this.shadowRoot.querySelector('#whiteLabelSelect').selectedIndex;
+  onSelectedCustomLabelChange_(event) {
+    this.customLabelIndex_ =
+        this.shadowRoot.querySelector('#customLabelSelect').selectedIndex;
   }
 
   /** @protected */
@@ -414,10 +424,10 @@ export class ReimagingDeviceInformationPage extends
   }
 
   /** @protected */
-  onResetWhiteLabelButtonClicked_(event) {
-    this.whiteLabelIndex_ = this.originalWhiteLabelIndex_;
-    this.shadowRoot.querySelector('#whiteLabelSelect').selectedIndex =
-        this.whiteLabelIndex_;
+  onResetCustomLabelButtonClicked_(event) {
+    this.customLabelIndex_ = this.originalCustomLabelIndex_;
+    this.shadowRoot.querySelector('#customLabelSelect').selectedIndex =
+        this.customLabelIndex_;
   }
 
   /** @protected */
@@ -461,7 +471,7 @@ export class ReimagingDeviceInformationPage extends
 
       return this.shimlessRmaService_.setDeviceInformation(
           this.serialNumber_, this.regionIndex_, this.skuIndex_,
-          this.whiteLabelIndex_, this.dramPartNumber_, isChassisBranded,
+          this.customLabelIndex_, this.dramPartNumber_, isChassisBranded,
           hwComplianceVersion);
     }
   }

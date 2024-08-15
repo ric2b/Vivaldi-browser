@@ -4,22 +4,73 @@
 
 #import "ios/chrome/browser/ui/settings/supervised_user_settings_app_interface.h"
 
+#import "base/memory/ptr_util.h"
+#import "base/memory/singleton.h"
 #import "components/prefs/pref_service.h"
+#import "components/signin/public/identity_manager/identity_manager.h"
+#import "components/supervised_user/core/browser/kids_chrome_management_client.h"
 #import "components/supervised_user/core/browser/permission_request_creator.h"
 #import "components/supervised_user/core/browser/permission_request_creator_mock.h"
+#import "components/supervised_user/core/browser/proto/kidschromemanagement_messages.pb.h"
 #import "components/supervised_user/core/browser/supervised_user_service.h"
 #import "components/supervised_user/core/browser/supervised_user_settings_service.h"
 #import "components/supervised_user/core/common/pref_names.h"
 #import "components/supervised_user/core/common/supervised_user_constants.h"
 #import "components/supervised_user/core/common/supervised_user_utils.h"
+#import "ios/chrome/app/main_controller.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser_provider.h"
+#import "ios/chrome/browser/shared/model/browser/browser_provider_interface.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/supervised_user/supervised_user_service_factory.h"
-#import "ios/chrome/browser/supervised_user/supervised_user_settings_service_factory.h"
+#import "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/supervised_user/model/supervised_user_error_container.h"
+#import "ios/chrome/browser/supervised_user/model/supervised_user_service_factory.h"
+#import "ios/chrome/browser/supervised_user/model/supervised_user_settings_service_factory.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
+#import "ios/chrome/test/app/tab_test_util.h"
+#import "ios/components/security_interstitials/ios_blocking_page_tab_helper.h"
+#import "ios/components/security_interstitials/ios_security_interstitial_page.h"
 #import "ios/web/public/web_state.h"
 #import "net/base/mac/url_conversions.h"
+#import "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#import "services/network/test/test_url_loader_factory.h"
 
 namespace {
+
+// Helper class that holds a instance of TestUrlLoaderFactory.
+// It allows the callers of this class to keep an alive instance
+// of a TestUrlLoaderFactory for the duration of a test.
+class TestUrlLoaderFactoryHelper {
+ public:
+  static TestUrlLoaderFactoryHelper* SharedInstance() {
+    return base::Singleton<TestUrlLoaderFactoryHelper>::get();
+  }
+
+  void SetUp() {
+    test_url_loader_factory_ =
+        std::make_unique<network::TestURLLoaderFactory>();
+    shared_url_loader_factory_ =
+        base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+            test_url_loader_factory_.get());
+  }
+
+  void TearDown() {
+    shared_url_loader_factory_.reset();
+    test_url_loader_factory_.reset();
+  }
+
+  scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory() {
+    return std::ref(shared_url_loader_factory_);
+  }
+  network::TestURLLoaderFactory* test_url_loader_factory() {
+    return test_url_loader_factory_.get();
+  }
+
+ private:
+  std::unique_ptr<network::TestURLLoaderFactory> test_url_loader_factory_;
+  scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory_;
+};
+
 void setUrlFilteringForUrl(const GURL& url, bool isAllowed) {
   supervised_user::SupervisedUserSettingsService* settings_service =
       SupervisedUserSettingsServiceFactory::GetForBrowserState(
@@ -39,6 +90,19 @@ void setUrlFilteringForUrl(const GURL& url, bool isAllowed) {
       supervised_user::kContentPackManualBehaviorHosts,
       std::move(dict_to_insert));
 }
+
+bool isShowingInterstitialForState(web::WebState* web_state) {
+  CHECK(web_state);
+  auto* blocking_tab_helper =
+      security_interstitials::IOSBlockingPageTabHelper::FromWebState(web_state);
+
+  CHECK(blocking_tab_helper);
+  security_interstitials::IOSSecurityInterstitialPage* blocking_page =
+      blocking_tab_helper->GetCurrentBlockingPage();
+  return blocking_page && blocking_page->GetInterstitialType() ==
+                              kSupervisedUserInterstitialType;
+}
+
 }  // namespace
 
 @implementation SupervisedUserSettingsAppInterface : NSObject
@@ -130,6 +194,64 @@ void setUrlFilteringForUrl(const GURL& url, bool isAllowed) {
       prefs::kFirstTimeInterstitialBannerState,
       static_cast<int>(
           supervised_user::FirstTimeInterstitialBannerState::kNeedToShow));
+}
+
++ (void)setDefaultClassifyURLNavigationIsAllowed:(BOOL)is_allowed {
+  // Fake the ClassifyUrl responses.
+  kids_chrome_management::ClassifyUrlResponse response;
+  auto url_classification =
+      is_allowed ? kids_chrome_management::ClassifyUrlResponse::ALLOWED
+                 : kids_chrome_management::ClassifyUrlResponse::RESTRICTED;
+  response.set_display_classification(url_classification);
+  std::string classify_url_service_url =
+      "https://kidsmanagement-pa.googleapis.com/kidsmanagement/v1/people/"
+      "me:classifyUrl?alt=proto";
+
+  auto* test_url_loader_factory =
+      TestUrlLoaderFactoryHelper::SharedInstance()->test_url_loader_factory();
+  CHECK(test_url_loader_factory);
+  auto shared_url_loader_factory =
+      TestUrlLoaderFactoryHelper::SharedInstance()->shared_url_loader_factory();
+  CHECK(shared_url_loader_factory);
+
+  test_url_loader_factory->AddResponse(classify_url_service_url,
+                                       response.SerializeAsString());
+
+  // Set up the KidsChromeManagementClient that provides fake safe search
+  // responses.
+  ChromeBrowserState* browser_state = ChromeBrowserState::FromBrowserState(
+      chrome_test_util::GetOriginalBrowserState());
+  auto* identity_manager =
+      IdentityManagerFactory::GetForBrowserState(browser_state);
+  CHECK(identity_manager);
+  auto kids_chrome_management_client =
+      std::make_unique<KidsChromeManagementClient>(shared_url_loader_factory,
+                                                   identity_manager);
+
+  supervised_user::SupervisedUserService* supervised_user_service =
+      SupervisedUserServiceFactory::GetForBrowserState(browser_state);
+  supervised_user_service->GetURLFilter()->InitAsyncURLChecker(
+      kids_chrome_management_client.get());
+}
+
++ (void)setUpTestUrlLoaderFactoryHelper {
+  TestUrlLoaderFactoryHelper::SharedInstance()->SetUp();
+}
+
++ (void)tearDownTestUrlLoaderFactoryHelper {
+  TestUrlLoaderFactoryHelper::SharedInstance()->TearDown();
+}
+
++ (NSInteger)countSupervisedUserIntersitialsForExistingWebStates {
+  int count = 0;
+  int tab_count = chrome_test_util::GetMainTabCount();
+  for (int i = 0; i < tab_count; i++) {
+    if (isShowingInterstitialForState(
+            chrome_test_util::GetWebStateAtIndexInCurrentMode(i))) {
+      count++;
+    }
+  }
+  return count;
 }
 
 @end

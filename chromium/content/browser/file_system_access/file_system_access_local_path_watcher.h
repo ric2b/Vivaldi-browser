@@ -22,6 +22,7 @@ class FileSystemAccessLocalPathWatcher : public FileSystemAccessChangeSource {
  public:
   FileSystemAccessLocalPathWatcher(
       FileSystemAccessWatchScope scope,
+      scoped_refptr<storage::FileSystemContext> file_system_context,
       base::PassKey<FileSystemAccessWatcherManager> pass_key);
   FileSystemAccessLocalPathWatcher(const FileSystemAccessLocalPathWatcher&) =
       delete;
@@ -31,7 +32,8 @@ class FileSystemAccessLocalPathWatcher : public FileSystemAccessChangeSource {
 
   // FileSystemAccessChangeSource:
   void Initialize(
-      base::OnceCallback<void(bool)> on_source_initialized) override;
+      base::OnceCallback<void(blink::mojom::FileSystemAccessErrorPtr)>
+          on_source_initialized) override;
 
  private:
   void OnFilePathChanged(const base::FilePath& changed_path, bool error);

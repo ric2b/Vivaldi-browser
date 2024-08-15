@@ -19,6 +19,8 @@
 #define KNOWN_404(path) "https://" HOSTNAME_404 path
 
 #define VIVALDI_HELP_SETTINGS_ABOUT "https://help.vivaldi.com/?pk_campaign=v-menu"
+#define VIVALDI_HELP_PRIVACY_ABOUT_UNSAFE \
+  "https://help.vivaldi.com/desktop/privacy/warnings-about-unsafe-websites/"
 
 namespace vivaldi {
 

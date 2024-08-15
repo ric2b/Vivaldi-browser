@@ -43,7 +43,7 @@ class IsolatedWebAppApplyUpdateCommandBrowserTest
   using InstallResult = base::expected<InstallIsolatedWebAppCommandSuccess,
                                        InstallIsolatedWebAppCommandError>;
   using PrepareAndStoreUpdateResult =
-      base::expected<void, IsolatedWebAppUpdatePrepareAndStoreCommandError>;
+      IsolatedWebAppUpdatePrepareAndStoreCommandResult;
   using ApplyUpdateResult =
       base::expected<void, IsolatedWebAppApplyUpdateCommandError>;
 
@@ -54,7 +54,7 @@ class IsolatedWebAppApplyUpdateCommandBrowserTest
 
     installed_bundle_path_ = scoped_temp_dir_.GetPath().Append(
         base::FilePath::FromASCII("installed-bundle.swbn"));
-    installed_location_ =
+    source_location_ =
         is_dev_mode_ ? IsolatedWebAppLocation(
                            DevModeBundle{.path = installed_bundle_path_})
                      : IsolatedWebAppLocation(
@@ -86,27 +86,28 @@ class IsolatedWebAppApplyUpdateCommandBrowserTest
   void Install() {
     base::test::TestFuture<InstallResult> future;
     provider()->scheduler().InstallIsolatedWebApp(
-        url_info_, installed_location_,
+        url_info_, source_location_,
         /*expected_version=*/installed_version_,
         /*optional_keep_alive=*/nullptr,
         /*optional_profile_keep_alive=*/nullptr, future.GetCallback());
-    EXPECT_THAT(future.Take(), HasValue());
+    ASSERT_OK_AND_ASSIGN(const InstallResult result, future.Take());
 
     const WebApp* web_app =
         provider()->registrar_unsafe().GetAppById(url_info_.app_id());
     ASSERT_THAT(web_app,
                 test::IwaIs(Eq("installed app"),
                             test::IsolationDataIs(
-                                Eq(installed_location_), Eq(installed_version_),
+                                result->location, Eq(installed_version_),
                                 /*controlled_frame_partitions=*/_,
                                 /*pending_update_info=*/Eq(absl::nullopt))));
   }
 
   PrepareAndStoreUpdateResult PrepareAndStoreUpdateInfo(
-      const PendingUpdateInfo& pending_update_info) {
+      const IsolatedWebAppUpdatePrepareAndStoreCommand::UpdateInfo&
+          update_info) {
     base::test::TestFuture<PrepareAndStoreUpdateResult> future;
     provider()->scheduler().PrepareAndStoreIsolatedWebAppUpdate(
-        pending_update_info, url_info_,
+        update_info, url_info_,
         /*optional_keep_alive=*/nullptr,
         /*optional_profile_keep_alive=*/nullptr, future.GetCallback());
     return future.Take();
@@ -138,7 +139,7 @@ class IsolatedWebAppApplyUpdateCommandBrowserTest
               key_pair_.public_key));
 
   base::FilePath installed_bundle_path_;
-  IsolatedWebAppLocation installed_location_;
+  IsolatedWebAppLocation source_location_;
   base::Version installed_version_ = base::Version("1.0.0");
 
   base::FilePath update_bundle_path_;
@@ -155,7 +156,8 @@ IN_PROC_BROWSER_TEST_P(IsolatedWebAppApplyUpdateCommandBrowserTest, Succeeds) {
   ASSERT_NO_FATAL_FAILURE(Install());
 
   PrepareAndStoreUpdateResult prepare_update_result = PrepareAndStoreUpdateInfo(
-      PendingUpdateInfo(update_location_, update_version_));
+      IsolatedWebAppUpdatePrepareAndStoreCommand::UpdateInfo(update_location_,
+                                                             update_version_));
   EXPECT_THAT(prepare_update_result, HasValue());
 
   ApplyUpdateResult apply_update_result = ApplyUpdate();
@@ -167,7 +169,7 @@ IN_PROC_BROWSER_TEST_P(IsolatedWebAppApplyUpdateCommandBrowserTest, Succeeds) {
       web_app,
       test::IwaIs(Eq("updated app"),
                   test::IsolationDataIs(
-                      Eq(update_location_), Eq(update_version_),
+                      prepare_update_result->location, Eq(update_version_),
                       /*controlled_frame_partitions=*/_, Eq(absl::nullopt))));
 }
 

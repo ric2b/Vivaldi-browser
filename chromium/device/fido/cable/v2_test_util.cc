@@ -52,6 +52,7 @@ class TestNetworkContext : public network::TestNetworkContext {
       const GURL& url,
       const std::vector<std::string>& requested_protocols,
       const net::SiteForCookies& site_for_cookies,
+      bool has_storage_access,
       const net::IsolationInfo& isolation_info,
       std::vector<network::mojom::HttpHeaderPtr> additional_headers,
       int32_t process_id,
@@ -591,6 +592,8 @@ class TestPlatform : public authenticator::Platform {
 
     auto response = blink::mojom::GetAssertionAuthenticatorResponse::New();
     response->info = blink::mojom::CommonCredentialInfo::New();
+    response->extensions =
+        blink::mojom::AuthenticationExtensionsClientOutputs::New();
 
     absl::optional<cbor::Value> v = cbor::Reader::Read(payload.subspan(1));
     const cbor::Value::MapValue& in_map = v->GetMap();
@@ -617,9 +620,10 @@ class TestPlatform : public authenticator::Platform {
       const auto dpk_it = unsigned_extension_outputs.find(
           cbor::Value(kExtensionDevicePublicKey));
       if (dpk_it != unsigned_extension_outputs.end()) {
-        response->device_public_key =
+        response->extensions->device_public_key =
             blink::mojom::DevicePublicKeyResponse::New();
-        response->device_public_key->signature = dpk_it->second.GetBytestring();
+        response->extensions->device_public_key->signature =
+            dpk_it->second.GetBytestring();
       }
       const auto prf_it =
           unsigned_extension_outputs.find(cbor::Value(kExtensionPRF));
@@ -637,7 +641,7 @@ class TestPlatform : public authenticator::Platform {
         if (second_it != results_from_authenticator.end()) {
           results_for_response->second = second_it->second.GetBytestring();
         }
-        response->prf_results = std::move(results_for_response);
+        response->extensions->prf_results = std::move(results_for_response);
       }
     }
 
@@ -688,8 +692,9 @@ class LateLinkingDevice : public authenticator::Transaction {
 
     network_context_->CreateWebSocket(
         target, {device::kCableWebSocketProtocol}, net::SiteForCookies(),
-        net::IsolationInfo(), /*additional_headers=*/{},
-        network::mojom::kBrowserProcessId, url::Origin::Create(target),
+        /*has_storage_access=*/false, net::IsolationInfo(),
+        /*additional_headers=*/{}, network::mojom::kBrowserProcessId,
+        url::Origin::Create(target),
         network::mojom::kWebSocketOptionBlockAllCookies,
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS),
         websocket_client_->BindNewHandshakeClientPipe(),
@@ -762,7 +767,6 @@ class LateLinkingDevice : public authenticator::Transaction {
         handshake_hash_ = result->second;
         websocket_client_->Write(response);
         crypter_ = std::move(result->first);
-        crypter_->UseNewConstruction();
 
         cbor::Value::MapValue post_handshake_msg;
         post_handshake_msg.emplace(1, BuildGetInfoResponse());
@@ -907,8 +911,9 @@ class HandshakeErrorDevice : public authenticator::Transaction {
 
     network_context_->CreateWebSocket(
         target, {device::kCableWebSocketProtocol}, net::SiteForCookies(),
-        net::IsolationInfo(), /*additional_headers=*/{},
-        network::mojom::kBrowserProcessId, url::Origin::Create(target),
+        /*has_storage_access=*/false, net::IsolationInfo(),
+        /*additional_headers=*/{}, network::mojom::kBrowserProcessId,
+        url::Origin::Create(target),
         network::mojom::kWebSocketOptionBlockAllCookies,
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS),
         websocket_client_->BindNewHandshakeClientPipe(),

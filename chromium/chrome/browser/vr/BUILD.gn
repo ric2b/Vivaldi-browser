@@ -65,6 +65,8 @@ component("vr_ui") {
     "renderers/base_quad_renderer.h",
     "renderers/base_renderer.cc",
     "renderers/base_renderer.h",
+    "renderers/grid_renderer.cc",
+    "renderers/grid_renderer.h",
     "renderers/radial_gradient_quad_renderer.cc",
     "renderers/radial_gradient_quad_renderer.h",
     "renderers/texture_copy_renderer.cc",
@@ -108,6 +110,10 @@ component("vr_ui") {
     "//ui/gfx/animation/keyframe",
   ]
 
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
+
+  defines = [ "VR_UI_IMPLEMENTATION" ]
+
   if (use_native_partitions) {
     # Mark symbols in this library as belonging to the VR partition. Only
     # exported symbols (module entrypoints) are affected.
@@ -116,9 +122,8 @@ component("vr_ui") {
 
   if (is_android) {
     sources += [ "jni_onload.cc" ]
+    deps += [ "//third_party/jni_zero" ]
   }
-
-  defines = [ "VR_UI_IMPLEMENTATION" ]
 
   if (use_command_buffer) {
     sources += [
@@ -150,6 +155,7 @@ component("vr_common") {
     "frame_type.h",
     "gesture_detector.cc",
     "gesture_detector.h",
+    "graphics_delegate.cc",
     "graphics_delegate.h",
     "input_delegate.h",
     "platform_controller.h",
@@ -193,6 +199,10 @@ component("vr_common") {
     "//ui/display",
   ]
 
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
+
+  defines = [ "VR_IMPLEMENTATION" ]
+
   if (is_win) {
     sources += [
       "win/graphics_delegate_win.cc",
@@ -205,20 +215,16 @@ component("vr_common") {
       "win/vr_browser_renderer_thread_win.h",
     ]
 
-    deps += [ "//services/viz/public/cpp/gpu" ]
+    deps += [
+      "//gpu/command_buffer/client:gles2_c_lib",
+      "//services/viz/public/cpp/gpu",
+    ]
 
     # Windows doesn't have app bundles, so include the UI directly.
     deps += [ ":vr_ui" ]
   }
 
-  defines = [ "VR_IMPLEMENTATION" ]
-
   if (!use_command_buffer) {
-    sources += [
-      "base_graphics_delegate.cc",
-      "base_graphics_delegate.h",
-    ]
-    deps += [ "//ui/gl/init" ]
   }
 }
 
@@ -274,6 +280,8 @@ component("vr_base") {
     "//services/metrics/public/cpp:ukm_builders",
     "//skia",
   ]
+
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
   if (is_android) {
     deps += [ "//chrome/android/features/vr:split_jni_headers" ]

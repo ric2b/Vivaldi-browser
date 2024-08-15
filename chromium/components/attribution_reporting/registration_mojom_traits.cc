@@ -23,8 +23,8 @@
 #include "components/attribution_reporting/os_registration.h"
 #include "components/attribution_reporting/registration.mojom-shared.h"
 #include "components/attribution_reporting/source_registration.h"
-#include "components/attribution_reporting/source_registration_error.mojom-shared.h"
 #include "components/attribution_reporting/suitable_origin.h"
+#include "components/attribution_reporting/trigger_config.h"
 #include "components/attribution_reporting/trigger_registration.h"
 #include "mojo/public/cpp/base/int128_mojom_traits.h"
 #include "mojo/public/cpp/base/time_mojom_traits.h"
@@ -148,7 +148,7 @@ bool StructTraits<attribution_reporting::mojom::EventReportWindowsDataView,
     Read(attribution_reporting::mojom::EventReportWindowsDataView data,
          attribution_reporting::EventReportWindows* out) {
   base::TimeDelta start_time;
-  if (!data.ReadStartTimeOrWindowTime(&start_time)) {
+  if (!data.ReadStartTime(&start_time)) {
     return false;
   }
 
@@ -157,17 +157,22 @@ bool StructTraits<attribution_reporting::mojom::EventReportWindowsDataView,
     return false;
   }
 
-  auto event_report_windows =
-      end_times.empty()
-          ? attribution_reporting::EventReportWindows::CreateSingularWindow(
-                start_time)
-          : attribution_reporting::EventReportWindows::CreateWindows(
-                start_time, std::move(end_times));
+  auto event_report_windows = attribution_reporting::EventReportWindows::Create(
+      start_time, std::move(end_times));
   if (!event_report_windows.has_value()) {
     return false;
   }
 
   *out = std::move(*event_report_windows);
+  return true;
+}
+
+// static
+bool StructTraits<attribution_reporting::mojom::TriggerConfigDataView,
+                  attribution_reporting::TriggerConfig>::
+    Read(attribution_reporting::mojom::TriggerConfigDataView data,
+         attribution_reporting::TriggerConfig* out) {
+  *out = attribution_reporting::TriggerConfig(data.trigger_data_matching());
   return true;
 }
 
@@ -192,10 +197,6 @@ bool StructTraits<attribution_reporting::mojom::SourceRegistrationDataView,
     return false;
   }
 
-  if (!data.ReadDebugKey(&out->debug_key)) {
-    return false;
-  }
-
   if (!data.ReadFilterData(&out->filter_data)) {
     return false;
   }
@@ -204,14 +205,16 @@ bool StructTraits<attribution_reporting::mojom::SourceRegistrationDataView,
     return false;
   }
 
+  if (!data.ReadTriggerConfig(&out->trigger_config)) {
+    return false;
+  }
+
   out->source_event_id = data.source_event_id();
-  out->max_event_level_reports =
-      data.max_event_level_reports() == -1
-          ? absl::nullopt
-          : absl::make_optional(data.max_event_level_reports());
+  out->max_event_level_reports = data.max_event_level_reports();
   out->priority = data.priority();
+  out->debug_key = data.debug_key();
   out->debug_reporting = data.debug_reporting();
-  return true;
+  return out->IsValid();
 }
 
 // static
@@ -227,14 +230,11 @@ bool StructTraits<attribution_reporting::mojom::EventTriggerDataDataView,
                   attribution_reporting::EventTriggerData>::
     Read(attribution_reporting::mojom::EventTriggerDataDataView data,
          attribution_reporting::EventTriggerData* out) {
-  if (!data.ReadDedupKey(&out->dedup_key)) {
-    return false;
-  }
-
   if (!data.ReadFilters(&out->filters)) {
     return false;
   }
 
+  out->dedup_key = data.dedup_key();
   out->data = data.data();
   out->priority = data.priority();
   return true;
@@ -276,14 +276,11 @@ bool StructTraits<attribution_reporting::mojom::AggregatableDedupKeyDataView,
                   attribution_reporting::AggregatableDedupKey>::
     Read(attribution_reporting::mojom::AggregatableDedupKeyDataView data,
          attribution_reporting::AggregatableDedupKey* out) {
-  if (!data.ReadDedupKey(&out->dedup_key)) {
-    return false;
-  }
-
   if (!data.ReadFilters(&out->filters)) {
     return false;
   }
 
+  out->dedup_key = data.dedup_key();
   return true;
 }
 
@@ -321,15 +318,12 @@ bool StructTraits<attribution_reporting::mojom::TriggerRegistrationDataView,
     return false;
   }
 
-  if (!data.ReadDebugKey(&out->debug_key)) {
-    return false;
-  }
-
   if (!data.ReadAggregationCoordinatorOrigin(
           &out->aggregation_coordinator_origin)) {
     return false;
   }
 
+  out->debug_key = data.debug_key();
   out->debug_reporting = data.debug_reporting();
   out->source_registration_time_config = data.source_registration_time_config();
   return true;

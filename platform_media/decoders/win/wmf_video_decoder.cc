@@ -128,7 +128,8 @@ Microsoft::WRL::ComPtr<IMFSample> PrepareInputSample(const DecoderBuffer& input,
 
 // Extract data from sample and reset its buffer to make it ready to receive
 // more data.
-bool ExtractSampleData(IMFSample* sample, std::vector<uint8_t>& buffer) {
+bool ExtractSampleData(IMFSample* sample, std::vector<uint8_t>& buffer,
+                       LONG stride, LONG rows) {
   Microsoft::WRL::ComPtr<IMFMediaBuffer> media_buffer;
   HRESULT hr = sample->ConvertToContiguousBuffer(media_buffer.GetAddressOf());
   RETURN_ON_HR_FAIL(hr, "IMFSample::ConvertToContiguousBuffer()", false);
@@ -140,8 +141,44 @@ bool ExtractSampleData(IMFSample* sample, std::vector<uint8_t>& buffer) {
 
   // We must call Unlock() on all code paths.
 
-  buffer.resize(data_size);
-  memcpy(buffer.data(), data, data_size);
+  // VB-101625: If the number of rows in the output from the decoder is smaller
+  // than the number of rows specified by the video config (and the buffer
+  // therefore is smaller than expected), then we need to recalculate the
+  // number of rows to the (more likely) proper number of rows in the frame and
+  // copy the contents over a new buffer with correct (larger) dimensions to
+  // prevent a crash due to reading past the end of the buffer in
+  // WrapExternalYuvData called below.
+  //
+  // The issue is probably due to incorrect coding of the video header compared
+  // to the encoding of the frames.
+  //
+  // Buffer organization: 1 set of N rows, 2 sets of N rows that are 1/4 stride.
+  // If the calculated N is not N % 16 == 0, it will be reduced to the next
+  // lower N matching the modulus, but the resulting colors in the video may
+  // look a bit off (if this happens, it would be caused by a bug in Windows).
+  if (LONG(data_size) < (rows * stride + rows * stride / 2)) {
+    LONG real_rows = (2 * (data_size / stride)) / 3;
+    real_rows = (real_rows & ~15);  // Make sure the number of rows is
+    // divisible by 16, even if that breaks the video
+    VLOG(1) << __FUNCTION__ << " Recalibrated rows : " << real_rows;
+
+    data_size = (rows * stride + rows * stride / 2);
+    buffer.resize(data_size);
+
+    // Null the buffer to make sure it is clean
+    // This only happens for badly encoded videoes, so no need to optimize
+    memset(buffer.data(), 0, data_size);
+    // Copy each plane of the frame
+    memcpy(buffer.data(), data, real_rows * stride);
+    memcpy(buffer.data() + (rows * stride),
+           data + (real_rows * stride), real_rows * stride / 4);
+    memcpy(buffer.data() + (rows * stride) + rows * stride / 4,
+           data + (real_rows * stride) + (real_rows * stride / 4),
+           real_rows * stride / 4);
+  } else {
+    buffer.resize(data_size);
+    memcpy(buffer.data(), data, data_size);
+  }
 
   hr = media_buffer->Unlock();
   RETURN_ON_HR_FAIL(hr, "IMFMediaBuffer::Unlock()", false);
@@ -167,13 +204,6 @@ scoped_refptr<VideoFrame> CreateOutputFrame(const VideoDecoderConfig& config,
   HRESULT hr = sample->GetSampleTime(&sample_time);
   RETURN_ON_HR_FAIL(hr, "IMFSample::GetSampleTime()", nullptr);
 
-  // The sample time in IMFSample is expressed in hundreds of nanoseconds.
-  const base::TimeDelta timestamp = base::Microseconds(sample_time / 10);
-
-  std::vector<uint8_t> buffer;
-  if (!ExtractSampleData(sample, buffer))
-    return nullptr;
-
   // Number of rows has to be divisible by 16.
   LONG rows = config.coded_size().height();
   LONG adjusted_rows = ((rows + 15) & ~15);
@@ -184,6 +214,13 @@ scoped_refptr<VideoFrame> CreateOutputFrame(const VideoDecoderConfig& config,
     rows = adjusted_rows;
     VLOG(1) << __FUNCTION__ << " After rows : " << rows;
   }
+
+  // The sample time in IMFSample is expressed in hundreds of nanoseconds.
+  const base::TimeDelta timestamp = base::Microseconds(sample_time / 10);
+
+  std::vector<uint8_t> buffer;
+  if (!ExtractSampleData(sample, buffer, stride, rows))
+    return nullptr;
 
   scoped_refptr<VideoFrame> frame = VideoFrame::WrapExternalYuvData(
       VideoPixelFormat::PIXEL_FORMAT_YV12, config.coded_size(),

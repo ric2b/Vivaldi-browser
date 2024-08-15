@@ -176,7 +176,7 @@ class HotseatWidgetTest
   }
 
   void StartOverview() {
-    ASSERT_FALSE(Shell::Get()->overview_controller()->InOverviewSession());
+    ASSERT_FALSE(OverviewController::Get()->InOverviewSession());
 
     // If the overview button is not expected to be shown, start overview
     // directly; otherwise, simulate tap on the overview button, which should
@@ -196,7 +196,7 @@ class HotseatWidgetTest
   }
 
   void EndOverview() {
-    ASSERT_TRUE(Shell::Get()->overview_controller()->InOverviewSession());
+    ASSERT_TRUE(OverviewController::Get()->InOverviewSession());
 
     // If the overview button is not expected to be shown, end overview
     // directly; otherwise, simulate tap on the overview button, which should
@@ -361,6 +361,10 @@ INSTANTIATE_TEST_SUITE_P(
 // TODO(b:270757104) Set status are widget sizes.
 TEST_P(StackedHotseatWidgetTest, StackedHotseatShownOnSmallScreens) {
   UpdateDisplay("475x350");
+  base::HistogramTester histogram_tester;
+  // Nothing logged before entering the tablet mode.
+  histogram_tester.ExpectTotalCount("Ash.Shelf.ShowStackedHotseat", 0);
+
   TabletModeControllerTestApi().EnterTabletMode();
   GetAppListTestHelper()->CheckVisibility(true);
   const gfx::Rect hotseat_bounds = GetPrimaryShelf()
@@ -370,11 +374,20 @@ TEST_P(StackedHotseatWidgetTest, StackedHotseatShownOnSmallScreens) {
   ASSERT_EQ(hotseat_bounds.bottom(),
             350 - ShelfConfig::Get()->hotseat_bottom_padding() * 2 -
                 ShelfConfig::Get()->shelf_size());
+
+  // Showed stacked hostseat.
+  histogram_tester.ExpectBucketCount("Ash.Shelf.ShowStackedHotseat", true, 1);
+  histogram_tester.ExpectBucketCount("Ash.Shelf.ShowStackedHotseat", false, 0);
 }
 
 // TODO(b:270757104) Set status are widget sizes.
 TEST_P(StackedHotseatWidgetTest, StackedHotseatNotShownOnLargeScreens) {
   UpdateDisplay("800x600");
+
+  base::HistogramTester histogram_tester;
+  // Nothing logged before entering the tablet mode.
+  histogram_tester.ExpectTotalCount("Ash.Shelf.ShowStackedHotseat", 0);
+
   TabletModeControllerTestApi().EnterTabletMode();
   GetAppListTestHelper()->CheckVisibility(true);
   const gfx::Rect hotseat_bounds = GetPrimaryShelf()
@@ -383,6 +396,10 @@ TEST_P(StackedHotseatWidgetTest, StackedHotseatNotShownOnLargeScreens) {
                                        ->GetWindowBoundsInScreen();
   ASSERT_EQ(hotseat_bounds.bottom(),
             600 - ShelfConfig::Get()->hotseat_bottom_padding());
+
+  // Showed regular hotseat.
+  histogram_tester.ExpectBucketCount("Ash.Shelf.ShowStackedHotseat", true, 0);
+  histogram_tester.ExpectBucketCount("Ash.Shelf.ShowStackedHotseat", false, 1);
 }
 
 TEST_P(HotseatWidgetTest, LongPressHomeWithoutAppWindow) {
@@ -927,7 +944,7 @@ TEST_P(HotseatWidgetTest, ObserverCallsMatch) {
   // Go to overview and cancel immediately. Hotseat state should be
   // kShownHomeLauncher.
   StartOverview();
-  EXPECT_TRUE(Shell::Get()->overview_controller()->IsInStartAnimation());
+  EXPECT_TRUE(OverviewController::Get()->IsInStartAnimation());
   // No animations should have been started so no animations are in progress
   // or aborted.
   EXPECT_TRUE(observer.ObserverCountsEqual());
@@ -1295,7 +1312,7 @@ TEST_P(HotseatWidgetTest, HomeToOverviewAndBack) {
     watcher.CheckEqual({/*Hotseat state should not change*/});
   }
 
-  OverviewController* overview_controller = Shell::Get()->overview_controller();
+  OverviewController* overview_controller = OverviewController::Get();
   EXPECT_TRUE(overview_controller->InOverviewSession());
 
   ShowShelfAndGoHome();
@@ -1332,7 +1349,7 @@ TEST_P(HotseatWidgetTest, InAppToOverviewAndBack) {
     StartOverview();
   }
 
-  OverviewController* overview_controller = Shell::Get()->overview_controller();
+  OverviewController* overview_controller = OverviewController::Get();
   EXPECT_TRUE(overview_controller->InOverviewSession());
   GetAppListTestHelper()->CheckVisibility(false);
 
@@ -1375,7 +1392,7 @@ TEST_P(HotseatWidgetTest, ShowShelfAndGoHomeDuringInAppToOverviewTransition) {
     StartOverview();
   }
 
-  OverviewController* overview_controller = Shell::Get()->overview_controller();
+  OverviewController* overview_controller = OverviewController::Get();
   EXPECT_TRUE(overview_controller->InOverviewSession());
   GetAppListTestHelper()->CheckVisibility(false);
 
@@ -1603,7 +1620,7 @@ TEST_P(HotseatWidgetTest, ExitOverviewWithClickOnHotseat) {
 
   // Enter overview, hotseat is visible. Choose the point to the farthest left.
   // This point will not be visible.
-  auto* overview_controller = Shell::Get()->overview_controller();
+  auto* overview_controller = OverviewController::Get();
   auto* hotseat_widget = GetPrimaryShelf()->hotseat_widget();
   EnterOverview();
   ASSERT_TRUE(overview_controller->InOverviewSession());
@@ -1868,7 +1885,7 @@ TEST_P(HotseatWidgetTest, ExitingOverviewHidesHotseat) {
   test_api.WaitUntilOverviewIsShown(window_drag_controller);
   EndScroll(/*is_fling=*/false, 0.f);
 
-  OverviewController* overview_controller = Shell::Get()->overview_controller();
+  OverviewController* overview_controller = OverviewController::Get();
   EXPECT_EQ(HotseatState::kExtended, GetShelfLayoutManager()->hotseat_state());
   EXPECT_TRUE(overview_controller->InOverviewSession());
 
@@ -1923,7 +1940,7 @@ TEST_P(HotseatWidgetTest, FailingOverviewDragResultsInExtendedHotseat) {
   }
   EndScroll(/*is_fling=*/false, 0.f);
 
-  ASSERT_FALSE(Shell::Get()->overview_controller()->InOverviewSession());
+  ASSERT_FALSE(OverviewController::Get()->InOverviewSession());
   EXPECT_EQ(HotseatState::kExtended, GetShelfLayoutManager()->hotseat_state());
 }
 
@@ -1937,7 +1954,7 @@ TEST_P(HotseatWidgetTest, SwipeOnHotseatInOverview) {
       AshTestBase::CreateTestWindow(gfx::Rect(0, 0, 400, 400));
   wm::ActivateWindow(window.get());
 
-  OverviewController* overview_controller = Shell::Get()->overview_controller();
+  OverviewController* overview_controller = OverviewController::Get();
   EnterOverview();
 
   Shelf* const shelf = GetPrimaryShelf();
@@ -1987,7 +2004,7 @@ TEST_P(HotseatWidgetTest, SwipeOnHotseatInSplitViewWithOverview) {
       AshTestBase::CreateTestWindow(gfx::Rect(0, 0, 400, 400));
   wm::ActivateWindow(window.get());
 
-  OverviewController* overview_controller = Shell::Get()->overview_controller();
+  OverviewController* overview_controller = OverviewController::Get();
   EnterOverview();
 
   SplitViewController* split_view_controller =

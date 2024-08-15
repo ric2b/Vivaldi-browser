@@ -62,13 +62,14 @@
 #include "third_party/blink/renderer/core/html/shadow/shadow_element_names.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/input_type_names.h"
+#include "third_party/blink/renderer/core/layout/layout_text_combine.h"
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
-#include "third_party/blink/renderer/core/layout/list_marker.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/layout_ng_text_combine.h"
+#include "third_party/blink/renderer/core/layout/list/list_marker.h"
 #include "third_party/blink/renderer/core/mathml/mathml_element.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
 #include "third_party/blink/renderer/core/style/style_intrinsic_length.h"
+#include "third_party/blink/renderer/core/style/style_svg_mask_reference_image.h"
 #include "third_party/blink/renderer/core/svg/svg_svg_element.h"
 #include "third_party/blink/renderer/core/svg_names.h"
 #include "third_party/blink/renderer/platform/geometry/length.h"
@@ -78,6 +79,8 @@
 #include "ui/base/ui_base_features.h"
 
 namespace blink {
+
+using mojom::blink::FormControlType;
 
 namespace {
 
@@ -117,10 +120,20 @@ bool HostIsInputFile(const Element* element) {
   }
   if (const Element* shadow_host = element->OwnerShadowHost()) {
     if (const auto* input = DynamicTo<HTMLInputElement>(shadow_host)) {
-      return input->type() == input_type_names::kFile;
+      return input->FormControlType() == FormControlType::kInputFile;
     }
   }
   return false;
+}
+
+StyleSVGResource* GetFirstMaskImageAsSVGResource(const SVGElement& element,
+                                                 FillLayer& first_layer) {
+  auto* svg_mask_reference =
+      DynamicTo<StyleSVGMaskReferenceImage>(first_layer.GetImage());
+  if (!svg_mask_reference) {
+    return nullptr;
+  }
+  return svg_mask_reference->CreateSVGResourceWrapper();
 }
 
 void AdjustStyleForSvgElement(const SVGElement& element,
@@ -136,6 +149,11 @@ void AdjustStyleForSvgElement(const SVGElement& element,
   builder.SetTextEmphasisMark(TextEmphasisMark::kNone);
   builder.SetTextUnderlineOffset(Length());  // crbug.com/1247912
   builder.SetTextUnderlinePosition(TextUnderlinePosition::kAuto);
+
+  if (RuntimeEnabledFeatures::CSSMaskingInteropEnabled()) {
+    builder.SetMaskerResource(
+        GetFirstMaskImageAsSVGResource(element, builder.AccessMaskLayers()));
+  }
 }
 
 bool ElementForcesStackingContext(Element* element) {
@@ -303,7 +321,7 @@ void StyleAdjuster::AdjustStyleForCombinedText(ComputedStyleBuilder& builder) {
   DCHECK_EQ(builder.GetFont().GetFontDescription().Orientation(),
             FontOrientation::kHorizontal);
   const ComputedStyle* cloned_style = builder.CloneStyle();
-  LayoutNGTextCombine::AssertStyleIsValid(*cloned_style);
+  LayoutTextCombine::AssertStyleIsValid(*cloned_style);
 #endif
 }
 
@@ -530,15 +548,13 @@ void StyleAdjuster::AdjustOverflow(ComputedStyleBuilder& builder,
                       WebFeature::kOverflowClipAlongEitherAxis);
   }
 
-  if (RuntimeEnabledFeatures::OverflowOverlayAliasesAutoEnabled()) {
-    // overlay is a legacy alias of auto.
-    // https://drafts.csswg.org/css-overflow-3/#valdef-overflow-auto
-    if (builder.OverflowY() == EOverflow::kOverlay) {
-      builder.SetOverflowY(EOverflow::kAuto);
-    }
-    if (builder.OverflowX() == EOverflow::kOverlay) {
-      builder.SetOverflowX(EOverflow::kAuto);
-    }
+  // overlay is a legacy alias of auto.
+  // https://drafts.csswg.org/css-overflow-3/#valdef-overflow-auto
+  if (builder.OverflowY() == EOverflow::kOverlay) {
+    builder.SetOverflowY(EOverflow::kAuto);
+  }
+  if (builder.OverflowX() == EOverflow::kOverlay) {
+    builder.SetOverflowX(EOverflow::kAuto);
   }
 }
 
@@ -620,7 +636,7 @@ bool StyleAdjuster::IsPasswordFieldWithUnrevealedPassword(Element* element) {
     return false;
   }
   if (auto* input = DynamicTo<HTMLInputElement>(element)) {
-    return (input->type() == input_type_names::kPassword) &&
+    return input->FormControlType() == FormControlType::kInputPassword &&
            !input->ShouldRevealPassword();
   }
   return false;
@@ -753,7 +769,7 @@ static void AdjustStyleForInert(ComputedStyleBuilder& builder,
     return;
   }
 
-  if (auto& base_data = builder.BaseData()) {
+  if (StyleBaseData* base_data = builder.BaseData()) {
     if (RuntimeEnabledFeatures::InertDisplayTransitionEnabled() &&
         base_data->GetBaseComputedStyle()->Display() == EDisplay::kNone) {
       // Elements which are transitioning to display:none should become inert:
@@ -881,7 +897,7 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
     AdjustStyleForDisplay(builder, layout_parent_style, element,
                           element ? &element->GetDocument() : nullptr);
 
-    // If this is a child of a LayoutNGCustom, we need the name of the parent
+    // If this is a child of a LayoutCustom, we need the name of the parent
     // layout function for invalidation purposes.
     if (layout_parent_style.IsDisplayLayoutCustomBox()) {
       builder.SetDisplayLayoutCustomParentName(

@@ -103,12 +103,14 @@ std::unique_ptr<TransientElement> CreateTransientParent(UiElementName name,
   return element;
 }
 
+#if !BUILDFLAG(IS_ANDROID)
 std::unique_ptr<UiElement> CreateSpacer(float width, float height) {
   auto spacer = Create<UiElement>(kNone, kPhaseNone);
   spacer->SetType(kTypeSpacer);
   spacer->SetSize(width, height);
   return spacer;
 }
+#endif
 
 void BindIndicatorText(Model* model, Text* text, const IndicatorSpec& spec) {
   text->AddBinding(std::make_unique<Binding<std::pair<bool, bool>>>(
@@ -352,16 +354,6 @@ int GetIndicatorsTimeout() {
 #else
   return kToastTimeoutSeconds;
 #endif
-}
-
-NOINLINE void CrashIntentionally() {
-  LOG(ERROR) << "Crashing VR browser";
-
-  static int static_variable_to_make_this_function_unique = 0;
-  base::debug::Alias(&static_variable_to_make_this_function_unique);
-
-  volatile int* zero = nullptr;
-  *zero = 0;
 }
 
 }  // namespace

@@ -18,6 +18,7 @@
 #include "base/trace_event/memory_usage_estimator.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "components/notes/note_node.h"
 #include "components/sync/base/data_type_histogram.h"
 #include "components/sync/base/features.h"
 #include "components/sync/base/model_type.h"
@@ -30,11 +31,10 @@
 #include "components/sync/protocol/model_type_state_helper.h"
 #include "components/sync/protocol/notes_model_metadata.pb.h"
 #include "components/sync/protocol/proto_value_conversions.h"
-#include "notes/note_node.h"
-#include "notes/notes_model.h"
 #include "sync/file_sync/file_store.h"
 #include "sync/notes/note_local_changes_builder.h"
 #include "sync/notes/note_model_merger.h"
+#include "sync/notes/note_model_view.h"
 #include "sync/notes/note_remote_updates_handler.h"
 #include "sync/notes/note_specifics_conversions.h"
 #include "sync/notes/notes_model_observer_impl.h"
@@ -52,7 +52,7 @@ class ScopedRemoteUpdateNotes {
  public:
   // `notes_model`, and `observer` must not be null
   // and must outlive this object.
-  ScopedRemoteUpdateNotes(vivaldi::NotesModel* notes_model,
+  ScopedRemoteUpdateNotes(NoteModelView* notes_model,
                           vivaldi::NotesModelObserver* observer)
       : notes_model_(notes_model), observer_(observer) {
     // Notify UI intensive observers of NotesModel that we are about to make
@@ -74,14 +74,14 @@ class ScopedRemoteUpdateNotes {
   }
 
  private:
-  const raw_ptr<vivaldi::NotesModel> notes_model_;
+  const raw_ptr<NoteModelView> notes_model_;
 
   const raw_ptr<vivaldi::NotesModelObserver> observer_;
 };
 
 std::string ComputeServerDefinedUniqueTagForDebugging(
     const vivaldi::NoteNode* node,
-    vivaldi::NotesModel* model) {
+    NoteModelView* model) {
   if (node == model->main_node()) {
     return "main_notes";
   }
@@ -94,13 +94,15 @@ std::string ComputeServerDefinedUniqueTagForDebugging(
   return "";
 }
 
-size_t CountSyncableNotesFromModel(vivaldi::NotesModel* model) {
+size_t CountSyncableNotesFromModel(NoteModelView* model) {
   size_t count = 0;
   ui::TreeNodeIterator<const vivaldi::NoteNode> iterator(model->root_node());
   // Does not count the root node.
   while (iterator.has_next()) {
-    iterator.Next();
-    ++count;
+    const vivaldi::NoteNode* node = iterator.Next();
+    if (model->IsNodeSyncable(node)) {
+      ++count;
+    }
   }
   return count;
 }
@@ -295,7 +297,7 @@ std::string NoteModelTypeProcessor::EncodeSyncMetadata() const {
 void NoteModelTypeProcessor::ModelReadyToSync(
     const std::string& metadata_str,
     const base::RepeatingClosure& schedule_save_closure,
-    vivaldi::NotesModel* model) {
+    NoteModelView* model) {
   DCHECK(model);
   DCHECK(model->loaded());
   DCHECK(!notes_model_);
@@ -546,7 +548,12 @@ void NoteModelTypeProcessor::NudgeForCommitIfNeeded() {
 void NoteModelTypeProcessor::OnNotesModelBeingDeleted() {
   DCHECK(notes_model_);
   DCHECK(notes_model_observer_);
-  StopTrackingMetadata();
+
+  notes_model_->RemoveObserver(notes_model_observer_.get());
+  notes_model_ = nullptr;
+  notes_model_observer_.reset();
+
+  DisconnectSync();
 }
 
 void NoteModelTypeProcessor::OnInitialUpdateReceived(
@@ -591,8 +598,8 @@ void NoteModelTypeProcessor::OnInitialUpdateReceived(
   if (!note_tracker_->GetEntityForNoteNode(notes_model_->main_node()) ||
       !note_tracker_->GetEntityForNoteNode(notes_model_->other_node()) ||
       !note_tracker_->GetEntityForNoteNode(notes_model_->trash_node())) {
-    StopTrackingMetadata();
-    note_tracker_.reset();
+    DisconnectSync();
+    StopTrackingMetadataAndResetTracker();
     error_handler_.Run(
         syncer::ModelError(FROM_HERE, "Permanent note entities missing"));
     return;
@@ -609,22 +616,13 @@ void NoteModelTypeProcessor::StartTrackingMetadata() {
   DCHECK(!notes_model_observer_);
 
   notes_model_observer_ = std::make_unique<NotesModelObserverImpl>(
+      notes_model_,
       base::BindRepeating(&NoteModelTypeProcessor::NudgeForCommitIfNeeded,
                           base::Unretained(this)),
       base::BindOnce(&NoteModelTypeProcessor::OnNotesModelBeingDeleted,
                      base::Unretained(this)),
       note_tracker_.get());
   notes_model_->AddObserver(notes_model_observer_.get());
-}
-
-void NoteModelTypeProcessor::StopTrackingMetadata() {
-  DCHECK(notes_model_observer_);
-
-  notes_model_->RemoveObserver(notes_model_observer_.get());
-  notes_model_ = nullptr;
-  notes_model_observer_.reset();
-
-  DisconnectSync();
 }
 
 void NoteModelTypeProcessor::GetAllNodesForDebugging(

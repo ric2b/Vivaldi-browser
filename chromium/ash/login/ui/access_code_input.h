@@ -159,6 +159,14 @@ class FixedLengthCodeInput : public AccessCodeInput {
       return fixed_length_code_input_->input_fields_[index];
     }
 
+    absl::optional<std::string> GetCode() const {
+      return fixed_length_code_input_->GetCode();
+    }
+
+    int GetActiveIndex() const {
+      return fixed_length_code_input_->active_input_index_;
+    }
+
    private:
     raw_ptr<FixedLengthCodeInput, ExperimentalAsh> fixed_length_code_input_;
   };
@@ -218,6 +226,9 @@ class FixedLengthCodeInput : public AccessCodeInput {
 
   bool HandleGestureEvent(views::Textfield* sender,
                           const ui::GestureEvent& gesture_event) override;
+
+  void ContentsChanged(views::Textfield* sender,
+                       const std::u16string& new_contents) override;
 
   // Enables/disables entering a PIN. Currently, there is no use-case that uses
   // this with fixed length PINs.

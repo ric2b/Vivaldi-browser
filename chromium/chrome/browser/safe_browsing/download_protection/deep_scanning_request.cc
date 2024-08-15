@@ -148,11 +148,7 @@ void ResponseToDownloadCheckResult(
   }
 
   if (dlp_scan_failure || malware_scan_failure) {
-    if (base::FeatureList::IsEnabled(kDeepScanningUpdatedUX)) {
-      *download_result = DownloadCheckResult::DEEP_SCANNED_FAILED;
-    } else {
-      *download_result = DownloadCheckResult::UNKNOWN;
-    }
+    *download_result = DownloadCheckResult::DEEP_SCANNED_FAILED;
     return;
   }
 
@@ -193,6 +189,7 @@ EventResult GetEventResult(download::DownloadDangerType danger_type,
       return EventResult::BYPASSED;
 
     case download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_SCANNING:
+    case download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_LOCAL_PASSWORD_SCANNING:
     case download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_BLOCK:
     case download::DOWNLOAD_DANGER_TYPE_BLOCKED_TOO_LARGE:
     case download::DOWNLOAD_DANGER_TYPE_BLOCKED_PASSWORD_PROTECTED:
@@ -264,23 +261,6 @@ std::string GetTriggerName(DeepScanningRequest::DeepScanTrigger trigger) {
   }
 }
 
-bool ResultIsRetriable(BinaryUploadService::Result result) {
-  switch (result) {
-    case BinaryUploadService::Result::UNKNOWN:
-    case BinaryUploadService::Result::SUCCESS:
-    case BinaryUploadService::Result::UNAUTHORIZED:
-    case BinaryUploadService::Result::FILE_TOO_LARGE:
-    case BinaryUploadService::Result::FILE_ENCRYPTED:
-    case BinaryUploadService::Result::DLP_SCAN_UNSUPPORTED_FILE_TYPE:
-      return false;
-    case BinaryUploadService::Result::UPLOAD_FAILURE:
-    case BinaryUploadService::Result::TIMEOUT:
-    case BinaryUploadService::Result::FAILED_TO_GET_TOKEN:
-    case BinaryUploadService::Result::TOO_MANY_REQUESTS:
-      return true;
-  }
-}
-
 enterprise_connectors::ContentAnalysisAcknowledgement::FinalAction
 GetFinalAction(EventResult event_result) {
   auto final_action =
@@ -309,6 +289,20 @@ void PromptForPassword(download::DownloadItem* item) {
       controller) {
     controller->GetDownloadDisplayController()->OpenSecuritySubpage(
         OfflineItemUtils::GetContentIdForDownload(item));
+  }
+}
+
+void LogDeepScanResult(DownloadCheckResult download_result,
+                       DeepScanningRequest::DeepScanTrigger trigger,
+                       bool is_encrypted_archive) {
+  base::UmaHistogramEnumeration(
+      "SBClientDownload.MalwareDeepScanResult2." + GetTriggerName(trigger),
+      download_result);
+  if (is_encrypted_archive) {
+    base::UmaHistogramEnumeration(
+        "SBClientDownload.PasswordProtectedMalwareDeepScanResult2." +
+            GetTriggerName(trigger),
+        download_result);
   }
 }
 
@@ -592,34 +586,27 @@ void DeepScanningRequest::OnScanComplete(
       /*duration=*/base::TimeTicks::Now() - upload_start_times_[current_path],
       /*total_size=*/item_->GetTotalBytes(), /*result=*/result,
       /*response=*/response);
+
+  if (trigger_ == DeepScanTrigger::TRIGGER_CONSUMER_PROMPT) {
+    OnConsumerScanComplete(current_path, result, response);
+  } else {
+    OnEnterpriseScanComplete(current_path, result, response);
+  }
+}
+
+void DeepScanningRequest::OnConsumerScanComplete(
+    const base::FilePath& current_path,
+    BinaryUploadService::Result result,
+    enterprise_connectors::ContentAnalysisResponse response) {
+  CHECK_EQ(trigger_, DeepScanTrigger::TRIGGER_CONSUMER_PROMPT);
   DownloadCheckResult download_result = DownloadCheckResult::UNKNOWN;
   if (result == BinaryUploadService::Result::SUCCESS) {
     request_tokens_.push_back(response.request_token());
     ResponseToDownloadCheckResult(response, &download_result);
-    if (trigger_ == DeepScanTrigger::TRIGGER_CONSUMER_PROMPT) {
-      LogDeepScanEvent(item_, DeepScanEvent::kScanCompleted);
-    }
-  } else if (!base::FeatureList::IsEnabled(kDeepScanningUpdatedUX) &&
-             trigger_ == DeepScanTrigger::TRIGGER_CONSUMER_PROMPT &&
-             ResultIsRetriable(result) &&
-             MaybeShowDeepScanFailureModalDialog(
-                 base::BindOnce(&DeepScanningRequest::Start,
-                                weak_ptr_factory_.GetWeakPtr()),
-                 base::BindOnce(&DeepScanningRequest::FinishRequest,
-                                weak_ptr_factory_.GetWeakPtr(),
-                                DownloadCheckResult::UNKNOWN),
-                 base::BindOnce(&DeepScanningRequest::FinishRequest,
-                                weak_ptr_factory_.GetWeakPtr(),
-                                DownloadCheckResult::UNKNOWN),
-                 base::BindOnce(&DeepScanningRequest::OpenDownload,
-                                weak_ptr_factory_.GetWeakPtr()))) {
-    return;
-  } else if (base::FeatureList::IsEnabled(kDeepScanningUpdatedUX) &&
-             trigger_ == DeepScanTrigger::TRIGGER_CONSUMER_PROMPT) {
+    LogDeepScanEvent(item_, DeepScanEvent::kScanCompleted);
+  } else {
     download_result = DownloadCheckResult::DEEP_SCANNED_FAILED;
-    if (trigger_ == DeepScanTrigger::TRIGGER_CONSUMER_PROMPT) {
-      LogDeepScanEvent(item_, DeepScanEvent::kScanFailed);
-    }
+    LogDeepScanEvent(item_, DeepScanEvent::kScanFailed);
 
     if (base::FeatureList::IsEnabled(kDeepScanningEncryptedArchives) &&
         result == BinaryUploadService::Result::FILE_ENCRYPTED) {
@@ -630,6 +617,25 @@ void DeepScanningRequest::OnScanComplete(
       PromptForPassword(item_);
       download_result = DownloadCheckResult::PROMPT_FOR_SCANNING;
     }
+  }
+
+  LogDeepScanResult(download_result, trigger_,
+                    DownloadItemWarningData::IsEncryptedArchive(item_));
+
+  DCHECK(file_metadata_.count(current_path));
+  file_metadata_.at(current_path).scan_response = std::move(response);
+  MaybeFinishRequest(download_result);
+}
+
+void DeepScanningRequest::OnEnterpriseScanComplete(
+    const base::FilePath& current_path,
+    BinaryUploadService::Result result,
+    enterprise_connectors::ContentAnalysisResponse response) {
+  CHECK_EQ(trigger_, DeepScanTrigger::TRIGGER_POLICY);
+  DownloadCheckResult download_result = DownloadCheckResult::UNKNOWN;
+  if (result == BinaryUploadService::Result::SUCCESS) {
+    request_tokens_.push_back(response.request_token());
+    ResponseToDownloadCheckResult(response, &download_result);
   } else if (result == BinaryUploadService::Result::FILE_TOO_LARGE &&
              analysis_settings_.block_large_files) {
     download_result = DownloadCheckResult::BLOCKED_TOO_LARGE;
@@ -642,15 +648,8 @@ void DeepScanningRequest::OnScanComplete(
     download_result = DownloadCheckResult::BLOCKED_UNSUPPORTED_FILE_TYPE;
   }
 
-  base::UmaHistogramEnumeration(
-      "SBClientDownload.MalwareDeepScanResult2." + GetTriggerName(trigger_),
-      download_result);
-  if (DownloadItemWarningData::IsEncryptedArchive(item_)) {
-    base::UmaHistogramEnumeration(
-        "SBClientDownload.PasswordProtectedMalwareDeepScanResult." +
-            GetTriggerName(trigger_),
-        download_result);
-  }
+  LogDeepScanResult(download_result, trigger_,
+                    DownloadItemWarningData::IsEncryptedArchive(item_));
 
   Profile* profile = Profile::FromBrowserContext(
       content::DownloadItemUtils::GetBrowserContext(item_));
@@ -659,8 +658,9 @@ void DeepScanningRequest::OnScanComplete(
   if (profile && trigger_ == DeepScanTrigger::TRIGGER_POLICY) {
     const auto& file_metadata = file_metadata_.at(current_path);
     report_callbacks_.AddUnsafe(base::BindOnce(
-        &MaybeReportDeepScanningVerdict, profile, item_->GetURL(), "", "",
-        file_metadata.filename, file_metadata.sha256, file_metadata.mime_type,
+        &MaybeReportDeepScanningVerdict, profile, item_->GetURL(),
+        item_->GetTabUrl(), "", "", file_metadata.filename,
+        file_metadata.sha256, file_metadata.mime_type,
         extensions::SafeBrowsingPrivateEventRouter::kTriggerFileDownload,
         DeepScanAccessPoint::DOWNLOAD, file_metadata.size, result,
         file_metadata.scan_response));

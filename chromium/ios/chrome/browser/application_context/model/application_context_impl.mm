@@ -43,17 +43,17 @@
 #import "components/variations/service/variations_service.h"
 #import "components/version_info/channel.h"
 #import "ios/chrome/app/tests_hook.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state_manager_impl.h"
-#import "ios/chrome/browser/browser_state/ios_chrome_io_thread.h"
-#import "ios/chrome/browser/component_updater/ios_component_updater_configurator.h"
-#import "ios/chrome/browser/crash_report/breadcrumbs/application_breadcrumbs_logger.h"
-#import "ios/chrome/browser/default_browser/utils.h"
+#import "ios/chrome/browser/browser_state/model/chrome_browser_state_manager_impl.h"
+#import "ios/chrome/browser/browser_state/model/ios_chrome_io_thread.h"
+#import "ios/chrome/browser/component_updater/model/ios_component_updater_configurator.h"
+#import "ios/chrome/browser/crash_report/model/breadcrumbs/application_breadcrumbs_logger.h"
+#import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/gcm/ios_chrome_gcm_profile_service_factory.h"
 #import "ios/chrome/browser/history/history_service_factory.h"
 #import "ios/chrome/browser/metrics/ios_chrome_metrics_services_manager_client.h"
 #import "ios/chrome/browser/policy/browser_policy_connector_ios.h"
 #import "ios/chrome/browser/policy/configuration_policy_handler_list_factory.h"
-#import "ios/chrome/browser/prefs/ios_chrome_pref_service_factory.h"
+#import "ios/chrome/browser/prefs/model/ios_chrome_pref_service_factory.h"
 #import "ios/chrome/browser/push_notification/push_notification_service.h"
 #import "ios/chrome/browser/segmentation_platform/otr_web_state_observer.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
@@ -61,7 +61,7 @@
 #import "ios/chrome/browser/shared/model/paths/paths.h"
 #import "ios/chrome/browser/shared/model/prefs/browser_prefs.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
-#import "ios/chrome/browser/update_client/ios_chrome_update_query_params_delegate.h"
+#import "ios/chrome/browser/update_client/model/ios_chrome_update_query_params_delegate.h"
 #import "ios/chrome/common/channel_info.h"
 #import "ios/components/security_interstitials/safe_browsing/safe_browsing_service_impl.h"
 #import "ios/public/provider/chrome/browser/app_distribution/app_distribution_api.h"
@@ -81,7 +81,7 @@
 #import "services/network/public/mojom/network_service.mojom.h"
 #import "ui/base/resource/resource_bundle.h"
 
-#include "prefs/vivaldi_browser_prefs.h"
+#include "prefs/vivaldi_local_state_prefs.h"
 
 namespace {
 
@@ -559,7 +559,7 @@ void ApplicationContextImpl::CreateLocalState() {
 
   // Register local state preferences.
   RegisterLocalStatePrefs(pref_registry.get());
-  vivaldi::RegisterLocalState(pref_registry.get());
+  vivaldi::RegisterLocalStatePrefs(pref_registry.get());
 
   policy::BrowserPolicyConnector* browser_policy_connector =
       GetBrowserPolicyConnector();
@@ -573,9 +573,9 @@ void ApplicationContextImpl::CreateLocalState() {
 
   sessions::SessionIdGenerator::GetInstance()->Init(local_state_.get());
 
-  net::ClientSocketPoolManager::set_max_sockets_per_proxy_server(
+  net::ClientSocketPoolManager::set_max_sockets_per_proxy_chain(
       net::HttpNetworkSession::NORMAL_SOCKET_POOL,
-      std::max(std::min<int>(net::kDefaultMaxSocketsPerProxyServer, 99),
+      std::max(std::min<int>(net::kDefaultMaxSocketsPerProxyChain, 99),
                net::ClientSocketPoolManager::max_sockets_per_group(
                    net::HttpNetworkSession::NORMAL_SOCKET_POOL)));
 
@@ -584,6 +584,9 @@ void ApplicationContextImpl::CreateLocalState() {
 
   // Delete obsolete data from user storage.
   CleanupUnusedStorage();
+
+  // Delete obsolete data from NSUserDefaults.
+  MigrateObsoleteUserDefault();
 }
 
 void ApplicationContextImpl::CreateGCMDriver() {

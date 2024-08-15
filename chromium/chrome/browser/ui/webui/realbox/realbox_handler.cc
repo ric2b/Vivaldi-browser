@@ -599,6 +599,10 @@ void RealboxHandler::SetupDropdownWebUIDataSource(
       {"hideSuggestions", IDS_TOOLTIP_HEADER_HIDE_SUGGESTIONS_BUTTON},
       {"showSuggestions", IDS_TOOLTIP_HEADER_SHOW_SUGGESTIONS_BUTTON}};
   source->AddLocalizedStrings(kStrings);
+
+  source->AddBoolean(
+      "omniboxActionsUISimplification",
+      base::FeatureList::IsEnabled(omnibox::kOmniboxActionsUISimplification));
 }
 
 // static
@@ -674,13 +678,8 @@ std::string RealboxHandler::AutocompleteMatchVectorIconToResourceName(
   } else if (icon.is_empty()) {
     return "";  // An empty resource name is effectively a blank icon.
   } else {
-    NOTREACHED()
-        << "Every vector icon returned by AutocompleteMatch::GetVectorIcon "
-           "must have an equivalent SVG resource for the NTP Realbox. "
-           "icon.name: '"
-        << icon.name << "'";
+    return PedalVectorIconToResourceName(icon);
   }
-  return "";
 }
 
 // static
@@ -719,7 +718,8 @@ std::string RealboxHandler::PedalVectorIconToResourceName(
   if (icon.name == vector_icons::kGoogleSitesIcon.name) {
     return kGoogleSitesIconResourceName;
   }
-  if (icon.name == vector_icons::kGoogleSuperGIcon.name) {
+  if (icon.name == vector_icons::kGoogleSuperGIcon.name ||
+      icon.name == vector_icons::kGoogleGLogoMonochromeIcon.name) {
     return kGoogleGIconResourceName;
   }
 #endif
@@ -798,6 +798,20 @@ RealboxHandler::~RealboxHandler() {
 
 bool RealboxHandler::IsRemoteBound() const {
   return page_set_;
+}
+
+void RealboxHandler::AddObserver(OmniboxWebUIPopupChangeObserver* observer) {
+  observers_.AddObserver(observer);
+  observer->OnPopupElementSizeChanged(webui_size_);
+}
+
+void RealboxHandler::RemoveObserver(OmniboxWebUIPopupChangeObserver* observer) {
+  observers_.RemoveObserver(observer);
+}
+
+bool RealboxHandler::HasObserver(
+    const OmniboxWebUIPopupChangeObserver* observer) const {
+  return observers_.HasObserver(observer);
 }
 
 void RealboxHandler::SetPage(
@@ -887,6 +901,13 @@ void RealboxHandler::OnNavigationLikely(
           SearchPrefetchServiceFactory::GetForProfile(profile_)) {
     search_prefetch_service->OnNavigationLikely(
         line, *match, navigation_predictor, web_contents_);
+  }
+}
+
+void RealboxHandler::PopupElementSizeChanged(const gfx::Size& size) {
+  webui_size_ = size;
+  for (OmniboxWebUIPopupChangeObserver& observer : observers_) {
+    observer.OnPopupElementSizeChanged(size);
   }
 }
 

@@ -4,8 +4,8 @@
 
 import("//build/config/ios/asset_catalog.gni")
 
-colorset("grid_background_color") {
-  sources = [ "grid_background_color.colorset/Contents.json" ]
+colorset("vivaldi_grid_background_color") {
+  sources = [ "vivaldi_grid_background_color.colorset/Contents.json" ]
 }
 
 colorset("grid_toolbar_text_button_color") {

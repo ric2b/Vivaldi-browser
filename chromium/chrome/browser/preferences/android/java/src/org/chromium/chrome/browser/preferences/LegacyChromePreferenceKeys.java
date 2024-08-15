@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.preferences;
 
+import org.chromium.base.shared_preferences.KeyPrefix;
 import org.chromium.build.annotations.CheckDiscard;
 
 import java.util.Arrays;
@@ -21,7 +22,6 @@ public class LegacyChromePreferenceKeys {
      *     format.
      */
     static List<String> getKeysInUse() {
-        // clang-format off
         return Arrays.asList(
                 ChromePreferenceKeys.APP_LOCALE,
                 ChromePreferenceKeys.AUTOFILL_ASSISTANT_ENABLED,
@@ -44,6 +44,7 @@ public class LegacyChromePreferenceKeys {
                 ChromePreferenceKeys.CRASH_UPLOAD_SUCCESS_OTHER,
                 ChromePreferenceKeys.CRASH_UPLOAD_SUCCESS_RENDERER,
                 ChromePreferenceKeys.CUSTOM_TABS_LAST_URL,
+                ChromePreferenceKeys.DEPRECATED_HOMEPAGE_CUSTOM_URI,
                 ChromePreferenceKeys.DOWNLOAD_AUTO_RESUMPTION_ATTEMPT_LEFT,
                 ChromePreferenceKeys.DOWNLOAD_FOREGROUND_SERVICE_OBSERVERS,
                 ChromePreferenceKeys.DOWNLOAD_IS_DOWNLOAD_HOME_ENABLED,
@@ -64,7 +65,6 @@ public class LegacyChromePreferenceKeys {
                 ChromePreferenceKeys.FONT_USER_FONT_SCALE_FACTOR,
                 ChromePreferenceKeys.FONT_USER_SET_FORCE_ENABLE_ZOOM,
                 ChromePreferenceKeys.HISTORY_SHOW_HISTORY_INFO,
-                ChromePreferenceKeys.HOMEPAGE_CUSTOM_URI,
                 ChromePreferenceKeys.HOMEPAGE_ENABLED,
                 ChromePreferenceKeys.HOMEPAGE_USE_DEFAULT_URI,
                 ChromePreferenceKeys.INCOGNITO_SHORTCUT_ADDED,
@@ -121,7 +121,6 @@ public class LegacyChromePreferenceKeys {
                 ChromePreferenceKeys.SIGNIN_PROMO_SETTINGS_PERSONALIZED_DISMISSED,
                 ChromePreferenceKeys.SIGNIN_LEGACY_SYNC_ACCOUNT_EMAIL,
                 ChromePreferenceKeys.SNAPSHOT_DATABASE_REMOVED,
-                ChromePreferenceKeys.SURVEY_DATE_LAST_ROLLED,
                 ChromePreferenceKeys.SYNC_ERROR_MESSAGE_SHOWN_AT_TIME,
                 ChromePreferenceKeys.TABBED_ACTIVITY_LAST_BACKGROUNDED_TIME_MS_PREF,
                 ChromePreferenceKeys.TABMODEL_ACTIVE_TAB_ID,
@@ -138,11 +137,9 @@ public class LegacyChromePreferenceKeys {
                 ChromePreferenceKeys.WEBAPK_UNINSTALLED_PACKAGES,
                 ChromePreferenceKeys.KEY_ZERO_SUGGEST_LIST_SIZE
         );
-        // clang-format on
     }
 
     static List<KeyPrefix> getPrefixesInUse() {
-        // clang-format off
         return Arrays.asList(
                 ChromePreferenceKeys.CUSTOM_TABS_DEX_LAST_UPDATE_TIME_PREF_PREFIX,
                 ChromePreferenceKeys.PAYMENTS_PAYMENT_INSTRUMENT_USE_COUNT,
@@ -160,6 +157,5 @@ public class LegacyChromePreferenceKeys {
                 ChromePreferenceKeys.KEY_ZERO_SUGGEST_POST_CONTENT_TYPE_PREFIX,
                 ChromePreferenceKeys.KEY_ZERO_SUGGEST_POST_CONTENT_DATA_PREFIX
         );
-        // clang-format on
     }
 }

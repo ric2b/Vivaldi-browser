@@ -17,11 +17,17 @@
         "enum": [ "remove_all_duplicates", "remove_duplicates_per_day", "keep_all_duplicates" ],
         "description": "Handling of History search results. See: DuplicateHandling enum in history_types.h"
       },
-       {
+      {
         "id": "TransitionType",
         "type": "string",
         "enum": ["link", "typed", "auto_bookmark", "auto_subframe", "manual_subframe", "generated", "auto_toplevel", "form_submit", "reload", "keyword", "keyword_generated"],
         "description": "The transition type for this visit from its referrer."
+      },
+      {
+        "id": "SourceType",
+        "type": "string",
+        "enum": ["synced", "browsed", "extension", "firefox_imported", "ie_imported", "safari_imported", "chromium_imported"],
+        "description": "The transition type for this visit from its referrer as defined in browser/history_types.h."
       },
       {
         "id": "TypedHistoryItem",
@@ -156,6 +162,11 @@
           "hour": {
             "type": "integer",
             "description": "Hour of day when this url was visited."
+          },
+          "source": {
+            "$ref": "SourceType",
+            "optional": true,
+            "description": "The origin of the link"
           }
         }
       },
@@ -219,8 +230,9 @@
             "type": "object",
             "properties": {
               "url": {"type": "string", "description": "The URL to remove."},
-              "startTime": {"type": "number", "description": "Items added to history after this date, represented in milliseconds since the epoch."},
-              "endTime": {"type": "number", "description": "Items added to history before this date, represented in milliseconds since the epoch."}
+              "time": {
+                "type": "number",
+                "description": "The visit time of the item to remove, represented in milliseconds since the epoch. IMPORTANT: This must be the exact visit time, to the microsecond. If it is truncated, then the deletion will not be synced."}
             }
           }
         ],
@@ -309,28 +321,6 @@
             }
           ]
         }
-      },
-      {
-        "name": "migrateOldTypedUrl",
-        "type": "function",
-        "description": "Add an old typed URL to history",
-        "parameters":[
-          {
-            "name": "url",
-            "type": "string",
-            "description": "The URL that was visited"
-          },
-          {
-            "name": "time",
-            "type": "number",
-            "description": "The time at which the visit took place as a UNIX timestamp"
-          },
-          {
-            "name": "transitionType",
-            "$ref": "TransitionType",
-            "description": "Expected to be typed, keyword or generated. In the last two cases, remember to call setKeywordSearchTermsForURL."
-          }
-        ]
       },
       {
         "name": "getDetailedHistory",

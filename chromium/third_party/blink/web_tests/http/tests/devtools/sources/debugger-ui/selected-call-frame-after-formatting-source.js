@@ -7,11 +7,12 @@ import {SourcesTestRunner} from 'sources_test_runner';
 import {ElementsTestRunner} from 'elements_test_runner';
 
 import * as Root from 'devtools/core/root/root.js';
+import * as UI from 'devtools/ui/legacy/legacy.js';
+import * as Sources from 'devtools/panels/sources/sources.js';
+import * as SDK from 'devtools/core/sdk/sdk.js';
 
 (async function() {
   TestRunner.addResult(`Tests selected call frame does not change when pretty-print is toggled.\n`);
-  await TestRunner.loadLegacyModule('sources');
-  await TestRunner.loadLegacyModule('elements');
   await TestRunner.showPanel('sources');
   await TestRunner.evaluateInPagePromise(`
       function testFunction()
@@ -28,7 +29,7 @@ import * as Root from 'devtools/core/root/root.js';
   `);
 
   SourcesTestRunner.startDebuggerTest(step1);
-  var panel = UI.panels.sources;
+  var panel = Sources.SourcesPanel.SourcesPanel.instance();
   var sourceFrame;
 
   function step1() {
@@ -50,7 +51,7 @@ import * as Root from 'devtools/core/root/root.js';
   }
 
   function step4() {
-    TestRunner.assertEquals('testFunction', UI.context.flavor(SDK.DebuggerModel.CallFrame).functionName);
+    TestRunner.assertEquals('testFunction', UI.Context.Context.instance().flavor(SDK.DebuggerModel.CallFrame).functionName);
     sourceFrame.toggleFormatSource(step5);
   }
 

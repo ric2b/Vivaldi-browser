@@ -225,14 +225,14 @@ FaviconResultToImageSkia(base::OnceCallback<void(gfx::ImageSkia)> callback,
       std::move(callback), icon_scale);
 }
 
-absl::optional<IconPurpose> GetIconPurpose(
+absl::optional<web_app::IconPurpose> GetIconPurpose(
     const std::string& web_app_id,
     const web_app::WebAppIconManager& icon_manager,
     int size_hint_in_dip) {
   TRACE_EVENT0("ui", "GetIconPurpose");
   // Get the max supported pixel size.
   int max_icon_size_in_px = 0;
-  for (auto scale_factor : ui::GetSupportedResourceScaleFactors()) {
+  for (const auto scale_factor : ui::GetSupportedResourceScaleFactors()) {
     const gfx::Size icon_size_in_px = gfx::ScaleToFlooredSize(
         gfx::Size(size_hint_in_dip, size_hint_in_dip),
         ui::GetScaleForResourceScaleFactor(scale_factor));
@@ -242,14 +242,14 @@ absl::optional<IconPurpose> GetIconPurpose(
     }
   }
 
-  if (icon_manager.HasSmallestIcon(web_app_id, {IconPurpose::MASKABLE},
+  if (icon_manager.HasSmallestIcon(web_app_id, {web_app::IconPurpose::MASKABLE},
                                    max_icon_size_in_px)) {
-    return absl::make_optional(IconPurpose::MASKABLE);
+    return absl::make_optional(web_app::IconPurpose::MASKABLE);
   }
 
-  if (icon_manager.HasSmallestIcon(web_app_id, {IconPurpose::ANY},
+  if (icon_manager.HasSmallestIcon(web_app_id, {web_app::IconPurpose::ANY},
                                    max_icon_size_in_px)) {
-    return absl::make_optional(IconPurpose::ANY);
+    return absl::make_optional(web_app::IconPurpose::ANY);
   }
 
   return absl::nullopt;
@@ -478,7 +478,7 @@ void AppIconLoader::LoadWebAppIcon(const std::string& web_app_id,
   // constructor.
   icon_scale_for_compressed_response_ = icon_scale_;
 
-  absl::optional<IconPurpose> icon_purpose_to_read =
+  absl::optional<web_app::IconPurpose> icon_purpose_to_read =
       GetIconPurpose(web_app_id, icon_manager, size_hint_in_dip_);
 
   if (!icon_purpose_to_read.has_value()) {
@@ -490,7 +490,7 @@ void AppIconLoader::LoadWebAppIcon(const std::string& web_app_id,
   // background in case the maskable icon contains transparent pixels in its
   // safe zone, and clear the standard icon effect, apply the mask to the icon
   // without shrinking it.
-  if (icon_purpose_to_read.value() == IconPurpose::MASKABLE) {
+  if (icon_purpose_to_read.value() == web_app::IconPurpose::MASKABLE) {
     icon_effects_ &= ~apps::IconEffects::kCrOsStandardIcon;
     icon_effects_ |= apps::IconEffects::kCrOsStandardBackground;
     icon_effects_ |= apps::IconEffects::kCrOsStandardMask;
@@ -516,7 +516,7 @@ void AppIconLoader::LoadWebAppIcon(const std::string& web_app_id,
       // resize the icon size, and then re-encode the image if the compressed
       // icon is requested.
       std::vector<int> icon_pixel_sizes;
-      for (auto scale_factor : ui::GetSupportedResourceScaleFactors()) {
+      for (const auto scale_factor : ui::GetSupportedResourceScaleFactors()) {
         auto size_and_purpose = icon_manager.FindIconMatchBigger(
             web_app_id, {*icon_purpose_to_read},
             apps_util::ConvertDipToPxForScale(
@@ -738,7 +738,7 @@ void AppIconLoader::GetWebAppCompressedIconData(
   TRACE_EVENT0("ui", "AppIconLoader::GetWebAppCompressedIconData");
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  absl::optional<IconPurpose> icon_purpose_to_read =
+  absl::optional<web_app::IconPurpose> icon_purpose_to_read =
       GetIconPurpose(web_app_id, icon_manager, size_hint_in_dip_);
 
   if (!icon_purpose_to_read.has_value() || icon_type_ == IconType::kUnknown) {
@@ -760,7 +760,7 @@ void AppIconLoader::GetWebAppCompressedIconData(
       web_app_id, *icon_purpose_to_read, icon_pixel_sizes,
       base::BindOnce(&AppIconLoader::OnReadWebAppForCompressedIconData,
                      base::WrapRefCounted(this),
-                     *icon_purpose_to_read == IconPurpose::MASKABLE));
+                     *icon_purpose_to_read == web_app::IconPurpose::MASKABLE));
 }
 
 void AppIconLoader::GetChromeAppCompressedIconData(
@@ -1106,7 +1106,7 @@ void AppIconLoader::OnReadWebAppIcon(std::map<int, SkBitmap> icon_bitmaps) {
 
   gfx::ImageSkia image_skia;
   auto it = icon_bitmaps.begin();
-  for (auto scale_factor : ui::GetSupportedResourceScaleFactors()) {
+  for (const auto scale_factor : ui::GetSupportedResourceScaleFactors()) {
     float icon_scale = ui::GetScaleForResourceScaleFactor(scale_factor);
     int icon_size_in_px =
         apps_util::ConvertDipToPxForScale(size_hint_in_dip_, icon_scale);

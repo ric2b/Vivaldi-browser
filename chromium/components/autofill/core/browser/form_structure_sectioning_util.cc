@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -45,8 +45,14 @@ bool ConsecutiveSimilarFieldType(ServerFieldType current_type,
                                  ServerFieldType previous_type) {
   if (previous_type == current_type)
     return true;
-  if (AutofillType(current_type).group() == FieldTypeGroup::kName &&
-      AutofillType(previous_type).group() == FieldTypeGroup::kName) {
+  if (GroupTypeOfServerFieldType(current_type) == FieldTypeGroup::kName &&
+      GroupTypeOfServerFieldType(previous_type) == FieldTypeGroup::kName) {
+    return true;
+  }
+  if (ServerFieldTypeSet({ADDRESS_HOME_ZIP, ADDRESS_HOME_DEPENDENT_LOCALITY,
+                          ADDRESS_HOME_CITY, ADDRESS_HOME_ADMIN_LEVEL2,
+                          ADDRESS_HOME_STATE, ADDRESS_HOME_COUNTRY})
+          .contains_all({previous_type, current_type})) {
     return true;
   }
   return false;
@@ -145,7 +151,7 @@ bool BelongsToCurrentSection(const ServerFieldTypeSet& seen_types,
   // There are many phone number field types and their classification is
   // generally a little bit off. Furthermore, forms often ask for multiple phone
   // numbers, e.g. both a daytime and evening phone number.
-  if (AutofillType(current_type).group() == FieldTypeGroup::kPhone) {
+  if (GroupTypeOfServerFieldType(current_type) == FieldTypeGroup::kPhone) {
     return true;
   }
 

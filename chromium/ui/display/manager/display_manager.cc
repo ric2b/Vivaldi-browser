@@ -309,6 +309,11 @@ void OnInternalDisplayZoomChanged(float zoom_factor) {
       ->Add(std::round(zoom_factor * 100));
 }
 
+// Returns true if two ids has the same output index.
+bool HasSameOutputIndex(int64_t id1, int64_t id2) {
+  return (id1 & 0xFF) == (id2 & 0xFF);
+}
+
 }  // namespace
 
 DisplayManager::BeginEndNotifier::BeginEndNotifier(
@@ -634,7 +639,7 @@ void DisplayManager::RegisterDisplayProperty(
     float refresh_rate,
     bool is_interlaced,
     VariableRefreshRateState variable_refresh_rate_state,
-    const absl::optional<uint16_t>& vsync_rate_min) {
+    const absl::optional<float>& vsync_rate_min) {
   if (display_info_.find(display_id) == display_info_.end())
     display_info_[display_id] =
         ManagedDisplayInfo(display_id, std::string(), false);
@@ -646,7 +651,6 @@ void DisplayManager::RegisterDisplayProperty(
   ManagedDisplayInfo& info = display_info_[display_id];
   info.SetRotation(rotation, Display::RotationSource::USER);
   info.SetRotation(rotation, Display::RotationSource::ACTIVE);
-
   info.set_zoom_factor(display_zoom_factor);
 
   if (overscan_insets)
@@ -681,7 +685,7 @@ bool DisplayManager::GetActiveModeForDisplayId(int64_t display_id,
 
   for (const auto& display_mode : display_modes) {
     if (display::IsInternalDisplayId(display_id)) {
-      if (display_modes.size() == 1) {
+      if (display_modes.size() == 1 || display_mode.native()) {
         *mode = display_mode;
         return true;
       }
@@ -690,6 +694,7 @@ bool DisplayManager::GetActiveModeForDisplayId(int64_t display_id,
       return true;
     }
   }
+
   return false;
 }
 
@@ -1018,8 +1023,17 @@ void DisplayManager::UpdateDisplaysWith(
       new_displays.push_back(new_display);
       ++curr_iter;
       ++new_info_iter;
-    } else if (CompareDisplayIds(curr_iter->id(), new_info_iter->id())) {
-      // more displays in current list between ids, which means it is deleted.
+    } else if (HasSameOutputIndex(curr_iter->id(), new_info_iter->id()) ||
+               // Two different ids has the same index, which means the old
+               // display was disconnected and new display was connected to the
+               // same port. This can happen when a) a display was swapped while
+               // the device is on sleep, or b) output connector is dynamic
+               // (e.g. DP tunneling). Just remove the display now. A new
+               // display will be added in the next iteration.
+               CompareDisplayIds(curr_iter->id(), new_info_iter->id())
+               // more displays in current list between ids, which means it is
+               // deleted.
+    ) {
       removed_displays.push_back(*curr_iter);
       ++curr_iter;
     } else {
@@ -1429,8 +1443,8 @@ void DisplayManager::SetMirrorMode(
   ReconfigureDisplays();
 }
 
-void DisplayManager::AddRemoveDisplay(
-    ManagedDisplayInfo::ManagedDisplayModeList display_modes) {
+void DisplayManager::AddRemoveDisplay() {
+  ManagedDisplayInfo::ManagedDisplayModeList display_modes;
   DCHECK(!active_display_list_.empty());
 
   DisplayInfoList new_display_info_list;
@@ -1441,36 +1455,15 @@ void DisplayManager::AddRemoveDisplay(
   new_display_info_list.push_back(first_display);
   // Add if there is only one display connected.
   if (num_connected_displays() == 1) {
+    constexpr int kVerticalOffsetPx = 100;
+    constexpr int kExtraWidth = 100;
+    // Layout the 2nd display's host below the primary as with the real device.
     gfx::Rect host_bounds = first_display.bounds_in_native();
-    if (display_modes.empty()) {
-      display_modes.emplace_back(
-          gfx::Size(host_bounds.height() + 100 /* width */,
-                    host_bounds.height()),
-          60.0, /* refresh_rate */
-          false /* is_interlaced */, true /* native */);
-    }
-
-    // Find native display mode (or just the first one if there is no
-    // mode marked as native) and create a display with this mode as a default
-    const ManagedDisplayMode* native_display_mode = &(display_modes[0]);
-    for (const ManagedDisplayMode& display_mode : display_modes) {
-      if (display_mode.native()) {
-        native_display_mode = &display_mode;
-        break;
-      }
-    }
-
-    const int kVerticalOffsetPx = 100;
-    // Layout the 2nd display below the primary as with the real device.
-    ManagedDisplayInfo display = ManagedDisplayInfo::CreateFromSpecWithID(
-        base::StringPrintf("%d+%d-%dx%d", host_bounds.x(),
-                           host_bounds.bottom() + kVerticalOffsetPx,
-                           native_display_mode->size().width(),
-                           native_display_mode->size().height()),
-        first_display.id() + 1);
-
-    display.SetManagedDisplayModes(std::move(display_modes));
-    new_display_info_list.push_back(std::move(display));
+    new_display_info_list.push_back(
+        ManagedDisplayInfo::CreateFromSpec(base::StringPrintf(
+            "%d+%d-%dx%d", host_bounds.x(),
+            host_bounds.bottom() + kVerticalOffsetPx,
+            host_bounds.height() + kExtraWidth, host_bounds.height())));
   }
   connected_display_id_list_ = CreateDisplayIdList(new_display_info_list);
   ClearMirroringSourceAndDestination();

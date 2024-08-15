@@ -11,7 +11,6 @@
 #include "app/vivaldi_apptools.h"
 #include "base/base64.h"
 #include "base/containers/cxx20_erase.h"
-#include "base/uuid.h"
 #include "base/hash/sha1.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -19,6 +18,8 @@
 #include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/memory_usage_estimator.h"
+#include "base/uuid.h"
+#include "components/notes/note_node.h"
 #include "components/sync/base/time.h"
 #include "components/sync/engine/commit_and_get_updates_types.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
@@ -26,9 +27,8 @@
 #include "components/sync/protocol/notes_model_metadata.pb.h"
 #include "components/sync/protocol/proto_memory_estimations.h"
 #include "components/sync_bookmarks/switches.h"
-#include "notes/note_node.h"
-#include "notes/notes_model.h"
 #include "sync/file_sync/file_store.h"
+#include "sync/notes/note_model_view.h"
 #include "sync/notes/synced_note_tracker_entity.h"
 #include "ui/base/models/tree_node_iterator.h"
 
@@ -44,7 +44,7 @@ void HashSpecifics(const sync_pb::EntitySpecifics& specifics,
 
 // Returns a map from id to node for all nodes in |model|.
 std::unordered_map<int64_t, const vivaldi::NoteNode*> BuildIdToNoteNodeMap(
-    const vivaldi::NotesModel* model) {
+    const NoteModelView* model) {
   std::unordered_map<int64_t, const vivaldi::NoteNode*> id_to_note_node_map;
 
   // The TreeNodeIterator used below doesn't include the node itself, and hence
@@ -85,7 +85,7 @@ std::unique_ptr<SyncedNoteTracker> SyncedNoteTracker::CreateEmpty(
 // static
 std::unique_ptr<SyncedNoteTracker>
 SyncedNoteTracker::CreateFromNotesModelAndMetadata(
-    const vivaldi::NotesModel* model,
+    const NoteModelView* model,
     sync_pb::NotesModelMetadata model_metadata,
     file_sync::SyncedFileStore* synced_file_store) {
   DCHECK(model);
@@ -415,7 +415,7 @@ SyncedNoteTracker::SyncedNoteTracker(
           max_version_among_ignored_updates_due_to_missing_parent) {}
 
 bool SyncedNoteTracker::InitEntitiesFromModelAndMetadata(
-    const vivaldi::NotesModel* model,
+    const NoteModelView* model,
     sync_pb::NotesModelMetadata model_metadata) {
   DCHECK(syncer::IsInitialSyncDone(model_type_state_.initial_sync_state()));
 
@@ -544,6 +544,9 @@ bool SyncedNoteTracker::InitEntitiesFromModelAndMetadata(
   ui::TreeNodeIterator<const vivaldi::NoteNode> iterator(model->root_node());
   while (iterator.has_next()) {
     const vivaldi::NoteNode* node = iterator.Next();
+    if (!model->IsNodeSyncable(node)) {
+      continue;
+    }
     if (note_node_to_entities_map_.count(node) == 0) {
       return false;
     }
@@ -766,7 +769,7 @@ size_t SyncedNoteTracker::TrackedEntitiesCountForTest() const {
 }
 
 void SyncedNoteTracker::CheckAllNodesTracked(
-    const vivaldi::NotesModel* notes_model) const {
+    const NoteModelView* notes_model) const {
 #if DCHECK_IS_ON()
   DCHECK(GetEntityForNoteNode(notes_model->main_node()));
   DCHECK(GetEntityForNoteNode(notes_model->other_node()));
@@ -776,6 +779,10 @@ void SyncedNoteTracker::CheckAllNodesTracked(
       notes_model->root_node());
   while (iterator.has_next()) {
     const vivaldi::NoteNode* node = iterator.Next();
+    if (!notes_model->IsNodeSyncable(node)) {
+      DCHECK(!GetEntityForNoteNode(node));
+      continue;
+    }
     DCHECK(GetEntityForNoteNode(node));
   }
 #endif  // DCHECK_IS_ON()

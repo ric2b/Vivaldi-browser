@@ -17,6 +17,7 @@
 #include "content/public/browser/interest_group_manager.h"
 #include "content/public/browser/private_aggregation_data_model.h"
 #include "content/public/browser/session_storage_usage_info.h"
+#include "net/cookies/canonical_cookie.h"
 #include "net/extras/shared_dictionary/shared_dictionary_isolation_key.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
@@ -32,7 +33,6 @@ class StoragePartition;
 // UI. Exposes a uniform view into browsing data based on the concept of
 // "data owners", which denote which entity the data should be closely
 // associated with in UI surfaces.
-// TODO(crbug.com/1271155): Implementation in progress, should not be used.
 class BrowsingDataModel {
  public:
   // The entity that logically owns a set of data. All browsing data will be
@@ -54,9 +54,10 @@ class BrowsingDataModel {
     kQuotaStorage,
     kSharedDictionary,
     kSharedWorker,
+    kCookie,
 
     kFirstType = kTrustTokens,
-    kLastType = kSharedWorker,
+    kLastType = kCookie,
     kExtendedDelegateRange =
         63,  // This is needed to include delegate values when adding delegate
              // browsing data to the model.
@@ -75,7 +76,8 @@ class BrowsingDataModel {
                         content::PrivateAggregationDataModel::DataKey,
                         content::SessionStorageUsageInfo,
                         net::SharedDictionaryIsolationKey,
-                        browsing_data::SharedWorkerInfo
+                        browsing_data::SharedWorkerInfo,
+                        net::CanonicalCookie
                         // TODO(crbug.com/1271155): Additional backend keys.
                         >
       DataKey;
@@ -106,6 +108,10 @@ class BrowsingDataModel {
     // Returns true if |origin| is within this browsing data's  owning entity.
     bool Matches(const url::Origin& origin) const;
 
+    // Returns the non-1P SchemefulSite this data is partitioned on. Returns
+    // base::nullopt if the data is not partitioned, or is the 1P partition.
+    absl::optional<net::SchemefulSite> GetThirdPartyPartitioningSite() const;
+
     // The logical owner of this browsing data. This is the entity which this
     // information will be most strongly associated with in UX surfaces.
     const raw_ref<const DataOwner, DanglingUntriaged> data_owner;
@@ -123,9 +129,6 @@ class BrowsingDataModel {
                           const DataKey& data_key,
                           const DataDetails& data_details);
   };
-
-  // Retrieves the host from the data owner.
-  static const std::string GetHost(const DataOwner& data_owner);
 
   // A delegate to handle non components/ data type retrieval and deletion.
   class Delegate {
@@ -208,6 +211,9 @@ class BrowsingDataModel {
   // Returns number of entries within the Model.
   size_t size() const { return browsing_data_entries_.size(); }
 
+  // Retrieves the host from the data owner.
+  static const std::string GetHost(const DataOwner& data_owner);
+
   // Consults supported storage backends to create and populate a Model based
   // on the current state of `browser_context`.
   static void BuildFromDisk(
@@ -258,6 +264,12 @@ class BrowsingDataModel {
       const net::SchemefulSite& top_level_site,
       base::OnceClosure completed);
 
+  // Removes data for `data_owner` which is not partitioned, or is the 1P
+  // partition. This supports more granular data deletion needed by UI surfaces.
+  // Virtual to allow an in-memory only fake to be created.
+  virtual void RemoveUnpartitionedBrowsingData(const DataOwner& data_owner,
+                                               base::OnceClosure completed);
+
   // Returns whether the provided `storage_type` is blocked when third party
   // cookies are blocked.
   bool IsBlockedByThirdPartyCookieBlocking(StorageType storage_type) const;
@@ -277,6 +289,11 @@ class BrowsingDataModel {
       std::unique_ptr<Delegate> delegate
       // TODO(crbug.com/1271155): Inject other dependencies.
   );
+
+  void GetAffectedDataKeyEntriesForRemovePartitionedBrowsingData(
+      const DataOwner& data_owner,
+      const net::SchemefulSite& top_level_site,
+      DataKeyEntries& affected_data_key_entries);
 
   // Pulls information from disk and populate the model.
   // Virtual to allow an in-memory only fake to be created.

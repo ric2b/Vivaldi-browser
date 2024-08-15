@@ -13,7 +13,7 @@
 #import "ios/chrome/browser/shared/ui/elements/activity_overlay_coordinator.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
-#import "ios/chrome/browser/sync/sync_service_factory.h"
+#import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/browser/ui/authentication/authentication_flow.h"
 #import "ios/chrome/browser/ui/authentication/authentication_ui_util.h"
 #import "ios/chrome/browser/ui/authentication/signin/instant_signin/instant_signin_mediator.h"
@@ -66,7 +66,7 @@
 - (void)dealloc {
   // TODO(crbug.com/1464966): Switch back to DCHECK if the number of reports is
   // low.
-  DUMP_WILL_BE_CHECK(!_mediator);
+  DUMP_WILL_BE_CHECK(!_mediator) << base::SysNSStringToUTF8([self description]);
 }
 
 #pragma mark - ChromeCoordinator

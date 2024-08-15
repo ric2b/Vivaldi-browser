@@ -90,6 +90,10 @@ class ASH_EXPORT WindowRestoreController
   // `this`.
   bool IsRestoringWindow(aura::Window* window) const;
 
+  // Starts an overview session with the informed restore dialog if certain
+  // conditions are met.
+  void MaybeStartInformedRestore();
+
   // TabletModeObserver:
   void OnTabletModeStarted() override;
   void OnTabletModeEnded() override;
@@ -145,8 +149,8 @@ class ASH_EXPORT WindowRestoreController
   void CancelAndRemoveRestorePropertyClearCallback(aura::Window* window);
 
   // Sets a callback for testing that will be fired immediately when
-  // SaveWindowImpl is about to notify the window restore component we want to
-  // write to file.
+  // `SaveWindowImpl()` is about to notify the window restore component we want
+  // to write to file.
   void SetSaveWindowCallbackForTesting(SaveWindowCallback callback);
 
   // True whenever we are attempting to restore snap state.

@@ -630,8 +630,9 @@ IN_PROC_BROWSER_TEST_P(TabHoverCardFadeFooterInteractiveUiTest,
 
 // The discarded status in the hover card footer should disappear after a
 // discarded tab is reloaded
+// TODO(crbug.com/1483255): Re-enable after resolving flakiness.
 IN_PROC_BROWSER_TEST_P(TabHoverCardFadeFooterInteractiveUiTest,
-                       HoverCardStopShowingDiscardStatusOnReload) {
+                       DISABLED_HoverCardStopShowingDiscardStatusOnReload) {
   RunTestSequence(
       InstrumentTab(kFirstTabContents, 0),
       NavigateWebContents(kFirstTabContents, GetTestingURL("a.com")),
@@ -658,8 +659,9 @@ IN_PROC_BROWSER_TEST_P(TabHoverCardFadeFooterInteractiveUiTest,
 // when the memory usage data refreshes. Memory usage data should be preserved
 // and continue to show on the hover card footer when a tab with memory usage
 // data is discarded
+// TODO(crbug.com/1483255): Re-enable after resolving flakiness.
 IN_PROC_BROWSER_TEST_P(TabHoverCardFadeFooterInteractiveUiTest,
-                       HoverCardShowsMemoryOnMemoryRefresh) {
+                       DISABLED_HoverCardShowsMemoryOnMemoryRefresh) {
   constexpr char kPerformanceRowLabel[] = "performance_row_label";
   RunTestSequence(
       InstrumentTab(kFirstTabContents, 0),
@@ -695,8 +697,16 @@ IN_PROC_BROWSER_TEST_P(TabHoverCardFadeFooterInteractiveUiTest,
 
 // The hover card should stop showing memory usage data after navigating to
 // another site since the data is now out of date
+// TODO(crbug.com/1483255): Flaky on mac
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_HoverCardStopShowingMemoryOnNavigation \
+  DISABLED_HoverCardStopShowingMemoryOnNavigation
+#else
+#define MAYBE_HoverCardStopShowingMemoryOnNavigation \
+  HoverCardStopShowingMemoryOnNavigation
+#endif
 IN_PROC_BROWSER_TEST_P(TabHoverCardFadeFooterInteractiveUiTest,
-                       HoverCardStopShowingMemoryOnNavigation) {
+                       MAYBE_HoverCardStopShowingMemoryOnNavigation) {
   RunTestSequence(
       InstrumentTab(kFirstTabContents, 0),
       NavigateWebContents(kFirstTabContents, GetTestingURL("a.com")),
@@ -716,8 +726,16 @@ IN_PROC_BROWSER_TEST_P(TabHoverCardFadeFooterInteractiveUiTest,
 // The hover card should display tab memory usage in the footer. When the user
 // hovers over a tab without memory data available, the footer should update
 // accordingly and stop showing memory usage
+// TODO(crbug.com/1483255): Flaky on mac
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_HoverCardShowsMemoryWhenAvailable \
+  DISABLED_HoverCardShowsMemoryWhenAvailable
+#else
+#define MAYBE_HoverCardShowsMemoryWhenAvailable \
+  HoverCardShowsMemoryWhenAvailable
+#endif
 IN_PROC_BROWSER_TEST_P(TabHoverCardFadeFooterInteractiveUiTest,
-                       HoverCardShowsMemoryWhenAvailable) {
+                       MAYBE_HoverCardShowsMemoryWhenAvailable) {
   RunTestSequence(
       InstrumentTab(kFirstTabContents, 0),
       NavigateWebContents(kFirstTabContents, GetTestingURL("a.com")),

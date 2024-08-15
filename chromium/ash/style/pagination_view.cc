@@ -234,7 +234,7 @@ class PaginationView::IndicatorContainer : public views::BoxLayoutView {
     DCHECK(buttons_.size());
     auto indicator_button = buttons_.back();
     buttons_.pop_back();
-    RemoveChildViewT(indicator_button);
+    RemoveChildViewT(std::exchange(indicator_button, nullptr));
   }
 
   // Gets indicator corresponding to the given page.
@@ -425,11 +425,8 @@ void PaginationView::CreateArrowButtons() {
 }
 
 void PaginationView::RemoveArrowButtons() {
-  RemoveChildViewT(backward_arrow_button_);
-  backward_arrow_button_ = nullptr;
-
-  RemoveChildViewT(forward_arrow_button_);
-  forward_arrow_button_ = nullptr;
+  RemoveChildViewT(std::exchange(backward_arrow_button_, nullptr));
+  RemoveChildViewT(std::exchange(forward_arrow_button_, nullptr));
 }
 
 void PaginationView::UpdateArrowButtonsVisiblity() {
@@ -485,8 +482,7 @@ void PaginationView::RemoveSelectorDot() {
     return;
   }
 
-  indicator_container_->RemoveChildViewT(selector_dot_);
-  selector_dot_ = nullptr;
+  indicator_container_->RemoveChildViewT(std::exchange(selector_dot_, nullptr));
 }
 
 void PaginationView::UpdateSelectorDot() {
@@ -510,7 +506,8 @@ void PaginationView::UpdateSelectorDot() {
 }
 
 void PaginationView::SetUpSelectorDotDeformation() {
-  DCHECK(!selector_dot_->DeformingInProgress());
+  CHECK(selector_dot_);
+  CHECK(!selector_dot_->DeformingInProgress());
 
   const int current_page = model_->selected_page();
   const int target_page = model_->transition().target_page;
@@ -628,6 +625,10 @@ void PaginationView::TotalPagesChanged(int previous_page_count,
 }
 
 void PaginationView::TransitionChanged() {
+  if (!selector_dot_) {
+    return;
+  }
+
   // If there is no transition, reset and cancel current selector dot
   // deformation and indicator container scrolling.
   if (!model_->has_transition()) {

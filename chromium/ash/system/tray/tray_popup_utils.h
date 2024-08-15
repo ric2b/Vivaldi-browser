@@ -132,8 +132,11 @@ class ASH_EXPORT TrayPopupUtils {
   // Creates a default focus painter used for most things in tray popups.
   static std::unique_ptr<views::Painter> CreateFocusPainter();
 
-  // Sets up |view| to be a sticky header in a tray detail scroll view.
+  // Sets up `view` to be a sticky header in a tray detail scroll view.
   static void ConfigureAsStickyHeader(views::View* view);
+
+  // Sets up `ink_drop` according to jelly ux requirements for row buttons.
+  static void ConfigureRowButtonInkdrop(views::InkDropHost* ink_drop);
 
   // Creates a button for use in the system menu. For MD, this is a prominent
   // text
@@ -168,6 +171,11 @@ class ASH_EXPORT TrayPopupUtils {
   // i.e. the user is logged in, not on the lock screen, not adding a secondary
   // user, and not in the supervised user creation flow.
   static bool CanOpenWebUISettings();
+
+  // Returns true if it is possible to show the night light feature tile, i.e.
+  // the `session_manager::SessionState` is ACTIVE, LOGGED_IN_NOT_ACTIVE, or
+  // LOCKED. This should only be used when `kQsRevamp` is enabled.
+  static bool CanShowNightLightFeatureTile();
 
   // Initializes a row in the system menu as checkable and update the check mark
   // status of this row. If |enterprise_managed| is true, adds an enterprise

@@ -21,7 +21,6 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.RelativeLayout;
 import android.widget.TextView;
 
 import androidx.annotation.Nullable;
@@ -45,6 +44,7 @@ import org.chromium.content_public.browser.HostZoomMap;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogManager.ModalDialogType;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
+import org.chromium.ui.modaldialog.ModalDialogProperties.ButtonType;
 import org.chromium.ui.modelutil.PropertyModel;
 
 import java.util.ArrayList;
@@ -60,7 +60,7 @@ import java.util.Set;
  * is launched to allow the user to see or modify the settings for that particular website.
  */
 @UsedByReflection("all_site_preferences.xml")
-public class AllSiteSettings extends SiteSettingsPreferenceFragment
+public class AllSiteSettings extends BaseSiteSettingsFragment
         implements PreferenceManager.OnPreferenceTreeClickListener, View.OnClickListener,
                    CustomDividerFragment {
     // The key to use to pass which category this preference should display,
@@ -138,12 +138,12 @@ public class AllSiteSettings extends SiteSettingsPreferenceFragment
         if (mCategory.getType() == SiteSettingsCategory.Type.ZOOM) {
             mCategory = SiteSettingsCategory.createFromType(
                     browserContextHandle, SiteSettingsCategory.Type.ZOOM);
-        };
+        }
         if (!(mCategory.getType() == SiteSettingsCategory.Type.ALL_SITES
                     || mCategory.getType() == SiteSettingsCategory.Type.USE_STORAGE
                     || mCategory.getType() == SiteSettingsCategory.Type.ZOOM)) {
             throw new IllegalArgumentException("Use SingleCategorySettings instead.");
-        };
+        }
 
         ViewGroup view = (ViewGroup) super.onCreateView(inflater, container, savedInstanceState);
 
@@ -240,14 +240,23 @@ public class AllSiteSettings extends SiteSettingsPreferenceFragment
         return new ModalDialogProperties.Controller() {
             @Override
             public void onClick(PropertyModel model, int buttonType) {
-                clearZooms();
-                mDialogManager.destroy();
+                switch (buttonType) {
+                    case ButtonType.POSITIVE:
+                        clearZooms();
+                        mDialogManager.destroy();
+                        break;
+                    case ButtonType.NEGATIVE:
+                        mDialogManager.destroy();
+                        break;
+                    default:
+                        // Should never reach this case, as there are only two buttons displayed.
+                        assert false;
+                        break;
+                }
             }
 
             @Override
-            public void onDismiss(PropertyModel model, int dismissalCause) {
-                mDialogManager.destroy();
-            }
+            public void onDismiss(PropertyModel model, int dismissalCause) {}
         };
     }
 
@@ -277,19 +286,16 @@ public class AllSiteSettings extends SiteSettingsPreferenceFragment
         TextView message = dialogView.findViewById(android.R.id.message);
         TextView signedOutText = dialogView.findViewById(R.id.signed_out_text);
         TextView offlineText = dialogView.findViewById(R.id.offline_text);
-        if (getSiteSettingsDelegate().isPrivacySandboxSettings4Enabled()) {
-            RelativeLayout adDataRow = dialogView.findViewById(R.id.ad_personalization);
-            adDataRow.setVisibility(View.VISIBLE);
-        }
         signedOutText.setText(R.string.webstorage_clear_data_dialog_sign_out_all_message);
-        offlineText.setText(R.string.webstorage_clear_data_dialog_offline_message);
+        offlineText.setText(R.string.webstorage_delete_data_dialog_offline_message);
         String dialogFormattedText =
-                getString(includesApps ? R.string.webstorage_clear_data_dialog_message_with_app
-                                       : R.string.webstorage_clear_data_dialog_message,
+                getString(includesApps ? R.string.webstorage_delete_data_dialog_message_with_app
+                                       : R.string.webstorage_delete_data_dialog_message,
                         Formatter.formatShortFileSize(getContext(), totalUsage));
         message.setText(dialogFormattedText);
         builder.setView(dialogView);
-        builder.setPositiveButton(R.string.storage_clear_dialog_clear_storage_option,
+        builder.setPositiveButton(
+                R.string.storage_delete_dialog_clear_storage_option,
                 new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int id) {
@@ -297,7 +303,7 @@ public class AllSiteSettings extends SiteSettingsPreferenceFragment
                     }
                 });
         builder.setNegativeButton(R.string.cancel, null);
-        builder.setTitle(R.string.storage_clear_site_storage_title);
+        builder.setTitle(R.string.storage_delete_site_storage_title);
         builder.create().show();
     }
 
@@ -360,22 +366,15 @@ public class AllSiteSettings extends SiteSettingsPreferenceFragment
         return false;
     }
 
-    private int getNavigationSource() {
-        return getArguments().getInt(
-                SettingsNavigationSource.EXTRA_KEY, SettingsNavigationSource.OTHER);
-    }
-
     @Override
     public boolean onPreferenceTreeClick(Preference preference) {
         // Store in a local variable; otherwise the linter complains.
-        final String extraKey = SettingsNavigationSource.EXTRA_KEY;
         if (preference instanceof WebsitePreference) {
             WebsitePreference website = (WebsitePreference) preference;
             website.setFragment(SingleWebsiteSettings.class.getName());
             // EXTRA_SITE re-uses already-fetched permissions, which we can only use if the Website
             // was populated with data for all permission types.
             website.putSiteIntoExtras(SingleWebsiteSettings.EXTRA_SITE);
-            website.getExtras().putInt(extraKey, getNavigationSource());
         } else if (preference instanceof WebsiteRowPreference) {
             ((WebsiteRowPreference) preference).handleClick(getArguments(), /*fromGrouped=*/false);
         }

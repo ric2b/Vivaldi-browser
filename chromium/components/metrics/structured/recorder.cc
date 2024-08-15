@@ -11,11 +11,11 @@
 #include "base/task/sequenced_task_runner.h"
 #include "components/metrics/structured/histogram_util.h"
 #include "components/metrics/structured/structured_metrics_features.h"
-#include "components/metrics/structured/structured_metrics_validator.h"
 
 namespace metrics::structured {
 
 Recorder::Recorder() = default;
+
 Recorder::~Recorder() = default;
 
 Recorder* Recorder::GetInstance() {
@@ -65,23 +65,9 @@ void Recorder::ProfileAdded(const base::FilePath& profile_path) {
   for (auto& observer : observers_) {
     observer.OnProfileAdded(profile_path);
   }
-}
 
-absl::optional<int> Recorder::LastKeyRotation(const Event& event) {
-  auto project_validator = validator::GetProjectValidator(event.project_name());
-  if (!project_validator.has_value()) {
-    return absl::nullopt;
-  }
-
-  auto project_name_hash = project_validator.value()->project_hash();
-
-  absl::optional<int> result;
-  // |observers_| will contain at most one observer, despite being an
-  // ObserverList.
-  for (auto& observer : observers_) {
-    result = observer.LastKeyRotation(project_name_hash);
-  }
-  return result;
+  // Notify the event processors.
+  delegating_events_processor_.OnProfileAdded(profile_path);
 }
 
 void Recorder::OnReportingStateChanged(bool enabled) {
@@ -117,6 +103,10 @@ void Recorder::AddEventsProcessor(
 void Recorder::OnProvideIndependentMetrics(
     ChromeUserMetricsExtension* uma_proto) {
   delegating_events_processor_.OnProvideIndependentMetrics(uma_proto);
+}
+
+void Recorder::OnEventRecorded(StructuredEventProto* event) {
+  delegating_events_processor_.OnEventRecorded(event);
 }
 
 }  // namespace metrics::structured

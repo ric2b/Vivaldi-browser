@@ -50,6 +50,7 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "ui/message_center/public/cpp/notification.h"
+#include "url/origin.h"
 
 #include "installer/util/vivaldi_install_util.h"
 
@@ -370,7 +371,7 @@ class NotificationPlatformBridgeWinImpl
     }
 
     NotificationLaunchId launch_id(notification_type, notification->id(),
-                                   profile_id, incognito,
+                                   profile_id, GetAppId(), incognito,
                                    notification->origin_url());
     std::wstring xml_template = BuildNotificationTemplate(
         image_retainer_.get(), launch_id, *notification);
@@ -553,6 +554,7 @@ class NotificationPlatformBridgeWinImpl
 
   void GetDisplayed(const std::string& profile_id,
                     bool incognito,
+                    absl::optional<GURL> origin,
                     GetDisplayedNotificationsCallback callback) const {
     DCHECK(notification_task_runner_->RunsTasksInCurrentSequence());
 
@@ -571,6 +573,10 @@ class NotificationPlatformBridgeWinImpl
       }
       if (launch_id.profile_id() != profile_id ||
           launch_id.incognito() != incognito) {
+        continue;
+      }
+      if (origin.has_value() &&
+          !url::IsSameOriginWith(launch_id.origin_url(), *origin)) {
         continue;
       }
       LogGetDisplayedLaunchIdStatus(GetDisplayedLaunchIdStatus::kSuccess);
@@ -953,6 +959,19 @@ void NotificationPlatformBridgeWin::GetDisplayed(
       FROM_HERE,
       base::BindOnce(&NotificationPlatformBridgeWinImpl::GetDisplayed, impl_,
                      GetProfileId(profile), profile->IsOffTheRecord(),
+                     /*origin=*/absl::nullopt, std::move(callback)));
+}
+
+void NotificationPlatformBridgeWin::GetDisplayedForOrigin(
+    Profile* profile,
+    const GURL& origin,
+    GetDisplayedNotificationsCallback callback) const {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  notification_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&NotificationPlatformBridgeWinImpl::GetDisplayed, impl_,
+                     GetProfileId(profile), profile->IsOffTheRecord(), origin,
                      std::move(callback)));
 }
 

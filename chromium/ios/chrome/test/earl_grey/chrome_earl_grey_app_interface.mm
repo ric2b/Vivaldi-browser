@@ -35,14 +35,14 @@
 #import "components/variations/variations_ids_provider.h"
 #import "ios/chrome/app/main_controller.h"
 #import "ios/chrome/browser/autofill/personal_data_manager_factory.h"
-#import "ios/chrome/browser/content_settings/host_content_settings_map_factory.h"
-#import "ios/chrome/browser/default_browser/utils.h"
-#import "ios/chrome/browser/default_browser/utils_test_support.h"
+#import "ios/chrome/browser/content_settings/model/host_content_settings_map_factory.h"
+#import "ios/chrome/browser/default_browser/model/utils.h"
+#import "ios/chrome/browser/default_browser/model/utils_test_support.h"
 #import "ios/chrome/browser/first_run/first_run.h"
 #import "ios/chrome/browser/ntp/features.h"
-#import "ios/chrome/browser/search_engines/search_engines_util.h"
-#import "ios/chrome/browser/search_engines/template_url_service_factory.h"
-#import "ios/chrome/browser/sessions/session_restoration_browser_agent.h"
+#import "ios/chrome/browser/search_engines/model/search_engines_util.h"
+#import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
+#import "ios/chrome/browser/sessions/session_restoration_util.h"
 #import "ios/chrome/browser/sessions/session_service_ios.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
@@ -55,10 +55,10 @@
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/signin/fake_system_identity.h"
-#import "ios/chrome/browser/sync/sync_service_factory.h"
+#import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_feature.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/feature_flags.h"
-#import "ios/chrome/browser/unified_consent/unified_consent_service_factory.h"
+#import "ios/chrome/browser/unified_consent/model/unified_consent_service_factory.h"
 #import "ios/chrome/browser/web/web_navigation_browser_agent.h"
 #import "ios/chrome/test/app/browsing_data_test_util.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
@@ -191,10 +191,9 @@ NSString* SerializedValue(const base::Value* value) {
 }
 
 + (void)saveSessionImmediately {
+  SaveSessionForBrowser(chrome_test_util::GetMainBrowser());
+
   if (!web::features::UseSessionSerializationOptimizations()) {
-    SessionRestorationBrowserAgent::FromBrowser(
-        chrome_test_util::GetMainBrowser())
-        ->SaveSession(/*immediately=*/true);
     dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
     ProceduralBlock completionBlock = ^{
       dispatch_semaphore_signal(semaphore);
@@ -274,6 +273,17 @@ NSString* SerializedValue(const base::Value* value) {
 
 + (NSUInteger)browserCount {
   return chrome_test_util::RegularBrowserCount();
+}
+
++ (NSInteger)realizedWebStatesCount {
+  int count = 0;
+  int tab_count = chrome_test_util::GetMainTabCount();
+  for (int i = 0; i < tab_count; i++) {
+    if (chrome_test_util::GetWebStateAtIndexInCurrentMode(i)->IsRealized()) {
+      count++;
+    }
+  }
+  return count;
 }
 
 + (NSUInteger)evictedMainTabCount {
@@ -811,10 +821,6 @@ NSString* SerializedValue(const base::Value* value) {
       base::SysNSStringToUTF8(originator_client_item_id));
 }
 
-+ (void)addFakeSyncServerTypedURL:(NSString*)URL {
-  chrome_test_util::AddTypedURLToFakeSyncServer(base::SysNSStringToUTF8(URL));
-}
-
 + (void)addFakeSyncServerHistoryVisit:(NSURL*)URL {
   chrome_test_util::AddHistoryVisitToFakeSyncServer(net::GURLWithNSURL(URL));
 }
@@ -1125,21 +1131,12 @@ NSString* SerializedValue(const base::Value* value) {
   return base::FeatureList::IsEnabled(ukm::kUkmFeature);
 }
 
-+ (BOOL)isSynthesizedRestoreSessionEnabled {
-  return base::FeatureList::IsEnabled(
-      web::features::kSynthesizedRestoreSession);
-}
-
 + (BOOL)isTestFeatureEnabled {
   return base::FeatureList::IsEnabled(kTestFeature);
 }
 
 + (BOOL)isDemographicMetricsReportingEnabled {
   return base::FeatureList::IsEnabled(metrics::kDemographicMetricsReporting);
-}
-
-+ (BOOL)isSyncHistoryDataTypeEnabled {
-  return base::FeatureList::IsEnabled(syncer::kSyncEnableHistoryDataType);
 }
 
 + (BOOL)isReplaceSyncWithSigninEnabled {
@@ -1227,12 +1224,16 @@ NSString* SerializedValue(const base::Value* value) {
 
 #pragma mark - Default Utilities (EG2)
 
-+ (void)setUserDefaultObject:(id)value forKey:(NSString*)defaultName {
++ (void)setUserDefaultsObject:(id)value forKey:(NSString*)defaultName {
   [[NSUserDefaults standardUserDefaults] setObject:value forKey:defaultName];
 }
 
-+ (void)removeUserDefaultObjectForKey:(NSString*)key {
++ (void)removeUserDefaultsObjectForKey:(NSString*)key {
   [[NSUserDefaults standardUserDefaults] removeObjectForKey:key];
+}
+
++ (id)userDefaultsObjectForKey:(NSString*)key {
+  return [[NSUserDefaults standardUserDefaults] objectForKey:key];
 }
 
 #pragma mark - Pref Utilities (EG2)
@@ -1261,6 +1262,12 @@ NSString* SerializedValue(const base::Value* value) {
   std::string path = base::SysNSStringToUTF8(prefName);
   PrefService* prefService = GetApplicationContext()->GetLocalState();
   prefService->SetString(path, UTF8Value);
+}
+
++ (void)setBoolValue:(BOOL)value forLocalStatePref:(NSString*)prefName {
+  std::string path = base::SysNSStringToUTF8(prefName);
+  PrefService* prefService = GetApplicationContext()->GetLocalState();
+  prefService->SetBoolean(path, value);
 }
 
 + (NSString*)userPrefValue:(NSString*)prefName {

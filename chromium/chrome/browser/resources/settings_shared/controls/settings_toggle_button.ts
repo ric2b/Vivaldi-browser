@@ -11,6 +11,7 @@ import '//resources/cr_elements/cr_shared_vars.css.js';
 import '//resources/cr_elements/action_link.css.js';
 import '//resources/cr_elements/cr_toggle/cr_toggle.js';
 import '//resources/cr_elements/policy/cr_policy_pref_indicator.js';
+import '//resources/polymer/v3_0/iron-icon/iron-icon.js';
 import '//resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 // <if expr='chromeos_ash'>
 import '//resources/cr_elements/chromeos/cros_color_overrides.css.js';
@@ -81,9 +82,12 @@ export class SettingsToggleButtonElement extends
         reflectToAttribute: true,
       },
 
-      // <if expr="chromeos_ash">
+      learnMoreAriaLabel: {
+        type: String,
+        value: '',
+      },
+
       icon: String,
-      // </if>
 
       subLabelIcon: String,
     };
@@ -99,9 +103,8 @@ export class SettingsToggleButtonElement extends
   ariaShowLabel: boolean;
   ariaShowSublabel: boolean;
   elideLabel: boolean;
-  // <if expr="chromeos_ash">
   icon: string;
-  // </if>
+  learnMoreAriaLabel: string;
   learnMoreUrl: string;
   subLabelWithLink: string;
   subLabelIcon: string;
@@ -134,6 +137,11 @@ export class SettingsToggleButtonElement extends
 
   private getAriaLabel_(): string {
     return this.ariaLabel || this.label;
+  }
+
+  private getLearnMoreAriaLabelledBy_(): string {
+    return this.learnMoreAriaLabel ? 'learn-more-aria-label' :
+                                     'sub-label-text learn-more';
   }
 
   private onDisableOrPrefChange_() {

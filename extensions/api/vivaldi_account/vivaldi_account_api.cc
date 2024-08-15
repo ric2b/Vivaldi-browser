@@ -67,9 +67,10 @@ vivaldi::vivaldi_account::State GetState(Profile* profile) {
   state.last_account_info_fetch_error = ToVivaldiAccountAPIFetchError(
       account_manager->last_account_info_fetch_error());
 
-  state.token_request_time = account_manager->GetTokenRequestTime().ToJsTime();
-  state.next_token_request_time =
-      account_manager->GetNextTokenRequestTime().ToJsTime();
+  state.token_request_time =
+      account_manager->GetTokenRequestTime().InMillisecondsFSinceUnixEpoch();
+  state.next_token_request_time = account_manager->GetNextTokenRequestTime()
+                                      .InMillisecondsFSinceUnixEpoch();
 
   state.is_ready = true;
 

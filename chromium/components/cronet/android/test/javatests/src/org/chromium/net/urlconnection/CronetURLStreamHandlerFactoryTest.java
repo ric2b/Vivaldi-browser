@@ -18,21 +18,21 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.net.CronetTestRule;
-import org.chromium.net.CronetTestRule.OnlyRunNativeCronet;
+import org.chromium.net.CronetTestRule.CronetImplementation;
+import org.chromium.net.CronetTestRule.IgnoreFor;
 import org.chromium.net.NativeTestServer;
 
 import java.net.URL;
 
-/**
- * Test for CronetURLStreamHandlerFactory.
- */
+/** Test for CronetURLStreamHandlerFactory. */
 @DoNotBatch(
         reason = "URL#setURLStreamHandlerFactory can be called at most once during JVM lifetime")
-@OnlyRunNativeCronet
+@IgnoreFor(
+        implementations = {CronetImplementation.FALLBACK},
+        reason = "See crrev.com/c/4590329")
 @RunWith(AndroidJUnit4.class)
 public class CronetURLStreamHandlerFactoryTest {
-    @Rule
-    public final CronetTestRule mTestRule = CronetTestRule.withAutomaticEngineStartup();
+    @Rule public final CronetTestRule mTestRule = CronetTestRule.withAutomaticEngineStartup();
 
     private CronetHttpURLConnection mUrlConnection;
 
@@ -47,8 +47,9 @@ public class CronetURLStreamHandlerFactoryTest {
     @Test
     @SmallTest
     public void testRequireConfig() throws Exception {
-        NullPointerException e = assertThrows(
-                NullPointerException.class, () -> new CronetURLStreamHandlerFactory(null));
+        NullPointerException e =
+                assertThrows(
+                        NullPointerException.class, () -> new CronetURLStreamHandlerFactory(null));
         assertThat(e).hasMessageThat().isEqualTo("CronetEngine is null.");
     }
 
@@ -56,7 +57,8 @@ public class CronetURLStreamHandlerFactoryTest {
     @SmallTest
     public void testSetUrlStreamFactoryUsesCronet() throws Exception {
         assertThat(
-                NativeTestServer.startNativeTestServer(mTestRule.getTestFramework().getContext()))
+                        NativeTestServer.startNativeTestServer(
+                                mTestRule.getTestFramework().getContext()))
                 .isTrue();
 
         URL.setURLStreamHandlerFactory(

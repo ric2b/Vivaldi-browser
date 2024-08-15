@@ -453,8 +453,11 @@ locale.  The strings in this file are specific to iOS.
 
       <!-- End Notes -->
       <!-- START PAGE AND SPEED DIAL -->
-      <message name="IDS_IOS_TABS_SPEED_DIAL" desc="The title for the new tab on desktop tabs tab view">
+      <message name="IDS_IOS_TABS_SPEED_DIAL" desc="The title for the new tab on desktop tabs tab view and tab switcher">
         Speed Dial
+      </message>
+      <message name="IDS_IOS_TABS_NEW_PRIVATE_TAB" desc="The title for the new private tab on desktop tabs tab view and tab switcher">
+        New Private Tab
       </message>
       <message name="IDS_IOS_NEW_SPEED_DIAL" desc="The string title describing the new speed dial adding option on the start page.">
         New Speed Dial
@@ -603,6 +606,9 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_VIVALDI_ACCOUNT_LOG_IN" desc="(Vivaldi) Confirming sync account credentials.">
         Log In
+      </message>
+      <message name="IDS_VIVALDI_ACCOUNT_SAVE_CREDENTIALS" desc="(Vivaldi) Allows the user to store their sync credentials in saved passwords">
+        Save password
       </message>
       <message name="IDS_VIVALDI_ACCOUNT_REGISTER" desc="(Vivaldi) Title for Register button">
         Register
@@ -814,9 +820,8 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_LOG_IN_TEXT" desc="(Vivaldi) Go back to the login screen from the create account screen.">
         Already have an account? <ph name="BEGIN_LINK">BEGIN_LINK</ph>Log in ➔<ph name="END_LINK">END_LINK</ph>
       </message>
-      <!-- TODO(tomas@vivaldi.com): we need an ios URL. See HP-199 in JIRA-->
       <message name="IDS_VIVALDI_IOS_ENCRYPTION_INFO_URL" translateable="false">
-        https://help.vivaldi.com/android/android-tools/android-sync
+        https://help.vivaldi.com/ios/ios-tools/sync-browser-data-on-ios/
       </message>
       <message name="IDS_VIVALDI_SYNC_BOOKMARKS" desc="(Vivaldi) Title of switch for choosing whether the given datatype gets synced.">
         Bookmarks
@@ -1080,6 +1085,9 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_VIVALDI_IOS_SOURCE_MAP_TYPE_COOKIE_WARNING" desc="The type of the blocking list source file">
         Remove cookie warnings (<ph name="TYPE">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_TYPE_ANNOYANCES" desc="The origin of the blocking list source file">
+        Remove annoyances, can break sites (<ph name="ORIGIN">$1</ph>)
       </message>
       <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_ARABIC" desc="The origin of the blocking list source file">
         Arabic (<ph name="ORIGIN">$1</ph>)
@@ -1436,6 +1444,26 @@ locale.  The strings in this file are specific to iOS.
         Cancel
       </message>
       <!-- END SEARCH ENGINE SETTINGS -->
+      <!-- APPEARANCE SETTING -->
+      <message name="IDS_VIVALDI_IOS_APPEARANCE_SETTING_TITLE" desc="Title for the apperance settings page for start page wallapaper">
+        Appearance
+      </message>
+      <message name="IDS_VIVALDI_IOS_APPEARANCE_THEME_TITLE" desc="Title for the theme in apperance settings">
+        Theme
+      </message>
+      <message name="IDS_VIVALDI_IOS_APPEARANCE_WALLPAPER_TITLE" desc="Title for the wallapapers in apperance settings">
+        Wallpapers
+      </message>
+      <message name="IDS_VIVALDI_IOS_APPEARANCE_DARK_MODE_TITLE" desc="Title for dark mode in apperance settings">
+        Dark
+      </message>
+      <message name="IDS_VIVALDI_IOS_APPEARANCE_LIGHT_MODE_TITLE" desc="Title for light mode in apperance settings">
+        Light
+      </message>
+      <message name="IDS_VIVALDI_IOS_APPEARANCE_SYSTEM_MODE_TITLE" desc="Title for system mode in apperance settings">
+        System
+      </message>
+      <!-- END APPEARANCE SETTING -->
     </messages>
   </release>
 </grit>

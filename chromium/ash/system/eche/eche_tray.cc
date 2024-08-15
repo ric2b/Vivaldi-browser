@@ -235,18 +235,9 @@ EcheTray::EcheTray(Shelf* shelf)
       icon_(
           tray_container()->AddChildView(std::make_unique<views::ImageView>())),
       event_interceptor_(std::make_unique<EventInterceptor>(this)) {
-  SetPressedCallback(base::BindRepeating(
-      [](EcheTray* eche_tray, const ui::Event& event) {
-        // The `bubble_` is cached, so don't check for existence (which is the
-        // base TrayBackgroundView implementation), check for visibility to
-        // decide on whether to show or hide.
-        if (eche_tray->IsBubbleVisible()) {
-          eche_tray->HideBubble();
-          return;
-        }
-        eche_tray->ShowBubble();
-      },
-      base::Unretained(this)));
+  SetCallback(
+      base::BindRepeating(&EcheTray::OnButtonPressed, base::Unretained(this)));
+
   const int icon_padding = (kTrayItemSize - kIconSize) / 2;
 
   icon_->SetBorder(
@@ -365,6 +356,9 @@ void EcheTray::ShowBubble() {
   bubble_->GetBubbleWidget()->GetNativeWindow()->AddPreTargetHandler(
       event_interceptor_.get());
   shelf()->UpdateAutoHideState();
+  if (bubble_shown_callback_) {
+    bubble_shown_callback_.Run(web_view_);
+  }
 }
 
 TrayBubbleView* EcheTray::GetBubbleView() {
@@ -378,17 +372,6 @@ views::Widget* EcheTray::GetBubbleWidget() const {
 void EcheTray::OnVirtualKeyboardVisibilityChanged() {
   OnKeyboardVisibilityChanged(KeyboardController::Get()->IsKeyboardVisible());
   TrayBackgroundView::OnVirtualKeyboardVisibilityChanged();
-}
-
-void EcheTray::OnAnyBubbleVisibilityChanged(views::Widget* bubble_widget,
-                                            bool visible) {
-  // We only care about "other" bubbles being shown.
-  if (!bubble_ || bubble_widget == GetBubbleWidget())
-    return;
-
-  // Another bubble has become visible, so minimize this one.
-  if (visible && IsBubbleVisible())
-    HideBubble();
 }
 
 bool EcheTray::CacheBubbleViewForHide() const {
@@ -510,6 +493,20 @@ void EcheTray::OnRequestBackgroundConnectionAttempt() {
   SetIconVisibility(false);
 }
 
+void EcheTray::OnStatusAreaAnchoredBubbleVisibilityChanged(
+    TrayBubbleView* tray_bubble,
+    bool visible) {
+  // We only care about "other" bubbles being shown.
+  if (!bubble_ || tray_bubble == GetBubbleView()) {
+    return;
+  }
+
+  // Another bubble has become visible, so minimize this one.
+  if (visible && IsBubbleVisible()) {
+    HideBubble();
+  }
+}
+
 void EcheTray::CloseInitializer() {
   initializer_webview_.reset();
   if (on_initializer_closed_) {
@@ -539,6 +536,17 @@ void EcheTray::StartGracefulCloseInitializer() {
   unload_timer_ = std::make_unique<base::DelayTimer>(
       FROM_HERE, kUnloadTimeoutDuration, this, &EcheTray::CloseInitializer);
   unload_timer_->Reset();  // Starts the timer.
+}
+
+void EcheTray::OnButtonPressed() {
+  // The `bubble_` is cached, so don't check for existence (which is the base
+  // TrayBackgroundView implementation), check for visibility to decide on
+  // whether to show or hide.
+  if (IsBubbleVisible()) {
+    HideBubble();
+    return;
+  }
+  ShowBubble();
 }
 
 void EcheTray::SetUrl(const GURL& url) {
@@ -593,8 +601,8 @@ bool EcheTray::LoadBubble(
   StartLoadingAnimation();
   auto* phone_hub_tray = GetPhoneHubTray();
   if (phone_hub_tray) {
-    phone_hub_tray->SetEcheIconActivationCallback(
-        base::BindRepeating(&EcheTray::PerformAction, base::Unretained(this)));
+    phone_hub_tray->SetEcheIconActivationCallback(base::BindRepeating(
+        &EcheTray::OnButtonPressed, base::Unretained(this)));
   }
   // Hide bubble first until the streaming is ready.
   HideBubble();
@@ -636,6 +644,14 @@ void EcheTray::SetGracefulGoBackCallback(
   if (!graceful_go_back_callback)
     return;
   graceful_go_back_callback_ = std::move(graceful_go_back_callback);
+}
+
+void EcheTray::SetBubbleShownCallback(
+    BubbleShownCallback bubble_shown_callback) {
+  if (!bubble_shown_callback) {
+    return;
+  }
+  bubble_shown_callback_ = std::move(bubble_shown_callback);
 }
 
 void EcheTray::HideBubble() {

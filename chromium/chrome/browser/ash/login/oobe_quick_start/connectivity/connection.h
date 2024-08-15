@@ -35,8 +35,8 @@ namespace ash::quick_start {
 
 class QuickStartMessage;
 
-// Represents a connection to the remote source device and is an abstraction of
-// a Nearby Connection.
+// Represents a high-level connection used to exchange Quick Start messages with
+// the remote source device using a NearbyConnection.
 class Connection
     : public TargetDeviceConnectionBroker::AuthenticatedConnection {
  public:
@@ -108,53 +108,53 @@ class Connection
       base::OnceCallback<void(absl::optional<std::vector<uint8_t>>)>;
   using PayloadResponseCallback =
       base::OnceCallback<void(absl::optional<std::vector<uint8_t>>)>;
-  using BootstrapConfigurationsCallback =
-      base::OnceCallback<void(absl::optional<std::vector<uint8_t>>)>;
+  using OnDecodingCompleteCallback =
+      base::OnceCallback<void(mojom::QuickStartMessagePtr)>;
 
   // TargetDeviceConnectionBroker::AuthenticatedConnection:
-  void RequestWifiCredentials(int32_t session_id,
-                              RequestWifiCredentialsCallback callback) override;
-  void NotifySourceOfUpdate(int32_t session_id,
-                            NotifySourceOfUpdateCallback callback) override;
+  void RequestWifiCredentials(RequestWifiCredentialsCallback callback) override;
+  void NotifySourceOfUpdate(NotifySourceOfUpdateCallback callback) override;
+  void RequestAccountInfo(base::OnceClosure callback) override;
   void RequestAccountTransferAssertion(
       const Base64UrlString& challenge,
       RequestAccountTransferAssertionCallback callback) override;
   void WaitForUserVerification(AwaitUserVerificationCallback callback) override;
   base::Value::Dict GetPrepareForUpdateInfo() override;
 
-  void OnUserVerificationRequested(
+  void DoWaitForUserVerification(size_t attempt_number,
+                                 AwaitUserVerificationCallback callback);
+
+  // Called each time any one of the three user verification packets
+  // (UserVerificationRequested, UserVerificationMethod,
+  // UserVerificationResponse) is decoded. |attempt_number| tracks how many user
+  // verification packets have been decoded, since only three are expected.
+  void OnUserVerificationPacketDecoded(
+      size_t attempt_number,
       AwaitUserVerificationCallback callback,
-      absl::optional<mojom::UserVerificationRequested>
-          user_verification_request);
+      mojom::QuickStartMessagePtr quick_start_message);
 
   void OnNotifySourceOfUpdateResponse(
       NotifySourceOfUpdateCallback callback,
-      absl::optional<std::vector<uint8_t>> response_bytes);
-
-  void HandleNotifySourceOfUpdateResponse(NotifySourceOfUpdateCallback callback,
-                                          absl::optional<bool> ack_received);
+      mojom::QuickStartMessagePtr quick_start_message);
 
   // Parses a raw AssertionResponse and converts it into a FidoAssertionInfo
   void OnRequestAccountTransferAssertionResponse(
       RequestAccountTransferAssertionCallback callback,
-      absl::optional<std::vector<uint8_t>> response_bytes);
-
-  void GenerateFidoAssertionInfo(
-      RequestAccountTransferAssertionCallback callback,
-      ash::quick_start::mojom::FidoAssertionResponsePtr fido_response,
-      absl::optional<::ash::quick_start::mojom::QuickStartDecoderError> error);
+      mojom::QuickStartMessagePtr quick_start_message);
 
   void OnBootstrapConfigurationsResponse(
-      BootstrapConfigurationsCallback callback,
-      absl::optional<std::vector<uint8_t>> response_bytes);
+      base::OnceClosure callback,
+      mojom::QuickStartMessagePtr quick_start_message);
 
-  void ParseBootstrapConfigurationsResponse(
-      absl::optional<mojom::BootstrapConfigurations> bootstrap_configurations);
-
-  void SendMessageAndReadResponse(
+  void SendMessageAndDecodeResponse(
       std::unique_ptr<QuickStartMessage> message,
       QuickStartResponseType response_type,
-      ConnectionResponseCallback callback,
+      OnDecodingCompleteCallback callback,
+      base::TimeDelta timeout = kDefaultRoundTripTimeout);
+  void SendMessageAndDiscardResponse(
+      std::unique_ptr<QuickStartMessage> message,
+      QuickStartResponseType response_type,
+      base::OnceClosure callback,
       base::TimeDelta timeout = kDefaultRoundTripTimeout);
   void SendBytesAndReadResponse(
       std::vector<uint8_t>&& bytes,
@@ -174,27 +174,11 @@ class Connection
                           QuickStartResponseType response_type,
                           absl::optional<std::vector<uint8_t>> response_bytes);
 
-  template <typename T>
-  using DecoderResponseCallback =
-      base::OnceCallback<void(mojo::InlinedStructPtr<T>,
-                              absl::optional<mojom::QuickStartDecoderError>)>;
-
-  template <typename T>
-  using DecoderMethod = void (mojom::QuickStartDecoder::*)(
-      const absl::optional<std::vector<uint8_t>>&,
-      DecoderResponseCallback<T>);
-
-  template <typename T>
-  using OnDecodingCompleteCallback =
-      base::OnceCallback<void(absl::optional<T>)>;
-
   // Generic method to decode data using QuickStartDecoder. If a decoding error
-  // occurs, return empty data. On success, on_success will be called
-  // with the decoded data.
-  template <typename T>
-  void DecodeData(DecoderMethod<T> decoder_method,
-                  OnDecodingCompleteCallback<T> on_decoding_complete,
-                  absl::optional<std::vector<uint8_t>> data);
+  // occurs, return invoke |on_decoding_complete| with nullptr. On success,
+  // |on_decoding_complete| will be called with the decoded data.
+  void DecodeQuickStartMessage(OnDecodingCompleteCallback on_decoding_complete,
+                               absl::optional<std::vector<uint8_t>> data);
 
   base::OneShotTimer response_timeout_timer_;
   raw_ptr<NearbyConnection, ExperimentalAsh> nearby_connection_;

@@ -37,6 +37,7 @@
 #include "third_party/blink/renderer/core/script/script_scheduling_type.h"
 #include "third_party/blink/renderer/platform/bindings/name_client.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+#include "third_party/blink/renderer/platform/scheduler/public/task_attribution_info.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/text/text_position.h"
 
@@ -139,26 +140,27 @@ class CORE_EXPORT PendingScript : public GarbageCollected<PendingScript>,
     return false;
   }
 
-  bool IsWatchingForLoad() const { return client_; }
+  bool IsWatchingForLoad() const { return client_ != nullptr; }
 
  protected:
   PendingScript(ScriptElementBase*,
                 const TextPosition& starting_position,
-                absl::optional<scheduler::TaskAttributionId> parent_task_id =
-                    absl::nullopt);
+                scheduler::TaskAttributionInfo* parent_task);
 
   virtual void DisposeInternal() = 0;
 
-  PendingScriptClient* Client() { return client_; }
+  PendingScriptClient* Client() { return client_.Get(); }
 
   virtual void CheckState() const = 0;
 
   Document* OriginalElementDocument() const {
-    return original_element_document_;
+    return original_element_document_.Get();
   }
   ExecutionContext* OriginalExecutionContext() const {
-    return original_execution_context_;
+    return original_execution_context_.Get();
   }
+
+  bool IsDisposed() const { return !element_; }
 
  private:
   static void ExecuteScriptBlockInternal(
@@ -194,7 +196,7 @@ class CORE_EXPORT PendingScript : public GarbageCollected<PendingScript>,
   const bool created_during_document_write_;
 
   // The ID of the parent task that loaded the script.
-  absl::optional<scheduler::TaskAttributionId> parent_task_id_;
+  Member<scheduler::TaskAttributionInfo> parent_task_;
 };
 
 }  // namespace blink

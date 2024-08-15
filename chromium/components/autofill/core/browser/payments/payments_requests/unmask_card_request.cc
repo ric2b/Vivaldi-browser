@@ -212,7 +212,7 @@ std::string UnmaskCardRequest::GetRequestContent() {
   request_dict.Set("risk_data_encoded",
                    BuildRiskDictionary(request_details_.risk_data));
   base::Value::Dict context;
-  context.Set("billable_service", kUnmaskCardBillableServiceNumber);
+  context.Set("billable_service", kUnmaskPaymentMethodBillableServiceNumber);
   if (request_details_.billing_customer_number != 0) {
     context.Set("customer_context",
                 BuildCustomerContextDictionary(
@@ -290,6 +290,14 @@ std::string UnmaskCardRequest::GetRequestContent() {
             .spec());
     request_dict.Set("virtual_card_request_info",
                      std::move(virtual_card_request_info));
+  }
+
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableMerchantDomainInUnmaskCardRequest) &&
+      request_details_.merchant_domain_for_footprints.has_value()) {
+    request_dict.Set(
+        "merchant_domain",
+        request_details_.merchant_domain_for_footprints->Serialize());
   }
 
   std::string json_request;

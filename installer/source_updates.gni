@@ -183,4 +183,10 @@ if (is_ios) {
     ]
   }
 
+  update_template_instance("//ios/chrome/open_extension/appex:entitlements") {
+    entitlements_templates -= [ "entitlements/external/open_extension.appex.entitlements" ]
+    entitlements_templates += [
+      "//vivaldi/ios/app/entitlements/open_extension.appex.entitlements",
+    ]
+  }
 }

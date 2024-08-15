@@ -39,8 +39,10 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/ash/accessibility/accessibility_feature_browsertest.h"
 #include "chrome/browser/ash/accessibility/accessibility_manager.h"
-#include "chrome/browser/ash/accessibility/html_test_utils.h"
+#include "chrome/browser/ash/accessibility/automation_test_utils.h"
+#include "chrome/browser/ash/crosapi/browser_manager.h"
 #include "chrome/browser/ash/input_method/ui/candidate_window_view.h"
 #include "chrome/browser/ash/login/test/device_state_mixin.h"
 #include "chrome/browser/ash/login/test/login_manager_mixin.h"
@@ -64,6 +66,7 @@
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
+#include "extensions/browser/background_script_executor.h"
 #include "extensions/browser/browsertest_util.h"
 #include "extensions/common/constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -74,6 +77,7 @@
 #include "ui/display/screen.h"
 #include "ui/display/test/display_manager_test_api.h"
 #include "ui/events/base_event_utils.h"
+#include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/events/types/event_type.h"
 #include "ui/views/widget/widget.h"
@@ -93,12 +97,14 @@ LoggedInSpokenFeedbackTest::~LoggedInSpokenFeedbackTest() = default;
 
 void LoggedInSpokenFeedbackTest::SetUpInProcessBrowserTestFixture() {
   AccessibilityManager::SetBrailleControllerForTest(&braille_controller_);
+  AccessibilityFeatureBrowserTest::SetUpInProcessBrowserTestFixture();
 }
 
 void LoggedInSpokenFeedbackTest::SetUpOnMainThread() {
   InProcessBrowserTest::SetUpOnMainThread();
   event_generator_ = std::make_unique<ui::test::EventGenerator>(
       Shell::Get()->GetPrimaryRootWindow());
+  AccessibilityFeatureBrowserTest::SetUpOnMainThread();
 }
 
 void LoggedInSpokenFeedbackTest::TearDownOnMainThread() {
@@ -111,43 +117,65 @@ void LoggedInSpokenFeedbackTest::TearDownOnMainThread() {
 }
 
 void LoggedInSpokenFeedbackTest::SendKeyPress(ui::KeyboardCode key) {
-  ui::test::EmulateFullKeyPressReleaseSequence(event_generator_.get(), key,
-                                               false, false, false, false);
+  ui::test::EmulateFullKeyPressReleaseSequence(
+      event_generator_.get(), key,
+      /*control=*/false, /*shift=*/false, /*alt=*/false, /*command=*/false);
 }
 
 void LoggedInSpokenFeedbackTest::SendKeyPressWithControl(ui::KeyboardCode key) {
   ui::test::EmulateFullKeyPressReleaseSequence(
-      event_generator_.get(), key, /*control=*/true, false, false, false);
+      event_generator_.get(), key, /*control=*/true, /*shift=*/false,
+      /*alt=*/false, /*command=*/false);
 }
 
 void LoggedInSpokenFeedbackTest::SendKeyPressWithControlAndAlt(
     ui::KeyboardCode key) {
   ui::test::EmulateFullKeyPressReleaseSequence(event_generator_.get(), key,
-                                               /*control=*/true, false,
-                                               /*shift=*/true, false);
+                                               /*control=*/true,
+                                               /*shift=*/false,
+                                               /*alt=*/true, /*command=*/false);
+}
+
+void LoggedInSpokenFeedbackTest::SendKeyPressWithControlAndShift(
+    ui::KeyboardCode key) {
+  ui::test::EmulateFullKeyPressReleaseSequence(event_generator_.get(), key,
+                                               /*control=*/true, /*shift=*/true,
+                                               /*alt=*/false,
+                                               /*command=*/false);
 }
 
 void LoggedInSpokenFeedbackTest::SendKeyPressWithShift(ui::KeyboardCode key) {
   ui::test::EmulateFullKeyPressReleaseSequence(
-      event_generator_.get(), key, false, /*shift=*/true, false, false);
+      event_generator_.get(), key, /*control=*/false, /*shift=*/true,
+      /*alt=*/false, /*command=*/false);
+}
+
+void LoggedInSpokenFeedbackTest::SendKeyPressWithAltAndShift(
+    ui::KeyboardCode key) {
+  ui::test::EmulateFullKeyPressReleaseSequence(
+      event_generator_.get(), key, /*control=*/false, /*shift=*/true,
+      /*alt=*/true, /*command=*/false);
 }
 
 void LoggedInSpokenFeedbackTest::SendKeyPressWithSearchAndShift(
     ui::KeyboardCode key) {
   ui::test::EmulateFullKeyPressReleaseSequence(event_generator_.get(), key,
-                                               false, /*shift=*/true, false,
+                                               /*control=*/false,
+                                               /*shift=*/true, /*alt=*/false,
                                                /*command=*/true);
 }
 
 void LoggedInSpokenFeedbackTest::SendKeyPressWithSearch(ui::KeyboardCode key) {
   ui::test::EmulateFullKeyPressReleaseSequence(
-      event_generator_.get(), key, false, false, false, /*command=*/true);
+      event_generator_.get(), key, /*control=*/false, /*shift=*/false,
+      /*alt=*/false, /*command=*/true);
 }
 
 void LoggedInSpokenFeedbackTest::SendKeyPressWithSearchAndControl(
     ui::KeyboardCode key) {
   ui::test::EmulateFullKeyPressReleaseSequence(event_generator_.get(), key,
-                                               /*control=*/true, false, false,
+                                               /*control=*/true,
+                                               /*shift=*/false, /*alt=*/false,
                                                /*command=*/true);
 }
 
@@ -155,7 +183,7 @@ void LoggedInSpokenFeedbackTest::SendKeyPressWithSearchAndControlAndShift(
     ui::KeyboardCode key) {
   ui::test::EmulateFullKeyPressReleaseSequence(event_generator_.get(), key,
                                                /*control=*/true, /*shift=*/true,
-                                               false, /*command=*/true);
+                                               /*alt=*/false, /*command=*/true);
 }
 
 void LoggedInSpokenFeedbackTest::SendStickyKeyCommand() {
@@ -172,23 +200,29 @@ bool LoggedInSpokenFeedbackTest::PerformAcceleratorAction(
   return AcceleratorController::Get()->PerformActionIfEnabled(action, {});
 }
 
+void LoggedInSpokenFeedbackTest::RunJSForChromeVox(const std::string& script) {
+  extensions::BackgroundScriptExecutor::ExecuteScriptAsync(
+      GetProfile(), extension_misc::kChromeVoxExtensionId, script,
+      extensions::browsertest_util::ScriptUserActivation::kDontActivate);
+}
+
 void LoggedInSpokenFeedbackTest::DisableEarcons() {
   // Playing earcons from within a test is not only annoying if you're
   // running the test locally, but seems to cause crashes
   // (http://crbug.com/396507). Work around this by just telling
   // ChromeVox to not ever play earcons (prerecorded sound effects).
   extensions::browsertest_util::ExecuteScriptInBackgroundPageNoWait(
-      browser()->profile(), extension_misc::kChromeVoxExtensionId,
+      GetProfile(), extension_misc::kChromeVoxExtensionId,
       "ChromeVox.earcons.playEarcon = function() {};");
 }
 
 void LoggedInSpokenFeedbackTest::ImportJSModuleForChromeVox(std::string name,
                                                             std::string path) {
   extensions::browsertest_util::ExecuteScriptInBackgroundPageDeprecated(
-      browser()->profile(), extension_misc::kChromeVoxExtensionId,
+      GetProfile(), extension_misc::kChromeVoxExtensionId,
       "import('" + path +
           "').then(mod => {"
-          "window." +
+          "globalThis." +
           name + " = mod." + name +
           ";"
           "window.domAutomationController.send('done')"
@@ -215,33 +249,30 @@ void LoggedInSpokenFeedbackTest::EnableChromeVox(bool check_for_intro) {
 
 void LoggedInSpokenFeedbackTest::StablizeChromeVoxState() {
   sm_.Call([this]() {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), GURL(R"(data:text/html;charset=utf-8,
-        <button autofocus>Click me</button>)")));
+    NavigateToUrl(GURL(R"(data:text/html;charset=utf-8,
+        <button autofocus>Click me</button>)"));
   });
   sm_.ExpectSpeech("Click me");
 }
 
 void LoggedInSpokenFeedbackTest::ExecuteCommandHandlerCommand(
     std::string command) {
-  extensions::browsertest_util::ExecuteScriptInBackgroundPageNoWait(
-      browser()->profile(), extension_misc::kChromeVoxExtensionId,
-      "import('/chromevox/background/"
-      "command_handler_interface.js').then(module => "
-      "module.CommandHandlerInterface.instance.onCommand('" +
-          command + "'));");
+  ImportJSModuleForChromeVox(
+      "CommandHandlerInterface",
+      "/chromevox/background/input/command_handler_interface.js");
+  RunJSForChromeVox("CommandHandlerInterface.instance.onCommand('" + command +
+                    "');");
 }
 
 // Flaky test, crbug.com/1081563
 IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest, DISABLED_AddBookmark) {
   EnableChromeVox();
 
-  sm_.Call(
-      [this]() { chrome::ExecuteCommand(browser(), IDC_SHOW_BOOKMARK_BAR); });
+  // Open the bookmarks bar.
+  sm_.Call([this]() { SendKeyPressWithControlAndShift(ui::VKEY_B); });
 
   // Create a bookmark with title "foo".
-  sm_.Call(
-      [this]() { chrome::ExecuteCommand(browser(), IDC_BOOKMARK_THIS_TAB); });
+  sm_.Call([this]() { SendKeyPressWithControl(ui::VKEY_D); });
 
   sm_.ExpectSpeech("Bookmark name");
   sm_.ExpectSpeech("about:blank");
@@ -280,8 +311,10 @@ IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest, DISABLED_AddBookmark) {
   sm_.ExpectSpeechPattern("about:blank*");
 
   // Focus bookmarks bar and listen for "foo".
-  sm_.Call(
-      [this]() { chrome::ExecuteCommand(browser(), IDC_FOCUS_BOOKMARKS); });
+  sm_.Call([this]() {
+    // Focus bookmarks bar.
+    SendKeyPressWithAltAndShift(ui::VKEY_B);
+  });
   sm_.ExpectSpeech("foo");
   sm_.ExpectSpeech("Button");
   sm_.ExpectSpeech("Bookmarks");
@@ -348,17 +381,10 @@ IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest, LearnModeEscapeWithGesture) {
   sm_.Replay();
 }
 
-class NotificationCenterSpokenFeedbackTest
-    : public LoggedInSpokenFeedbackTest,
-      public ::testing::WithParamInterface<bool> {
+class NotificationCenterSpokenFeedbackTest : public LoggedInSpokenFeedbackTest {
  protected:
-  NotificationCenterSpokenFeedbackTest() {
-    feature_list_.InitWithFeatureState(features::kQsRevamp,
-                                       IsQsRevampEnabled());
-  }
+  NotificationCenterSpokenFeedbackTest() = default;
   ~NotificationCenterSpokenFeedbackTest() override = default;
-
-  bool IsQsRevampEnabled() const { return GetParam(); }
 
   NotificationCenterTestApi* test_api() {
     if (!test_api_) {
@@ -370,65 +396,33 @@ class NotificationCenterSpokenFeedbackTest
   }
 
  private:
-  base::test::ScopedFeatureList feature_list_;
   std::unique_ptr<NotificationCenterTestApi> test_api_;
 };
 
-INSTANTIATE_TEST_SUITE_P(QsRevampEnabled,
-                         NotificationCenterSpokenFeedbackTest,
-                         ::testing::Bool());
-
 // Tests the spoken feedback text when using the notification center accelerator
 // to navigate to the notification center.
-IN_PROC_BROWSER_TEST_P(NotificationCenterSpokenFeedbackTest,
+IN_PROC_BROWSER_TEST_F(NotificationCenterSpokenFeedbackTest,
                        NavigateNotificationCenter) {
   EnableChromeVox();
 
-  if (IsQsRevampEnabled()) {
-    // Add a notification so that the notification center tray is visible.
-    test_api()->AddNotification();
-    ASSERT_TRUE(test_api()->IsTrayShown());
+  // Add a notification so that the notification center tray is visible.
+  test_api()->AddNotification();
+  ASSERT_TRUE(test_api()->IsTrayShown());
 
-    // Press the accelerator that toggles the notification center.
-    sm_.Call([this]() {
-      EXPECT_TRUE(PerformAcceleratorAction(
-          AcceleratorAction::kToggleMessageCenterBubble));
-    });
-
-    // Verify the spoken feedback text.
-    sm_.ExpectSpeech("Notification Center");
-    sm_.Replay();
-    return;
-  }
-
+  // Press the accelerator that toggles the notification center.
   sm_.Call([this]() {
     EXPECT_TRUE(PerformAcceleratorAction(
         AcceleratorAction::kToggleMessageCenterBubble));
   });
-  sm_.ExpectSpeech(
-      "Quick Settings, Press search plus left to access the notification "
-      "center.");
 
-  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_LEFT); });
-  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_LEFT); });
-
-  // If you are hitting this in the course of changing the UI, please fix. This
-  // item needs a label.
-  sm_.ExpectSpeech("List item");
-
-  // Furthermore, navigation is generally broken using Search+Left.
-
+  // Verify the spoken feedback text.
+  sm_.ExpectSpeech("Notification Center");
   sm_.Replay();
 }
 
 // Tests that clicking the notification center tray does not crash when spoken
 // feedback is enabled.
-IN_PROC_BROWSER_TEST_P(NotificationCenterSpokenFeedbackTest, OpenBubble) {
-  // This test only makes sense in the context of the QS revamp.
-  if (!IsQsRevampEnabled()) {
-    return;
-  }
-
+IN_PROC_BROWSER_TEST_F(NotificationCenterSpokenFeedbackTest, OpenBubble) {
   // Enable spoken feedback and add a notification to ensure the tray is
   // visible.
   EnableChromeVox();
@@ -482,10 +476,19 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, EnableSpokenFeedback) {
 
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, FocusToolbar) {
   EnableChromeVox();
-  sm_.Call([this]() { chrome::ExecuteCommand(browser(), IDC_FOCUS_TOOLBAR); });
-  sm_.ExpectSpeech("Reload");
-  sm_.ExpectSpeech("Button");
-
+  // Wait for the browser to show up.
+  // In Ash, this results in a navigation, while in Lacros, this creates
+  // a new window. Thus the former has a "back" button while the latter
+  // does not, and focus will jump directly to the "reload" button.
+  StablizeChromeVoxState();
+  sm_.Call([this]() { SendKeyPressWithAltAndShift(ui::VKEY_T); });
+  if (IsLacrosRunning()) {
+    // The reload button should become focused.
+    sm_.ExpectSpeech("Reload");
+  } else {
+    // The back button should become focused.
+    sm_.ExpectSpeech("Back");
+  }
   sm_.Replay();
 }
 
@@ -494,8 +497,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DISABLED_TypeInOmnibox) {
   EnableChromeVox();
 
   sm_.Call([this]() {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), GURL("data:text/html;charset=utf-8,<p>unused</p>")));
+    NavigateToUrl(GURL("data:text/html;charset=utf-8,<p>unused</p>"));
   });
 
   sm_.Call([this]() { SendKeyPressWithControl(ui::VKEY_L); });
@@ -554,10 +556,9 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ShelfIconFocusForward) {
   // pinned apps in user preference will be removed.
   EnableChromeVox();
   sm_.Call([controller, title]() {
-    controller->InsertAppItem(
+    controller->CreateAppItem(
         std::make_unique<AppShortcutShelfItemController>(ShelfID("FakeApp")),
-        STATUS_CLOSED, controller->shelf_model()->item_count(), TYPE_PINNED_APP,
-        base::ASCIIToUTF16(title));
+        STATUS_CLOSED, /*pinned=*/true, base::ASCIIToUTF16(title));
   });
 
   // Focus on the shelf.
@@ -586,10 +587,9 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ShelfIconFocusForward) {
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, NavigateSpeechMenu) {
   EnableChromeVox();
   sm_.Call([this]() {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), GURL(R"(data:text/html;charset=utf-8,
+    NavigateToUrl(GURL(R"(data:text/html;charset=utf-8,
         <a href="https://google.com" autofocus>Link to Google</a>
-        <p>Text after link</p>)")));
+        <p>Text after link</p>)"));
   });
   sm_.ExpectSpeech("Link to Google");
   sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_OEM_PERIOD); });
@@ -624,16 +624,17 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, NavigateSpeechMenu) {
   sm_.Replay();
 }
 
-IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, OpenContextMenu) {
+// TODO(https://crbug.com/1486666): Fix flakiness
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DISABLED_OpenContextMenu) {
   EnableChromeVox();
+  StablizeChromeVoxState();
   sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_M); });
   sm_.ExpectSpeech("menu opened");
   // Close the menu
   sm_.Call([this]() { SendKeyPress(ui::VKEY_ESCAPE); });
   sm_.Call([this]() {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), GURL(R"(data:text/html;charset=utf-8,
-            <button autofocus>Click me</button>)")));
+    NavigateToUrl(GURL(R"(data:text/html;charset=utf-8,
+            <button autofocus>I'm a button</button>)"));
   });
   sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_M); });
   sm_.ExpectSpeech("menu opened");
@@ -652,17 +653,15 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, SpeakingTextUnderMouseForShelfItem) {
   sm_.Call([this]() {
     // Add three Shelf buttons. Wait for the change on ShelfModel to reach ash.
     ChromeShelfController* controller = ChromeShelfController::instance();
-    const int base_index = controller->shelf_model()->item_count();
     const std::string title("MockApp");
     const std::string id("FakeApp");
     const int insert_app_num = 3;
     for (int i = 0; i < insert_app_num; i++) {
       std::string app_title = title + base::NumberToString(i);
       std::string app_id = id + base::NumberToString(i);
-      controller->InsertAppItem(
+      controller->CreateAppItem(
           std::make_unique<AppShortcutShelfItemController>(ShelfID(app_id)),
-          STATUS_CLOSED, base_index + i, TYPE_PINNED_APP,
-          base::ASCIIToUTF16(app_title));
+          STATUS_CLOSED, /*pinned=*/true, base::ASCIIToUTF16(app_title));
     }
 
     // Enable the function of speaking text under mouse.
@@ -747,11 +746,9 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest,
 
   std::vector<apps::AppPtr> apps;
   apps.push_back(std::move(app));
-  apps::AppServiceProxyFactory::GetForProfile(
-      AccessibilityManager::Get()->profile())
-      ->AppRegistryCache()
-      .OnApps(std::move(apps), apps::AppType::kBuiltIn,
-              false /* should_notify_initialized */);
+  apps::AppServiceProxyFactory::GetForProfile(GetProfile())
+      ->OnApps(std::move(apps), apps::AppType::kBuiltIn,
+               false /* should_notify_initialized */);
 
   // Create and add a test app to the shelf model.
   ShelfItem item;
@@ -787,14 +784,13 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ShowHeadingList) {
   EnableChromeVox();
 
   sm_.Call([this]() {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), GURL(R"(data:text/html;charset=utf-8,
+    NavigateToUrl(GURL(R"(data:text/html;charset=utf-8,
         <h1>Page Title</h1>
         <h2>First Section</h2>
         <h3>Sub-category</h3>
         <p>Text</p>
         <h3>Second sub-category<h3>
-        <button autofocus>Next page</button>)")));
+        <button autofocus>Next page</button>)"));
   });
   sm_.ExpectSpeech("Next page");
   sm_.Call([this]() { SendKeyPressWithSearchAndControl(ui::VKEY_H); });
@@ -810,12 +806,19 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ShowHeadingList) {
   sm_.ExpectSpeechPattern("Sub-category Heading 3 Menu item 3 of *");
   sm_.Call([this]() { SendKeyPress(ui::VKEY_SPACE); });
   sm_.ExpectSpeech("Sub-category");
-  sm_.Call([this]() {
-    SendKeyPressWithSearch(ui::VKEY_DOWN);
-    SendKeyPressWithSearch(ui::VKEY_DOWN);
-    SendKeyPressWithSearch(ui::VKEY_DOWN);
-    SendKeyPressWithSearch(ui::VKEY_DOWN);
-  });
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_DOWN); });
+  sm_.ExpectSpeech("Sub-category");
+  if (IsLacrosRunning()) {
+    // With Lacros, it takes one more search+down to get out of the sub-category
+    // after having been in the heading menu.
+    sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_DOWN); });
+    sm_.ExpectSpeech("Sub-category");
+  }
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_DOWN); });
+  sm_.ExpectSpeech("Text");
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_DOWN); });
+  sm_.ExpectSpeech("Second sub-category");
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_DOWN); });
   sm_.ExpectSpeech("Next page Button");
 
   sm_.Replay();
@@ -835,11 +838,9 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest,
   app->readiness = apps::Readiness::kDisabledByPolicy;
   std::vector<apps::AppPtr> apps;
   apps.push_back(std::move(app));
-  apps::AppServiceProxyFactory::GetForProfile(
-      AccessibilityManager::Get()->profile())
-      ->AppRegistryCache()
-      .OnApps(std::move(apps), apps::AppType::kBuiltIn,
-              false /* should_notify_initialized */);
+  apps::AppServiceProxyFactory::GetForProfile(GetProfile())
+      ->OnApps(std::move(apps), apps::AppType::kBuiltIn,
+               false /* should_notify_initialized */);
 
   // Create and add a test app to the shelf model.
   ShelfItem item;
@@ -1005,8 +1006,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, LandmarkNavigation) {
 
   EnableChromeVox();
   sm_.Call([this]() {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), GURL(R"(data:text/html;charset=utf-8,
+    NavigateToUrl(GURL(R"(data:text/html;charset=utf-8,
         <button autofocus>Start here</button>
         <p>before first landmark</p>
         <div role="application">application</div>
@@ -1023,7 +1023,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, LandmarkNavigation) {
         <img alt="after navigation"></img>
         <input type="text" role="search" id="search"></input>
         <label for="search">search</label>
-        <p>after search</p>)")));
+        <p>after search</p>)"));
   });
   sm_.ExpectSpeech("Start here");
   sm_.Call([this, semicolon]() { SendKeyPressWithSearch(semicolon); });
@@ -1067,10 +1067,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, LandmarkNavigation) {
 
   sm_.Call([this]() { SendKeyPress(ui::VKEY_SPACE); });
   sm_.ExpectSpeech("Navigation");
-  sm_.Call([this]() {
-    SendKeyPressWithSearch(ui::VKEY_UP);
-    SendKeyPressWithSearch(ui::VKEY_UP);
-  });
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_UP); });
   sm_.ExpectSpeech("after main");
 
   sm_.Replay();
@@ -1078,13 +1075,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, LandmarkNavigation) {
 
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, OverviewMode) {
   EnableChromeVox();
-  sm_.Call([this]() {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), GURL(R"(data:text/html;charset=utf-8,
-        <button autofocus>Click me</button>)")));
-  });
-
-  sm_.ExpectSpeech("Click me");
+  StablizeChromeVoxState();
 
   sm_.Call([this]() {
     (PerformAcceleratorAction(AcceleratorAction::kToggleOverview));
@@ -1096,7 +1087,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, OverviewMode) {
 
   sm_.Call([this]() { SendKeyPress(ui::VKEY_TAB); });
   sm_.ExpectSpeechPattern(
-      "Chrom* - data:text slash html;charset equal utf-8, percent 0A less than "
+      "*window*data:text slash html;charset equal utf-8, percent 0A less than "
       "button autofocus greater than Click me less than slash button greater "
       "than");
   sm_.ExpectSpeechPattern("Press Ctrl plus W to close.");
@@ -1107,14 +1098,13 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, OverviewMode) {
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, NextGraphic) {
   EnableChromeVox();
   sm_.Call([this]() {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), GURL(R"(data:text/html;charset=utf-8,
+    NavigateToUrl(GURL(R"(data:text/html;charset=utf-8,
              <button autofocus>Start here</button>
              <p>before the image</p>
              <img src="cat.png" alt="A cat curled up on the couch">
              <p>between the images</p>
              <img src="dog.png" alt="A happy dog holding a stick in its mouth">
-             <p>after the images</p>)")));
+             <p>after the images</p>)"));
   });
   sm_.ExpectSpeech("Start here");
   sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_G); });
@@ -1130,11 +1120,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, NextGraphic) {
 // Verify that enable chromeVox won't end overview.
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest,
                        DISABLED_EnableChromeVoxOnOverviewMode) {
-  sm_.Call([this]() {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), GURL(R"(data:text/html;charset=utf-8,
-        <button autofocus>Click me</button>)")));
-  });
+  StablizeChromeVoxState();
 
   sm_.Call([this]() {
     (PerformAcceleratorAction(AcceleratorAction::kToggleOverview));
@@ -1162,14 +1148,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest,
 
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, MAYBE_ChromeVoxFindInPage) {
   EnableChromeVox();
-
-  sm_.Call([this]() {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), GURL(R"(data:text/html;charset=utf-8,
-        <button autofocus>Click me</button>)")));
-  });
-
-  sm_.ExpectSpeech("Click me");
+  StablizeChromeVoxState();
 
   // Press Search+/ to enter ChromeVox's "find in page".
   sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_OEM_2); });
@@ -1189,10 +1168,9 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest,
   EnableChromeVox();
 
   sm_.Call([this]() {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), GURL(R"(data:text/html;charset=utf-8,
+    NavigateToUrl(GURL(R"(data:text/html;charset=utf-8,
             <h1>Title</h1>
-            <button autofocus>Click me</button>)")));
+            <button autofocus>Click me</button>)"));
   });
   sm_.ExpectSpeech("Click me");
 
@@ -1217,9 +1195,8 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ChromeVoxStickyMode) {
   EnableChromeVox();
 
   sm_.Call([this]() {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), GURL(R"(data:text/html;charset=utf-8,
-            <button autofocus>Click me</button>)")));
+    NavigateToUrl(GURL(R"(data:text/html;charset=utf-8,
+            <button autofocus>Click me</button>)"));
   });
   sm_.ExpectSpeech("Click me");
 
@@ -1309,12 +1286,11 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DISABLED_TouchExploreStatusTray) {
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ShowLinksList) {
   EnableChromeVox();
   sm_.Call([this]() {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), GURL(R"(data:text/html;charset=utf-8,
+    NavigateToUrl(GURL(R"(data:text/html;charset=utf-8,
         <button autofocus>Start here</button>
         <a href="https://google.com/">Google Search Engine</a>
         <a href="https://docs.google.com/">Google Docs</a>
-        <a href="https://mail.google.com/">Gmail</a>)")));
+        <a href="https://mail.google.com/">Gmail</a>)"));
   });
   sm_.ExpectSpeech("Start here");
   sm_.Call([this]() { SendKeyPressWithSearchAndControl(ui::VKEY_L); });
@@ -1521,6 +1497,9 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, TouchExploreSecondaryDisplay) {
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, TouchExploreWebContents) {
   EnableChromeVox();
 
+  AutomationTestUtils test_utils(extension_misc::kChromeVoxExtensionId);
+  sm_.Call([&test_utils]() { test_utils.SetUpTestSupport(); });
+
   base::SimpleTestTickClock clock;
   auto* clock_ptr = &clock;
   ui::SetEventTickClockForTesting(clock_ptr);
@@ -1533,18 +1512,16 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, TouchExploreWebContents) {
   gfx::Rect b3_bounds;
 
   sm_.Call([this]() {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), GURL(R"(data:text/html;charset=utf-8,
+    NavigateToUrl(GURL(R"(data:text/html;charset=utf-8,
             <button id="b1" autofocus>First</button>
             <button id="b2">Second</button>
             <button id="b3">Third</button>
-        )")));
+        )"));
   });
   sm_.ExpectSpeech("First");
-  sm_.Call([this, clock_ptr, generator_ptr, &b2_bounds, &b3_bounds]() {
-    auto* web_contents = browser()->tab_strip_model()->GetActiveWebContents();
-    b2_bounds = GetControlBoundsInRoot(web_contents, "b2");
-    b3_bounds = GetControlBoundsInRoot(web_contents, "b3");
+  sm_.Call([clock_ptr, generator_ptr, &b2_bounds, &b3_bounds, &test_utils]() {
+    b2_bounds = test_utils.GetNodeBoundsInRoot("Second", "button");
+    b3_bounds = test_utils.GetNodeBoundsInRoot("Third", "button");
 
     ui::TouchEvent touch_press(
         ui::ET_TOUCH_PRESSED, b2_bounds.top_center(), base::TimeTicks::Now(),
@@ -1592,6 +1569,8 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, TouchExploreWebContentsHighDPI) {
       .UpdateDisplay("800x700*1.77778");
 
   EnableChromeVox();
+  AutomationTestUtils test_utils(extension_misc::kChromeVoxExtensionId);
+  sm_.Call([&test_utils]() { test_utils.SetUpTestSupport(); });
 
   base::SimpleTestTickClock clock;
   auto* clock_ptr = &clock;
@@ -1602,18 +1581,16 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, TouchExploreWebContentsHighDPI) {
   auto* generator_ptr = &generator;
 
   sm_.Call([this]() {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), GURL(R"(data:text/html;charset=utf-8,
+    NavigateToUrl(GURL(R"(data:text/html;charset=utf-8,
             <button id="b1" autofocus>First</button>
             <button id="b2">Second</button>
-        )")));
+        )"));
   });
   sm_.ExpectSpeech("First");
-  sm_.Call([this, clock_ptr, generator_ptr]() {
+  sm_.Call([clock_ptr, generator_ptr, &test_utils]() {
     float scale_factor = 1.77778;
-    auto* web_contents = browser()->tab_strip_model()->GetActiveWebContents();
-    gfx::Rect b2_bounds = GetControlBoundsInRoot(web_contents, "b2");
-    // GetControlBoundsInRoot returns in DIPs. Multiply by resolution to get px,
+    gfx::Rect b2_bounds = test_utils.GetNodeBoundsInRoot("Second", "button");
+    // GetNodeBoundsInRoot returns in DIPs. Multiply by resolution to get px,
     // which is where we need to touch on a high density screen.
     b2_bounds.set_x(b2_bounds.x() * scale_factor);
     b2_bounds.set_y(b2_bounds.y() * scale_factor);
@@ -1650,8 +1627,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ChromeVoxNextTabRecovery) {
   EnableChromeVox();
 
   sm_.Call([this]() {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), GURL(R"(data:text/html;charset=utf-8,
+    NavigateToUrl(GURL(R"(data:text/html;charset=utf-8,
             <button id='b1' autofocus>11</button>
             <button>22</button>
             <button>33</button>
@@ -1665,7 +1641,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ChromeVoxNextTabRecovery) {
                 document.getElementById('console').innerText =
                     'button lost focus';
               });
-            </script>)")));
+            </script>)"));
   });
   sm_.ExpectSpeech("Button");
 
@@ -1692,12 +1668,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ChromeVoxNextTabRecovery) {
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest,
                        MoveByCharacterPhoneticSpeechAndHints) {
   EnableChromeVox();
-  sm_.Call([this]() {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), GURL(R"(data:text/html;charset=utf-8,
-        <button autofocus>Click me</button>)")));
-  });
-  sm_.ExpectSpeech("Click me");
+  StablizeChromeVoxState();
   sm_.ExpectSpeech("Button");
   sm_.ExpectSpeech("Press Search plus Space to activate");
 
@@ -1756,13 +1727,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest,
 
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ResetTtsSettings) {
   EnableChromeVox();
-  sm_.Call([this]() {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), GURL(R"(data:text/html;charset=utf-8,
-        <button autofocus>Click me</button>)")));
-  });
-
-  sm_.ExpectSpeech("Click me");
+  StablizeChromeVoxState();
 
   // Reset Tts settings using hotkey and assert speech output.
   sm_.Call(
@@ -1813,8 +1778,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, TogglePunctuationEcho) {
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ShowFormControlsList) {
   EnableChromeVox();
   sm_.Call([this]() {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), GURL(R"(data:text/html;charset=utf-8,
+    NavigateToUrl(GURL(R"(data:text/html;charset=utf-8,
             <button autofocus>Start here</button>
             <input type="text" id="text"></input>
             <label for="text">Name</label>
@@ -1823,7 +1787,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ShowFormControlsList) {
             <input type="checkbox" id="checkbox"></input>
             <label for="checkbox">Express delivery</label>
             <input type="range" id="slider"></input>
-            <label for="slider">Percent cotton</label>)")));
+            <label for="slider">Percent cotton</label>)"));
   });
   sm_.ExpectSpeech("Start here");
   sm_.Call([this]() { SendKeyPressWithSearchAndControl(ui::VKEY_F); });
@@ -1850,11 +1814,10 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ShowFormControlsList) {
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DISABLED_SmartStickyMode) {
   EnableChromeVox();
   sm_.Call([this]() {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), GURL(R"(data:text/html;charset=utf-8,
+    NavigateToUrl(GURL(R"(data:text/html;charset=utf-8,
         <p>start</p>
         <input autofocus type='text'>
-        <p>end</p>)")));
+        <p>end</p>)"));
   });
 
   // The input is autofocused.
@@ -2034,9 +1997,8 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DarkenScreenConfirmation) {
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, Tutorial) {
   EnableChromeVox();
   sm_.Call([this]() {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), GURL(R"(data:text/html;charset=utf-8,
-        <button autofocus>Testing</button>)")));
+    NavigateToUrl(GURL(R"(data:text/html;charset=utf-8,
+        <button autofocus>Testing</button>)"));
   });
   sm_.ExpectSpeech("Testing");
   sm_.Call([this]() {
@@ -2058,12 +2020,12 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, Tutorial) {
   sm_.Replay();
 }
 
-IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ClipboardCopySpeech) {
+// TODO(crbug.com/1481691): Re-enable this test
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DISABLED_ClipboardCopySpeech) {
   EnableChromeVox();
   sm_.Call([this]() {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), GURL(R"(data:text/html;charset=utf-8,
-        <input autofocus type='text' value='Foo'></input>)")));
+    NavigateToUrl(GURL(R"(data:text/html;charset=utf-8,
+        <input autofocus type='text' value='Foo'></input>)"));
   });
 
   // The input is autofocused.
@@ -2346,10 +2308,8 @@ class ShortcutsAppSpokenFeedbackTest : public LoggedInSpokenFeedbackTest {
 IN_PROC_BROWSER_TEST_F(ShortcutsAppSpokenFeedbackTest,
                        DISABLED_ShortcutCustomization) {
   EnableChromeVox();
-  sm_.Call([this]() {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), GURL("chrome://shortcut-customization")));
-  });
+  sm_.Call(
+      [this]() { NavigateToUrl(GURL("chrome://shortcut-customization")); });
   sm_.ExpectSpeech("Search shortcuts");
 
   // Move through all tabs; make a few expectations along the way.

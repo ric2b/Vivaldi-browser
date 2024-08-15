@@ -51,9 +51,16 @@ class FormFieldTest
   }
 
   int ParseStandaloneCVCFields() {
-    FormField::ParseStandaloneCVCFields(list_, LanguageCode(""),
-                                        GetActivePatternSource().value(),
-                                        field_candidates_map_);
+    FormField::ParseStandaloneCVCFields(
+        list_, GeoIpCountryCode(""), LanguageCode(""),
+        GetActivePatternSource().value(), field_candidates_map_);
+    return field_candidates_map_.size();
+  }
+
+  int ParseStandaloneEmailFields() {
+    FormField::ParseStandaloneEmailFields(
+        list_, GeoIpCountryCode(""), LanguageCode(""),
+        GetActivePatternSource().value(), field_candidates_map_);
     return field_candidates_map_.size();
   }
 
@@ -61,6 +68,7 @@ class FormFieldTest
   // This function is unused in these unit tests, because FormField is not a
   // parser itself, but the infrastructure combining them.
   std::unique_ptr<FormField> Parse(AutofillScanner* scanner,
+                                   const GeoIpCountryCode& client_country,
                                    const LanguageCode& page_language) override {
     return nullptr;
   }
@@ -130,7 +138,8 @@ TEST_P(MatchTest, Match) {
 
 // Test that we ignore checkable elements.
 TEST_P(FormFieldTest, ParseFormFieldsIgnoreCheckableElements) {
-  AddFormFieldData("checkbox", "", "Is PO Box", UNKNOWN_TYPE);
+  AddFormFieldData(FormControlType::kInputCheckbox, "", "Is PO Box",
+                   UNKNOWN_TYPE);
   // Add 3 dummy fields to reach kMinRequiredFieldsForHeuristics = 3.
   AddTextFormFieldData("", "Address line 1", ADDRESS_HOME_LINE1);
   AddTextFormFieldData("", "Address line 2", ADDRESS_HOME_LINE2);
@@ -190,7 +199,11 @@ TEST_P(FormFieldTest, TestParseableLabels) {
 
 // Tests that `ParseSingleFieldForms` is called as part of `ParseFormFields`.
 TEST_P(FormFieldTest, ParseSingleFieldFormsInsideParseFormField) {
-  AddTextFormFieldData("", "Phone", PHONE_HOME_WHOLE_NUMBER);
+  AddTextFormFieldData(
+      "", "Phone",
+      base::FeatureList::IsEnabled(features::kAutofillDefaultToCityAndNumber)
+          ? PHONE_HOME_CITY_AND_NUMBER
+          : PHONE_HOME_WHOLE_NUMBER);
   AddTextFormFieldData("", "Email", EMAIL_ADDRESS);
   AddTextFormFieldData("", "Promo code", MERCHANT_PROMO_CODE);
 
@@ -355,6 +368,19 @@ TEST_P(FormFieldTest, ParseStandaloneZipEnabledForBR) {
       features::kAutofillEnableZipOnlyAddressForms};
   AddTextFormFieldData("cep", "CEP", ADDRESS_HOME_ZIP);
   EXPECT_EQ(1, ParseFormFields(GeoIpCountryCode("BR")));
+  TestClassificationExpectations();
+}
+
+TEST_P(FormFieldTest, ParseStandaloneEmail) {
+  AddTextFormFieldData("email", "email", EMAIL_ADDRESS);
+  AddTextFormFieldData("unknown", "Horseradish", UNKNOWN_TYPE);
+  EXPECT_EQ(1, ParseStandaloneEmailFields());
+  TestClassificationExpectations();
+}
+
+TEST_P(FormFieldTest, ParseStandaloneEmailWithNoEmailFields) {
+  AddTextFormFieldData("unknown", "Horseradish", UNKNOWN_TYPE);
+  EXPECT_EQ(0, ParseStandaloneEmailFields());
   TestClassificationExpectations();
 }
 

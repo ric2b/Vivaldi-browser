@@ -7,6 +7,7 @@ load("//lib/branches.star", "branches")
 load("//lib/builders.star", "cpu", "os", "reclient")
 load("//lib/try.star", "try_")
 load("//lib/consoles.star", "consoles")
+load("//lib/gn_args.star", "gn_args")
 
 try_.defaults.set(
     executable = try_.DEFAULT_EXECUTABLE,
@@ -36,6 +37,8 @@ try_.builder(
     mirrors = [
         "ci/android-official",
     ],
+    ssd = True,
+    contact_team_email = "clank-engprod@google.com",
 )
 
 try_.builder(
@@ -44,6 +47,7 @@ try_.builder(
     mirrors = [
         "ci/fuchsia-official",
     ],
+    ssd = True,
 )
 
 try_.builder(
@@ -52,6 +56,10 @@ try_.builder(
     mirrors = [
         "ci/linux-official",
     ],
+    ssd = True,
+    gn_args = gn_args.config(
+        configs = ["ci/linux-official", "try_builder"],
+    ),
 )
 
 try_.builder(

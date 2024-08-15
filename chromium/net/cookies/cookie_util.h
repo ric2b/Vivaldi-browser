@@ -17,6 +17,7 @@
 #include "net/cookies/cookie_options.h"
 #include "net/cookies/site_for_cookies.h"
 #include "net/first_party_sets/first_party_set_metadata.h"
+#include "net/first_party_sets/first_party_sets_cache_filter.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/origin.h"
 
@@ -47,14 +48,17 @@ enum class StorageAccessResult {
   ACCESS_ALLOWED_TOP_LEVEL_STORAGE_ACCESS_GRANT = 4,
   ACCESS_ALLOWED_3PCD = 5,
   ACCESS_ALLOWED_3PCD_METADATA_GRANT = 6,
-  kMaxValue = ACCESS_ALLOWED_3PCD_METADATA_GRANT,
+  ACCESS_ALLOWED_3PCD_HEURISTICS_GRANT = 7,
+  kMaxValue = ACCESS_ALLOWED_3PCD_HEURISTICS_GRANT,
 };
 // This enum must match the numbering for BreakageIndicatorType in
 // histograms/enums.xml. Do not reorder or remove items, only add new items
 // at the end.
 enum class BreakageIndicatorType {
   USER_RELOAD = 0,
-  kMaxValue = USER_RELOAD,
+  HTTP_ERROR = 1,
+  UNCAUGHT_JS_ERROR = 2,
+  kMaxValue = UNCAUGHT_JS_ERROR,
 };
 // Helper to fire telemetry indicating if a given request for storage was
 // allowed or not by the provided |result|.
@@ -283,19 +287,21 @@ NET_EXPORT bool IsSchemeBoundCookiesEnabled();
 // Returns whether the respective feature is enabled.
 NET_EXPORT bool IsSchemefulSameSiteEnabled();
 
-// Computes the First-Party Sets metadata. `isolation_info` must be fully
-// populated.
+// Computes the First-Party Sets metadata and cache match information.
+// `isolation_info` must be fully populated.
 //
 // The result may be returned synchronously, or `callback` may be invoked
 // asynchronously with the result. The callback will be invoked iff the return
 // value is nullopt; i.e. a result will be provided via return value or
 // callback, but not both, and not neither.
-[[nodiscard]] NET_EXPORT absl::optional<FirstPartySetMetadata>
+[[nodiscard]] NET_EXPORT absl::optional<
+    std::pair<FirstPartySetMetadata, FirstPartySetsCacheFilter::MatchInfo>>
 ComputeFirstPartySetMetadataMaybeAsync(
     const SchemefulSite& request_site,
     const IsolationInfo& isolation_info,
     const CookieAccessDelegate* cookie_access_delegate,
-    base::OnceCallback<void(FirstPartySetMetadata)> callback);
+    base::OnceCallback<void(FirstPartySetMetadata,
+                            FirstPartySetsCacheFilter::MatchInfo)> callback);
 
 // Converts a string representing the http request method to its enum
 // representation.

@@ -5,6 +5,7 @@
 #ifndef MEDIA_FILTERS_HLS_TEST_HELPERS_H_
 #define MEDIA_FILTERS_HLS_TEST_HELPERS_H_
 
+#include "media/filters/hls_codec_detector.h"
 #include "media/filters/hls_data_source_provider.h"
 #include "media/filters/hls_rendition.h"
 #include "media/filters/manifest_demuxer.h"
@@ -12,28 +13,49 @@
 
 namespace media {
 
-class FakeHlsDataSource : public HlsDataSource {
+class MockCodecDetector : public HlsCodecDetector {
  public:
-  FakeHlsDataSource(std::vector<uint8_t> data);
-  ~FakeHlsDataSource() override;
-  void Read(uint64_t pos,
-            size_t size,
-            uint8_t* buf,
-            HlsDataSource::ReadCb cb) override;
-  base::StringPiece GetMimeType() const override;
-
- protected:
-  std::vector<uint8_t> data_;
+  ~MockCodecDetector() override;
+  MockCodecDetector();
+  MOCK_METHOD(void,
+              DetermineContainerAndCodec,
+              (std::unique_ptr<HlsDataSourceStream>, CodecCallback),
+              (override));
+  MOCK_METHOD(void,
+              DetermineContainerOnly,
+              (std::unique_ptr<HlsDataSourceStream> stream, CodecCallback cb),
+              (override));
 };
 
-class FileHlsDataSource : public FakeHlsDataSource {
+class MockHlsDataSourceProvider : public HlsDataSourceProvider {
  public:
-  FileHlsDataSource(const std::string& filename);
+  MockHlsDataSourceProvider();
+  ~MockHlsDataSourceProvider() override;
+  MOCK_METHOD(void,
+              ReadFromUrl,
+              (GURL,
+               absl::optional<hls::types::ByteRange>,
+               HlsDataSourceProvider::ReadCb),
+              (override));
+  MOCK_METHOD(void,
+              ReadFromExistingStream,
+              (std::unique_ptr<HlsDataSourceStream>,
+               HlsDataSourceProvider::ReadCb),
+              (override));
+  MOCK_METHOD(void,
+              AbortPendingReads,
+              (base::OnceClosure callback),
+              (override));
 };
 
-class StringHlsDataSource : public FakeHlsDataSource {
+class StringHlsDataSourceStreamFactory {
  public:
-  StringHlsDataSource(base::StringPiece content);
+  static std::unique_ptr<HlsDataSourceStream> CreateStream(std::string content);
+};
+
+class FileHlsDataSourceStreamFactory {
+ public:
+  static std::unique_ptr<HlsDataSourceStream> CreateStream(std::string file);
 };
 
 class MockManifestDemuxerEngineHost : public ManifestDemuxerEngineHost {
@@ -83,6 +105,8 @@ class MockManifestDemuxerEngineHost : public ManifestDemuxerEngineHost {
               SetGroupStartTimestamp,
               (base::StringPiece role, base::TimeDelta time),
               (override));
+  MOCK_METHOD(void, SetEndOfStream, (), (override));
+  MOCK_METHOD(void, UnsetEndOfStream, (), (override));
 };
 
 class MockHlsRenditionHost : public HlsRenditionHost {
@@ -94,14 +118,20 @@ class MockHlsRenditionHost : public HlsRenditionHost {
               (GURL uri,
                bool read_chunked,
                absl::optional<hls::types::ByteRange> range,
-               HlsDataSourceStream::ReadCb cb),
+               HlsDataSourceProvider::ReadCb cb),
               (override));
 
   MOCK_METHOD(hls::ParseStatus::Or<scoped_refptr<hls::MediaPlaylist>>,
-              ParseMediaPlaylistFromStream,
-              (HlsDataSourceStream stream,
+              ParseMediaPlaylistFromStringSource,
+              (base::StringPiece source,
                GURL uri,
                hls::types::DecimalInteger version),
+              (override));
+
+  MOCK_METHOD(void,
+              ReadStream,
+              (std::unique_ptr<HlsDataSourceStream>,
+               HlsDataSourceProvider::ReadCb),
               (override));
 };
 
@@ -116,9 +146,13 @@ class MockHlsRendition : public HlsRendition {
                double rate,
                ManifestDemuxer::DelayCallback cb),
               (override));
-  MOCK_METHOD(bool, Seek, (base::TimeDelta time), (override));
-  MOCK_METHOD(void, CancelPendingNetworkRequests, (), (override));
+  MOCK_METHOD(ManifestDemuxer::SeekResponse,
+              Seek,
+              (base::TimeDelta time),
+              (override));
+  MOCK_METHOD(void, StartWaitingForSeek, (), (override));
   MOCK_METHOD(absl::optional<base::TimeDelta>, GetDuration, (), (override));
+  MOCK_METHOD(void, Stop, (), (override));
 };
 
 }  // namespace media

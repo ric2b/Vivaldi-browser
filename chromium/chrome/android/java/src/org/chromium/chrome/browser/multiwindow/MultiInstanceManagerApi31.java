@@ -25,6 +25,7 @@ import org.chromium.base.IntentUtils;
 import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.base.shared_preferences.SharedPreferencesManager;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.IntentHandler;
@@ -32,10 +33,9 @@ import org.chromium.chrome.browser.app.tab_activity_glue.ReparentingTask;
 import org.chromium.chrome.browser.app.tabmodel.TabModelOrchestrator;
 import org.chromium.chrome.browser.app.tabmodel.TabWindowManagerSingleton;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
@@ -45,6 +45,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tabmodel.TabWindowManager;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.util.AndroidTaskUtils;
 import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController;
 import org.chromium.components.favicon.LargeIconBridge;
@@ -101,7 +102,6 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
 
     @Override
     public boolean handleMenuOrKeyboardAction(int id, boolean fromMenu) {
-        // clang-format off
         if (id == org.chromium.chrome.R.id.manage_all_windows_menu_id) {
             List<InstanceInfo> info = getInstanceInfo();
             InstanceSwitcherCoordinator.showDialog(mActivity, mModalDialogManagerSupplier.get(),
@@ -116,7 +116,6 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
             tracker.notifyEvent(EventConstants.INSTANCE_SWITCHER_IPH_USED);
             return true;
         }
-        // clang-format on
         return super.handleMenuOrKeyboardAction(id, fromMenu);
     }
 
@@ -227,6 +226,14 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
         return result;
     }
 
+    @Override
+    public int getCurrentInstanceId() {
+        List<InstanceInfo> allInstances = getInstanceInfo();
+        if (allInstances == null || allInstances.isEmpty()) return INVALID_INSTANCE_ID;
+        // Current instance is at top of list.
+        return allInstances.get(0).instanceId;
+    }
+
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     protected boolean isRunningInAdjacentWindow(
             SparseBooleanArray visibleTasks, Activity activity) {
@@ -238,12 +245,12 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
     public int allocInstanceId(int windowId, int taskId, boolean preferNew) {
         removeInvalidInstanceData();
 
+        int instanceId = getInstanceByTask(taskId);
+
         // Explicitly specified window ID should be preferred. This comes from user selecting
-        // a certain instance on UI. This method would never be called if there were an instance
-        // already mapped to the task. Check it with an assert. When out of range, ignore the ID
-        // and apply the normal allocation logic below.
-        if (windowId >= 0 && windowId < mMaxInstances) {
-            assert getInstanceByTask(taskId) == INVALID_INSTANCE_ID;
+        // a certain instance on UI when no task is present for it.
+        // When out of range, ignore the ID and apply the normal allocation logic below.
+        if (windowId >= 0 && windowId < mMaxInstances && instanceId == INVALID_INSTANCE_ID) {
             Log.i(TAG_MULTI_INSTANCE, "Existing Instance - selected Id allocated: " + windowId);
             return windowId;
         }
@@ -251,7 +258,6 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
         // First, see if we have instance-task ID mapping. If we do, use the instance id. This
         // takes care of a task that had its activity destroyed and comes back to create a
         // new one. We pair them again.
-        int instanceId = getInstanceByTask(taskId);
         if (instanceId != INVALID_INSTANCE_ID) {
             Log.i(TAG_MULTI_INSTANCE, "Existing Instance - mapped Id allocated: " + instanceId);
             return instanceId;
@@ -343,7 +349,20 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
         mTabModelObserver = new TabModelSelectorTabModelObserver(selector) {
             @Override
             public void didSelectTab(Tab tab, int type, int lastId) {
-                if (mActiveTab == tab) return;
+                // We will check if |mActiveTab| is the same as the selected |tab| to avoid a
+                // superfluous update to an instance's stored active tab info that remains
+                // unchanged.
+                // The check on |lastId| is required to continue updating this info for an instance
+                // even when |mActiveTab| is the same as the selected |tab|, in the following
+                // scenario:
+                // If |mActiveTab| is the last tab in instance 1, and is moved to instance 2,
+                // instance 1 stores "empty" active tab information since it now contains no tabs.
+                // When |mActiveTab| is moved back to instance 1, |mActiveTab| is now the same as
+                // the selected |tab| in instance 1, however instance 1's active tab information
+                // will not be updated, unless we establish that this instance is currently holding
+                // "empty" info, reflected by the fact that it has an invalid last selected tab ID,
+                // so it's active tab info can then be updated.
+                if (mActiveTab == tab && lastId != Tab.INVALID_TAB_ID) return;
                 if (mActiveTab != null) mActiveTab.removeObserver(mActiveTabObserver);
                 mActiveTab = tab;
                 if (mActiveTab != null) {
@@ -385,7 +404,7 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
     }
 
     static int getTaskFromMap(int index) {
-        return SharedPreferencesManager.getInstance().readInt(taskMapKey(index), INVALID_TASK_ID);
+        return ChromeSharedPreferences.getInstance().readInt(taskMapKey(index), INVALID_TASK_ID);
     }
 
     private static String taskMapKey(int index) {
@@ -394,19 +413,19 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     static void updateTaskMap(int instanceId, int taskId) {
-        SharedPreferencesManager.getInstance().writeInt(taskMapKey(instanceId), taskId);
+        ChromeSharedPreferences.getInstance().writeInt(taskMapKey(instanceId), taskId);
     }
 
     private void removeInvalidInstanceData() {
         // Remove tasks that do not exist any more from the task map
         Set<Integer> validTasks = getAllChromeTasks();
-        Map<String, Integer> taskMap = SharedPreferencesManager.getInstance().readIntsWithPrefix(
+        Map<String, Integer> taskMap = ChromeSharedPreferences.getInstance().readIntsWithPrefix(
                 ChromePreferenceKeys.MULTI_INSTANCE_TASK_MAP);
         List<String> tasksRemoved = new ArrayList<>();
         for (Map.Entry<String, Integer> entry : taskMap.entrySet()) {
             if (!validTasks.contains(entry.getValue())) {
                 tasksRemoved.add(entry.getKey() + " - " + entry.getValue());
-                SharedPreferencesManager.getInstance().removeKey(entry.getKey());
+                ChromeSharedPreferences.getInstance().removeKey(entry.getKey());
             }
         }
 
@@ -492,13 +511,13 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     static void writeIncognitoSelected(int index, Tab tab) {
-        SharedPreferencesManager.getInstance().writeBoolean(
+        ChromeSharedPreferences.getInstance().writeBoolean(
                 incognitoSelectedKey(index), tab.isIncognito());
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     static boolean readIncognitoSelected(int index) {
-        return SharedPreferencesManager.getInstance().readBoolean(
+        return ChromeSharedPreferences.getInstance().readBoolean(
                 incognitoSelectedKey(index), false);
     }
 
@@ -508,11 +527,11 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     static String readUrl(int index) {
-        return SharedPreferencesManager.getInstance().readString(urlKey(index), null);
+        return ChromeSharedPreferences.getInstance().readString(urlKey(index), null);
     }
 
     static void writeUrl(int index, String url) {
-        SharedPreferencesManager.getInstance().writeString(urlKey(index), url);
+        ChromeSharedPreferences.getInstance().writeString(urlKey(index), url);
     }
 
     private static void writeUrl(int index, Tab tab) {
@@ -526,7 +545,7 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     static String readTitle(int index) {
-        return SharedPreferencesManager.getInstance().readString(titleKey(index), null);
+        return ChromeSharedPreferences.getInstance().readString(titleKey(index), null);
     }
 
     private static void writeTitle(int index, Tab tab) {
@@ -535,7 +554,7 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
     }
 
     private static void writeTitle(int index, String title) {
-        SharedPreferencesManager.getInstance().writeString(titleKey(index), title);
+        ChromeSharedPreferences.getInstance().writeString(titleKey(index), title);
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
@@ -544,7 +563,7 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
     }
 
     static int readTabCount(int index) {
-        return SharedPreferencesManager.getInstance().readInt(tabCountKey(index));
+        return ChromeSharedPreferences.getInstance().readInt(tabCountKey(index));
     }
 
     private static String incognitoTabCountKey(int index) {
@@ -554,13 +573,13 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     static int readIncognitoTabCount(int index) {
-        return SharedPreferencesManager.getInstance().readInt(incognitoTabCountKey(index));
+        return ChromeSharedPreferences.getInstance().readInt(incognitoTabCountKey(index));
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     static void writeTabCount(int index, TabModelSelector selector) {
         if (!selector.isTabStateInitialized()) return;
-        SharedPreferencesManager prefs = SharedPreferencesManager.getInstance();
+        SharedPreferencesManager prefs = ChromeSharedPreferences.getInstance();
         int tabCount = selector.getModel(false).getCount();
         prefs.writeInt(tabCountKey(index), tabCount);
         prefs.writeInt(incognitoTabCountKey(index), selector.getModel(true).getCount());
@@ -712,7 +731,7 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
     }
 
     private static void removeInstanceInfo(int index) {
-        SharedPreferencesManager prefs = SharedPreferencesManager.getInstance();
+        SharedPreferencesManager prefs = ChromeSharedPreferences.getInstance();
         prefs.removeKey(urlKey(index));
         prefs.removeKey(titleKey(index));
         prefs.removeKey(tabCountKey(index));
@@ -733,7 +752,7 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
 
         if (newState != ActivityState.RESUMED && newState != ActivityState.STOPPED) return;
 
-        SharedPreferencesManager prefs = SharedPreferencesManager.getInstance();
+        SharedPreferencesManager prefs = ChromeSharedPreferences.getInstance();
         // Check the max instance count in a day for every state update if needed.
         long timestamp = prefs.readLong(ChromePreferenceKeys.MULTI_INSTANCE_MAX_COUNT_TIME, 0);
         int maxCount = prefs.readInt(ChromePreferenceKeys.MULTI_INSTANCE_MAX_INSTANCE_COUNT, 0);
@@ -757,7 +776,7 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
     private void onMultiInstanceStateChanged(boolean inMultiInstanceMode) {
         if (!MultiWindowUtils.isMultiInstanceApi31Enabled()) return;
 
-        SharedPreferencesManager prefs = SharedPreferencesManager.getInstance();
+        SharedPreferencesManager prefs = ChromeSharedPreferences.getInstance();
         long startTime = prefs.readLong(ChromePreferenceKeys.MULTI_INSTANCE_START_TIME);
         long current = System.currentTimeMillis();
 
@@ -783,7 +802,7 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
      */
     @Override
     public void moveTabToNewWindow(Tab tab) {
-        if (!ChromeFeatureList.sTabDragDropAndroid.isEnabled()) return;
+        if (!TabUiFeatureUtilities.isTabDragEnabled()) return;
 
         // Check if the new Chrome instance can be opened.
         if (MultiWindowUtils.getInstanceCount() < mMaxInstances) {
@@ -805,7 +824,7 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
      */
     @Override
     public void moveTabToWindow(Activity activity, Tab tab, int atIndex) {
-        if (!ChromeFeatureList.sTabDragDropAndroid.isEnabled()) return;
+        if (!TabUiFeatureUtilities.isTabDragEnabled()) return;
 
         // Get the current instance and move tab there.
         InstanceInfo info = getInstanceInfoFor(activity);

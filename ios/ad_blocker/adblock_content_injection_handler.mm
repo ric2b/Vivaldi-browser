@@ -28,9 +28,9 @@ constexpr char kMessageNamePrefix[] = "vivaldi_adblock_scriptlet_";
 constexpr size_t kMessageNamePrefixLength =
     base::StringPiece(kMessageNamePrefix).length();
 
-constexpr char kJSScriptArgRequestPart1[] =
-    "window.webkit.messageHandlers['";
-constexpr char kJSScriptArgRequestPart2[] = R"JsSource('].postMessage({}).then((scriptlet_arguments) =>  {
+constexpr char kJSScriptArgRequestPart1[] = "window.webkit.messageHandlers['";
+constexpr char kJSScriptArgRequestPart2[] =
+    R"JsSource('].postMessage({}).then((scriptlet_arguments) =>  {
   const source=)JsSource";
 constexpr char kJSScriptArgRequestPart3[] = R"JsSource(;
   if(scriptlet_arguments.length != 0) {
@@ -79,6 +79,7 @@ class ContentInjectionHandlerImpl
       delete;
 
   // Implementing ContentInjectionHandler
+  void SetIncognitoBrowserState(web::BrowserState* browser_state) override;
   void SetScriptletInjectionRules(RuleGroup group,
                                   base::Value::Dict injection_rules) override;
 
@@ -92,16 +93,20 @@ class ContentInjectionHandlerImpl
       WKWebViewConfiguration* new_config) override;
 
   void InjectUserScripts();
+  void InjectUserScriptsForController(
+      __weak WKUserContentController* user_content_controller);
   void HandlePlaceholderRequest(WKScriptMessage* message,
                                 ScriptMessageReplyHandler reply_handler);
 
   web::BrowserState* browser_state_;
+  web::BrowserState* incognito_browser_state_;
   std::array<absl::optional<base::Value::Dict>, kRuleGroupCount>
       injection_rules_;
 
   Resources* resources_;
 
   __weak WKUserContentController* user_content_controller_;
+  __weak WKUserContentController* incognito_user_content_controller_;
 
   // NOTE(julien): Unclear why, but I am not managing to use a straight vector
   // of ScopedWKScriptMessageHandler and insert with emplace_back.
@@ -128,6 +133,18 @@ ContentInjectionHandlerImpl::ContentInjectionHandlerImpl(
     resources->AddObserver(this);
 }
 
+void ContentInjectionHandlerImpl::SetIncognitoBrowserState(
+    web::BrowserState* browser_state) {
+  incognito_browser_state_ = browser_state;
+  if (incognito_browser_state_) {
+    web::WKWebViewConfigurationProvider& config_provider =
+        web::WKWebViewConfigurationProvider::FromBrowserState(
+            incognito_browser_state_);
+    DidCreateNewConfiguration(&config_provider,
+                              config_provider.GetWebViewConfiguration());
+  }
+}
+
 ContentInjectionHandlerImpl::~ContentInjectionHandlerImpl() {
   web::WKWebViewConfigurationProvider::FromBrowserState(browser_state_)
       .RemoveObserver(this);
@@ -141,10 +158,19 @@ void ContentInjectionHandlerImpl::OnResourcesLoaded() {
 void ContentInjectionHandlerImpl::DidCreateNewConfiguration(
     web::WKWebViewConfigurationProvider* config_provider,
     WKWebViewConfiguration* new_config) {
-  user_content_controller_ = new_config.userContentController;
-
-  if (resources_->loaded())
-    InjectUserScripts();
+  if (config_provider ==
+      &web::WKWebViewConfigurationProvider::FromBrowserState(browser_state_)) {
+    user_content_controller_ = new_config.userContentController;
+    if (resources_->loaded())
+      InjectUserScriptsForController(user_content_controller_);
+  } else if (incognito_browser_state_ &&
+             config_provider ==
+                 &web::WKWebViewConfigurationProvider::FromBrowserState(
+                     incognito_browser_state_)) {
+    incognito_user_content_controller_ = new_config.userContentController;
+    if (resources_->loaded())
+      InjectUserScriptsForController(incognito_user_content_controller_);
+  }
 }
 
 void ContentInjectionHandlerImpl::SetScriptletInjectionRules(
@@ -154,6 +180,14 @@ void ContentInjectionHandlerImpl::SetScriptletInjectionRules(
 }
 
 void ContentInjectionHandlerImpl::InjectUserScripts() {
+  if (user_content_controller_)
+    InjectUserScriptsForController(user_content_controller_);
+  if (incognito_user_content_controller_)
+    InjectUserScriptsForController(incognito_user_content_controller_);
+}
+
+void ContentInjectionHandlerImpl::InjectUserScriptsForController(
+    __weak WKUserContentController* user_content_controller) {
   std::map<std::string, base::StringPiece> injections =
       resources_->GetInjections();
 
@@ -172,7 +206,7 @@ void ContentInjectionHandlerImpl::InjectUserScripts() {
 
     script_message_handlers_.emplace_back(
         std::make_unique<ScopedWKScriptMessageHandler>(
-            user_content_controller_,
+            user_content_controller,
             [NSString stringWithUTF8String:message_name.c_str()], content_world,
             base::BindRepeating(
                 &ContentInjectionHandlerImpl::HandlePlaceholderRequest,
@@ -182,7 +216,7 @@ void ContentInjectionHandlerImpl::InjectUserScripts() {
            injectionTime:WKUserScriptInjectionTimeAtDocumentStart
         forMainFrameOnly:false
           inContentWorld:content_world];
-    [user_content_controller_ addUserScript:user_script];
+    [user_content_controller addUserScript:user_script];
   }
 }
 
@@ -219,7 +253,7 @@ void ContentInjectionHandlerImpl::HandlePlaceholderRequest(
 
     base::Value::Dict* subdomain_dict =
         &injection_rules_[static_cast<size_t>(group)].value();
-    for (const auto& domain_piece: base::Reversed(domain_pieces)) {
+    for (const auto& domain_piece : base::Reversed(domain_pieces)) {
       subdomain_dict = subdomain_dict->FindDict(domain_piece);
       if (!subdomain_dict) {
         break;

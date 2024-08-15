@@ -378,8 +378,7 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
 
   // BrowserPluginGuestDelegate implementation.
   std::unique_ptr<content::WebContents> CreateNewGuestWindow(
-      const content::WebContents::CreateParams& create_params,
-      int disposition) final;
+      const content::WebContents::CreateParams& create_params) final;
   content::WebContents* GetOwnerWebContents() final;
   base::WeakPtr<content::BrowserPluginGuestDelegate> GetGuestDelegateWeakPtr()
       final;
@@ -398,11 +397,10 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   void RunFileChooser(content::RenderFrameHost* render_frame_host,
                       scoped_refptr<content::FileSelectListener> listener,
                       const blink::mojom::FileChooserParams& params) final;
-  bool ShouldFocusPageAfterCrash() final;
+  bool ShouldFocusPageAfterCrash(content::WebContents* source) final;
   void UpdatePreferredSize(content::WebContents* web_contents,
                            const gfx::Size& pref_size) final;
   void UpdateTargetURL(content::WebContents* source, const GURL& url) override;
-  bool ShouldResumeRequestsForCreatedWindow() final;
 
   // WebContentsObserver implementation.
   void DidStopLoading() final;

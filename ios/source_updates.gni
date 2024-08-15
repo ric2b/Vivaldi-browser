@@ -30,12 +30,14 @@ update_template_instance("//ios/chrome/widget_kit_extension:widget_kit_extension
   sources -= [
     "main.swift",
     "search_widget.swift",
-    "quick_actions_widget.swift"
+    "quick_actions_widget.swift",
+    "lockscreen_launcher_widget.swift"
   ]
   sources += [
     "//vivaldi/ios/chrome/widget_kit_extension/main.swift",
     "//vivaldi/ios/chrome/widget_kit_extension/search_widget.swift",
     "//vivaldi/ios/chrome/widget_kit_extension/quick_actions_widget.swift",
+    "//vivaldi/ios/chrome/widget_kit_extension/lockscreen_launcher_widget.swift",
   ]
 }
 
@@ -73,7 +75,7 @@ update_target("//ios/chrome/browser/shared/ui/table_view/cells:cells") {
   ]
 }
 
-update_target("//ios/chrome/browser/browser_state:browser_state") {
+update_target("//ios/chrome/browser/shared/model/browser_state:browser_state") {
   sources += [
     "//vivaldi/ios/ad_blocker/adblock_rule_service_factory.h",
     "//vivaldi/ios/ad_blocker/adblock_rule_service_factory.mm",
@@ -144,11 +146,56 @@ update_target("//ios/chrome/browser/ui/webui:webui") {
       "//vivaldi/ios/ui/about/vivaldi_ios_about_version.mm",
       "//vivaldi/ios/ui/about/vivaldi_ios_about_version.h",
   ]
+
+  configs += [
+    "//vivaldi/gn/config:release_kind"
+  ]
 }
 
 update_target("//ios/chrome/browser/ui/whats_new:whats_new") {
     sources += [
       "//vivaldi/ios/chrome/browser/ui/whats_new/vivaldi_whats_new_util.mm",
       "//vivaldi/ios/chrome/browser/ui/whats_new/vivaldi_whats_new_util.h",
+  ]
+}
+
+update_template_instance("//ios/chrome/open_extension/resources:extension_icon") {
+  sources -= [
+    "ExtensionIcon.appiconset/Contents.json",
+    "ExtensionIcon.appiconset/monochrome_logo_1024_1x.png",
+    "ExtensionIcon.appiconset/monochrome_logo_20_2x.png",
+    "ExtensionIcon.appiconset/monochrome_logo_20_3x.png",
+    "ExtensionIcon.appiconset/monochrome_logo_29_2x.png",
+    "ExtensionIcon.appiconset/monochrome_logo_29_3x.png",
+    "ExtensionIcon.appiconset/monochrome_logo_38_2x.png",
+    "ExtensionIcon.appiconset/monochrome_logo_38_3x.png",
+    "ExtensionIcon.appiconset/monochrome_logo_40_2x.png",
+    "ExtensionIcon.appiconset/monochrome_logo_40_3x.png",
+    "ExtensionIcon.appiconset/monochrome_logo_60_2x.png",
+    "ExtensionIcon.appiconset/monochrome_logo_60_3x.png",
+    "ExtensionIcon.appiconset/monochrome_logo_64_2x.png",
+    "ExtensionIcon.appiconset/monochrome_logo_64_3x.png",
+    "ExtensionIcon.appiconset/monochrome_logo_68_2x.png",
+    "ExtensionIcon.appiconset/monochrome_logo_76_2x.png",
+    "ExtensionIcon.appiconset/monochrome_logo_83.5_2x.png",
+  ]
+  sources += [
+    "//vivaldi/ios/app/resources/ExtensionIcon.appiconset/Contents.json",
+    "//vivaldi/ios/app/resources/ExtensionIcon.appiconset/monochrome_logo_1024_1x.png",
+    "//vivaldi/ios/app/resources/ExtensionIcon.appiconset/monochrome_logo_20_2x.png",
+    "//vivaldi/ios/app/resources/ExtensionIcon.appiconset/monochrome_logo_20_3x.png",
+    "//vivaldi/ios/app/resources/ExtensionIcon.appiconset/monochrome_logo_29_2x.png",
+    "//vivaldi/ios/app/resources/ExtensionIcon.appiconset/monochrome_logo_29_3x.png",
+    "//vivaldi/ios/app/resources/ExtensionIcon.appiconset/monochrome_logo_38_2x.png",
+    "//vivaldi/ios/app/resources/ExtensionIcon.appiconset/monochrome_logo_38_3x.png",
+    "//vivaldi/ios/app/resources/ExtensionIcon.appiconset/monochrome_logo_40_2x.png",
+    "//vivaldi/ios/app/resources/ExtensionIcon.appiconset/monochrome_logo_40_3x.png",
+    "//vivaldi/ios/app/resources/ExtensionIcon.appiconset/monochrome_logo_60_2x.png",
+    "//vivaldi/ios/app/resources/ExtensionIcon.appiconset/monochrome_logo_60_3x.png",
+    "//vivaldi/ios/app/resources/ExtensionIcon.appiconset/monochrome_logo_64_2x.png",
+    "//vivaldi/ios/app/resources/ExtensionIcon.appiconset/monochrome_logo_64_3x.png",
+    "//vivaldi/ios/app/resources/ExtensionIcon.appiconset/monochrome_logo_68_2x.png",
+    "//vivaldi/ios/app/resources/ExtensionIcon.appiconset/monochrome_logo_76_2x.png",
+    "//vivaldi/ios/app/resources/ExtensionIcon.appiconset/monochrome_logo_83.5_2x.png",
   ]
 }

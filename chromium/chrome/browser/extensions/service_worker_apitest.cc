@@ -58,7 +58,6 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/service_worker_context_observer.h"
-#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/page_type.h"
@@ -100,12 +99,6 @@ namespace extensions {
 namespace {
 
 using ::testing::HasSubstr;
-
-content::ServiceWorkerContext* GetServiceWorkerContext(
-    content::BrowserContext* browser_context) {
-  return browser_context->GetDefaultStoragePartition()
-      ->GetServiceWorkerContext();
-}
 
 class WebContentsLoadStopObserver : content::WebContentsObserver {
  public:
@@ -189,8 +182,7 @@ std::string ServiceWorkerTest::NavigateAndExtractInnerText(const GURL& url) {
 }
 
 size_t ServiceWorkerTest::GetWorkerRefCount(const blink::StorageKey& key) {
-  content::ServiceWorkerContext* sw_context =
-      GetServiceWorkerContext(browser()->profile());
+  content::ServiceWorkerContext* sw_context = GetServiceWorkerContext();
   return sw_context->CountExternalRequestsForTest(key);
 }
 
@@ -293,7 +285,6 @@ class ServiceWorkerWithManifestVersionTest
 // an event listener for tabs.onCreated event. The step also verifies that tab
 // creation correctly fires the listener.
 IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, PRE_Basic) {
-  base::HistogramTester histogram_tester;
   ExtensionTestMessageListener newtab_listener("CREATED");
   newtab_listener.set_failure_message("CREATE_FAILED");
   ExtensionTestMessageListener worker_listener("WORKER_RUNNING");
@@ -312,31 +303,6 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, PRE_Basic) {
 
   // Service Worker extension does not have ExtensionHost.
   EXPECT_FALSE(process_manager()->GetBackgroundHostForExtension(extension_id));
-
-  // Call to runtime.onInstalled and tabs.onCreated are expected.
-  histogram_tester.ExpectTotalCount(
-      "Extensions.Events.DispatchToAckTime.ExtensionServiceWorker2",
-      /*expected_count=*/2);
-  histogram_tester.ExpectTotalCount(
-      "Extensions.Events.DispatchToAckLongTime.ExtensionServiceWorker2",
-      /*expected_count=*/2);
-  histogram_tester.ExpectTotalCount(
-      "Extensions.Events.DidDispatchToAckSucceed.ExtensionServiceWorker",
-      /*expected_count=*/2);
-
-  // Verify that the recorded values are sane -- that is, that they are less
-  // than the maximum bucket.
-  // This is the best we can do, since the other buckets are determined
-  // by the histogram, rather than by us.
-  histogram_tester.ExpectBucketCount(
-      "Extensions.Events.DispatchToAckTime.ExtensionServiceWorker2",
-      /*sample=*/base::Minutes(5).InMicroseconds(), /*expected_count=*/0);
-  histogram_tester.ExpectBucketCount(
-      "Extensions.Events.DispatchToAckLongTime.ExtensionServiceWorker2",
-      /*sample=*/base::Days(1).InMilliseconds(), /*expected_count=*/0);
-  histogram_tester.ExpectBucketCount(
-      "Extensions.Events.DidDispatchToAckSucceed.ExtensionServiceWorker",
-      /*sample=*/false, /*expected_count=*/0);
 }
 
 // After browser restarts, this test step ensures that opening a tab fires
@@ -1926,8 +1892,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
   // Stop the service worker.
   {
     base::RunLoop run_loop;
-    content::ServiceWorkerContext* context =
-        GetServiceWorkerContext(browser()->profile());
+    content::ServiceWorkerContext* context = GetServiceWorkerContext();
     // The service worker is registered at the root scope.
     content::StopServiceWorkerForScope(context, extension->url(),
                                        run_loop.QuitClosure());
@@ -2297,8 +2262,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
 // Regression test for https://crbug.com/1019161.
 IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
                        WorkerStartFailureClearsPendingTasks) {
-  content::ServiceWorkerContext* context =
-      GetServiceWorkerContext(browser()->profile());
+  content::ServiceWorkerContext* context = GetServiceWorkerContext();
 
   const ExtensionId test_extension_id("iegclhlplifhodhkoafiokenjoapiobj");
   // Set up an observer to wait for worker to start and then stop.
@@ -2840,7 +2804,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTestWithEarlyReadyMesssage,
     // we largely prevent this, it could still happen by means of e.g.
     // disk or pref corruption.
     base::RunLoop run_loop;
-    content::ServiceWorkerContext* context = GetServiceWorkerContext(profile());
+    content::ServiceWorkerContext* context = GetServiceWorkerContext();
     // The service worker is registered at the root scope.
     const GURL& scope = extension->url();
     base::AutoReset<const GURL*> allow_worker_unregistration =

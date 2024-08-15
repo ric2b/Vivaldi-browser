@@ -7,7 +7,7 @@
 #import "base/ios/block_types.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/sync/service/sync_service.h"
-#import "ios/chrome/browser/consent_auditor/consent_auditor_factory.h"
+#import "ios/chrome/browser/consent_auditor/model/consent_auditor_factory.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
@@ -20,8 +20,8 @@
 #import "ios/chrome/browser/signin/chrome_account_manager_service.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
-#import "ios/chrome/browser/sync/sync_service_factory.h"
-#import "ios/chrome/browser/sync/sync_setup_service_factory.h"
+#import "ios/chrome/browser/sync/model/sync_service_factory.h"
+#import "ios/chrome/browser/sync/model/sync_setup_service_factory.h"
 #import "ios/chrome/browser/ui/authentication/authentication_flow.h"
 #import "ios/chrome/browser/ui/authentication/authentication_ui_util.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_constants.h"
@@ -31,7 +31,7 @@
 #import "ios/chrome/browser/ui/authentication/signin/user_signin/user_signin_mediator.h"
 #import "ios/chrome/browser/ui/authentication/signin/user_signin/user_signin_view_controller.h"
 #import "ios/chrome/browser/ui/authentication/unified_consent/unified_consent_coordinator.h"
-#import "ios/chrome/browser/unified_consent/unified_consent_service_factory.h"
+#import "ios/chrome/browser/unified_consent/model/unified_consent_service_factory.h"
 
 using signin_metrics::AccessPoint;
 using signin_metrics::PromoAction;
@@ -501,7 +501,10 @@ using signin_metrics::PromoAction;
     // animation. The interruption has to be processed when the view controller
     // will be fully presented.
     // See crbug.com/1126170
-    DCHECK(!self.interruptCallback);
+    // TODO(crbug.com/1493398): Convert to CHECK.
+    DUMP_WILL_BE_CHECK(!self.interruptCallback)
+        << "Action: " << static_cast<int>(action) << ", "
+        << base::SysNSStringToUTF8([self description]);
     __weak __typeof(self) weakSelf = self;
     self.interruptCallback = ^() {
       [weakSelf interruptUserSigninUIWithAction:action

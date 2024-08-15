@@ -56,9 +56,9 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
 
-#if BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
 #include "sandbox/policy/linux/sandbox_seccomp_bpf_linux.h"
-#endif  // BUILDFLAG(IS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
 
 using SystemNetworkContextManagerBrowsertest = InProcessBrowserTest;
 
@@ -221,14 +221,32 @@ IN_PROC_BROWSER_TEST_F(SystemNetworkContextManagerBrowsertest, AuthParams) {
             dynamic_params->patterns_allowed_to_use_all_schemes);
 }
 
-#if BUILDFLAG(IS_CHROMEOS)
-class SystemNetworkContextManagerNetworkServiceSandboxEnabledBrowsertest
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
+// GSSAPI is currently incompatible with the network service sandbox
+// (crbug.com/1474362). It isn't known until the browser is already started
+// whether GSSAPI is desired, so if Chrome detects that GSSAPI is desired after
+// the network service has already started sandboxed, the network
+// service must be restarted so the sandbox can be removed.
+class SystemNetworkContextManagerNetworkServiceSandboxBrowsertest
     : public SystemNetworkContextManagerBrowsertest,
-      public content::ServiceProcessHost::Observer {
+      public content::ServiceProcessHost::Observer,
+      public testing::WithParamInterface<bool> {
  public:
-  SystemNetworkContextManagerNetworkServiceSandboxEnabledBrowsertest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        sandbox::policy::features::kNetworkServiceSandbox);
+  // On both ChromeOS and Linux, a pref determines whether GSSAPI is desired in
+  // the network service. This pref will determine whether the network service
+  // is sandboxed, and when it changes from false to true this should trigger a
+  // network service restart to remove the sandbox.
+  const char* kGssapiDesiredPref =
+#if BUILDFLAG(IS_CHROMEOS)
+      prefs::kKerberosEnabled;
+#elif BUILDFLAG(IS_LINUX)
+      prefs::kReceivedHttpAuthNegotiateHeader;
+#endif
+
+  SystemNetworkContextManagerNetworkServiceSandboxBrowsertest() {
+    sandbox_desired_ = GetParam();
+    scoped_feature_list_.InitWithFeatureState(
+        sandbox::policy::features::kNetworkServiceSandbox, sandbox_desired_);
   }
 
   void SetUpOnMainThread() override {
@@ -256,7 +274,10 @@ class SystemNetworkContextManagerNetworkServiceSandboxEnabledBrowsertest
     launch_run_loop_->Run();
   }
 
-  void WaitForNetworkServiceReady() {
+  void ExpectNetworkService(bool seccomp_sandboxed,
+                            bool allows_gssapi_library_load) {
+    // The network service may have been launched but has not yet sandboxed
+    // itself. So, wait for the Mojo endpoints to start accepting messages.
     mojo::Remote<network::mojom::NetworkServiceTest> network_service_test;
     content::GetNetworkService()->BindTestInterfaceForTesting(
         network_service_test.BindNewPipeAndPassReceiver());
@@ -264,19 +285,25 @@ class SystemNetworkContextManagerNetworkServiceSandboxEnabledBrowsertest
     // Log() is sync so this thread will wait for this call to succeed.
     network_service_test->Log(
         "Logging in network service to ensure it's ready.");
-  }
 
-  void ExpectNetworkServiceSeccompSandboxed(bool sandboxed) {
-    // The network service may have been launched but has not yet sandboxed
-    // itself. So, wait for the Mojo endpoints to start accepting messages.
-    WaitForNetworkServiceReady();
-    EXPECT_EQ(sandboxed, GetNetworkServiceProcess().IsSeccompSandboxed());
+    // Now the test can check if the seccomp sandbox has been applied.
+    EXPECT_EQ(seccomp_sandboxed,
+              GetNetworkServiceProcess().IsSeccompSandboxed());
+
+    bool network_service_allows_gssapi_library_load;
+    ASSERT_TRUE(network_service_test->AllowsGSSAPILibraryLoad(
+        &network_service_allows_gssapi_library_load));
+    EXPECT_EQ(allows_gssapi_library_load,
+              network_service_allows_gssapi_library_load);
   }
 
   base::Process GetNetworkServiceProcess() {
     CHECK(content::IsOutOfProcessNetworkService());
     return network_process_.Duplicate();
   }
+
+ protected:
+  bool sandbox_desired_;
 
  private:
   void OnServiceProcessLaunched(
@@ -301,48 +328,69 @@ class SystemNetworkContextManagerNetworkServiceSandboxEnabledBrowsertest
   absl::optional<base::RunLoop> launch_run_loop_;
 };
 
-IN_PROC_BROWSER_TEST_F(
-    SystemNetworkContextManagerNetworkServiceSandboxEnabledBrowsertest,
-    NetworkServiceRestartsUnsandboxedOnKerberosEnabled) {
+IN_PROC_BROWSER_TEST_P(
+    SystemNetworkContextManagerNetworkServiceSandboxBrowsertest,
+    NetworkServiceRestartsUnsandboxedOnGssapiDesired) {
   PrefService* local_state = g_browser_process->local_state();
 
-  // Ensure kerberos starts disabled.
-  EXPECT_FALSE(local_state->GetBoolean(prefs::kKerberosEnabled));
-  // Ensure the network service starts sandboxed.
-  ExpectNetworkServiceSeccompSandboxed(/*sandboxed=*/true);
+  // Ensure GSSAPI starts as "undesired".
+  EXPECT_FALSE(local_state->GetBoolean(kGssapiDesiredPref));
+  // Ensure the network service starts sandboxed (if desired) and cannot load
+  // GSSAPI libraries.
+  ExpectNetworkService(/*seccomp_sandboxed=*/sandbox_desired_,
+                       /*allows_gssapi_library_load=*/false);
 
-  // Now enable kerberos.
-  local_state->SetBoolean(prefs::kKerberosEnabled, true);
-  EXPECT_TRUE(local_state->GetBoolean(prefs::kKerberosEnabled));
-  // The network service should automatically restart, and be unsandboxed.
-  WaitForNextLaunch();
-  ExpectNetworkServiceSeccompSandboxed(/*sandboxed=*/false);
+  // Now signal that GSSAPI is desired.
+  local_state->SetBoolean(kGssapiDesiredPref, true);
+  EXPECT_TRUE(local_state->GetBoolean(kGssapiDesiredPref));
+  // If the network service was sandboxed it should automatically restart and
+  // be unsandboxed. In any case it should now respect the pref and allow GSSAPI
+  // library loads.
+  if (sandbox_desired_) {
+    WaitForNextLaunch();
+  }
+  ExpectNetworkService(/*seccomp_sandboxed=*/false,
+                       /*allows_gssapi_library_load=*/true);
 
-  // After killing the network service, it should still restart unsandboxed.
+  // After killing the network service, it should still restart unsandboxed and
+  // allow GSSAPI library loads.
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(base::IgnoreResult(&content::RestartNetworkService)));
   WaitForNextLaunch();
-  ExpectNetworkServiceSeccompSandboxed(/*sandboxed=*/false);
+  ExpectNetworkService(/*seccomp_sandboxed=*/false,
+                       /*allows_gssapi_library_load=*/true);
 }
 
-IN_PROC_BROWSER_TEST_F(
-    SystemNetworkContextManagerNetworkServiceSandboxEnabledBrowsertest,
-    PRE_NetworkServiceStartsUnsandboxedWithKerberosEnabled) {
+IN_PROC_BROWSER_TEST_P(
+    SystemNetworkContextManagerNetworkServiceSandboxBrowsertest,
+    PRE_NetworkServiceStartsUnsandboxedWithGssapiDesired) {
   PrefService* local_state = g_browser_process->local_state();
-  // Enable kerberos.
-  local_state->SetBoolean(prefs::kKerberosEnabled, true);
-  EXPECT_TRUE(local_state->GetBoolean(prefs::kKerberosEnabled));
+  // Signal that GSSAPI is desired. This should persist across browser restarts
+  // like any pref.
+  local_state->SetBoolean(kGssapiDesiredPref, true);
+  EXPECT_TRUE(local_state->GetBoolean(kGssapiDesiredPref));
 }
 
-IN_PROC_BROWSER_TEST_F(
-    SystemNetworkContextManagerNetworkServiceSandboxEnabledBrowsertest,
-    NetworkServiceStartsUnsandboxedWithKerberosEnabled) {
-  // Ensure the network service starts sandboxed.
-  ExpectNetworkServiceSeccompSandboxed(/*sandboxed=*/false);
+IN_PROC_BROWSER_TEST_P(
+    SystemNetworkContextManagerNetworkServiceSandboxBrowsertest,
+    NetworkServiceStartsUnsandboxedWithGssapiDesired) {
+  // Ensure the network service starts sandboxed and allows GSSAPI library
+  // loads.
+  ExpectNetworkService(/*seccomp_sandboxed=*/false,
+                       /*allows_gssapi_library_load=*/true);
 }
 
-#endif  // BUILDFLAG(IS_CHROMEOS)
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    SystemNetworkContextManagerNetworkServiceSandboxBrowsertest,
+    testing::Bool(),
+    [](const testing::TestParamInfo<bool>& info) {
+      return info.param ? "NetworkSandboxDesired"
+                        : "NetworkSandboxFullyDisabled";
+    });
+
+#endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
 
 #if BUILDFLAG(IS_LINUX)
 class SystemNetworkContextManagerHttpNegotiateHeader

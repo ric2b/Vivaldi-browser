@@ -12,6 +12,7 @@
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "gpu/ipc/common/command_buffer_id.h"
+#include "mojo/public/cpp/bindings/sync_call_restrictions.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/buffer_types.h"
 #include "ui/gfx/gpu_fence.h"
@@ -73,9 +74,11 @@ std::vector<SyncToken> GenerateDependenciesFromSyncToken(
 
 }  // namespace
 
-SharedImageInterfaceProxy::SharedImageInterfaceProxy(GpuChannelHost* host,
-                                                     int32_t route_id)
-    : host_(host), route_id_(route_id) {}
+SharedImageInterfaceProxy::SharedImageInterfaceProxy(
+    GpuChannelHost* host,
+    int32_t route_id,
+    const gpu::SharedImageCapabilities& capabilities)
+    : host_(host), route_id_(route_id), capabilities_(capabilities) {}
 
 SharedImageInterfaceProxy::~SharedImageInterfaceProxy() = default;
 
@@ -121,29 +124,40 @@ Mailbox SharedImageInterfaceProxy::CreateSharedImage(
     uint32_t usage,
     base::StringPiece debug_label,
     gfx::BufferUsage buffer_usage) {
-  auto mailbox = Mailbox::GenerateForSharedImage();
-  auto params = mojom::CreateSharedImageBackedByBufferParams::New();
-  params->mailbox = mailbox;
-  params->format = format;
-  params->size = size;
-  params->color_space = color_space;
-  params->usage = usage;
-  params->debug_label = std::string(debug_label);
-  params->surface_origin = surface_origin;
-  params->alpha_type = alpha_type;
-  params->buffer_usage = buffer_usage;
+  // Create a GMB here first on IO thread via sync IPC. Then create a mailbox
+  // from it.
+  gfx::GpuMemoryBufferHandle buffer_handle;
   {
-    base::AutoLock lock(lock_);
-    AddMailbox(mailbox, usage);
-    params->release_id = ++next_release_id_;
-    // Note: we enqueue the IPC under the lock to guarantee monotonicity of the
-    // release ids as seen by the service.
-    last_flush_id_ = host_->EnqueueDeferredMessage(
-        mojom::DeferredRequestParams::NewSharedImageRequest(
-            mojom::DeferredSharedImageRequest::
-                NewCreateSharedImageBackedByBuffer(std::move(params))));
+    mojo::SyncCallRestrictions::ScopedAllowSyncCall allow_sync_call;
+    host_->CreateGpuMemoryBuffer(size, format, buffer_usage, &buffer_handle);
   }
 
+  if (buffer_handle.is_null()) {
+    LOG(ERROR) << "Buffer handle is null. Not creating a mailbox from it.";
+    return Mailbox();
+  }
+
+  // Call existing SI method to create a SI from handle. Note that we are doing
+  // 2 IPCs here in this call. 1 to create a GMB above and then another to
+  // create a SI from it.
+  // TODO(crbug.com/1486930) : This can be optimize to just 1 IPC. Instead of
+  // sending a deferred IPC from SIIProxy after receiving the handle,
+  // GpuChannelMessageFilter::CreateGpuMemoryBuffer() call in service side can
+  // itself can post a task from IO thread to gpu main thread to create a
+  // mailbox from handle and then return the handle back to SIIProxy.
+  auto mailbox =
+      CreateSharedImage(format, size, color_space, surface_origin, alpha_type,
+                        usage, std::move(debug_label), buffer_handle.Clone());
+
+  auto gpu_memory_buffer =
+      SharedImageInterface::CreateGpuMemoryBufferForUseByScopedMapping(
+          GpuMemoryBufferHandleInfo(std::move(buffer_handle), format, size,
+                                    buffer_usage));
+  // Cache the buffer in the map.
+  {
+    base::AutoLock lock(lock_);
+    mailbox_infos_[mailbox].gpu_memory_buffer = std::move(gpu_memory_buffer);
+  }
   return mailbox;
 }
 
@@ -614,42 +628,16 @@ void SharedImageInterfaceProxy::NotifyMailboxAdded(const Mailbox& mailbox,
   AddMailbox(mailbox, usage);
 }
 
-SharedImageInterfaceProxy::GpuMemoryBufferHandleInfo
-SharedImageInterfaceProxy::GetGpuMemoryBufferHandleInfo(
+gfx::GpuMemoryBuffer* SharedImageInterfaceProxy::GetGpuMemoryBuffer(
     const Mailbox& mailbox) {
-  // Check if the handle info is already present in the map.
-  {
-    base::AutoLock lock(lock_);
-    auto it = mailbox_infos_.find(mailbox);
+  base::AutoLock lock(lock_);
+  auto it = mailbox_infos_.find(mailbox);
 
-    // Mailbox for which query is made must be present.
-    CHECK(it != mailbox_infos_.end());
-    if (it->second.handle_info) {
-      return it->second.handle_info.value();
-    }
-  }
-
-  // If not present, then get it from service side via blocking call.
-  // Flush all the pending deferred messages first to send them to service side.
-  Flush();
-
-  // Get the handle info from service side. This call will be blocked on current
-  // thread which is client's calling thread.
-  gfx::GpuMemoryBufferHandle handle;
-  viz::SharedImageFormat format;
-  gfx::Size size;
-  gfx::BufferUsage buffer_usage;
-  host_->GetGpuMemoryBufferHandleInfo(mailbox, &handle, &format, &size,
-                                      &buffer_usage);
-  GpuMemoryBufferHandleInfo handle_info(std::move(handle), format, size,
-                                        buffer_usage);
-
-  // Cache the handle info in the map.
-  {
-    base::AutoLock lock(lock_);
-    mailbox_infos_[mailbox].handle_info = handle_info;
-  }
-  return handle_info;
+  // Mailbox for which query is made must be present. GMB must also be
+  // present as it should be populated while creating the mailbox.
+  CHECK(it != mailbox_infos_.end());
+  CHECK(it->second.gpu_memory_buffer);
+  return it->second.gpu_memory_buffer.get();
 }
 
 SharedImageInterfaceProxy::SharedImageInfo::SharedImageInfo() = default;

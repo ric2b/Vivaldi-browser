@@ -163,7 +163,7 @@ PrintBackendServiceManager::RegisterPrintDocumentClientReusingClientRemote(
 void PrintBackendServiceManager::UnregisterClient(ClientId id) {
   // Determine which client type has this ID, and remove it once found.
   absl::optional<ClientType> client_type;
-  RemoteId remote_id = GetRemoteIdForPrinterName(kEmptyPrinterName);
+  absl::optional<RemoteId> remote_id;
   if (query_clients_.erase(id) != 0) {
     client_type = ClientType::kQuery;
   } else if (query_with_ui_clients_.erase(id) != 0) {
@@ -189,11 +189,14 @@ void PrintBackendServiceManager::UnregisterClient(ClientId id) {
           << ClientTypeToString(client_type.value())
           << ") from print backend service.";
 
+  if (!remote_id.has_value()) {
+    remote_id = GetRemoteIdForPrinterName(kEmptyPrinterName);
+  }
   absl::optional<base::TimeDelta> new_timeout =
       DetermineIdleTimeoutUpdateOnUnregisteredClient(client_type.value(),
-                                                     remote_id);
+                                                     remote_id.value());
   if (new_timeout.has_value())
-    UpdateServiceIdleTimeoutByRemoteId(remote_id, new_timeout.value());
+    UpdateServiceIdleTimeoutByRemoteId(remote_id.value(), new_timeout.value());
 
 #if BUILDFLAG(IS_WIN)
   if (base::FeatureList::IsEnabled(features::kReadPrinterCapabilitiesWithXps) &&
@@ -630,7 +633,8 @@ PrintBackendServiceManager::RemoteId
 PrintBackendServiceManager::GetRemoteIdForPrinterName(
     const std::string& printer_name) {
 #if BUILDFLAG(IS_WIN)
-  if (!sandboxed_service_remote_for_test_) {
+  if (!sandboxed_service_remote_for_test_ &&
+      !features::kEnableOopPrintDriversSingleProcess.Get()) {
     // Windows drivers are not thread safe.  Use a process per driver to prevent
     // bad interactions when interfacing to multiple drivers in parallel.
     // https://crbug.com/957242
@@ -639,17 +643,14 @@ PrintBackendServiceManager::GetRemoteIdForPrinterName(
       return iter->second;
     }
 
-    // No remote yet for this printer so make one.  RemoteId is only used within
-    // browse process management code, so a simple incrementing sequence is
-    // sufficient.
-    static uint32_t id_sequence = 0;
-    return remote_id_map_.insert({printer_name, RemoteId(++id_sequence)})
+    // No remote yet for this printer so make one.
+    return remote_id_map_
+        .insert({printer_name, RemoteId(++remote_id_sequence_)})
         .first->second;
   }
 #endif
 
-  // Non-Windows platforms and the testing environment always just use one
-  // instance for all printers.
+  // Just a single process that services all printers.
   return RemoteId(1);
 }
 
@@ -788,6 +789,10 @@ const mojo::Remote<mojom::PrintBackendService>&
 PrintBackendServiceManager::GetService(const RemoteId& remote_id,
                                        ClientType client_type,
                                        bool sandboxed) {
+  // Performance is improved if a service is launched ahead of the time it will
+  // be needed by client callers.
+  DCHECK_GT(GetClientsRegisteredCount(), 0u);
+
   if (sandboxed_service_remote_for_test_) {
     // The presence of a sandboxed remote for testing signals a testing
     // environment.  If no unsandboxed test service was provided for fallback
@@ -799,24 +804,17 @@ PrintBackendServiceManager::GetService(const RemoteId& remote_id,
     return *sandboxed_service_remote_for_test_;
   }
 
-  // Performance is improved if a service is launched ahead of the time it will
-  // be needed by client callers.
-  DCHECK_GT(GetClientsRegisteredCount(), 0u);
-
   if (sandboxed) {
     // On the first print that will try to use sandboxed service, make note that
     // so far no drivers have been discovered to require fallback beyond any
     // predetermined known cases.
-    static bool first_sandboxed_print = true;
-    if (first_sandboxed_print) {
-      first_sandboxed_print = false;
+    if (first_sandboxed_print_) {
+      first_sandboxed_print_ = false;
       base::UmaHistogramBoolean(
           kPrintBackendRequiresElevatedPrivilegeHistogramName,
           /*sample=*/false);
     }
-  }
 
-  if (sandboxed) {
     return GetServiceFromBundle(remote_id, client_type, /*sandboxed=*/true,
                                 sandboxed_remotes_bundles_);
   }

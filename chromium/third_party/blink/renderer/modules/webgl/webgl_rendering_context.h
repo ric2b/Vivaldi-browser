@@ -36,6 +36,8 @@ namespace blink {
 
 class ANGLEInstancedArrays;
 class CanvasContextCreationAttributesCore;
+class ExceptionState;
+class EXTBlendFuncExtended;
 class EXTBlendMinMax;
 class EXTClipControl;
 class EXTColorBufferHalfFloat;
@@ -63,7 +65,6 @@ class WebGLDepthTexture;
 class WebGLLoseContext;
 class WebGLMultiDraw;
 class WebGLPolygonMode;
-class WebGLVideoTexture;
 
 class WebGLRenderingContext final : public WebGLRenderingContextBase {
   DEFINE_WRAPPERTYPEINFO();
@@ -94,7 +95,7 @@ class WebGLRenderingContext final : public WebGLRenderingContextBase {
                         const Platform::GraphicsInfo&,
                         const CanvasContextCreationAttributesCore&);
 
-  ImageBitmap* TransferToImageBitmap(ScriptState*) final;
+  ImageBitmap* TransferToImageBitmap(ScriptState*, ExceptionState&) final;
   String ContextName() const override { return "WebGLRenderingContext"; }
   void RegisterContextExtensions() override;
   V8RenderingContext* AsV8RenderingContext() final;
@@ -105,6 +106,7 @@ class WebGLRenderingContext final : public WebGLRenderingContextBase {
  private:
   // Enabled extension objects.
   Member<ANGLEInstancedArrays> angle_instanced_arrays_;
+  Member<EXTBlendFuncExtended> ext_blend_func_extended_;
   Member<EXTBlendMinMax> ext_blend_min_max_;
   Member<EXTClipControl> ext_clip_control_;
   Member<EXTColorBufferHalfFloat> ext_color_buffer_half_float_;
@@ -142,7 +144,6 @@ class WebGLRenderingContext final : public WebGLRenderingContextBase {
   Member<WebGLLoseContext> webgl_lose_context_;
   Member<WebGLMultiDraw> webgl_multi_draw_;
   Member<WebGLPolygonMode> webgl_polygon_mode_;
-  Member<WebGLVideoTexture> webgl_video_texture_;
 };
 
 }  // namespace blink

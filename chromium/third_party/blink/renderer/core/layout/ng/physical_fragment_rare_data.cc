@@ -16,8 +16,8 @@ PhysicalFragmentRareData::PhysicalFragmentRareData(wtf_size_t num_fields) {
 
 PhysicalFragmentRareData::PhysicalFragmentRareData(
     const PhysicalRect* layout_overflow,
-    const NGPhysicalBoxStrut* borders,
-    const NGPhysicalBoxStrut* padding,
+    const PhysicalBoxStrut* borders,
+    const PhysicalBoxStrut* padding,
     absl::optional<PhysicalRect> inflow_bounds,
     NGBoxFragmentBuilder& builder,
     wtf_size_t num_fields) {
@@ -72,7 +72,7 @@ PhysicalFragmentRareData::PhysicalFragmentRareData(
   table_collapsed_borders_ = builder.table_collapsed_borders_;
   if (!builder.table_column_geometries_.empty()) {
     table_column_geometries_ =
-        MakeGarbageCollected<NGTableFragmentData::ColumnGeometries>(
+        MakeGarbageCollected<TableFragmentData::ColumnGeometries>(
             builder.table_column_geometries_);
   }
 

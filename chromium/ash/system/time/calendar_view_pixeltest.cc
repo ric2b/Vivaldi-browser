@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/constants/ash_features.h"
 #include "ash/shelf/shelf.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/time/calendar_event_list_view.h"
@@ -11,13 +10,10 @@
 #include "ash/system/unified/date_tray.h"
 #include "ash/system/unified/unified_system_tray_bubble.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/ash_test_util.h"
 #include "ash/test/pixel/ash_pixel_differ.h"
 #include "ash/test/pixel/ash_pixel_test_init_params.h"
 #include "base/memory/raw_ptr.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "google_apis/calendar/calendar_api_response_types.h"
 
 namespace ash {
@@ -42,16 +38,6 @@ class CalendarViewPixelTest : public AshTestBase {
   CalendarViewPixelTest() = default;
 
   // AshTestBase:
-  void SetUp() override {
-    scoped_feature_list_ = std::make_unique<base::test::ScopedFeatureList>();
-    scoped_feature_list_->InitWithFeatures(
-        {chromeos::features::kJelly, features::kQsRevamp,
-         features::kCalendarJelly},
-        {});
-    AshTestBase::SetUp();
-  }
-
-  // AshTestBase:
   absl::optional<pixel_test::InitParams> CreatePixelTestInitParams()
       const override {
     return pixel_test::InitParams();
@@ -62,10 +48,10 @@ class CalendarViewPixelTest : public AshTestBase {
     GetPrimaryShelf()->GetStatusAreaWidget()->date_tray()->OnButtonPressed(
         ui::KeyEvent(ui::EventType::ET_MOUSE_PRESSED, ui::VKEY_UNKNOWN,
                      ui::EF_NONE));
-    calendar_view_ = static_cast<CalendarView*>(GetPrimaryUnifiedSystemTray()
-                                                    ->bubble()
-                                                    ->quick_settings_view()
-                                                    ->GetDetailedViewForTest());
+    calendar_view_ = GetPrimaryUnifiedSystemTray()
+                         ->bubble()
+                         ->quick_settings_view()
+                         ->GetDetailedViewForTest<CalendarView>();
   }
 
   CalendarView* GetCalendarView() { return calendar_view_; }
@@ -92,7 +78,6 @@ class CalendarViewPixelTest : public AshTestBase {
  private:
   raw_ptr<CalendarView, DanglingUntriaged | ExperimentalAsh> calendar_view_ =
       nullptr;
-  std::unique_ptr<base::test::ScopedFeatureList> scoped_feature_list_;
   static base::Time fake_time_;
 };
 
@@ -111,7 +96,7 @@ TEST_F(CalendarViewPixelTest, Basics) {
 
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
       "calendar_view",
-      /*revision_number=*/2, GetCalendarView()));
+      /*revision_number=*/6, GetCalendarView()));
 }
 
 TEST_F(CalendarViewPixelTest, EventList) {
@@ -141,7 +126,7 @@ TEST_F(CalendarViewPixelTest, EventList) {
 
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
       "event_list_view",
-      /*revision_number=*/4, GetEventListView()));
+      /*revision_number=*/7, GetEventListView()));
 }
 
 }  // namespace ash

@@ -284,6 +284,8 @@ public class SelectableListLayout<E> extends FrameLayout
      * @param imageResId The image view to show when the selectable list is empty.
      */
     public void setEmptyStateImageRes(int imageResId) {
+        // Vivaldi
+        if (mEmptyImageView != null) // End Vivaldi
         mEmptyImageView.setImageResource(imageResId);
     }
 
@@ -306,6 +308,8 @@ public class SelectableListLayout<E> extends FrameLayout
         mEmptyStringResId = emptyHeadingStringResId;
 
         mEmptyView.setText(mEmptyStringResId);
+        // Vivaldi
+        if (mEmptyStateSubHeadingView != null) // End Vivaldi
         mEmptyStateSubHeadingView.setText(emptySubheadingStringResId);
     }
 

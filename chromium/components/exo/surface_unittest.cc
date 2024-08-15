@@ -8,6 +8,7 @@
 
 #include "base/command_line.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ref.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
@@ -18,6 +19,7 @@
 #include "components/exo/surface_test_util.h"
 #include "components/exo/test/exo_test_base.h"
 #include "components/exo/test/exo_test_helper.h"
+#include "components/exo/test/shell_surface_builder.h"
 #include "components/exo/test/surface_tree_host_test_util.h"
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
@@ -26,6 +28,7 @@
 #include "components/viz/service/surfaces/surface_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/khronos/GLES2/gl2.h"
+#include "ui/aura/test/window_occlusion_tracker_test_api.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_tree_owner.h"
 #include "ui/display/display.h"
@@ -89,16 +92,13 @@ std::string TransformToString(Transform transform) {
   return prefix + name;
 }
 
-class SurfaceTest
-    : public test::ExoTestBase,
-      public ::testing::WithParamInterface<std::tuple<bool, float>> {
+class SurfaceTest : public test::ExoTestBase,
+                    public ::testing::WithParamInterface<
+                        std::tuple<test::FrameSubmissionType, float>> {
  public:
   SurfaceTest() {
-    if (reactive_frame_submission_enabled()) {
-      feature_list_.InitAndEnableFeature(kExoReactiveFrameSubmission);
-    } else {
-      feature_list_.InitAndDisableFeature(kExoReactiveFrameSubmission);
-    }
+    test::SetFrameSubmissionFeatureFlags(&feature_list_,
+                                         GetFrameSubmissionType());
   }
 
   SurfaceTest(const SurfaceTest&) = delete;
@@ -119,7 +119,7 @@ class SurfaceTest
     display::Display::ResetForceDeviceScaleFactorForTesting();
   }
 
-  bool reactive_frame_submission_enabled() const {
+  test::FrameSubmissionType GetFrameSubmissionType() const {
     return std::get<0>(GetParam());
   }
   float device_scale_factor() const { return std::get<1>(GetParam()); }
@@ -193,11 +193,17 @@ void ExplicitReleaseBuffer(int* release_buffer_call_count,
   (*release_buffer_call_count)++;
 }
 
-// Instantiate the values of device scale factor in the parameterized tests.
-INSTANTIATE_TEST_SUITE_P(All,
-                         SurfaceTest,
-                         testing::Combine(testing::Values(false, true),
-                                          testing::Values(1.0f, 1.25f, 2.0f)));
+// Instantiate the values of frame submission types and device scale factor in
+// the parameterized tests.
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    SurfaceTest,
+    testing::Combine(
+        testing::Values(
+            test::FrameSubmissionType::kNoReactive,
+            test::FrameSubmissionType::kReactive_NoAutoNeedsBeginFrame,
+            test::FrameSubmissionType::kReactive_AutoNeedsBeginFrame),
+        testing::Values(1.0f, 1.25f, 2.0f)));
 
 TEST_P(SurfaceTest, Damage) {
   gfx::Size buffer_size(256, 256);
@@ -1008,7 +1014,7 @@ TEST_P(SurfaceTest, MAYBE_SetCropAndBufferTransform) {
 
   struct TransformTestcase {
     Transform transform;
-    const SkRect& expected_rect;
+    const raw_ref<const SkRect> expected_rect;
 
     constexpr TransformTestcase(Transform transform_in,
                                 const SkRect& expected_rect_in)
@@ -1028,7 +1034,7 @@ TEST_P(SurfaceTest, MAYBE_SetCropAndBufferTransform) {
   for (const auto& tc : testcases) {
     SetCropAndBufferTransformHelperTransformAndTest(
         surface.get(), shell_surface.get(), tc.transform,
-        gfx::SkRectToRectF(tc.expected_rect), false);
+        gfx::SkRectToRectF(*tc.expected_rect), false);
   }
 
   surface->SetViewport(gfx::SizeF(128, 64));
@@ -1036,7 +1042,7 @@ TEST_P(SurfaceTest, MAYBE_SetCropAndBufferTransform) {
   for (const auto& tc : testcases) {
     SetCropAndBufferTransformHelperTransformAndTest(
         surface.get(), shell_surface.get(), tc.transform,
-        gfx::SkRectToRectF(tc.expected_rect), true);
+        gfx::SkRectToRectF(*tc.expected_rect), true);
   }
 }
 
@@ -1454,6 +1460,33 @@ TEST_P(SurfaceTest, UpdatesOcclusionOnDestroyingSubsurface) {
             child_surface->window()->GetOcclusionState());
 }
 
+TEST_P(SurfaceTest, OcclusionNotRecomputedOnWidgetCommit) {
+  constexpr gfx::Size kBufferSize(32, 32);
+  auto shell_surface =
+      test::ShellSurfaceBuilder(kBufferSize).BuildShellSurface();
+  auto* surface = shell_surface->root_surface();
+
+  // Turn on occlusion tracking.
+  surface->SetOcclusionTracking(true);
+  surface->Commit();
+
+  // Commit the surface with no changes and expect not to get an occlusion
+  // update.
+  aura::test::WindowOcclusionTrackerTestApi window_occlusion_tracker_test_api(
+      aura::Env::GetInstance()->GetWindowOcclusionTracker());
+  const int num_times_occlusion_recomputed =
+      window_occlusion_tracker_test_api.GetNumTimesOcclusionRecomputed();
+  surface->Commit();
+  EXPECT_EQ(num_times_occlusion_recomputed,
+            window_occlusion_tracker_test_api.GetNumTimesOcclusionRecomputed());
+
+  // Set a non-null alpha shape and make sure occlusion is recomputed.
+  shell_surface->SetShape(cc::Region(gfx::Rect(0, 0, 24, 24)));
+  surface->Commit();
+  EXPECT_EQ(num_times_occlusion_recomputed + 1,
+            window_occlusion_tracker_test_api.GetNumTimesOcclusionRecomputed());
+}
+
 // TODO(crbug.com/1427023): Flaky test on Linux ChromiumOS MSan Tests.
 // Re-enable it.
 #if BUILDFLAG(IS_CHROMEOS) && defined(MEMORY_SANITIZER)
@@ -1795,7 +1828,10 @@ TEST_P(SurfaceTest, LayerSharedQuadState) {
 class ReactiveFrameSubmissionSurfaceTest : public SurfaceTest {
  public:
   ReactiveFrameSubmissionSurfaceTest() {
-    DCHECK(reactive_frame_submission_enabled());
+    DCHECK(GetFrameSubmissionType() ==
+               test::FrameSubmissionType::kReactive_NoAutoNeedsBeginFrame ||
+           GetFrameSubmissionType() ==
+               test::FrameSubmissionType::kReactive_AutoNeedsBeginFrame);
   }
 
   ReactiveFrameSubmissionSurfaceTest(
@@ -1806,11 +1842,16 @@ class ReactiveFrameSubmissionSurfaceTest : public SurfaceTest {
   ~ReactiveFrameSubmissionSurfaceTest() override = default;
 };
 
-// Instantiate the values of device scale factor in the parameterized tests.
-INSTANTIATE_TEST_SUITE_P(All,
-                         ReactiveFrameSubmissionSurfaceTest,
-                         testing::Combine(testing::Values(true),
-                                          testing::Values(1.0f, 1.25f, 2.0f)));
+// Instantiate the values of frame submission types and device scale factor in
+// the parameterized tests.
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    ReactiveFrameSubmissionSurfaceTest,
+    testing::Combine(
+        testing::Values(
+            test::FrameSubmissionType::kReactive_NoAutoNeedsBeginFrame,
+            test::FrameSubmissionType::kReactive_AutoNeedsBeginFrame),
+        testing::Values(1.0f, 1.25f, 2.0f)));
 
 TEST_P(ReactiveFrameSubmissionSurfaceTest, FullDamageAfterDiscardingFrame) {
   gfx::Size buffer_size(256, 256);
@@ -1825,8 +1866,13 @@ TEST_P(ReactiveFrameSubmissionSurfaceTest, FullDamageAfterDiscardingFrame) {
       ->ClearPendingBeginFramesForTesting();
 
   // This will result in a cached frame in LayerTreeFrameSinkHolder.
-  surface->Damage(gfx::Rect(10, 10, 10, 10));
-  surface->Commit();
+  // Do the action twice is necessary when AutoNeedsBeginFrame is enabled,
+  // because the first commit will be an unsolicited frame submission and
+  // therefore not cached.
+  for (int i = 0; i < 2; ++i) {
+    surface->Damage(gfx::Rect(10, 10, 10, 10));
+    surface->Commit();
+  }
 
   // Commit a frame without any damage. It will cause the previously cached
   // frame to be discarded.

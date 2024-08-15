@@ -14,6 +14,7 @@
 #include "base/base_paths_android.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/hash/hash.h"
 #include "base/i18n/rtl.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/persistent_histogram_allocator.h"
@@ -46,6 +47,7 @@
 #include "components/metrics/net/net_metrics_log_uploader.h"
 #include "components/metrics/net/network_metrics_provider.h"
 #include "components/metrics/persistent_histograms.h"
+#include "components/metrics/persistent_synthetic_trial_observer.h"
 #include "components/metrics/sampling_metrics_provider.h"
 #include "components/metrics/stability_metrics_helper.h"
 #include "components/metrics/ui/form_factor_metrics_provider.h"
@@ -268,6 +270,7 @@ void AndroidMetricsServiceClient::Initialize(PrefService* pref_service) {
   synthetic_trial_registry_ =
       std::make_unique<variations::SyntheticTrialRegistry>(
           IsExternalExperimentAllowlistEnabled());
+  synthetic_trial_observation_.Observe(synthetic_trial_registry_.get());
 
   // Create the MetricsService immediately so that other code can make use of
   // it. Chrome always creates the MetricsService as well.

@@ -100,12 +100,14 @@
 #include "third_party/blink/renderer/core/loader/render_blocking_resource_manager.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/page_popup_controller.h"
+#include "third_party/blink/renderer/core/preferences/preference_overrides.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/filter_operations.h"
 #include "third_party/blink/renderer/core/style/style_initial_data.h"
 #include "third_party/blink/renderer/core/svg/svg_resource.h"
 #include "third_party/blink/renderer/core/view_transition/view_transition.h"
+#include "third_party/blink/renderer/core/view_transition/view_transition_supplement.h"
 #include "third_party/blink/renderer/core/view_transition/view_transition_utils.h"
 #include "third_party/blink/renderer/platform/fonts/font_cache.h"
 #include "third_party/blink/renderer/platform/fonts/font_selector.h"
@@ -138,7 +140,8 @@ enum RuleSetFlags {
   kLayerRules = 1 << 5,
   kFontPaletteValuesRules = 1 << 6,
   kPositionFallbackRules = 1 << 7,
-  kFontFeatureValuesRules = 1 << 8
+  kFontFeatureValuesRules = 1 << 8,
+  kViewTransitionsRules = 1 << 9
 };
 
 const unsigned kRuleSetFlagsAll = ~0u;
@@ -158,9 +161,6 @@ unsigned GetRuleSetFlags(const HeapHashSet<Member<RuleSet>> rule_sets) {
     if (!rule_set->FontFeatureValuesRules().empty()) {
       flags |= kFontFeatureValuesRules;
     }
-    if (rule_set->NeedsFullRecalcForRuleSetInvalidation()) {
-      flags |= kFullRecalcRules;
-    }
     if (!rule_set->PropertyRules().empty()) {
       flags |= kPropertyRules;
     }
@@ -172,6 +172,9 @@ unsigned GetRuleSetFlags(const HeapHashSet<Member<RuleSet>> rule_sets) {
     }
     if (!rule_set->PositionFallbackRules().empty()) {
       flags |= kPositionFallbackRules;
+    }
+    if (!rule_set->ViewTransitionsRules().empty()) {
+      flags |= kViewTransitionsRules;
     }
   }
   return flags;
@@ -562,7 +565,7 @@ Element* StyleEngine::EnsureVTTOriginatingElement() {
     vtt_originating_element_ = MakeGarbageCollected<Element>(
         QualifiedName(g_null_atom, g_empty_atom, g_empty_atom), document_);
   }
-  return vtt_originating_element_;
+  return vtt_originating_element_.Get();
 }
 
 void StyleEngine::MediaQueryAffectingValueChanged(
@@ -1853,70 +1856,91 @@ void StyleEngine::ScheduleNthPseudoInvalidations(ContainerNode& nth_parent) {
                                                          nth_parent);
 }
 
-void StyleEngine::ScheduleRuleSetInvalidationsForElement(
-    Element& element,
-    const HeapHashSet<Member<RuleSet>>& rule_sets) {
-  AtomicString id;
-  const SpaceSplitString* class_names = nullptr;
-
-  if (element.HasID()) {
-    id = element.IdForStyleResolution();
-  }
-  if (element.HasClass()) {
-    class_names = &element.ClassNames();
-  }
-
-  InvalidationLists invalidation_lists;
-  for (const auto& rule_set : rule_sets) {
-    if (!id.IsNull()) {
-      rule_set->Features().CollectInvalidationSetsForId(invalidation_lists,
-                                                        element, id);
-    }
-    if (class_names) {
-      wtf_size_t class_name_count = class_names->size();
-      for (wtf_size_t i = 0; i < class_name_count; i++) {
-        rule_set->Features().CollectInvalidationSetsForClass(
-            invalidation_lists, element, (*class_names)[i]);
-      }
-    }
-    for (const Attribute& attribute : element.Attributes()) {
-      rule_set->Features().CollectInvalidationSetsForAttribute(
-          invalidation_lists, element, attribute.GetName());
-    }
-  }
-  pending_invalidations_.ScheduleInvalidationSetsForNode(invalidation_lists,
-                                                         element);
+// Inserting/changing some types of rules cause invalidation even if they don't
+// match, because the very act of evaluating them has side effects for the
+// ComputedStyle. For instance, evaluating a rule with :hover will set the
+// AffectedByHover() flag on ComputedStyle even if it matches (for
+// invalidation). So we need to test for that here, and invalidate the element
+// so that such rules are properly evaluated.
+//
+// We don't need to care specifically about @starting-style, but all other flags
+// should probably be covered here.
+static bool FlagsCauseInvalidation(const MatchResult& result) {
+  return result.HasFlag(MatchFlag::kAffectedByDrag) ||
+         result.HasFlag(MatchFlag::kAffectedByFocusWithin) ||
+         result.HasFlag(MatchFlag::kAffectedByHover) ||
+         result.HasFlag(MatchFlag::kAffectedByActive);
 }
 
-void StyleEngine::ScheduleTypeRuleSetInvalidations(
-    ContainerNode& node,
-    const HeapHashSet<Member<RuleSet>>& rule_sets) {
-  InvalidationLists invalidation_lists;
-  for (const auto& rule_set : rule_sets) {
-    rule_set->Features().CollectTypeRuleInvalidationSet(invalidation_lists,
-                                                        node);
+static bool AnyRuleCausesInvalidation(const MatchRequest& match_request,
+                                      ElementRuleCollector& collector,
+                                      bool is_shadow_host) {
+  if (collector.CheckIfAnyRuleMatches(match_request) ||
+      FlagsCauseInvalidation(collector.MatchedResult())) {
+    return true;
   }
-  DCHECK(invalidation_lists.siblings.empty());
-  pending_invalidations_.ScheduleInvalidationSetsForNode(invalidation_lists,
-                                                         node);
-
-  auto* shadow_root = DynamicTo<ShadowRoot>(node);
-  if (!shadow_root) {
-    return;
-  }
-
-  Element& host = shadow_root->host();
-  if (host.NeedsStyleRecalc()) {
-    return;
-  }
-
-  for (auto& invalidation_set : invalidation_lists.descendants) {
-    if (invalidation_set->InvalidatesTagName(host)) {
-      host.SetNeedsStyleRecalc(kLocalStyleChange,
-                               StyleChangeReasonForTracing::Create(
-                                   style_change_reason::kStyleSheetChange));
-      return;
+  if (is_shadow_host) {
+    if (collector.CheckIfAnyShadowHostRuleMatches(match_request) ||
+        FlagsCauseInvalidation(collector.MatchedResult())) {
+      return true;
     }
+  }
+  return false;
+}
+
+namespace {
+
+bool CanRejectRuleSet(ElementRuleCollector& collector,
+                      const RuleSet& rule_set) {
+  const StyleScope* scope = rule_set.SingleScope();
+  return scope && collector.CanRejectScope(*scope);
+}
+
+}  // namespace
+
+// See if a given element needs to be recalculated after RuleSet changes
+// (see ApplyRuleSetInvalidation()).
+void StyleEngine::ApplyRuleSetInvalidationForElement(
+    const TreeScope& tree_scope,
+    Element& element,
+    SelectorFilter& selector_filter,
+    StyleScopeFrame& style_scope_frame,
+    const HeapHashSet<Member<RuleSet>>& rule_sets,
+    bool is_shadow_host) {
+  ElementResolveContext element_resolve_context(element);
+  MatchResult match_result;
+  EInsideLink inside_link =
+      EInsideLink::kNotInsideLink;  // Only used for MatchedProperties, so does
+                                    // not matter for us.
+  StyleRecalcContext style_recalc_context =
+      StyleRecalcContext::FromAncestors(element);
+  style_recalc_context.style_scope_frame = &style_scope_frame;
+  ElementRuleCollector collector(element_resolve_context, style_recalc_context,
+                                 selector_filter, match_result, inside_link);
+
+  MatchRequest match_request{&tree_scope.RootNode()};
+  bool matched_any = false;
+  for (const Member<RuleSet>& rule_set : rule_sets) {
+    if (CanRejectRuleSet(collector, *rule_set)) {
+      continue;
+    }
+    match_request.AddRuleset(rule_set.Get());
+    if (match_request.IsFull()) {
+      if (AnyRuleCausesInvalidation(match_request, collector, is_shadow_host)) {
+        matched_any = true;
+        break;
+      }
+      match_request.ClearAfterMatching();
+    }
+  }
+  if (!match_request.IsEmpty() && !matched_any) {
+    matched_any =
+        AnyRuleCausesInvalidation(match_request, collector, is_shadow_host);
+  }
+  if (matched_any) {
+    element.SetNeedsStyleRecalc(kLocalStyleChange,
+                                StyleChangeReasonForTracing::Create(
+                                    style_change_reason::kStyleInvalidator));
   }
 }
 
@@ -2118,27 +2142,45 @@ bool StyleEngine::HasViewportDependentPropertyRegistrations() {
   return registry && registry->GetViewportUnitFlags();
 }
 
-void StyleEngine::ScheduleInvalidationsForRuleSets(
+// Given a list of RuleSets that have changed (both old and new), see what
+// elements in the given TreeScope that could be affected by them and need
+// style recalculation.
+//
+// This generally works by our regular selector matching; if any selector
+// in any of the given RuleSets match, it means we need to mark the element
+// for style recalc. This could either be because the element is affected
+// by a rule where it wasn't before, or because the element used to be
+// affected by some rule and isn't anymore, or even that the rule itself
+// changed. (It could also be a false positive, e.g. because someone added
+// a single new rule to a style sheet, causing a new RuleSet to be created
+// that also contains all the old rules, and the element matches one of them.)
+//
+// There are some twists to this; e.g., for a rule like a:hover, we will need
+// to invalidate all <a> elements whether they are currently matching :hover
+// or not (see FlagsCauseInvalidation()).
+//
+// In general, we check all elements in this TreeScope and nothing else.
+// There are some exceptions (in both directions); in particular, if an element
+// is already marked for subtree recalc, we don't need to go below it. Also,
+// if invalidation_scope says so, or if we have rules pertaining to UA shadows,
+// we may need to descend into child TreeScopes.
+void StyleEngine::ApplyRuleSetInvalidationForTreeScope(
     TreeScope& tree_scope,
+    ContainerNode& node,
+    SelectorFilter& selector_filter,
+    StyleScopeFrame& style_scope_frame,
     const HeapHashSet<Member<RuleSet>>& rule_sets,
     InvalidationScope invalidation_scope) {
-#if DCHECK_IS_ON()
-  // Full scope recalcs should be handled while collecting the rule sets before
-  // calling this method.
-  for (auto rule_set : rule_sets) {
-    DCHECK(!rule_set->Features().NeedsFullRecalcForRuleSetInvalidation());
-  }
-#endif  // DCHECK_IS_ON()
-
   TRACE_EVENT0("blink,blink_style",
                "StyleEngine::scheduleInvalidationsForRuleSets");
 
-  ScheduleTypeRuleSetInvalidations(tree_scope.RootNode(), rule_sets);
-
   bool invalidate_slotted = false;
-  if (auto* shadow_root = DynamicTo<ShadowRoot>(&tree_scope.RootNode())) {
+  bool invalidate_part = false;
+  if (auto* shadow_root = DynamicTo<ShadowRoot>(&node)) {
     Element& host = shadow_root->host();
-    ScheduleRuleSetInvalidationsForElement(host, rule_sets);
+    ApplyRuleSetInvalidationForElement(tree_scope, host, selector_filter,
+                                       style_scope_frame, rule_sets,
+                                       /*is_shadow_host=*/true);
     if (host.GetStyleChangeType() == kSubtreeStyleChange) {
       return;
     }
@@ -2147,31 +2189,93 @@ void StyleEngine::ScheduleInvalidationsForRuleSets(
         invalidate_slotted = true;
         break;
       }
+      if (rule_set->HasPartPseudoRules()) {
+        invalidate_part = true;
+        break;
+      }
     }
   }
 
-  Node* stay_within = &tree_scope.RootNode();
-  Element* element = ElementTraversal::FirstChild(*stay_within);
-  while (element) {
-    ScheduleRuleSetInvalidationsForElement(*element, rule_sets);
-    auto* html_slot_element = DynamicTo<HTMLSlotElement>(element);
-    if (html_slot_element && invalidate_slotted) {
-      InvalidateSlottedElements(*html_slot_element);
-    }
-
-    if (invalidation_scope == kInvalidateAllScopes) {
-      if (ShadowRoot* shadow_root = element->GetShadowRoot()) {
-        ScheduleInvalidationsForRuleSets(*shadow_root, rule_sets,
-                                         kInvalidateAllScopes);
+  // If there are any rules that cover UA pseudos, we need to descend into
+  // UA shadows so that we can invalidate them. This is pretty crude
+  // (it descends into all shadows), but such rules are fairly rare anyway.
+  //
+  // We do a similar thing for :part(), descending into all shadows.
+  if (invalidation_scope != kInvalidateAllScopes) {
+    for (auto rule_set : rule_sets) {
+      if (rule_set->HasUAShadowPseudoElementRules() ||
+          rule_set->HasPartPseudoRules()) {
+        invalidation_scope = kInvalidateAllScopes;
+        break;
       }
     }
+  }
 
-    if (element->GetStyleChangeType() < kSubtreeStyleChange &&
-        element->GetComputedStyle()) {
-      element = ElementTraversal::Next(*element, stay_within);
-    } else {
-      element = ElementTraversal::NextSkippingChildren(*element, stay_within);
+  // Note that there is no need to meddle with the SelectorFilter
+  // or StyleScopeFrame here: the caller should already have set up
+  // the required state for `node` in both cases.
+  for (Element& child : ElementTraversal::ChildrenOf(node)) {
+    ApplyRuleSetInvalidationForSubtree(
+        tree_scope, child, selector_filter,
+        /* parent_style_scope_frame */ style_scope_frame, rule_sets,
+        invalidation_scope, invalidate_slotted, invalidate_part);
+  }
+}
+
+void StyleEngine::ApplyRuleSetInvalidationForSubtree(
+    TreeScope& tree_scope,
+    Element& element,
+    SelectorFilter& selector_filter,
+    StyleScopeFrame& parent_style_scope_frame,
+    const HeapHashSet<Member<RuleSet>>& rule_sets,
+    InvalidationScope invalidation_scope,
+    bool invalidate_slotted,
+    bool invalidate_part) {
+  StyleScopeFrame style_scope_frame(element, &parent_style_scope_frame);
+
+  if (invalidate_part && element.hasAttribute(html_names::kPartAttr)) {
+    // It's too complicated to try to handle ::part() precisely.
+    // If we have any ::part() rules, and the element has a [part]
+    // attribute, just invalidate it.
+    element.SetNeedsStyleRecalc(kLocalStyleChange,
+                                StyleChangeReasonForTracing::Create(
+                                    style_change_reason::kStyleInvalidator));
+  } else {
+    ApplyRuleSetInvalidationForElement(tree_scope, element, selector_filter,
+                                       style_scope_frame, rule_sets,
+                                       /*is_shadow_host=*/false);
+  }
+
+  auto* html_slot_element = DynamicTo<HTMLSlotElement>(element);
+  if (html_slot_element && invalidate_slotted) {
+    InvalidateSlottedElements(*html_slot_element);
+  }
+
+  if (invalidation_scope == kInvalidateAllScopes) {
+    if (ShadowRoot* shadow_root = element.GetShadowRoot()) {
+      ApplyRuleSetInvalidationForTreeScope(tree_scope, shadow_root->RootNode(),
+                                           selector_filter, style_scope_frame,
+                                           rule_sets, kInvalidateAllScopes);
     }
+  }
+
+  // Skip traversal of the subtree if we're going to update the entire subtree
+  // anyway.
+  const bool traverse_children =
+      (element.GetStyleChangeType() < kSubtreeStyleChange &&
+       element.GetComputedStyle());
+
+  if (traverse_children) {
+    selector_filter.PushParent(element);
+
+    for (Element& child : ElementTraversal::ChildrenOf(element)) {
+      ApplyRuleSetInvalidationForSubtree(
+          tree_scope, child, selector_filter,
+          /* parent_style_scope_frame */ style_scope_frame, rule_sets,
+          invalidation_scope, invalidate_slotted, invalidate_part);
+    }
+
+    selector_filter.PopParent(element);
   }
 }
 
@@ -2207,12 +2311,13 @@ void StyleEngine::CollectFeaturesTo(RuleFeatureSet& features) {
   CollectScopedStyleFeaturesTo(features);
 }
 
-void StyleEngine::EnsureUAStyleForFullscreen() {
+void StyleEngine::EnsureUAStyleForFullscreen(const Element& element) {
   DCHECK(global_rule_set_);
   if (global_rule_set_->HasFullscreenUAStyle()) {
     return;
   }
-  CSSDefaultStyleSheets::Instance().EnsureDefaultStyleSheetForFullscreen();
+  CSSDefaultStyleSheets::Instance().EnsureDefaultStyleSheetForFullscreen(
+      element);
   global_rule_set_->MarkDirty();
   UpdateActiveStyle();
 }
@@ -2248,7 +2353,7 @@ void StyleEngine::EnsureUAStyleForForcedColors() {
 }
 
 RuleSet* StyleEngine::DefaultViewTransitionStyle() const {
-  auto* transition = ViewTransitionUtils::GetActiveTransition(GetDocument());
+  auto* transition = ViewTransitionUtils::GetTransition(GetDocument());
   if (!transition) {
     return nullptr;
   }
@@ -2256,6 +2361,23 @@ RuleSet* StyleEngine::DefaultViewTransitionStyle() const {
   auto* css_style_sheet = transition->UAStyleSheet();
   return &css_style_sheet->Contents()->EnsureRuleSet(
       CSSDefaultStyleSheets::ScreenEval());
+}
+
+void StyleEngine::UpdateViewTransitionsOptIn() {
+  bool cross_document_enabled = false;
+
+  // TODO(https://crbug.com/1463966): This will likely need to change to a
+  // CSSValueList if we want to support multiple tokens as a trigger.
+  if (view_transitions_rule_) {
+    if (const CSSValue* value =
+            view_transitions_rule_->GetNavigationTrigger()) {
+      cross_document_enabled = To<CSSIdentifierValue>(value)->GetValueID() ==
+                               CSSValueID::kCrossDocumentSameOrigin;
+    }
+  }
+
+  ViewTransitionSupplement::From(GetDocument())
+      ->OnViewTransitionsStyleUpdated(cross_document_enabled);
 }
 
 bool StyleEngine::HasRulesForId(const AtomicString& id) const {
@@ -2327,8 +2449,26 @@ void StyleEngine::InvalidateForRuleSetChanges(
     return;
   }
 
-  ScheduleInvalidationsForRuleSets(tree_scope, changed_rule_sets,
-                                   invalidation_scope);
+  SelectorFilter selector_filter;
+  selector_filter.PushAllParentsOf(tree_scope);
+
+  // Note that unlike the SelectorFilter, there is no need to explicitly
+  // handle the ancestor chain. It's OK to have a "root" StyleScopeFrame
+  // (i.e. a StyleScopeFrame without a parent frame) in the middle of the
+  // tree.
+  //
+  // Note also in the below call to ApplyRuleSetInvalidationForTreeScope,
+  // when `tree_scope` is a ShadowRoot, we have special behavior inside
+  // which invalidates "up" to the shadow *host*. This is why we use the
+  // host (if applicable) as the StyleScopeFrame element here.
+  StyleScopeFrame style_scope_frame(
+      IsA<ShadowRoot>(tree_scope)
+          ? To<ShadowRoot>(tree_scope).host()
+          : *tree_scope.GetDocument().documentElement());
+
+  ApplyRuleSetInvalidationForTreeScope(tree_scope, tree_scope.RootNode(),
+                                       selector_filter, style_scope_frame,
+                                       changed_rule_sets, invalidation_scope);
 }
 
 void StyleEngine::InvalidateInitialData() {
@@ -2404,7 +2544,7 @@ void StyleEngine::ApplyUserRuleSetChanges(
   HeapHashSet<Member<RuleSet>> changed_rule_sets;
 
   ActiveSheetsChange change = CompareActiveStyleSheets(
-      old_style_sheets, new_style_sheets, changed_rule_sets);
+      old_style_sheets, new_style_sheets, /*diffs=*/{}, changed_rule_sets);
 
   if (change == kNoActiveSheetsChanged) {
     return;
@@ -2516,9 +2656,6 @@ void StyleEngine::ApplyUserRuleSetChanges(
     MarkPositionFallbackStylesDirty();
   }
 
-  // TODO(crbug.com/1463966): @view-transitions doesn't yet work from user
-  // stylesheets.
-
   InvalidateForRuleSetChanges(GetDocument(), changed_rule_sets,
                               changed_rule_flags, kInvalidateAllScopes);
 }
@@ -2526,12 +2663,13 @@ void StyleEngine::ApplyUserRuleSetChanges(
 void StyleEngine::ApplyRuleSetChanges(
     TreeScope& tree_scope,
     const ActiveStyleSheetVector& old_style_sheets,
-    const ActiveStyleSheetVector& new_style_sheets) {
+    const ActiveStyleSheetVector& new_style_sheets,
+    const HeapVector<Member<RuleSetDiff>>& diffs) {
   DCHECK(global_rule_set_);
   HeapHashSet<Member<RuleSet>> changed_rule_sets;
 
   ActiveSheetsChange change = CompareActiveStyleSheets(
-      old_style_sheets, new_style_sheets, changed_rule_sets);
+      old_style_sheets, new_style_sheets, diffs, changed_rule_sets);
 
   unsigned changed_rule_flags = GetRuleSetFlags(changed_rule_sets);
 
@@ -2650,6 +2788,14 @@ void StyleEngine::ApplyRuleSetChanges(
     MarkPositionFallbackStylesDirty();
   }
 
+  if (changed_rule_flags & kViewTransitionsRules) {
+    // Since a shadow-tree isn't an independent navigable, @view-transition
+    // doesn't apply within one.
+    if (tree_scope.RootNode().IsDocumentNode()) {
+      AddViewTransitionsRules(new_style_sheets);
+    }
+  }
+
   if (!new_style_sheets.empty()) {
     tree_scope.EnsureScopedStyleResolver().AppendActiveStyleSheets(
         append_start_index, new_style_sheets);
@@ -2670,7 +2816,7 @@ void StyleEngine::LoadVisionDeficiencyFilter() {
     vision_deficiency_filter_ = nullptr;
   } else {
     AtomicString url = CreateVisionDeficiencyFilterUrl(vision_deficiency_);
-    cssvalue::CSSURIValue css_uri_value(url);
+    cssvalue::CSSURIValue css_uri_value{CSSUrlData(url)};
     SVGResource* svg_resource = css_uri_value.EnsureResourceReference();
     // Note: The fact that we're using data: URLs here is an
     // implementation detail. Emulating vision deficiencies should still
@@ -2766,7 +2912,10 @@ void StyleEngine::EnvironmentVariableChanged() {
 void StyleEngine::NodeWillBeRemoved(Node& node) {
   if (auto* element = DynamicTo<Element>(node)) {
     if (StyleContainmentScopeTree* tree = GetStyleContainmentScopeTree()) {
-      tree->ElementWillBeRemoved(*element);
+      if (element->GetComputedStyle() &&
+          element->ComputedStyleRef().ContainsStyle()) {
+        tree->DestroyScopeForElement(*element);
+      }
     }
     pending_invalidations_.RescheduleSiblingInvalidationsAsDescendants(
         *element);
@@ -2894,6 +3043,36 @@ bool StyleEngine::UserKeyframeStyleShouldOverride(
                                          new_rule->GetCascadeLayer()) <= 0;
 }
 
+void StyleEngine::AddViewTransitionsRules(
+    const ActiveStyleSheetVector& sheets) {
+  if (!RuntimeEnabledFeatures::ViewTransitionOnNavigationEnabled()) {
+    return;
+  }
+  view_transitions_rule_.Clear();
+
+  for (const ActiveStyleSheet& active_sheet : sheets) {
+    RuleSet* rule_set = active_sheet.second;
+    if (!rule_set || rule_set->ViewTransitionsRules().empty()) {
+      continue;
+    }
+
+    const CascadeLayerMap* layer_map =
+        document_->GetScopedStyleResolver()
+            ? document_->GetScopedStyleResolver()->GetCascadeLayerMap()
+            : nullptr;
+    for (auto& rule : rule_set->ViewTransitionsRules()) {
+      if (!view_transitions_rule_ || !layer_map ||
+          layer_map->CompareLayerOrder(
+              view_transitions_rule_->GetCascadeLayer(),
+              rule->GetCascadeLayer()) <= 0) {
+        view_transitions_rule_ = rule;
+      }
+    }
+  }
+
+  UpdateViewTransitionsOptIn();
+}
+
 void StyleEngine::AddFontPaletteValuesRules(const RuleSet& rule_set) {
   const HeapVector<Member<StyleRuleFontPaletteValues>>
       font_palette_values_rules = rule_set.FontPaletteValuesRules();
@@ -2983,10 +3162,87 @@ scoped_refptr<StyleInitialData> StyleEngine::MaybeCreateAndGetInitialData() {
   return initial_data_;
 }
 
+void StyleEngine::RecalcHighlightStylesForContainer(Element& container) {
+  const ComputedStyle& style = container.ComputedStyleRef();
+  if (!style.HasAnyHighlightPseudoElementStyles() ||
+      !style.HasNonUaHighlightPseudoStyles() ||
+      !style.HighlightData().DependsOnSizeContainerQueries()) {
+    return;
+  }
+
+  // We are recalculating styles for a size container whose highlight pseudo
+  // styles depend on size container queries. Make sure we update those styles
+  // based on the changed container size.
+  StyleRecalcContext recalc_context;
+  recalc_context.container = &container;
+  if (const ComputedStyle* new_style = container.RecalcHighlightStyles(
+          recalc_context, nullptr /* old_style */, style,
+          container.ParentComputedStyle());
+      new_style != &style) {
+    container.SetComputedStyle(new_style);
+    container.GetLayoutObject()->SetStyle(new_style,
+                                          LayoutObject::ApplyStyleChanges::kNo);
+  }
+}
+
+#if DCHECK_IS_ON()
+namespace {
+bool ContainerStyleChangesAllowed(Element& container,
+                                  const ComputedStyle* old_element_style,
+                                  const ComputedStyle* old_layout_style) {
+  // Generally, the size container element style is not allowed to change during
+  // layout, but for highlight pseudo elements depending on queries against
+  // their originating element, we need to update the style during layout since
+  // the highlight styles hangs off the originating element's ComputedStyle.
+  const ComputedStyle* new_element_style = container.GetComputedStyle();
+  const ComputedStyle* new_layout_style =
+      container.GetLayoutObject() ? container.GetLayoutObject()->Style()
+                                  : nullptr;
+
+  if (!new_element_style || !old_element_style) {
+    // The container should always have a ComputedStyle.
+    return false;
+  }
+  if (new_element_style != old_element_style) {
+    Vector<ComputedStyleBase::DebugDiff> diff =
+        old_element_style->DebugDiffFields(*new_element_style);
+    // Allow highlight styles to change, but only highlight styles.
+    if (diff.size() > 1 ||
+        (diff.size() == 1 &&
+         diff[0].field != ComputedStyleBase::DebugField::highlight_data_)) {
+      return false;
+    }
+  }
+  if (new_layout_style == old_layout_style) {
+    return true;
+  }
+  if (!new_layout_style || !old_element_style) {
+    // Container may not have a LayoutObject when called from
+    // UpdateStyleForNonEligibleContainer(), but then make sure the style is
+    // null for both cases.
+    return new_layout_style == old_element_style;
+  }
+  Vector<ComputedStyleBase::DebugDiff> diff =
+      old_layout_style->DebugDiffFields(*new_layout_style);
+  // Allow highlight styles to change, but only highlight styles.
+  return diff.size() == 0 ||
+         (diff.size() == 1 &&
+          diff[0].field == ComputedStyleBase::DebugField::highlight_data_);
+}
+}  // namespace
+#endif  // DCHECK_IS_ON()
+
 void StyleEngine::RecalcStyleForContainer(Element& container,
                                           StyleRecalcChange change) {
   // The container node must not need recalc at this point.
   DCHECK(!StyleRecalcChange().ShouldRecalcStyleFor(container));
+
+#if DCHECK_IS_ON()
+  const ComputedStyle* old_element_style = container.GetComputedStyle();
+  const ComputedStyle* old_layout_style =
+      container.GetLayoutObject() ? container.GetLayoutObject()->Style()
+                                  : nullptr;
+#endif  // DCHECK_IS_ON()
 
   // If the container itself depends on an outer container, then its
   // DependsOnSizeContainerQueries flag will be set, and we would recalc its
@@ -2998,10 +3254,17 @@ void StyleEngine::RecalcStyleForContainer(Element& container,
   container.SetChildNeedsStyleRecalc();
   style_recalc_root_.Update(nullptr, &container);
 
+  RecalcHighlightStylesForContainer(container);
+
   // TODO(crbug.com/1145970): Consider use a caching mechanism for FromAncestors
   // as we typically will call it for all containers on the first style/layout
   // pass.
   RecalcStyle(change, StyleRecalcContext::FromAncestors(container));
+
+#if DCHECK_IS_ON()
+  DCHECK(ContainerStyleChangesAllowed(container, old_element_style,
+                                      old_layout_style));
+#endif  // DCHECK_IS_ON()
 }
 
 void StyleEngine::UpdateStyleForNonEligibleContainer(Element& container) {
@@ -3135,8 +3398,7 @@ void StyleEngine::UpdateStyleAndLayoutTreeForContainer(
 
   if (container.NeedsReattachLayoutTree()) {
     ReattachContainerSubtree(container);
-  } else if (container.ChildNeedsReattachLayoutTree()) {
-    DCHECK(layout_tree_rebuild_root_.GetRootNode());
+  } else if (NeedsLayoutTreeRebuild()) {
     if (layout_tree_rebuild_root_.GetRootNode()->IsDocumentNode()) {
       // Avoid traversing from outside the container root. We know none of the
       // elements outside the subtree should be marked dirty in this pass, but
@@ -3550,8 +3812,11 @@ void StyleEngine::UpdateColorScheme() {
   preferred_color_scheme_ = settings->GetPreferredColorScheme();
   bool old_force_dark_mode_enabled = force_dark_mode_enabled_;
   force_dark_mode_enabled_ = settings->GetForceDarkModeEnabled();
+  bool media_feature_override_color_scheme = false;
 
-  if (const auto* overrides =
+  // TODO(1479201): Should DevTools emulation use the WebPreferences API
+  // overrides?
+  if (const MediaFeatureOverrides* overrides =
           GetDocument().GetPage()->GetMediaFeatureOverrides()) {
     if (absl::optional<ForcedColors> forced_color_override =
             overrides->GetForcedColors()) {
@@ -3560,6 +3825,18 @@ void StyleEngine::UpdateColorScheme() {
     if (absl::optional<mojom::blink::PreferredColorScheme>
             preferred_color_scheme_override =
                 overrides->GetPreferredColorScheme()) {
+      preferred_color_scheme_ = preferred_color_scheme_override.value();
+      media_feature_override_color_scheme = true;
+    }
+  }
+
+  const PreferenceOverrides* preference_overrides =
+      GetDocument().GetPage()->GetPreferenceOverrides();
+  if (preference_overrides && !media_feature_override_color_scheme) {
+    absl::optional<mojom::blink::PreferredColorScheme>
+        preferred_color_scheme_override =
+            preference_overrides->GetPreferredColorScheme();
+    if (preferred_color_scheme_override.has_value()) {
       preferred_color_scheme_ = preferred_color_scheme_override.value();
     }
   }
@@ -3854,6 +4131,7 @@ void StyleEngine::Trace(Visitor* visitor) const {
   visitor->Trace(text_tracks_);
   visitor->Trace(vtt_originating_element_);
   visitor->Trace(parent_for_detached_subtree_);
+  visitor->Trace(view_transitions_rule_);
   visitor->Trace(style_image_cache_);
   visitor->Trace(fill_or_clip_path_uri_value_cache_);
   visitor->Trace(style_containment_scope_tree_);

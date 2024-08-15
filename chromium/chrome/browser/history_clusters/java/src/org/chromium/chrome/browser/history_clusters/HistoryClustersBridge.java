@@ -6,12 +6,13 @@ package org.chromium.chrome.browser.history_clusters;
 
 import androidx.annotation.VisibleForTesting;
 
+import org.jni_zero.CalledByNative;
+import org.jni_zero.JNINamespace;
+import org.jni_zero.NativeMethods;
+
 import org.chromium.base.Callback;
 import org.chromium.base.Promise;
 import org.chromium.base.ResettersForTesting;
-import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.annotations.JNINamespace;
-import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.browser.history_clusters.HistoryCluster.MatchPosition;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.url.GURL;
@@ -47,8 +48,8 @@ public class HistoryClustersBridge {
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     public Promise<HistoryClustersResult> queryClusters(String query) {
         Promise<HistoryClustersResult> returnedPromise = new Promise<>();
-        HistoryClustersBridgeJni.get().queryClusters(
-                mNativeBridge, this, query, returnedPromise::fulfill);
+        HistoryClustersBridgeJni.get().queryClusters(mNativeBridge, this, query,
+                (HistoryClustersResult result) -> fulfillIfNotRejected(returnedPromise, result));
         return returnedPromise;
     }
 
@@ -56,14 +57,20 @@ public class HistoryClustersBridge {
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     public Promise<HistoryClustersResult> loadMoreClusters(String query) {
         Promise<HistoryClustersResult> returnedPromise = new Promise<>();
-        HistoryClustersBridgeJni.get().loadMoreClusters(
-                mNativeBridge, this, query, returnedPromise::fulfill);
+        HistoryClustersBridgeJni.get().loadMoreClusters(mNativeBridge, this, query,
+                (HistoryClustersResult result) -> fulfillIfNotRejected(returnedPromise, result));
         return returnedPromise;
     }
 
     /* Constructs a new HistoryClustersBridge. */
     private HistoryClustersBridge(long nativeBridgePointer) {
         mNativeBridge = nativeBridgePointer;
+    }
+
+    private static void fulfillIfNotRejected(
+            Promise<HistoryClustersResult> returnedPromise, HistoryClustersResult result) {
+        if (returnedPromise.isRejected()) return;
+        returnedPromise.fulfill(result);
     }
 
     @CalledByNative

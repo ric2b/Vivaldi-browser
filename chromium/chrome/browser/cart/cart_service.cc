@@ -4,6 +4,7 @@
 
 #include "chrome/browser/cart/cart_service.h"
 
+#include "base/containers/contains.h"
 #include "base/json/json_reader.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/no_destructor.h"
@@ -450,7 +451,8 @@ void CartService::RecordDiscountConsentStatusAtLoad(bool should_show_consent) {
 }
 
 bool CartService::IsCartExpired(const cart_db::ChromeCartContentProto& proto) {
-  return (base::Time::Now() - base::Time::FromDoubleT(proto.timestamp()))
+  return (base::Time::Now() -
+          base::Time::FromSecondsSinceUnixEpoch(proto.timestamp()))
              .InDays() > kCartExpirationTimeInDays;
 }
 
@@ -676,8 +678,8 @@ CartDB* CartService::GetDB() {
 
 void CartService::AddCartsWithFakeData() {
   DeleteCartsWithFakeData();
-  // Polulate and add some carts with fake data.
-  double time_now = base::Time::Now().ToDoubleT();
+  // Populate and add some carts with fake data.
+  double time_now = base::Time::Now().InSecondsFSinceUnixEpoch();
   cart_db::ChromeCartContentProto dummy_proto1;
   GURL dummy_url1 = GURL("https://www.example.com");
   dummy_proto1.set_key(std::string(kFakeDataPrefix) + eTLDPlusOne(dummy_url1));
@@ -1110,8 +1112,7 @@ void CartService::OnAddCart(const GURL& navigation_url,
   if (!has_product_image && cached_image_url.has_value()) {
     std::string url_string = cached_image_url.value().spec();
     auto existing_images = existing_proto.product_image_urls();
-    if (std::find(existing_images.begin(), existing_images.end(), url_string) ==
-        existing_images.end()) {
+    if (!base::Contains(existing_images, url_string)) {
       existing_proto.add_product_image_urls(url_string);
     }
   }

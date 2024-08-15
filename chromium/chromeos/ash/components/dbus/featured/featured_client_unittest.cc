@@ -4,6 +4,7 @@
 
 #include "chromeos/ash/components/dbus/featured/featured_client.h"
 
+#include <map>
 #include <string>
 
 #include "base/check_op.h"
@@ -30,6 +31,7 @@ namespace {
 
 using ::testing::_;
 using ::testing::Invoke;
+using ::testing::IsEmpty;
 using ::testing::Return;
 
 std::string CreateEscapedFilename(const std::string& trial_name,
@@ -265,48 +267,42 @@ TEST_F(FeaturedClientTest, FakeHandleSeedFetched_InvokeSuccessWhenSet) {
   EXPECT_EQ(FakeFeaturedClient::Get(), nullptr);
 }
 
-TEST_F(FeaturedClientTest, ListenForActiveEarlyBootTrials_NewFileCreated) {
-  base::RunLoop run_loop;
-  bool ran_callback = false;
+TEST_F(FeaturedClientTest, ReadTrialsActivatedBeforeChromeStartup_FilesExist) {
+  // Create active trial files before FeaturedClient is initialized.
+  EXPECT_TRUE(base::WriteFile(
+      active_trials_dir_.Append("test_trial_1,test_group_1"), ""));
+  EXPECT_TRUE(base::WriteFile(
+      active_trials_dir_.Append("test_trial_2,test_group_2"), ""));
+
+  std::map<std::string, std::string> expected;
+  expected.insert({"test_trial_1", "test_group_1"});
+  expected.insert({"test_trial_2", "test_group_2"});
+
+  std::map<std::string, std::string> actual;
   FeaturedClient::InitializeForTesting(
       bus_.get(), active_trials_dir_,
-      base::BindLambdaForTesting(
-          [&ran_callback, &run_loop](const std::string& trial_name,
-                                     const std::string& group_name) {
-            EXPECT_EQ(trial_name, "test_trial");
-            EXPECT_EQ(group_name, "test_group");
-            ran_callback = true;
-            run_loop.Quit();
-          }));
-
-  FeaturedClient* client = FeaturedClient::Get();
-  ASSERT_NE(client, nullptr);
-
-  // // Create a new active trial file.
-  EXPECT_TRUE(
-      base::WriteFile(active_trials_dir_.Append("test_trial,test_group"), ""));
-  run_loop.Run();
-  // Ensures the callback was executed.
-  EXPECT_TRUE(ran_callback);
+      base::BindLambdaForTesting([&actual](const std::string& trial_name,
+                                           const std::string& group_name) {
+        actual.insert({trial_name, group_name});
+      }));
+  EXPECT_EQ(actual, expected);
 
   FeaturedClient::Shutdown();
 
   EXPECT_EQ(FeaturedClient::Get(), nullptr);
 }
 
-TEST_F(FeaturedClientTest, ListenForActiveEarlyBootTrials_NoFileCreated) {
-  bool ran_callback = false;
+TEST_F(FeaturedClientTest,
+       ReadTrialsActivatedBeforeChromeStartup_NoFilesExist) {
+  std::map<std::string, std::string> actual_trials;
   FeaturedClient::InitializeForTesting(
       bus_.get(), active_trials_dir_,
       base::BindLambdaForTesting(
-          [&ran_callback](const std::string& trial_name,
-                          const std::string& group_name) {
-            ran_callback = true;
+          [&actual_trials](const std::string& trial_name,
+                           const std::string& group_name) {
+            actual_trials.insert({trial_name, group_name});
           }));
-
-  FeaturedClient* client = FeaturedClient::Get();
-  ASSERT_NE(client, nullptr);
-  EXPECT_FALSE(ran_callback);
+  EXPECT_THAT(actual_trials, IsEmpty());
 
   FeaturedClient::Shutdown();
 

@@ -27,6 +27,8 @@ const wchar_t kRegValueDateOfLastRollcall[] = L"DayOfLastRollCall";
 const wchar_t kRegValueName[] = L"name";
 const wchar_t kRegValueUninstallCmdLine[] = L"UninstallCmdLine";
 const wchar_t kRegValueVersion[] = L"version";
+
+const wchar_t kRegKeyCohort[] = L"cohort";
 const wchar_t kRegValueCohortName[] = L"name";
 const wchar_t kRegValueCohortHint[] = L"hint";
 
@@ -64,6 +66,8 @@ const wchar_t kRegValueEnrollmentMandatory[] = L"EnrollmentMandatory";
 
 const wchar_t kRegKeyCompanyEnrollment[] = COMPANY_KEY L"Enrollment\\";
 const wchar_t kRegValueDmToken[] = L"dmtoken";
+
+const wchar_t kRegValueIntegrationTestMode[] = L"IntegrationTestMode";
 
 const wchar_t kWindowsServiceName[] = L"Service";
 const wchar_t kWindowsInternalServiceName[] = L"InternalService";

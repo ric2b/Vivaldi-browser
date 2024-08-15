@@ -34,6 +34,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/gtest_util.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_command_line.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_mock_time_task_runner.h"
@@ -136,6 +137,7 @@ using ::testing::_;
 
 using blink::mojom::AttestationConveyancePreference;
 using blink::mojom::AuthenticationExtensionsClientInputs;
+using blink::mojom::AuthenticationExtensionsClientOutputs;
 using blink::mojom::AuthenticatorSelectionCriteria;
 using blink::mojom::AuthenticatorSelectionCriteriaPtr;
 using blink::mojom::AuthenticatorStatus;
@@ -1093,7 +1095,7 @@ TEST_F(AuthenticatorImplTest, AppIdExtension) {
 
     GetAssertionResult result = AuthenticatorGetAssertion(std::move(options));
     ASSERT_EQ(result.status, AuthenticatorStatus::SUCCESS);
-    EXPECT_EQ(result.response->echo_appid_extension, false);
+    EXPECT_EQ(result.response->extensions->echo_appid_extension, false);
   }
 
   {
@@ -1111,8 +1113,8 @@ TEST_F(AuthenticatorImplTest, AppIdExtension) {
 
     GetAssertionResult result = AuthenticatorGetAssertion(std::move(options));
     ASSERT_EQ(result.status, AuthenticatorStatus::SUCCESS);
-    EXPECT_EQ(result.response->echo_appid_extension, true);
-    EXPECT_EQ(result.response->appid_extension, false);
+    EXPECT_EQ(result.response->extensions->echo_appid_extension, true);
+    EXPECT_EQ(result.response->extensions->appid_extension, false);
   }
 
   {
@@ -1128,8 +1130,8 @@ TEST_F(AuthenticatorImplTest, AppIdExtension) {
 
     GetAssertionResult result = AuthenticatorGetAssertion(std::move(options));
     ASSERT_EQ(result.status, AuthenticatorStatus::SUCCESS);
-    EXPECT_EQ(result.response->echo_appid_extension, true);
-    EXPECT_EQ(result.response->appid_extension, true);
+    EXPECT_EQ(result.response->extensions->echo_appid_extension, true);
+    EXPECT_EQ(result.response->extensions->appid_extension, true);
   }
 
   {
@@ -1153,8 +1155,8 @@ TEST_F(AuthenticatorImplTest, AppIdExtension) {
 
     GetAssertionResult result = AuthenticatorGetAssertion(std::move(options));
     ASSERT_EQ(result.status, AuthenticatorStatus::SUCCESS);
-    EXPECT_EQ(result.response->echo_appid_extension, true);
-    EXPECT_EQ(result.response->appid_extension, true);
+    EXPECT_EQ(result.response->extensions->echo_appid_extension, true);
+    EXPECT_EQ(result.response->extensions->appid_extension, true);
   }
 }
 
@@ -1238,12 +1240,16 @@ TEST_F(AuthenticatorImplTest, TestGetAssertionTimeout) {
       ->ReplaceDefaultDiscoveryFactoryForTesting(
           std::make_unique<device::FidoDiscoveryFactory>());
   NavigateAndCommit(GURL(kTestOrigin1));
+  base::HistogramTester histogram_tester;
   PublicKeyCredentialRequestOptionsPtr options =
       GetTestPublicKeyCredentialRequestOptions();
 
   EXPECT_EQ(
       AuthenticatorGetAssertionAndWaitForTimeout(std::move(options)).status,
       AuthenticatorStatus::NOT_ALLOWED_ERROR);
+  histogram_tester.ExpectUniqueSample(
+      "WebAuthentication.GetAssertion.Result",
+      AuthenticatorCommonImpl::GetAssertionResult::kTimeout, 1);
 }
 
 TEST_F(AuthenticatorImplTest, OversizedCredentialId) {
@@ -1519,16 +1525,6 @@ TEST_F(AuthenticatorImplTest, GetAssertionResponseWithAttestedCredentialData) {
       AuthenticatorStatus::NOT_ALLOWED_ERROR);
 }
 
-TEST_F(AuthenticatorImplTest, GPMPasskeys_IsConditionalMediationAvailable) {
-  // Conditional mediation should always be available if gpm passkeys are
-  // enabled.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures(
-      {device::kWebAuthnListSyncedPasskeys, device::kWebAuthnNewPasskeyUI},
-      /*disabled_features=*/{});
-  ASSERT_TRUE(AuthenticatorIsConditionalMediationAvailable());
-}
-
 #if BUILDFLAG(IS_WIN)
 TEST_F(AuthenticatorImplTest, IsUVPAA) {
   virtual_device_factory_->set_discover_win_webauthn_api_authenticator(true);
@@ -1784,6 +1780,10 @@ class TestWebAuthenticationDelegate : public WebAuthenticationDelegate {
     return supports_resident_keys;
   }
 
+  bool SupportsPasskeyMetadataSyncing() override {
+    return supports_passkey_metadata_syncing;
+  }
+
   bool IsFocused(WebContents* web_contents) override { return is_focused; }
 
 #if BUILDFLAG(IS_MAC)
@@ -1831,6 +1831,9 @@ class TestWebAuthenticationDelegate : public WebAuthenticationDelegate {
   // Indicates whether resident key operations should be permitted by the
   // delegate.
   bool supports_resident_keys = false;
+
+  // Indicates whether metadata syncing should be assumed to be supported.
+  bool supports_passkey_metadata_syncing = false;
 
   // The return value of the focus check issued at the end of a request.
   bool is_focused = true;
@@ -1931,12 +1934,14 @@ class TestAuthenticatorRequestDelegate
       RenderFrameHost* render_frame_host,
       base::OnceClosure action_callbacks_registered_callback,
       AttestationConsent attestation_consent,
-      base::OnceClosure started_over_callback)
+      base::OnceClosure started_over_callback,
+      bool simulate_user_cancelled)
       : action_callbacks_registered_callback_(
             std::move(action_callbacks_registered_callback)),
         attestation_consent_(attestation_consent),
         started_over_callback_(std::move(started_over_callback)),
-        does_block_request_on_failure_(!started_over_callback_.is_null()) {}
+        does_block_request_on_failure_(!started_over_callback_.is_null()),
+        simulate_user_cancelled_(simulate_user_cancelled) {}
 
   TestAuthenticatorRequestDelegate(const TestAuthenticatorRequestDelegate&) =
       delete;
@@ -2000,7 +2005,8 @@ class TestAuthenticatorRequestDelegate
     // Simulate the behaviour of Chrome's |AuthenticatorRequestDialogModel|
     // which shows a specific error when no transports are available and lets
     // the user cancel the request.
-    if (transport_info.available_transports.empty()) {
+    if (transport_info.available_transports.empty() ||
+        simulate_user_cancelled_) {
       std::move(cancel_callback_).Run();
     }
   }
@@ -2022,6 +2028,7 @@ class TestAuthenticatorRequestDelegate
   base::OnceClosure start_over_callback_;
   bool does_block_request_on_failure_ = false;
   bool attestation_consent_queried_ = false;
+  bool simulate_user_cancelled_ = false;
 };
 
 // TestAuthenticatorContentBrowserClient is a test fake implementation of the
@@ -2049,7 +2056,8 @@ class TestAuthenticatorContentBrowserClient : public ContentBrowserClient {
         action_callbacks_registered_callback
             ? std::move(action_callbacks_registered_callback)
             : base::DoNothing(),
-        attestation_consent, std::move(started_over_callback_));
+        attestation_consent, std::move(started_over_callback_),
+        simulate_user_cancelled_);
   }
 
   TestWebAuthenticationDelegate web_authentication_delegate;
@@ -2071,6 +2079,10 @@ class TestAuthenticatorContentBrowserClient : public ContentBrowserClient {
   // second time action callbacks are registered. It also causes
   // DoesBlockRequestOnFailure to return true, once.
   base::OnceClosure started_over_callback_;
+
+  // This simulates the user immediately cancelling the request after transport
+  // availability info is enumerated.
+  bool simulate_user_cancelled_ = false;
 };
 
 // A test class that installs and removes an
@@ -2318,6 +2330,20 @@ TEST_F(AuthenticatorContentBrowserClientTest,
       options->allow_credentials[0].id, kTestRelyingPartyId));
   EXPECT_EQ(AuthenticatorGetAssertion(std::move(options)).status,
             AuthenticatorStatus::SUCCESS);
+}
+
+TEST_F(AuthenticatorContentBrowserClientTest, TestGetAssertionCancel) {
+  NavigateAndCommit(GURL(kTestOrigin1));
+  test_client_.simulate_user_cancelled_ = true;
+  base::HistogramTester histogram_tester;
+  PublicKeyCredentialRequestOptionsPtr options =
+      GetTestPublicKeyCredentialRequestOptions();
+
+  EXPECT_EQ(AuthenticatorGetAssertion().status,
+            AuthenticatorStatus::NOT_ALLOWED_ERROR);
+  histogram_tester.ExpectUniqueSample(
+      "WebAuthentication.GetAssertion.Result",
+      AuthenticatorCommonImpl::GetAssertionResult::kUserCancelled, 1);
 }
 
 // Test that credentials can be created and used from an extension origin when
@@ -3323,6 +3349,16 @@ TEST_F(AuthenticatorContentBrowserClientTest, IsUVPAAOverride) {
   }
 }
 
+TEST_F(AuthenticatorContentBrowserClientTest,
+       GPMPasskeys_IsConditionalMediationAvailable) {
+  // Conditional mediation should always be available if gpm passkeys are
+  // enabled.
+  test_client_.GetTestWebAuthenticationDelegate()
+      ->supports_passkey_metadata_syncing = true;
+  NavigateAndCommit(GURL(kTestOrigin1));
+  ASSERT_TRUE(AuthenticatorIsConditionalMediationAvailable());
+}
+
 // AuthenticatorImplRemoteDesktopClientOverrideTest exercises the
 // RemoteDesktopClientOverride extension, which is used by remote desktop
 // applications exercising requests on behalf of other origins.
@@ -3535,7 +3571,8 @@ class MockAuthenticatorRequestDelegateObserver
             nullptr /* render_frame_host */,
             base::DoNothing() /* did_start_request_callback */,
             AttestationConsent::NOT_USED,
-            /*started_over_callback=*/base::OnceClosure()),
+            /*started_over_callback=*/base::OnceClosure(),
+            /*simulate_user_cancelled=*/false),
         failure_reasons_callback_(std::move(failure_reasons_callback)) {}
 
   MockAuthenticatorRequestDelegateObserver(
@@ -3890,6 +3927,34 @@ TEST_F(AuthenticatorImplTest, MakeCredentialWithLargeExcludeList) {
               has_excluded_credential ? AuthenticatorStatus::CREDENTIAL_EXCLUDED
                                       : AuthenticatorStatus::SUCCESS);
   }
+}
+
+TEST_F(AuthenticatorImplTest, GetAssertionResultMetricError) {
+  NavigateAndCommit(GURL(kTestOrigin1));
+
+  base::HistogramTester histogram_tester;
+  PublicKeyCredentialRequestOptionsPtr options =
+      GetTestPublicKeyCredentialRequestOptions();
+  EXPECT_EQ(AuthenticatorGetAssertion(std::move(options)).status,
+            AuthenticatorStatus::NOT_ALLOWED_ERROR);
+  histogram_tester.ExpectUniqueSample(
+      "WebAuthentication.GetAssertion.Result",
+      AuthenticatorCommonImpl::GetAssertionResult::kOtherError, 1);
+}
+
+TEST_F(AuthenticatorImplTest, GetAssertionResultMetricSuccess) {
+  NavigateAndCommit(GURL(kTestOrigin1));
+
+  base::HistogramTester histogram_tester;
+  PublicKeyCredentialRequestOptionsPtr options =
+      GetTestPublicKeyCredentialRequestOptions();
+  ASSERT_TRUE(virtual_device_factory_->mutable_state()->InjectRegistration(
+      options->allow_credentials.back().id, kTestRelyingPartyId));
+  EXPECT_EQ(AuthenticatorGetAssertion(std::move(options)).status,
+            AuthenticatorStatus::SUCCESS);
+  histogram_tester.ExpectUniqueSample(
+      "WebAuthentication.GetAssertion.Result",
+      AuthenticatorCommonImpl::GetAssertionResult::kOtherSuccess, 1);
 }
 
 // Tests that for an authenticator that does not support batching, credential
@@ -4652,7 +4717,7 @@ TEST_F(AuthenticatorImplTest, CredBlob) {
 
     auto result = AuthenticatorGetAssertion(std::move(options));
     ASSERT_EQ(result.status, AuthenticatorStatus::SUCCESS);
-    EXPECT_EQ(result.response->get_cred_blob, cred_blob);
+    EXPECT_EQ(result.response->extensions->get_cred_blob, cred_blob);
   }
 }
 
@@ -4877,12 +4942,13 @@ TEST_F(AuthenticatorDevicePublicKeyTest, DevicePublicKeyGetAssertion) {
     GetAssertionResult result = AuthenticatorGetAssertion(std::move(options));
 
     ASSERT_EQ(result.status, AuthenticatorStatus::SUCCESS);
-    ASSERT_EQ(static_cast<bool>(result.response->device_public_key),
+    ASSERT_EQ(static_cast<bool>(result.response->extensions->device_public_key),
               dpk_support);
     if (dpk_support) {
+      ASSERT_FALSE(result.response->extensions->device_public_key
+                       ->authenticator_output.empty());
       ASSERT_FALSE(
-          result.response->device_public_key->authenticator_output.empty());
-      ASSERT_FALSE(result.response->device_public_key->signature.empty());
+          result.response->extensions->device_public_key->signature.empty());
     }
   }
 }
@@ -4911,7 +4977,8 @@ TEST_F(AuthenticatorDevicePublicKeyTest,
 
     if (backup_eligible) {
       ASSERT_EQ(result.status, AuthenticatorStatus::SUCCESS);
-      ASSERT_TRUE(static_cast<bool>(result.response->device_public_key));
+      ASSERT_TRUE(
+          static_cast<bool>(result.response->extensions->device_public_key));
     } else {
       ASSERT_EQ(result.status, AuthenticatorStatus::NOT_ALLOWED_ERROR);
     }
@@ -7703,12 +7770,12 @@ TEST_F(ResidentKeyAuthenticatorImplTest, GetAssertionLargeBlobRead) {
     GetAssertionResult result = AuthenticatorGetAssertion(std::move(options));
 
     ASSERT_EQ(AuthenticatorStatus::SUCCESS, result.status);
-    EXPECT_TRUE(result.response->echo_large_blob);
-    EXPECT_FALSE(result.response->echo_large_blob_written);
+    EXPECT_TRUE(result.response->extensions->echo_large_blob);
+    EXPECT_FALSE(result.response->extensions->echo_large_blob_written);
     if (test.did_read_large_blob) {
-      EXPECT_EQ(large_blob, *result.response->large_blob);
+      EXPECT_EQ(large_blob, *result.response->extensions->large_blob);
     } else {
-      EXPECT_FALSE(result.response->large_blob.has_value());
+      EXPECT_FALSE(result.response->extensions->large_blob.has_value());
     }
     virtual_device_factory_->mutable_state()->registrations.clear();
     virtual_device_factory_->mutable_state()->ClearLargeBlobs();
@@ -7770,10 +7837,11 @@ TEST_F(ResidentKeyAuthenticatorImplTest, GetAssertionLargeBlobWrite) {
     GetAssertionResult result = AuthenticatorGetAssertion(std::move(options));
 
     ASSERT_EQ(AuthenticatorStatus::SUCCESS, result.status);
-    EXPECT_TRUE(result.response->echo_large_blob);
-    EXPECT_FALSE(result.response->large_blob.has_value());
-    EXPECT_TRUE(result.response->echo_large_blob_written);
-    EXPECT_EQ(test.did_write_large_blob, result.response->large_blob_written);
+    EXPECT_TRUE(result.response->extensions->echo_large_blob);
+    EXPECT_FALSE(result.response->extensions->large_blob.has_value());
+    EXPECT_TRUE(result.response->extensions->echo_large_blob_written);
+    EXPECT_EQ(test.did_write_large_blob,
+              result.response->extensions->large_blob_written);
     if (test.did_write_large_blob) {
       absl::optional<device::LargeBlob> compressed_blob =
           virtual_device_factory_->mutable_state()->GetLargeBlob(
@@ -7810,9 +7878,9 @@ TEST_F(ResidentKeyAuthenticatorImplTest,
   options->extensions->large_blob_read = true;
   GetAssertionResult result = AuthenticatorGetAssertion(std::move(options));
   ASSERT_EQ(AuthenticatorStatus::SUCCESS, result.status);
-  EXPECT_TRUE(result.response->echo_large_blob);
-  EXPECT_FALSE(result.response->echo_large_blob_written);
-  ASSERT_FALSE(result.response->large_blob);
+  EXPECT_TRUE(result.response->extensions->echo_large_blob);
+  EXPECT_FALSE(result.response->extensions->echo_large_blob_written);
+  ASSERT_FALSE(result.response->extensions->large_blob);
 }
 
 TEST_F(ResidentKeyAuthenticatorImplTest, GetAssertionLargeBlobExtension) {
@@ -7839,9 +7907,9 @@ TEST_F(ResidentKeyAuthenticatorImplTest, GetAssertionLargeBlobExtension) {
     options->extensions->large_blob_read = true;
     GetAssertionResult result = AuthenticatorGetAssertion(std::move(options));
     ASSERT_EQ(AuthenticatorStatus::SUCCESS, result.status);
-    EXPECT_TRUE(result.response->echo_large_blob);
-    EXPECT_FALSE(result.response->echo_large_blob_written);
-    ASSERT_FALSE(result.response->large_blob);
+    EXPECT_TRUE(result.response->extensions->echo_large_blob);
+    EXPECT_FALSE(result.response->extensions->echo_large_blob_written);
+    ASSERT_FALSE(result.response->extensions->large_blob);
   }
 
   {
@@ -7852,9 +7920,9 @@ TEST_F(ResidentKeyAuthenticatorImplTest, GetAssertionLargeBlobExtension) {
     options->extensions->large_blob_write = large_blob;
     GetAssertionResult result = AuthenticatorGetAssertion(std::move(options));
     ASSERT_EQ(AuthenticatorStatus::SUCCESS, result.status);
-    EXPECT_TRUE(result.response->echo_large_blob);
-    EXPECT_TRUE(result.response->echo_large_blob_written);
-    EXPECT_FALSE(result.response->large_blob);
+    EXPECT_TRUE(result.response->extensions->echo_large_blob);
+    EXPECT_TRUE(result.response->extensions->echo_large_blob_written);
+    EXPECT_FALSE(result.response->extensions->large_blob);
   }
 
   {
@@ -7865,10 +7933,10 @@ TEST_F(ResidentKeyAuthenticatorImplTest, GetAssertionLargeBlobExtension) {
     options->extensions->large_blob_read = true;
     GetAssertionResult result = AuthenticatorGetAssertion(std::move(options));
     ASSERT_EQ(AuthenticatorStatus::SUCCESS, result.status);
-    EXPECT_TRUE(result.response->echo_large_blob);
-    EXPECT_FALSE(result.response->echo_large_blob_written);
-    ASSERT_TRUE(result.response->large_blob);
-    EXPECT_EQ(large_blob, *result.response->large_blob);
+    EXPECT_TRUE(result.response->extensions->echo_large_blob);
+    EXPECT_FALSE(result.response->extensions->echo_large_blob_written);
+    ASSERT_TRUE(result.response->extensions->large_blob);
+    EXPECT_EQ(large_blob, *result.response->extensions->large_blob);
   }
 
   // Corrupt the large blob data and attempt to read it back. The invalid
@@ -7884,9 +7952,9 @@ TEST_F(ResidentKeyAuthenticatorImplTest, GetAssertionLargeBlobExtension) {
     options->extensions->large_blob_read = true;
     GetAssertionResult result = AuthenticatorGetAssertion(std::move(options));
     ASSERT_EQ(AuthenticatorStatus::SUCCESS, result.status);
-    EXPECT_TRUE(result.response->echo_large_blob);
-    EXPECT_FALSE(result.response->echo_large_blob_written);
-    ASSERT_FALSE(result.response->large_blob);
+    EXPECT_TRUE(result.response->extensions->echo_large_blob);
+    EXPECT_FALSE(result.response->extensions->echo_large_blob_written);
+    ASSERT_FALSE(result.response->extensions->large_blob);
   }
 }
 
@@ -8446,9 +8514,9 @@ TEST_F(ResidentKeyAuthenticatorImplTest, PRFExtension) {
             AuthenticatorGetAssertion(std::move(options));
 
         EXPECT_EQ(result.status, AuthenticatorStatus::SUCCESS);
-        CHECK(result.response->prf_results);
-        CHECK(!result.response->prf_results->id);
-        return std::move(result.response->prf_results);
+        CHECK(result.response->extensions->prf_results);
+        CHECK(!result.response->extensions->prf_results->id);
+        return std::move(result.response->extensions->prf_results);
       };
 
       const std::vector<uint8_t> salt1(32, 1);
@@ -8598,6 +8666,49 @@ TEST_F(ResidentKeyAuthenticatorImplTest, PRFExtension) {
   }
 }
 
+TEST_F(ResidentKeyAuthenticatorImplTest, PRFEvaluationDuringMakeCredential) {
+  // The WebAuthn "prf" extension supports evaluating the PRF when making a
+  // credential. The hmac-secret extension does not support this, but hybrid
+  // devices (and our virtual authenticator) can support it using the
+  // CTAP2-level "prf" extension.
+  NavigateAndCommit(GURL(kTestOrigin1));
+
+  device::VirtualCtap2Device::Config config;
+  config.prf_support = true;
+  config.internal_account_chooser = true;
+  config.always_uv = true;
+  config.pin_support = true;
+  config.resident_key_support = true;
+  virtual_device_factory_->SetCtap2Config(config);
+
+  PublicKeyCredentialCreationOptionsPtr options =
+      GetTestPublicKeyCredentialCreationOptions();
+  options->prf_enable = true;
+  options->authenticator_selection->resident_key =
+      device::ResidentKeyRequirement::kRequired;
+  options->user.id = {1, 2, 3, 4};
+  options->user.name = "name";
+  options->user.display_name = "displayName";
+  options->prf_input = blink::mojom::PRFValues::New();
+  const std::vector<uint8_t> salt1(32, 1);
+  const std::vector<uint8_t> salt2(32, 2);
+  options->prf_input->first = salt1;
+  options->prf_input->second = salt2;
+
+  MakeCredentialResult result = AuthenticatorMakeCredential(std::move(options));
+  EXPECT_EQ(result.status, AuthenticatorStatus::SUCCESS);
+
+  EXPECT_TRUE(result.response->echo_prf);
+  EXPECT_TRUE(result.response->prf);
+  ASSERT_TRUE(result.response->prf_results);
+  EXPECT_EQ(result.response->prf_results->first.size(), 32u);
+  EXPECT_EQ(result.response->prf_results->second->size(), 32u);
+}
+
+TEST_F(ResidentKeyAuthenticatorImplTest, MakeCredentialPRFExtension) {
+  NavigateAndCommit(GURL(kTestOrigin1));
+}
+
 TEST_F(ResidentKeyAuthenticatorImplTest,
        PRFExtensionOnUnconfiguredAuthenticator) {
   // If a credential is on a UV-capable, but not UV-configured authenticator and
@@ -8637,7 +8748,7 @@ TEST_F(ResidentKeyAuthenticatorImplTest,
   GetAssertionResult result = AuthenticatorGetAssertion(std::move(options));
 
   EXPECT_EQ(result.status, AuthenticatorStatus::SUCCESS);
-  EXPECT_FALSE(result.response->prf_results);
+  EXPECT_FALSE(result.response->extensions->prf_results);
 }
 
 TEST_F(ResidentKeyAuthenticatorImplTest, ConditionalUI) {
@@ -9332,7 +9443,7 @@ class AuthenticatorCableV2Test : public AuthenticatorImplRequestDelegateTest {
 
   void OnInvalidatedPairing(
       std::unique_ptr<device::cablev2::Pairing> disabled_pairing) {
-    pairings_.erase(std::ranges::find_if(
+    pairings_.erase(base::ranges::find_if(
         pairings_, [&disabled_pairing](const auto& pairing) {
           return device::cablev2::Pairing::EqualPublicKeys(pairing,
                                                            disabled_pairing);
@@ -9853,7 +9964,7 @@ TEST_F(AuthenticatorCableV2AuthenticatorTest, DevicePublicKeyGetAssertion) {
   const auto result = AuthenticatorGetAssertion(std::move(options));
 
   ASSERT_EQ(result.status, AuthenticatorStatus::SUCCESS);
-  EXPECT_TRUE(result.response->device_public_key);
+  EXPECT_TRUE(result.response->extensions->device_public_key);
 }
 
 TEST_F(AuthenticatorCableV2AuthenticatorTest, PRFMakeCredential) {
@@ -9926,11 +10037,11 @@ TEST_F(AuthenticatorCableV2AuthenticatorTest, PRFGetAssertion) {
   const auto result = AuthenticatorGetAssertion(std::move(options));
 
   ASSERT_EQ(result.status, AuthenticatorStatus::SUCCESS);
-  EXPECT_TRUE(result.response->echo_prf);
-  EXPECT_TRUE(result.response->prf_results);
-  EXPECT_EQ(result.response->prf_results->first, output1);
-  ASSERT_TRUE(result.response->prf_results->second.has_value());
-  EXPECT_EQ(*result.response->prf_results->second, output2);
+  EXPECT_TRUE(result.response->extensions->echo_prf);
+  EXPECT_TRUE(result.response->extensions->prf_results);
+  EXPECT_EQ(result.response->extensions->prf_results->first, output1);
+  ASSERT_TRUE(result.response->extensions->prf_results->second.has_value());
+  EXPECT_EQ(*result.response->extensions->prf_results->second, output2);
 }
 
 TEST_F(AuthenticatorCableV2AuthenticatorTest, PRFGetAssertionByCredential) {
@@ -9942,11 +10053,11 @@ TEST_F(AuthenticatorCableV2AuthenticatorTest, PRFGetAssertionByCredential) {
   const auto result = AuthenticatorGetAssertion(std::move(options));
 
   ASSERT_EQ(result.status, AuthenticatorStatus::SUCCESS);
-  EXPECT_TRUE(result.response->echo_prf);
-  EXPECT_TRUE(result.response->prf_results);
-  EXPECT_EQ(result.response->prf_results->first, output1);
-  ASSERT_TRUE(result.response->prf_results->second.has_value());
-  EXPECT_EQ(*result.response->prf_results->second, output2);
+  EXPECT_TRUE(result.response->extensions->echo_prf);
+  EXPECT_TRUE(result.response->extensions->prf_results);
+  EXPECT_EQ(result.response->extensions->prf_results->first, output1);
+  ASSERT_TRUE(result.response->extensions->prf_results->second.has_value());
+  EXPECT_EQ(*result.response->extensions->prf_results->second, output2);
 }
 
 // AuthenticatorImplWithRequestProxyTest tests behavior with an installed
@@ -9995,6 +10106,34 @@ TEST_F(AuthenticatorImplWithRequestProxyTest, IsUVPAA) {
 }
 
 TEST_F(AuthenticatorImplWithRequestProxyTest, IsConditionalMediationAvailable) {
+  // We can't autofill credentials over the request proxy. Hence, conditional
+  // mediation is unavailable, even if IsUVPAA returns true.
+  NavigateAndCommit(GURL(kTestOrigin1));
+
+  // Ensure there is no test override set and we're testing the real
+  // implementation.
+  ASSERT_EQ(test_client_.GetTestWebAuthenticationDelegate()->is_uvpaa_override,
+            absl::nullopt);
+
+  // Proxy says `IsUVPAA()` is true.
+  request_proxy().config().is_uvpaa = true;
+  EXPECT_TRUE(AuthenticatorIsUvpaa());
+  EXPECT_EQ(request_proxy().observations().num_isuvpaa, 1u);
+
+  // But `IsConditionalMediationAvailable()` still returns false, bypassing the
+  // proxy.
+  EXPECT_FALSE(AuthenticatorIsConditionalMediationAvailable());
+  EXPECT_EQ(request_proxy().observations().num_isuvpaa, 1u);
+}
+
+// Temporary regression test for crbug.com/1489468.
+// TODO(crbug.com/1489482): Remove after passkey metadata syncing is enabled by
+// default.
+TEST_F(AuthenticatorImplWithRequestProxyTest,
+       IsConditionalMediationAvailable_MetadataSyncing) {
+  test_client_.GetTestWebAuthenticationDelegate()
+      ->supports_passkey_metadata_syncing = true;
+
   // We can't autofill credentials over the request proxy. Hence, conditional
   // mediation is unavailable, even if IsUVPAA returns true.
   NavigateAndCommit(GURL(kTestOrigin1));
@@ -10169,6 +10308,8 @@ TEST_F(AuthenticatorImplWithRequestProxyTest, GetAssertion) {
       GetAssertionAuthenticatorResponse::New();
   request_proxy().config().get_assertion_response->info =
       CommonCredentialInfo::New();
+  request_proxy().config().get_assertion_response->extensions =
+      AuthenticationExtensionsClientOutputs::New();
 
   NavigateAndCommit(GURL(kTestOrigin1));
   auto request = GetTestPublicKeyCredentialRequestOptions();

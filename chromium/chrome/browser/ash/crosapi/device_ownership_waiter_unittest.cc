@@ -12,6 +12,7 @@
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
+#include "chromeos/ash/components/install_attributes/stub_install_attributes.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
@@ -23,12 +24,11 @@ namespace crosapi {
 class DeviceOwnershipWaiterTest : public testing::Test {
  public:
   DeviceOwnershipWaiterTest() = default;
+
   ~DeviceOwnershipWaiterTest() override = default;
 
   void SetUp() override {
-    auto user_manager = std::make_unique<ash::FakeChromeUserManager>();
-    scoped_user_manager_ = std::make_unique<user_manager::ScopedUserManager>(
-        std::move(user_manager));
+    fake_user_manager_.Reset(std::make_unique<ash::FakeChromeUserManager>());
   }
 
   ash::FakeChromeUserManager& GetFakeUserManager() {
@@ -38,7 +38,11 @@ class DeviceOwnershipWaiterTest : public testing::Test {
 
  private:
   base::test::TaskEnvironment task_environment_;
-  std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
+  std::unique_ptr<ash::ScopedStubInstallAttributes> stub_install_attributes_{
+      std::make_unique<ash::ScopedStubInstallAttributes>(
+          ash::StubInstallAttributes::CreateUnset())};
+  user_manager::TypedScopedUserManager<ash::FakeChromeUserManager>
+      fake_user_manager_;
 };
 
 TEST_F(DeviceOwnershipWaiterTest, DelaysCorrectly) {
@@ -52,8 +56,8 @@ TEST_F(DeviceOwnershipWaiterTest, DelaysCorrectly) {
     DeviceOwnershipWaiterImpl waiter;
 
     base::test::TestFuture<void> future;
-    waiter.WaitForOwnerhipFetched(future.GetCallback(),
-                                  /*launching_at_login_screen=*/true);
+    waiter.WaitForOwnershipFetched(future.GetCallback(),
+                                   /*launching_at_login_screen=*/true);
 
     GetFakeUserManager().SetOwnerId(user_manager::StubAccountId());
 
@@ -65,8 +69,8 @@ TEST_F(DeviceOwnershipWaiterTest, DelaysCorrectly) {
     DeviceOwnershipWaiterImpl waiter;
 
     base::test::TestFuture<void> future;
-    waiter.WaitForOwnerhipFetched(future.GetCallback(),
-                                  /*launching_at_login_screen=*/false);
+    waiter.WaitForOwnershipFetched(future.GetCallback(),
+                                   /*launching_at_login_screen=*/false);
 
     GetFakeUserManager().SetOwnerId(user_manager::StubAccountId());
 
@@ -84,8 +88,8 @@ TEST_F(DeviceOwnershipWaiterTest, DoesNotDelayForChromeOsOnLinux) {
   DeviceOwnershipWaiterImpl waiter;
 
   base::test::TestFuture<void> future;
-  waiter.WaitForOwnerhipFetched(future.GetCallback(),
-                                /*launching_at_login_screen=*/false);
+  waiter.WaitForOwnershipFetched(future.GetCallback(),
+                                 /*launching_at_login_screen=*/false);
 
   EXPECT_TRUE(future.Wait());
 }

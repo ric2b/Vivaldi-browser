@@ -15,6 +15,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "ui/events/ash/keyboard_capability.h"
+#include "ui/events/ash/mojom/extended_fkeys_modifier.mojom-shared.h"
 #include "ui/events/ash/mojom/modifier_key.mojom-shared.h"
 #include "ui/events/ash/mojom/simulate_right_click_modifier.mojom-shared.h"
 #include "ui/events/ash/mojom/six_pack_shortcut_modifier.mojom-shared.h"
@@ -30,7 +31,7 @@ class ImeKeyboard;
 
 namespace ui {
 
-enum class DomCode;
+enum class DomCode : uint32_t;
 struct KeyboardDevice;
 
 // EventRewriterAsh makes various changes to keyboard-related events,
@@ -187,24 +188,16 @@ class EventRewriterAsh : public EventRewriter {
         ui::mojom::SixPackShortcutModifier blocked_modifier,
         ui::mojom::SixPackShortcutModifier active_modifier,
         int device_id) = 0;
-  };
 
-  // Enum used to record the usage of the modifier keys on all devices. Do not
-  // edit the ordering of the values.
-  enum class ModifierKeyUsageMetric {
-    kMetaLeft,
-    kMetaRight,
-    kControlLeft,
-    kControlRight,
-    kAltLeft,
-    kAltRight,
-    kShiftLeft,
-    kShiftRight,
-    kCapsLock,
-    kBackspace,
-    kEscape,
-    kAssistant,
-    kMaxValue = kAssistant
+    // Returns the modifier for rewriting key events to F11/F12 for ChromeOS
+    // keyboards with less than 12 top row keys. `key_code` must be either
+    // `ui::KeyboardCode::VKEY_F11` or `ui::KeyboardCode::VKEY_F12` and is used
+    // used to determine if the setting for F11 or F12 should be retrieved for
+    // the keyboard with the given `device_id`. The key event will not be
+    // rewritten if the return value is either absl::nullopt (settings for
+    // `device_id` weren't found) or if an invalid `key_code` was passed in.
+    virtual absl::optional<ui::mojom::ExtendedFkeysModifier>
+    GetExtendedFkeySetting(int device_id, ui::KeyboardCode key_code) = 0;
   };
 
   // Does not take ownership of the |sticky_keys_controller|, which may also be
@@ -279,12 +272,6 @@ class EventRewriterAsh : public EventRewriter {
   }
 
  private:
-  // Returns the fixed-up keyboard device id.
-  // |keyboard_device_id| should be KeyEvent::source_device_id() for the current
-  // event, and |last_keyboard_device_id| is the previous one.
-  int GetKeyboardDeviceId(int keyboard_device_id,
-                          int last_keyboard_device_id) const;
-
   // By default the top row (F1-F12) keys are system keys for back, forward,
   // brightness, volume, etc. However, windows for v2 apps can optionally
   // request raw function keys for these keys.
@@ -312,11 +299,6 @@ class EventRewriterAsh : public EventRewriter {
                                int flags,
                                int* matched_mask,
                                bool* matched_alt_deprecation) const;
-
-  // Records when modifier keys are pressed to metrics for tracking usage of
-  // various metrics before and after remapping.
-  void RecordModifierKeyPressedBeforeRemapping(int device_id, DomCode dom_code);
-  void RecordModifierKeyPressedAfterRemapping(int device_id, DomCode dom_code);
 
   // Rewrite a particular kind of event.
   EventRewriteStatus RewriteKeyEvent(const KeyEvent& key_event,

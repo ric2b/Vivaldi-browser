@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "base/barrier_closure.h"
+#include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/run_loop.h"
 #include "base/task/sequenced_task_runner.h"
@@ -22,6 +23,7 @@
 #include "components/services/storage/public/cpp/quota_error_or.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
 #include "content/browser/indexed_db/indexed_db_factory.h"
+#include "content/browser/indexed_db/indexed_db_leveldb_operations.h"
 #include "content/browser/indexed_db/mock_mojo_indexed_db_database_callbacks.h"
 #include "content/browser/indexed_db/mock_mojo_indexed_db_factory_client.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
@@ -89,7 +91,7 @@ class IndexedDBContextTest : public testing::Test {
   scoped_refptr<storage::MockQuotaManager> quota_manager_;
   scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy_;
 
-  MockIndexedDBClientStateChecker example_checker;
+  MockIndexedDBClientStateChecker example_checker_;
 
   const blink::StorageKey example_storage_key_ =
       blink::StorageKey::CreateFromStringForTesting("https://example.com");
@@ -99,19 +101,19 @@ class IndexedDBContextTest : public testing::Test {
 
 TEST_F(IndexedDBContextTest, DefaultBucketCreatedOnBindIndexedDB) {
   mojo::Remote<blink::mojom::IDBFactory> example_remote;
-  mojo::AssociatedReceiver<storage::mojom::IndexedDBClientStateChecker>
-      example_checker_receiver(&example_checker);
+  mojo::Receiver<storage::mojom::IndexedDBClientStateChecker>
+      example_checker_receiver(&example_checker_);
   indexed_db_context_->BindIndexedDB(
-      example_storage_key_,
-      example_checker_receiver.BindNewEndpointAndPassDedicatedRemote(),
+      storage::BucketLocator::ForDefaultBucket(example_storage_key_),
+      example_checker_receiver.BindNewPipeAndPassRemote(),
       example_remote.BindNewPipeAndPassReceiver());
 
   mojo::Remote<blink::mojom::IDBFactory> google_remote;
-  mojo::AssociatedReceiver<storage::mojom::IndexedDBClientStateChecker>
-      google_checker_receiver(&example_checker);
+  mojo::Receiver<storage::mojom::IndexedDBClientStateChecker>
+      google_checker_receiver(&example_checker_);
   indexed_db_context_->BindIndexedDB(
-      google_storage_key_,
-      google_checker_receiver.BindNewEndpointAndPassDedicatedRemote(),
+      storage::BucketLocator::ForDefaultBucket(google_storage_key_),
+      google_checker_receiver.BindNewPipeAndPassRemote(),
       google_remote.BindNewPipeAndPassReceiver());
 
   storage::QuotaManagerProxySync quota_manager_proxy_sync(
@@ -122,23 +124,13 @@ TEST_F(IndexedDBContextTest, DefaultBucketCreatedOnBindIndexedDB) {
   base::test::TestFuture<std::vector<blink::mojom::IDBNameAndVersionPtr>,
                          blink::mojom::IDBErrorPtr>
       info_future;
-  auto example_bucket_locator = storage::BucketLocator();
-  example_bucket_locator.storage_key = example_storage_key_;
-  indexed_db_context_->GetIDBFactory()->GetDatabaseInfo(
-      example_bucket_locator,
-      indexed_db_context_->GetDataPath(example_bucket_locator),
-      info_future.GetCallback());
+  example_remote->GetDatabaseInfo(info_future.GetCallback());
   ASSERT_TRUE(info_future.Wait());
 
   base::test::TestFuture<std::vector<blink::mojom::IDBNameAndVersionPtr>,
                          blink::mojom::IDBErrorPtr>
       info_future2;
-  auto google_bucket_locator = storage::BucketLocator();
-  google_bucket_locator.storage_key = google_storage_key_;
-  indexed_db_context_->GetIDBFactory()->GetDatabaseInfo(
-      google_bucket_locator,
-      indexed_db_context_->GetDataPath(google_bucket_locator),
-      info_future2.GetCallback());
+  google_remote->GetDatabaseInfo(info_future2.GetCallback());
   ASSERT_TRUE(info_future2.Wait());
 
   // Check default bucket exists for https://example.com.
@@ -165,11 +157,11 @@ TEST_F(IndexedDBContextTest, GetDefaultBucketError) {
   quota_manager_->SetDisableDatabase(true);
 
   mojo::Remote<blink::mojom::IDBFactory> example_remote;
-  mojo::AssociatedReceiver<storage::mojom::IndexedDBClientStateChecker>
-      example_checker_receiver(&example_checker);
+  mojo::Receiver<storage::mojom::IndexedDBClientStateChecker>
+      example_checker_receiver(&example_checker_);
   indexed_db_context_->BindIndexedDB(
-      example_storage_key_,
-      example_checker_receiver.BindNewEndpointAndPassDedicatedRemote(),
+      storage::BucketLocator::ForDefaultBucket(example_storage_key_),
+      example_checker_receiver.BindNewPipeAndPassRemote(),
       example_remote.BindNewPipeAndPassReceiver());
 
   // IDBFactory::GetDatabaseInfo
@@ -216,6 +208,19 @@ TEST_F(IndexedDBContextTest, GetDefaultBucketError) {
       mock_factory_client->CreateInterfacePtrAndBind(), u"database_name",
       /*force_close=*/true);
   loop_3.Run();
+}
+
+// Regression test for crbug.com/1472826
+TEST_F(IndexedDBContextTest, DontChokeOnBadLegacyFiles) {
+  base::CreateDirectory(indexed_db_context_->GetFirstPartyDataPathForTesting()
+                            .AppendASCII("invalid_storage_key")
+                            .AddExtension(indexed_db::kIndexedDBExtension)
+                            .AddExtension(indexed_db::kLevelDBExtension));
+
+  base::RunLoop run_loop;
+  indexed_db_context_->ForceInitializeFromFilesForTesting(
+      run_loop.QuitClosure());
+  run_loop.Run();
 }
 
 }  // namespace content

@@ -15,10 +15,8 @@ namespace autofill {
 
 size_t NumberOfPossibleFieldTypesInGroup(const AutofillField& field,
                                          FieldTypeGroup group) {
-  return base::ranges::count_if(field.possible_types(),
-                                [&](const ServerFieldType& type) {
-                                  return AutofillType(type).group() == group;
-                                });
+  return base::ranges::count(field.possible_types(), group,
+                             GroupTypeOfServerFieldType);
 }
 
 bool FieldHasMeaningfulPossibleFieldTypes(const AutofillField& field) {
@@ -74,6 +72,17 @@ size_t AddressLineIndex(ServerFieldType type) {
     return kAddressLineIndex.at(type);
   }
   NOTREACHED_NORETURN();
+}
+
+size_t DetermineExpirationYearLength(ServerFieldType assumed_field_type) {
+  switch (assumed_field_type) {
+    case CREDIT_CARD_EXP_2_DIGIT_YEAR:
+      return 2;
+    case CREDIT_CARD_EXP_4_DIGIT_YEAR:
+      return 4;
+    default:
+      NOTREACHED_NORETURN();
+  }
 }
 
 }  // namespace autofill

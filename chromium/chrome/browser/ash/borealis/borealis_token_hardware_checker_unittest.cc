@@ -35,6 +35,9 @@ TEST(BorealisTokenHardwareCheckerTest, Volteer) {
   EXPECT_EQ(check("volteer", "lindar",
                   "11th Gen Intel(R) Core(TM) i5-1145G7 @ 2.60GHz", 8, ""),
             AllowStatus::kAllowed);
+  EXPECT_EQ(check("volteer-foo", "lindar",
+                  "11th Gen Intel(R) Core(TM) i5-1145G7 @ 2.60GHz", 8, ""),
+            AllowStatus::kAllowed);
 
   // Insufficient ram/cpu
   EXPECT_EQ(check("volteer", "lindar",
@@ -57,14 +60,17 @@ TEST(BorealisTokenHardwareCheckerTest, GuybrushMajolica) {
   EXPECT_EQ(
       check("majolica", "", "AMD Ryzen 5 5625C with Radeon Graphics", 8, ""),
       AllowStatus::kAllowed);
+  EXPECT_EQ(check("guybrush-dash", "", "AMD Ryzen 5 5625C with Radeon Graphics",
+                  8, ""),
+            AllowStatus::kAllowed);
 
   EXPECT_EQ(
       check("majolica", "", "AMD Ryzen 5 5625C with Radeon Graphics", 1, ""),
       AllowStatus::kHardwareChecksFailed);
 }
 
-TEST(BorealisTokenHardwareCheckerTest, Draco) {
-  EXPECT_EQ(check("draco", "", "", 0, ""), AllowStatus::kAllowed);
+TEST(BorealisTokenHardwareCheckerTest, Aurora) {
+  EXPECT_EQ(check("aurora", "", "", 0, ""), AllowStatus::kAllowed);
 }
 
 TEST(BorealisTokenHardwareCheckerTest, Myst) {
@@ -96,6 +102,13 @@ TEST(BorealisTokenHardwareCheckerTest, Skyrim) {
   features.InitWithFeatureState(ash::features::kFeatureManagementBorealis,
                                 /*enabled=*/true);
   EXPECT_EQ(check_skyrim(), AllowStatus::kAllowed);
+}
+
+TEST(BorealisTokenHardwareCheckerTest, Rex) {
+  // TODO(307825451): Put the real CPU here.
+  EXPECT_EQ(check("rex", "", "Fake Cpu", 8, ""), AllowStatus::kAllowed);
+  EXPECT_EQ(check("rex", "", "Fake Cpu", 4, ""),
+            AllowStatus::kHardwareChecksFailed);
 }
 
 // Procedure for adding and new token:

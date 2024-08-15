@@ -26,8 +26,11 @@
 #include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "printing/buildflags/buildflags.h"
-#include "printing/printing_features.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+
+#if BUILDFLAG(ENABLE_OOP_PRINTING)
+#include "chrome/browser/printing/prefs_util.h"
+#endif
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/chromeos/policy/dlp/dlp_content_manager.h"
@@ -118,7 +121,7 @@ bool PrintViewManager::PrintForSystemDialogNow(
   }
 
 #if BUILDFLAG(ENABLE_OOP_PRINTING)
-  if (printing::features::kEnableOopPrintDriversJobPrint.Get()) {
+  if (ShouldPrintJobOop()) {
     // Register this worker so that the service persists as long as the user
     // keeps the system print dialog UI displayed.
     if (!RegisterSystemPrintClient())
@@ -453,12 +456,10 @@ void PrintViewManager::OnScriptedPrintPreviewCallback(
 
   auto* dialog_controller = PrintPreviewDialogController::GetInstance();
   CHECK(dialog_controller);
-  dialog_controller->PrintPreview(web_contents());
-
   mojom::RequestPrintPreviewParams params;
   params.is_modifiable = source_is_modifiable;
-  PrintPreviewUI::SetInitialParams(
-      dialog_controller->GetPrintPreviewForContents(web_contents()), params);
+  dialog_controller->PrintPreview(web_contents(), params);
+
   PrintPreviewAllowedForTesting();
 }
 
@@ -497,10 +498,8 @@ void PrintViewManager::OnRequestPrintPreviewCallback(
 
   auto* dialog_controller = PrintPreviewDialogController::GetInstance();
   CHECK(dialog_controller);
-  dialog_controller->PrintPreview(web_contents());
+  dialog_controller->PrintPreview(web_contents(), *params);
 
-  PrintPreviewUI::SetInitialParams(
-      dialog_controller->GetPrintPreviewForContents(web_contents()), *params);
   PrintPreviewAllowedForTesting();
 }
 

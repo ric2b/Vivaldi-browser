@@ -11,6 +11,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
+#include "base/notreached.h"
 #include "base/numerics/checked_math.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
@@ -901,11 +902,24 @@ WebBundleParser::~WebBundleParser() {
   // Explicitly delete active parsers to avoid potential problems
   // with deletion of them in |active_parsers_|'s dtor and consequently
   // referring to |active_parsers_| in OnParsingComplete().
-  active_parsers_.clear();
+  //
+  // Avoid using container clear method directly on the member variable
+  // since parser destructor can call back to this class OnParsingComplete
+  // method via the complete_callback_. OnParsingComplete would in such
+  // case call erase method on the same container trying to remove an object
+  // from whose destructor it has been called. C++ and //base containers
+  // generally don't support re-entrancy so this would result in undefined
+  // behavior.
+  auto parsers = std::exchange(active_parsers_, {});
+  parsers.clear();
 }
 
 void WebBundleParser::ParseIntegrityBlock(
     ParseIntegrityBlockCallback callback) {
+  if (CheckIfClosed()) {
+    return;
+  }
+
   std::unique_ptr<WebBundleSectionParser> parser =
       std::make_unique<web_package::IntegrityBlockParser>(data_source_,
                                                           std::move(callback));
@@ -914,6 +928,10 @@ void WebBundleParser::ParseIntegrityBlock(
 
 void WebBundleParser::ParseMetadata(absl::optional<uint64_t> offset,
                                     ParseMetadataCallback callback) {
+  if (CheckIfClosed()) {
+    return;
+  }
+
   std::unique_ptr<WebBundleSectionParser> parser =
       std::make_unique<MetadataParser>(data_source_, base_url_,
                                        std::move(offset), std::move(callback));
@@ -923,6 +941,10 @@ void WebBundleParser::ParseMetadata(absl::optional<uint64_t> offset,
 void WebBundleParser::ParseResponse(uint64_t response_offset,
                                     uint64_t response_length,
                                     ParseResponseCallback callback) {
+  if (CheckIfClosed()) {
+    return;
+  }
+
   std::unique_ptr<WebBundleSectionParser> parser =
       std::make_unique<ResponseParser>(data_source_, response_offset,
                                        response_length, std::move(callback));
@@ -945,6 +967,25 @@ void WebBundleParser::OnParsingComplete(WebBundleSectionParser* parser,
 
 void WebBundleParser::OnDisconnect() {
   active_parsers_.clear();
+}
+
+void WebBundleParser::Close(CloseCallback parser_closed_callback) {
+  is_closed_ = true;
+  active_parsers_.clear();
+  data_source_->Close(base::BindOnce(&WebBundleParser::OnDataSourceClosed,
+                                     base::Unretained(this),
+                                     std::move(parser_closed_callback)));
+}
+
+void WebBundleParser::OnDataSourceClosed(CloseCallback parser_closed_callback) {
+  std::move(parser_closed_callback).Run();
+}
+
+bool WebBundleParser::CheckIfClosed() {
+  if (is_closed_) {
+    mojo::ReportBadMessage("Attempt to access the closed web bundle parser");
+  }
+  return is_closed_;
 }
 
 }  // namespace web_package

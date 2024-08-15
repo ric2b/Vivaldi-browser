@@ -16,6 +16,7 @@
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -567,7 +568,7 @@ class EventSenderBindings : public gin::Wrappable<EventSenderBindings> {
     void OnDestruct() override { bindings_->OnFrameDestroyed(); }
 
    private:
-    EventSenderBindings* const bindings_;
+    const raw_ptr<EventSenderBindings, ExperimentalRenderer> bindings_;
   };
 
   explicit EventSenderBindings(base::WeakPtr<EventSender> sender,
@@ -664,7 +665,7 @@ class EventSenderBindings : public gin::Wrappable<EventSenderBindings> {
   EventSenderBindingsRenderFrameObserver frame_observer_;
 
   base::WeakPtr<EventSender> sender_;
-  blink::WebLocalFrame* const frame_;
+  const raw_ptr<blink::WebLocalFrame, ExperimentalRenderer> frame_;
 };
 
 gin::WrapperInfo EventSenderBindings::kWrapperInfo = {gin::kEmbedderNativeGin};
@@ -680,7 +681,8 @@ EventSenderBindings::~EventSenderBindings() = default;
 // static
 void EventSenderBindings::Install(base::WeakPtr<EventSender> sender,
                                   WebFrameTestProxy* frame) {
-  v8::Isolate* isolate = blink::MainThreadIsolate();
+  v8::Isolate* isolate =
+      frame->GetWebFrame()->GetAgentGroupScheduler()->Isolate();
   v8::HandleScope handle_scope(isolate);
   v8::Local<v8::Context> context =
       frame->GetWebFrame()->MainWorldScriptContext();
@@ -1316,7 +1318,8 @@ void EventSender::DoDragDrop(const WebDragData& drag_data,
           current_pointer_state_[kRawMousePointerId].modifiers_,
           current_pointer_state_[kRawMousePointerId].current_buttons_),
       base::BindOnce(
-          [](base::WeakPtr<EventSender> sender, ui::mojom::DragOperation op) {
+          [](base::WeakPtr<EventSender> sender, ui::mojom::DragOperation op,
+             bool document_is_handling_drag) {
             if (sender)
               sender->current_drag_effect_ = op;
           },
@@ -1575,7 +1578,8 @@ void EventSender::KeyEvent(KeyEventType event_type,
     if (!code) {
       std::u16string code_str16 = base::UTF8ToUTF16(code_str);
       if (code_str16.size() != 1u) {
-        v8::Isolate* isolate = blink::MainThreadIsolate();
+        v8::Isolate* isolate =
+            web_frame_widget_->LocalRoot()->GetAgentGroupScheduler()->Isolate();
         isolate->ThrowException(v8::Exception::TypeError(
             gin::StringToV8(isolate, "Invalid web code.")));
         return;
@@ -1708,7 +1712,7 @@ void EventSender::KeyEvent(KeyEventType event_type,
           current_pointer_state_[kRawMousePointerId].current_buttons_,
           current_pointer_state_[kRawMousePointerId].last_pos_, click_count_,
           &event);
-      FinishDragAndDrop(event, ui::mojom::DragOperation::kNone);
+      FinishDragAndDrop(event, ui::mojom::DragOperation::kNone, false);
     }
 
     web_frame_widget_->ClearEditCommands();
@@ -1791,7 +1795,8 @@ void EventSender::ClearTouchPoints() {
 }
 
 void EventSender::ThrowTouchPointError() {
-  v8::Isolate* isolate = blink::MainThreadIsolate();
+  v8::Isolate* isolate =
+      web_frame_widget_->LocalRoot()->GetAgentGroupScheduler()->Isolate();
   isolate->ThrowException(v8::Exception::TypeError(
       gin::StringToV8(isolate, "Invalid touch point.")));
 }
@@ -1919,7 +1924,8 @@ void EventSender::BeginDragWithItems(
     // Nested dragging not supported, fuzzer code a likely culprit.
     // Cancel the current drag operation and throw an error.
     KeyDown("Escape", 0, DOMKeyLocationStandard);
-    v8::Isolate* isolate = blink::MainThreadIsolate();
+    v8::Isolate* isolate =
+        web_frame_widget_->LocalRoot()->GetAgentGroupScheduler()->Isolate();
     isolate->ThrowException(v8::Exception::Error(gin::StringToV8(
         isolate,
         "Nested beginDragWithFiles/beginDragWithStringData() not supported.")));
@@ -2502,7 +2508,7 @@ void EventSender::GestureEvent(WebInputEvent::Type type,
                    current_pointer_state_[kRawMousePointerId].current_buttons_,
                    gfx::PointF(x, y), click_count_, &mouse_event);
 
-    FinishDragAndDrop(mouse_event, ui::mojom::DragOperation::kNone);
+    FinishDragAndDrop(mouse_event, ui::mojom::DragOperation::kNone, false);
   }
   args->Return(result != WebInputEventResult::kNotHandled);
 }
@@ -2661,7 +2667,8 @@ void EventSender::InitPointerProperties(gin::Arguments* args,
 }
 
 void EventSender::FinishDragAndDrop(const WebMouseEvent& event,
-                                    ui::mojom::DragOperation drag_effect) {
+                                    ui::mojom::DragOperation drag_effect,
+                                    bool document_is_handling_drag) {
   // Bail if cancelled.
   if (!current_drag_data_)
     return;
@@ -2709,7 +2716,8 @@ void EventSender::DoDragAfterMouseMove(const WebMouseEvent& event) {
       event.PositionInWidget(), event.PositionInScreen(),
       current_drag_effects_allowed_, event.GetModifiers(),
       base::BindOnce(
-          [](base::WeakPtr<EventSender> sender, ui::mojom::DragOperation op) {
+          [](base::WeakPtr<EventSender> sender, ui::mojom::DragOperation op,
+             bool document_is_handling_drag) {
             if (sender)
               sender->current_drag_effect_ = op;
           },

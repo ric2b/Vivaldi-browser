@@ -64,6 +64,7 @@ enum UpdateEventFields {
   COMPLETED = 1 << 28,
   SYNC_PENDING = 1 << 29,
   DELETE_PENDING = 1 << 30,
+  END_RECURRING = 1 << 31,
 };
 
 // EventRow -------------------------------------------------------------------
@@ -120,6 +121,7 @@ class EventRow {
   base::Time completed;
   bool sync_pending;
   bool delete_pending;
+  base::Time end_recurring;
   int updateFields;
 
  protected:

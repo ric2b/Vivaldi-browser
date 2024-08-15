@@ -19,10 +19,6 @@
 #include "components/sync/model/wipe_model_upon_sync_disabled_behavior.h"
 #include "sync/notes/synced_note_tracker.h"
 
-namespace vivaldi {
-class NotesModel;
-}
-
 namespace file_sync {
 class SyncedFileStore;
 }
@@ -30,6 +26,7 @@ class SyncedFileStore;
 namespace sync_notes {
 
 class NotesModelObserverImpl;
+class NoteModelView;
 
 class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
                                public syncer::ModelTypeControllerDelegate {
@@ -83,7 +80,7 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
   // metadata.
   void ModelReadyToSync(const std::string& metadata_str,
                         const base::RepeatingClosure& schedule_save_closure,
-                        vivaldi::NotesModel* model);
+                        NoteModelView* model);
 
   bool IsTrackingMetadata() const;
 
@@ -122,7 +119,6 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
   // of metadata fields managed by the processor but only those tracked by the
   // note tracker.
   void StartTrackingMetadata();
-  void StopTrackingMetadata();
 
   // Resets note tracker in addition to stopping metadata tracking. Note
   // that unlike StopTrackingMetadata(), this does not disconnect sync and
@@ -151,8 +147,7 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
   // The note model we are processing local changes from and forwarding
   // remote changes to. It is set during ModelReadyToSync(), which is called
   // during startup, as part of the note-loading process.
-  raw_ptr<vivaldi::NotesModel, AcrossTasksDanglingUntriaged> notes_model_ =
-      nullptr;
+  raw_ptr<NoteModelView, AcrossTasksDanglingUntriaged> notes_model_ = nullptr;
 
   // Controls whether notes should be wiped when sync is stopped. Not actually
   // used in Vivaldi

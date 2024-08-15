@@ -16,6 +16,7 @@ source_set("public") {
     "//net",
     "//services/network/public/cpp",
     "//services/network/public/mojom",
+    "//third_party/abseil-cpp:absl",
     "//ui/base",
   ]
 
@@ -34,6 +35,7 @@ source_set("public") {
     "web_state.h",
     "web_state_delegate.h",
     "web_state_delegate_bridge.h",
+    "web_state_id.h",
     "web_state_observer_bridge.h",
     "web_state_user_data.h",
   ]

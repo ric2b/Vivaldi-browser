@@ -14,6 +14,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/types/cxx23_to_underlying.h"
 #include "base/values.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/common/autocomplete_parsing_util.h"
@@ -28,6 +29,7 @@
 #include "url/gurl.h"
 #include "url/origin.h"
 
+using autofill::FormControlType;
 using base::NumberToString;
 using base::StringToUint;
 
@@ -59,6 +61,7 @@ void ConvertValueToBool(base::OnceCallback<void(BOOL)> callback,
   }
   std::move(callback).Run(result);
 }
+
 }  // namespace
 
 namespace autofill {
@@ -212,7 +215,8 @@ bool ExtractFormFieldData(const base::Value::Dict& field,
   }
 
   field_data->name = base::UTF8ToUTF16(*name);
-  field_data->form_control_type = *form_control_type;
+  field_data->form_control_type = autofill::StringToFormControlTypeDiscouraged(
+      *form_control_type, /*fallback=*/std::nullopt);
 
   const std::string* unique_renderer_id =
       field.FindString("unique_renderer_id");
@@ -257,6 +261,19 @@ bool ExtractFormFieldData(const base::Value::Dict& field,
   field_data->should_autocomplete =
       field.FindBool("should_autocomplete")
           .value_or(field_data->should_autocomplete);
+
+  if (const std::string* placeholder_attribute =
+          field.FindString("placeholder_attribute")) {
+    field_data->placeholder = base::UTF8ToUTF16(*placeholder_attribute);
+  }
+
+  if (const std::string* aria_label = field.FindString("aria_label")) {
+    field_data->aria_label = base::UTF8ToUTF16(*aria_label);
+  }
+  if (const std::string* aria_description =
+          field.FindString("aria_description")) {
+    field_data->aria_description = base::UTF8ToUTF16(*aria_description);
+  }
 
   // RoleAttribute::kOther is the default value. The only other value as of this
   // writing is RoleAttribute::kPresentation.

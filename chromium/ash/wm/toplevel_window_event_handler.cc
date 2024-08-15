@@ -328,7 +328,34 @@ void ToplevelWindowEventHandler::OnGestureEvent(ui::GestureEvent* event) {
     }
   }
 
-  if (event->type() == ui::ET_GESTURE_BEGIN) {
+  if (event->type() == ui::ET_GESTURE_PINCH_BEGIN) {
+    in_pinch_ = true;
+  } else if (event->type() == ui::ET_GESTURE_SCROLL_BEGIN ||
+             event->type() == ui::ET_GESTURE_PINCH_END) {
+    in_pinch_ = false;
+  }
+
+  if (event->handled()) {
+    return;
+  }
+  if (!target->delegate()) {
+    return;
+  }
+
+  if (window_resizer_ && !in_gesture_drag_) {
+    return;
+  }
+
+  if (window_resizer_ && window_resizer_->resizer()->GetTarget() != target &&
+      !target->bounds().IsEmpty()) {
+    CompleteDrag(DragResult::SUCCESS);
+    return;
+  }
+
+  if (event->type() == ui::ET_GESTURE_END &&
+      event->details().touch_points() == 1) {
+    UpdateGestureTarget(nullptr);
+  } else if (event->type() == ui::ET_GESTURE_BEGIN) {
     // We don't always process ET_GESTURE_END events (i.e. on a fling or swipe),
     // so reset `is_moving_floated_window_` in ET_GESTURE_BEGIN.
     is_moving_floated_window_ = false;
@@ -361,24 +388,6 @@ void ToplevelWindowEventHandler::OnGestureEvent(ui::GestureEvent* event) {
                                        &location_in_target);
     UpdateGestureTarget(gesture_target_, location_in_target);
   }
-
-  if (event->type() == ui::ET_GESTURE_PINCH_BEGIN) {
-    in_pinch_ = true;
-  } else if (event->type() == ui::ET_GESTURE_SCROLL_BEGIN) {
-    in_pinch_ = false;
-  }
-
-  if (event->handled())
-    return;
-  if (!target->delegate())
-    return;
-
-  if (window_resizer_ && !in_gesture_drag_)
-    return;
-
-  if (window_resizer_ && window_resizer_->resizer()->GetTarget() != target &&
-      !target->bounds().IsEmpty())
-    return;
 
   if (event->details().touch_points() > 2) {
     if (CompleteDrag(DragResult::SUCCESS))
@@ -688,6 +697,16 @@ bool ToplevelWindowEventHandler::AttemptToStartDrag(
     EndClosure end_closure,
     bool update_gesture_target,
     bool grab_capture) {
+  auto* env = aura::Env::GetInstance();
+  // This may be called asynchronosly from remote client, and the mouse/touch
+  // might have already been released.
+  if ((source == ::wm::WINDOW_MOVE_SOURCE_TOUCH && !env->is_touch_down()) ||
+      (source == ::wm::WINDOW_MOVE_SOURCE_MOUSE && !env->IsMouseButtonDown())) {
+    LOG(WARNING) << "AttemptToStartDrag called when mouse/touch are not in "
+                    "pressed state";
+    return false;
+  }
+
   if (gesture_target_ != nullptr && update_gesture_target) {
     DCHECK_EQ(source, ::wm::WINDOW_MOVE_SOURCE_TOUCH);
     // Transfer events for gesture if switching to new target.
@@ -697,9 +716,12 @@ bool ToplevelWindowEventHandler::AttemptToStartDrag(
 
   if (!PrepareForDrag(window, point_in_parent, window_component, source,
                       grab_capture)) {
+    in_gesture_drag_ = false;
+
     // Treat failure to start as a revert.
     if (end_closure)
       std::move(end_closure).Run(DragResult::REVERT);
+
     return false;
   }
 
@@ -747,7 +769,8 @@ bool ToplevelWindowEventHandler::AttemptToStartPinch(
 
   // Only gesture drag move can switch to pinch to resize. No other existing
   // resizer is allowed.
-  bool in_gesture_drag_move = in_gesture_drag_ && window_resizer_->IsMove();
+  bool in_gesture_drag_move =
+      in_gesture_drag_ && window_resizer_ && window_resizer_->IsMove();
   if (window_resizer_ && !in_gesture_drag_move) {
     return false;
   }
@@ -759,6 +782,7 @@ bool ToplevelWindowEventHandler::AttemptToStartPinch(
   }
 
   if (!PrepareForPinch(window, point_in_parent, window_component)) {
+    in_gesture_drag_ = false;
     return false;
   }
 
@@ -799,7 +823,6 @@ bool ToplevelWindowEventHandler::PrepareForPinch(
   Shell::Get()->multi_display_metrics_controller()->OnWindowMovedOrResized(
       window);
 
-  in_pinch_ = true;
   return true;
 }
 
@@ -895,8 +918,6 @@ bool ToplevelWindowEventHandler::PrepareForDrag(
 }
 
 bool ToplevelWindowEventHandler::CompleteDrag(DragResult result) {
-  UpdateGestureTarget(nullptr);
-
   if (!window_resizer_)
     return false;
 
@@ -906,9 +927,12 @@ bool ToplevelWindowEventHandler::CompleteDrag(DragResult result) {
       resizer->resizer()->CompleteDrag();
       break;
     case DragResult::REVERT:
+      UpdateGestureTarget(nullptr);
       resizer->resizer()->RevertDrag();
       break;
     case DragResult::WINDOW_DESTROYED:
+      UpdateGestureTarget(nullptr);
+
       // We explicitly do not invoke RevertDrag() since that may do things to
       // the window that was destroyed.
       break;
@@ -924,11 +948,9 @@ bool ToplevelWindowEventHandler::CompleteDrag(DragResult result) {
 }
 
 bool ToplevelWindowEventHandler::CompletePinch() {
-  if (!window_resizer_ || !in_pinch_) {
+  if (!window_resizer_) {
     return false;
   }
-
-  in_pinch_ = false;
 
   // Reinitialize the `window_resizer_` if an `ET_GESTURE_SCROLL_UPDATE` event
   // is called right after pinch is completed. This is necessary because
@@ -1012,7 +1034,8 @@ void ToplevelWindowEventHandler::HandlePinch(aura::Window* target,
       target, window_resizer_->resizer()->GetTarget()->parent(),
       &location_in_parent);
   window_resizer_->resizer()->Pinch(location_in_parent,
-                                    event->details().scale());
+                                    event->details().scale(),
+                                    event->details().pinch_angle());
   event->StopPropagation();
 }
 

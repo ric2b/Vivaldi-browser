@@ -54,8 +54,8 @@ class CONTENT_EXPORT AuctionRunner : public blink::mojom::AbortableAdAuction {
 
   // Invoked when a FLEDGE auction is complete.
   //
-  // `manually_aborted` is true only if the auction was successfully interrupted
-  //  by the call to Abort().
+  // `aborted_by_script` is true only if the auction was successfully
+  // interrupted by the call to Abort().
   //
   // `winning_group_id` owner and name of the winning interest group (if any).
   //
@@ -76,7 +76,7 @@ class CONTENT_EXPORT AuctionRunner : public blink::mojom::AbortableAdAuction {
   //  sensitive for the renderers to see.
   using RunAuctionCallback = base::OnceCallback<void(
       AuctionRunner* auction_runner,
-      bool manually_aborted,
+      bool aborted_by_script,
       absl::optional<blink::InterestGroupKey> winning_group_id,
       absl::optional<blink::AdSize> requested_ad_size,
       absl::optional<blink::AdDescriptor> ad_descriptor,
@@ -90,9 +90,6 @@ class CONTENT_EXPORT AuctionRunner : public blink::mojom::AbortableAdAuction {
   // interest group API.
   using IsInterestGroupApiAllowedCallback =
       InterestGroupAuction::IsInterestGroupApiAllowedCallback;
-
-  using GetAdAuctionPageDataCallback =
-      base::RepeatingCallback<AdAuctionPageData*()>;
 
   using AreReportingOriginsAttestedCallback =
       base::RepeatingCallback<bool(const std::vector<url::Origin>&)>;
@@ -139,6 +136,7 @@ class CONTENT_EXPORT AuctionRunner : public blink::mojom::AbortableAdAuction {
       InterestGroupManagerImpl* interest_group_manager,
       BrowserContext* browser_context,
       PrivateAggregationManager* private_aggregation_manager,
+      AdAuctionPageData* ad_auction_page_data,
       InterestGroupAuctionReporter::LogPrivateAggregationRequestsCallback
           log_private_aggregation_requests_callback,
       const blink::AuctionConfig& auction_config,
@@ -148,7 +146,6 @@ class CONTENT_EXPORT AuctionRunner : public blink::mojom::AbortableAdAuction {
       network::mojom::ClientSecurityStatePtr client_security_state,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       IsInterestGroupApiAllowedCallback is_interest_group_api_allowed_callback,
-      GetAdAuctionPageDataCallback get_page_data_callback,
       AreReportingOriginsAttestedCallback attestation_callback,
       mojo::PendingReceiver<AbortableAdAuction> abort_receiver,
       RunAuctionCallback callback);
@@ -196,7 +193,7 @@ class CONTENT_EXPORT AuctionRunner : public blink::mojom::AbortableAdAuction {
   //
   // `interest_groups_that_bid` is a list of the interest groups that bid in the
   // auction.
-  void FailAuction(bool manually_aborted,
+  void FailAuction(bool aborted_by_script,
                    blink::InterestGroupSet interest_groups_that_bid =
                        blink::InterestGroupSet());
 
@@ -214,6 +211,7 @@ class CONTENT_EXPORT AuctionRunner : public blink::mojom::AbortableAdAuction {
       InterestGroupManagerImpl* interest_group_manager,
       BrowserContext* browser_context,
       PrivateAggregationManager* private_aggregation_manager,
+      AdAuctionPageData* ad_auction_page_data,
       InterestGroupAuctionReporter::LogPrivateAggregationRequestsCallback
           log_private_aggregation_requests_callback,
       auction_worklet::mojom::KAnonymityBidMode kanon_mode,
@@ -224,7 +222,6 @@ class CONTENT_EXPORT AuctionRunner : public blink::mojom::AbortableAdAuction {
       network::mojom::ClientSecurityStatePtr client_security_state,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       IsInterestGroupApiAllowedCallback is_interest_group_api_allowed_callback,
-      GetAdAuctionPageDataCallback get_page_data_callback,
       AreReportingOriginsAttestedCallback attestation_callback,
       mojo::PendingReceiver<AbortableAdAuction> abort_receiver,
       RunAuctionCallback callback);
@@ -291,7 +288,8 @@ class CONTENT_EXPORT AuctionRunner : public blink::mojom::AbortableAdAuction {
   // etc. are allowed or not.
   IsInterestGroupApiAllowedCallback is_interest_group_api_allowed_callback_;
 
-  GetAdAuctionPageDataCallback get_page_data_callback_;
+  // Owned by the Page.
+  raw_ptr<AdAuctionPageData> ad_auction_page_data_;
 
   AreReportingOriginsAttestedCallback attestation_callback_;
 

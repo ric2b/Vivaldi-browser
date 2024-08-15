@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_EXO_SHELL_SURFACE_BASE_H_
 #define COMPONENTS_EXO_SHELL_SURFACE_BASE_H_
 
+#include <stdint.h>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -15,6 +16,7 @@
 #include "chromeos/ui/base/display_util.h"
 #include "chromeos/ui/base/window_pin_type.h"
 #include "chromeos/ui/frame/caption_buttons/snap_controller.h"
+#include "chromeos/ui/frame/multitask_menu/float_controller_base.h"
 #include "components/exo/surface_observer.h"
 #include "components/exo/surface_tree_host.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -22,13 +24,14 @@
 #include "ui/aura/client/capture_client_observer.h"
 #include "ui/aura/window_observer.h"
 #include "ui/base/hit_test.h"
-#include "ui/display/display_observer.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/geometry/vector2d.h"
+#include "ui/gfx/geometry/rounded_corners_f.h"
+#include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/widget/widget_observer.h"
+#include "ui/views/window/hit_test_utils.h"
 #include "ui/wm/public/activation_change_observer.h"
 #include "ui/wm/public/tooltip_observer.h"
 
@@ -151,6 +154,9 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   // widget is created.
   void SetPersistable(bool persistable);
 
+  // Sets the window corner radii.
+  void SetWindowCornerRadii(const gfx::RoundedCornersF& radii);
+
   // Set normal shadow bounds, |shadow_bounds_|, to |bounds| to be used and
   // applied via `UpdateShadow()`. Set and update resize shadow bounds with
   // |widget_|'s origin and |bounds| via `UpdateResizeShadowBoundsOfWindow()`.
@@ -193,7 +199,7 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   // An overlay creation parameters. The view is owned by the
   // overlay.
   struct OverlayParams {
-    OverlayParams(std::unique_ptr<views::View> overlay);
+    explicit OverlayParams(std::unique_ptr<views::View> overlay);
     ~OverlayParams();
 
     bool translucent = false;
@@ -202,6 +208,7 @@ class ShellSurfaceBase : public SurfaceTreeHost,
     // TODO(oshima): It's unlikely for overlay not to request focus.
     // Remove this.
     bool focusable = true;
+    absl::optional<gfx::RoundedCornersF> corners_radii;
     std::unique_ptr<views::View> contents_view;
   };
 
@@ -249,7 +256,8 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   void UnsetCanGoBack() override;
   void SetPip() override;
   void UnsetPip() override;
-  void SetFloat() override;
+  void SetFloatToLocation(
+      chromeos::FloatStartLocation float_start_location) override;
   void SetAspectRatio(const gfx::SizeF& aspect_ratio) override;
   void MoveToDesk(int desk_index) override;
   void SetVisibleOnAllWorkspaces() override;
@@ -330,6 +338,10 @@ class ShellSurfaceBase : public SurfaceTreeHost,
            frame_type_ != SurfaceFrameType::SHADOW;
   }
 
+  bool frame_overlapped() const {
+    return frame_type_ == SurfaceFrameType::OVERLAP;
+  }
+
   Surface* surface_for_testing() { return root_surface(); }
   bool get_shadow_bounds_changed_for_testing() {
     return shadow_bounds_changed_;
@@ -349,6 +361,11 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   }
 
   const absl::optional<cc::Region>& shape_dp() const { return shape_dp_; }
+
+  // Window corners radii in dps.
+  const absl::optional<gfx::RoundedCornersF>& window_corners_radii() const {
+    return window_corners_radii_dp_;
+  }
 
  protected:
   // Creates the |widget_| for |surface_|. |show_state| is the initial state
@@ -384,11 +401,9 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   // |shadow_bounds_|.
   void UpdateShadow();
 
-  // Updates the corner radius depending on whether the |widget_| is in pip or
-  // not.
-  void UpdateCornerRadius();
-
   virtual void UpdateFrameType();
+
+  void UpdateWindowRoundedCorners();
 
   // Applies |system_modal_| to |widget_|.
   void UpdateSystemModal();
@@ -397,7 +412,9 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   void UpdateShape();
 
   // Returns the "visible bounds" for the surface from the user's perspective.
-  gfx::Rect GetVisibleBounds() const;
+  // TODO(b/299688152): Make this non virtual back once ARC is updated not to
+  // use geometry to specify the window bounds.
+  virtual gfx::Rect GetVisibleBounds() const;
 
   // Returns the bounds of the client area.
   gfx::Rect GetClientViewBounds() const;
@@ -448,6 +465,10 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   absl::optional<cc::Region> shape_dp_;
   absl::optional<cc::Region> pending_shape_dp_;
 
+  // Radii of window corners in dips.
+  absl::optional<gfx::RoundedCornersF> window_corners_radii_dp_;
+  absl::optional<gfx::RoundedCornersF> pending_window_corners_radii_dp_;
+
   int64_t display_id_ = display::kInvalidDisplayId;
   int64_t pending_display_id_ = display::kInvalidDisplayId;
   absl::optional<gfx::Rect> shadow_bounds_;
@@ -483,6 +504,15 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   FRIEND_TEST_ALL_PREFIXES(ShellSurfaceTest,
                            ShadowBoundsWithNegativeCoordinate);
   FRIEND_TEST_ALL_PREFIXES(ShellSurfaceTest, ShadowBoundsWithScaleFactor);
+  FRIEND_TEST_ALL_PREFIXES(ShellSurfaceTest,
+                           LocalSurfaceIdUpdatedOnHostWindowOriginChanged);
+  FRIEND_TEST_ALL_PREFIXES(
+      ShellSurfaceTest,
+      LocalSurfaceIdUpdatedOnHostWindowOriginChangedWithScaleFactor);
+  FRIEND_TEST_ALL_PREFIXES(ShellSurfaceTest, SubpixelPositionOffset);
+
+  // Updates the shadow's rounded corner associated with the `widget_`.
+  void UpdateShadowRoundedCorners();
 
   // Called on widget creation to initialize its window state.
   // TODO(reveman): Remove virtual functions below to avoid FBC problem.

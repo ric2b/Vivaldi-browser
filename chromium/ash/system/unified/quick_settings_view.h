@@ -13,6 +13,7 @@
 #include "base/memory/raw_ptr.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/view.h"
+#include "ui/views/view_utils.h"
 
 namespace views {
 class FlexLayoutView;
@@ -22,11 +23,10 @@ namespace ash {
 
 class FeatureTile;
 class FeatureTilesContainerView;
-class PageIndicatorView;
+class PaginationView;
 class QuickSettingsFooter;
 class QuickSettingsHeader;
 class QuickSettingsMediaViewContainer;
-class TrayDetailedView;
 class UnifiedMediaControlsContainer;
 class UnifiedSystemTrayController;
 
@@ -109,11 +109,16 @@ class ASH_EXPORT QuickSettingsView : public views::View,
   views::View* detailed_view_container() { return detailed_view_container_; }
 
   // Returns the current tray detailed view.
-  TrayDetailedView* GetDetailedViewForTest();
-
-  PageIndicatorView* page_indicator_view_for_test() {
-    return page_indicator_view_;
+  template <typename T>
+  T* GetDetailedViewForTest() {
+    CHECK(!detailed_view_container_->children().empty());
+    views::View* view = detailed_view_container_->children()[0];
+    CHECK(views::IsViewClass<T>(view));
+    return static_cast<T*>(view);
   }
+
+  PaginationView* pagination_view_for_test() { return pagination_view_; }
+
   UnifiedMediaControlsContainer* media_controls_container_for_testing() {
     return media_controls_container_;
   }
@@ -136,7 +141,7 @@ class ASH_EXPORT QuickSettingsView : public views::View,
   raw_ptr<QuickSettingsHeader, ExperimentalAsh> header_ = nullptr;
   raw_ptr<FeatureTilesContainerView, ExperimentalAsh> feature_tiles_container_ =
       nullptr;
-  raw_ptr<PageIndicatorView, ExperimentalAsh> page_indicator_view_ = nullptr;
+  raw_ptr<PaginationView, ExperimentalAsh> pagination_view_ = nullptr;
   raw_ptr<views::FlexLayoutView, ExperimentalAsh> sliders_container_ = nullptr;
   raw_ptr<QuickSettingsFooter, ExperimentalAsh> footer_ = nullptr;
   raw_ptr<views::View, ExperimentalAsh> detailed_view_container_ = nullptr;

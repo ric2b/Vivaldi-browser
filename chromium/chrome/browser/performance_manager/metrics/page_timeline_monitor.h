@@ -7,7 +7,10 @@
 
 #include <map>
 #include <memory>
+#include <utility>
+#include <vector>
 
+#include "base/functional/callback_forward.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -18,6 +21,7 @@
 #include "components/performance_manager/public/graph/graph.h"
 #include "components/performance_manager/public/graph/graph_registered.h"
 #include "components/performance_manager/public/graph/page_node.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace performance_manager::metrics {
 
@@ -116,13 +120,53 @@ class PageTimelineMonitor : public PageNode::ObserverDefaultImpl,
     ~PageNodeInfo() = default;
   };
 
-  // Method collecting the PageResourceUsage UKM.
-  void CollectPageResourceUsage();
+  // Suffix for CPU intervention histograms.
+  enum class CPUInterventionSuffix {
+    kBaseline,
+    kImmediate,
+    kDelayed,
+  };
+
+  using PageCPUUsageVector = std::vector<std::pair<const PageNode*, double>>;
+
+  // Asynchronously collects the PageResourceUsage UKM. Calls `done_closure`
+  // when finished.
+  void CollectPageResourceUsage(base::OnceClosure done_closure);
+
+  // Invoked asynchronously from CollectPageResourceUsage() when measurements
+  // are ready.
+  void OnPageResourceUsageResult(const PageCPUUsageVector& page_cpu_usage);
 
   // Method collecting a slice for the PageTimelineState UKM.
   void CollectSlice();
 
   bool ShouldCollectSlice() const;
+
+  // Asynchronously checks if the CPU metrics are still above the threshold
+  // after a delay.
+  void CheckDelayedCPUInterventionMetrics();
+
+  // Invoked asynchronously from CheckDelayedCPUInterventionMetrics() when
+  // measurements are ready.
+  void OnDelayedCPUInterventionMetricsResult(
+      const PageCPUUsageVector& page_cpu_usage);
+
+  // Log CPU intervention metrics with the provided suffix.
+  void LogCPUInterventionMetrics(const PageCPUUsageVector& page_cpu_usage,
+                                 const base::TimeTicks now,
+                                 CPUInterventionSuffix histogram_suffix);
+
+  // Asynchronously calculates per-PageNode CPU usage, converts the results to a
+  // vector, and passes them to `callback`.
+  void CalculatePageCPUUsage(
+      base::OnceCallback<void(const PageCPUUsageVector&)> callback);
+
+  // Invoked asynchronously from CalculatePageCPUUsage() when measurements are
+  // ready. Converts the measurements in `cpu_usage_map` to a vector and passes
+  // them to `callback`.
+  void OnCPUUsageResult(
+      base::OnceCallback<void(const PageCPUUsageVector&)> callback,
+      const PageTimelineCPUMonitor::CPUUsageMap& cpu_usage_map);
 
   // If this is called, CollectSlice() and CollectPageResourceUsage() will not
   // be called on a timer. Tests can call them manually.
@@ -149,6 +193,13 @@ class PageTimelineMonitor : public PageNode::ObserverDefaultImpl,
 
   // Timer which is used to trigger CollectPageResourceUsage().
   base::RepeatingTimer collect_page_resource_usage_timer_;
+
+  // Timer which handles logging high CPU after a potential delay.
+  base::OneShotTimer log_cpu_on_delay_timer_;
+
+  // Keeps track of whether the browser has exceeded the CPU threshold.
+  absl::optional<base::TimeTicks> time_of_last_cpu_threshold_exceeded_ =
+      absl::nullopt;
 
   // Pointer to this process' graph.
   raw_ptr<Graph> graph_ = nullptr;

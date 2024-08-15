@@ -153,7 +153,7 @@ class PaintArtifactCompositorTest : public testing::Test,
           scroll_translation_nodes = {}) {
     paint_artifact_compositor_->SetNeedsUpdate();
     paint_artifact_compositor_->Update(artifact, viewport_properties,
-                                       scroll_translation_nodes, {}, {});
+                                       scroll_translation_nodes, {});
     layer_tree_->layer_tree_host()->LayoutAndUpdateLayers();
   }
 
@@ -1604,6 +1604,61 @@ TEST_P(PaintArtifactCompositorTest,
   EXPECT_EQ(gfx::PointF(-11, -22), transform_node_c.scroll_offset);
   EXPECT_EQ(gfx::PointF(-11, -22),
             scroll_tree.current_scroll_offset(scroll_node_c.element_id));
+}
+
+TEST_P(PaintArtifactCompositorTest, FixedPositionScrollState) {
+  auto scroll_state_a = ScrollState1();
+  auto& scroll_a = *scroll_state_a.Transform().ScrollNode();
+  auto fixed_transform = CreateFixedPositionTranslation(
+      t0(), 100, 200, scroll_state_a.Transform());
+  PropertyTreeState fixed_state(*fixed_transform, scroll_state_a.Clip(),
+                                scroll_state_a.Effect());
+  // scroll_state_b's has fixed transform space, while the scroll parent is
+  // scroll_a.
+  auto scroll_state_b = CreateCompositedScrollTranslationState(
+      fixed_state, scroll_a, 11, 22, gfx::Rect(10, 20), gfx::Size(50, 60));
+  auto& scroll_b = *scroll_state_b.Transform().ScrollNode();
+
+  TestPaintArtifact artifact;
+  CreateScrollableChunk(artifact, scroll_state_a);
+  artifact.Chunk(fixed_state).RectDrawing(gfx::Rect(50, 100), Color::kBlack);
+  CreateScrollableChunk(artifact, scroll_state_b);
+  Update(artifact.Build());
+
+  auto& scroll_tree = GetPropertyTrees().scroll_tree();
+  auto& transform_tree = GetPropertyTrees().transform_tree();
+  // Node #0 reserved for null. #1 for root render surface. #2 is for scroll_a.
+  // scroll #3 and transform #4 are for scroll_b. Transform #3 is for
+  // fixed_transform.
+  ASSERT_EQ(4u, scroll_tree.size());
+  ASSERT_EQ(5u, transform_tree.size());
+  ASSERT_EQ(3u, LayerCount());
+
+  auto* scroll_node_a = scroll_tree.Node(2);
+  auto* layer_a = LayerAt(0);
+  EXPECT_EQ(scroll_a.GetCompositorElementId(), scroll_node_a->element_id);
+  EXPECT_EQ(1, scroll_node_a->parent_id);
+  EXPECT_EQ(2, scroll_node_a->transform_id);
+  EXPECT_EQ(2, layer_a->scroll_tree_index());
+  EXPECT_EQ(1, layer_a->transform_tree_index());
+
+  auto* fixed_layer = LayerAt(1);
+  if (RuntimeEnabledFeatures::HitTestOpaquenessEnabled()) {
+    EXPECT_EQ(2, fixed_layer->scroll_tree_index());
+  } else {
+    EXPECT_EQ(1, fixed_layer->scroll_tree_index());
+  }
+  EXPECT_EQ(3, fixed_layer->transform_tree_index());
+  auto* fixed_transform_node = transform_tree.Node(3);
+  EXPECT_EQ(1, fixed_transform_node->parent_id);
+
+  auto* scroll_node_b = scroll_tree.Node(3);
+  auto* layer_b = LayerAt(2);
+  EXPECT_EQ(2, scroll_node_b->parent_id);
+  EXPECT_EQ(scroll_b.GetCompositorElementId(), scroll_node_b->element_id);
+  EXPECT_EQ(4, scroll_node_b->transform_id);
+  EXPECT_EQ(3, layer_b->scroll_tree_index());
+  EXPECT_EQ(3, layer_b->transform_tree_index());
 }
 
 TEST_P(PaintArtifactCompositorTest, MergeSimpleChunks) {
@@ -4909,17 +4964,9 @@ TEST_P(PaintArtifactCompositorTest, DirectlySetScrollOffset) {
 }
 
 TEST_P(PaintArtifactCompositorTest, AddNonCompositedScrollNodes) {
-  uint32_t main_thread_scrolling_reason =
-      cc::MainThreadScrollingReason::kNotScrollingOnMain;
-  if (!RuntimeEnabledFeatures::CompositeScrollAfterPaintEnabled()) {
-    main_thread_scrolling_reason =
-        cc::MainThreadScrollingReason::kNotOpaqueForTextAndLCDText;
-    ASSERT_TRUE(cc::MainThreadScrollingReason::HasNonCompositedScrollReasons(
-        main_thread_scrolling_reason));
-  }
   auto scroll_state =
       ScrollState1(PropertyTreeState::Root(), CompositingReason::kNone,
-                   main_thread_scrolling_reason);
+                   cc::MainThreadScrollingReason::kNotScrollingOnMain);
 
   WTF::Vector<const TransformPaintPropertyNode*> scroll_translation_nodes;
   scroll_translation_nodes.push_back(&scroll_state.Transform());
@@ -4929,8 +4976,7 @@ TEST_P(PaintArtifactCompositorTest, AddNonCompositedScrollNodes) {
           .Chunk(1)
           .ScrollHitTest(scroll_state.Transform().ScrollNode()->ContainerRect(),
                          &scroll_state.Transform())
-          // In CompositeScrollAfterPaint, this chunk being non-opaque makes
-          // the scroll not composited.
+          // This chunk being non-opaque makes the scroll not composited.
           .Chunk(2)
           .Properties(scroll_state.Transform(), c0(), e0())
           .Build(),
@@ -4946,8 +4992,6 @@ TEST_P(PaintArtifactCompositorTest, AddNonCompositedScrollNodes) {
 TEST_P(PaintArtifactCompositorTest, AddUnpaintedNonCompositedScrollNodes) {
   const uint32_t main_thread_scrolling_reason =
       cc::MainThreadScrollingReason::kNotOpaqueForTextAndLCDText;
-  ASSERT_TRUE(cc::MainThreadScrollingReason::HasNonCompositedScrollReasons(
-      main_thread_scrolling_reason));
   auto scroll_state =
       ScrollState1(PropertyTreeState::Root(), CompositingReason::kNone,
                    main_thread_scrolling_reason);
@@ -5053,6 +5097,32 @@ TEST_P(PaintArtifactCompositorTest,
   const auto* cc_clip_expander =
       GetPropertyTrees().clip_tree().Node(LayerAt(0)->clip_tree_index());
   EXPECT_TRUE(cc_clip_expander->AppliesLocalClip());
+}
+
+TEST_P(PaintArtifactCompositorTest,
+       CreatePictureLayerForSolidColorBackdropFilterMask) {
+  CompositorFilterOperations filter;
+  filter.AppendBlurFilter(5);
+  auto backdrop_filter = CreateBackdropFilterEffect(e0(), filter);
+
+  EffectPaintPropertyNode::State mask_state;
+  mask_state.local_transform_space = &t0();
+  mask_state.output_clip = &c0();
+  mask_state.blend_mode = SkBlendMode::kDstIn;
+  mask_state.direct_compositing_reasons =
+      CompositingReason::kBackdropFilterMask;
+  auto mask =
+      EffectPaintPropertyNode::Create(*backdrop_filter, std::move(mask_state));
+
+  Update(TestPaintArtifact()
+             .Chunk(t0(), c0(), *backdrop_filter)
+             .RectDrawing(gfx::Rect(150, 150, 100, 100), Color::kWhite)
+             .Chunk(t0(), c0(), *mask)
+             .RectDrawing(gfx::Rect(150, 150, 100, 100), Color::kBlack)
+             .IsSolidColor()
+             .Build());
+  ASSERT_EQ(2u, LayerCount());
+  EXPECT_FALSE(LayerAt(1)->IsSolidColorLayerForTesting());
 }
 
 }  // namespace blink

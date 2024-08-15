@@ -729,8 +729,8 @@ void FinalizeSuccessfullInstall(
           LOG(WARNING) << "Failed to rename old Profile folder to User "
                           "Data. Error="
                        << error;
-          std::wstring message(base::StringPrintf(
-              L"Failed to rename 'Profile' folder. Error=%u", error));
+          std::wstring message(base::UTF8ToWide(base::StringPrintf(
+              "Failed to rename 'Profile' folder. Error=%lu", error)));
           MessageBox(NULL, message.c_str(), L"Vivaldi Installer",
                      MB_OK | MB_ICONWARNING);
         } else {
@@ -813,9 +813,9 @@ void DoPostUninstallOperations(const base::Version& version) {
 
   const base::win::OSInfo* os_info = base::win::OSInfo::GetInstance();
   base::win::OSInfo::VersionNumber version_number = os_info->version_number();
-  std::wstring os_version =
-      base::StringPrintf(L"W%d.%d.%d", version_number.major,
-                         version_number.minor, version_number.build);
+  std::wstring os_version = base::UTF8ToWide(
+      base::StringPrintf("W%d.%d.%d", version_number.major,
+                         version_number.minor, version_number.build));
 
   std::wstring url = GetUninstallSurveyUrl() + L"&" + kVersionParam + L"=" +
                      base::ASCIIToWide(version.GetString()) + L"&" + kOSParam +

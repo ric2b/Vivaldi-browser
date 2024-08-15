@@ -283,27 +283,33 @@ void PermissionRequestManager::AddRequest(
 }
 
 bool PermissionRequestManager::ReprioritizeCurrentRequestIfNeeded() {
-  if (pending_permission_requests_.IsEmpty() || !IsRequestInProgress())
+  if (!IsRequestInProgress() ||
+      IsCurrentRequestEmbeddedPermissionElementInitiated()) {
     return true;
+  }
+
+  // Pop out all invalid requests in front of the queue.
+  while (!pending_permission_requests_.IsEmpty() &&
+         !ValidateRequest(pending_permission_requests_.Peek())) {
+    pending_permission_requests_.Pop();
+  }
+
+  if (pending_permission_requests_.IsEmpty()) {
+    return true;
+  }
 
   auto current_request_fate = CurrentRequestFate::kKeepCurrent;
 
-  if (base::FeatureList::IsEnabled(features::kPermissionQuietChip)) {
+  if (PermissionUtil::DoesPlatformSupportChip()) {
     if (ShouldCurrentRequestUseQuietUI() &&
         !ShouldShowQuietRequestAgainIfPreempted(
             current_request_first_display_time_)) {
       current_request_fate = CurrentRequestFate::kFinalize;
-    } else if (base::FeatureList::IsEnabled(features::kPermissionChip)) {
+    } else {
       // Preempt current request if it is a quiet UI request.
       if (ShouldCurrentRequestUseQuietUI()) {
         current_request_fate = CurrentRequestFate::kPreempt;
       } else {
-        // Pop out all invalid requests in front of the queue.
-        while (!pending_permission_requests_.IsEmpty() &&
-               !ValidateRequest(pending_permission_requests_.Peek())) {
-          pending_permission_requests_.Pop();
-        }
-
         // Here we also try to prioritise the requests. If there's a valid high
         // priority request (high acceptance rate request) in the pending queue,
         // preempt the current request. The valid high priority request, if
@@ -314,24 +320,25 @@ bool PermissionRequestManager::ReprioritizeCurrentRequestIfNeeded() {
           current_request_fate = CurrentRequestFate::kPreempt;
         }
       }
-    } else if (ShouldCurrentRequestUseQuietUI()) {
-      current_request_fate = CurrentRequestFate::kPreempt;
     }
-  } else {
-    if (base::FeatureList::IsEnabled(features::kPermissionChip)) {
-      current_request_fate = CurrentRequestFate::kPreempt;
-    } else if (ShouldCurrentRequestUseQuietUI()) {
-      // If we're displaying a quiet permission request, ignore it in favor of a
-      // new permission request.
-      current_request_fate = CurrentRequestFate::kFinalize;
-    }
+  } else if (ShouldCurrentRequestUseQuietUI()) {
+    // If we're displaying a quiet permission request, ignore it in favor of a
+    // new permission request.
+    current_request_fate = CurrentRequestFate::kFinalize;
+  }
+
+  if (current_request_fate == CurrentRequestFate::kKeepCurrent &&
+      !pending_permission_requests_.IsEmpty() &&
+      pending_permission_requests_.Peek()
+          ->IsEmbeddedPermissionElementInitiated()) {
+    current_request_fate = CurrentRequestFate::kPreempt;
   }
 
   switch (current_request_fate) {
     case CurrentRequestFate::kKeepCurrent:
       return true;
     case CurrentRequestFate::kPreempt: {
-      DCHECK(!pending_permission_requests_.IsEmpty());
+      CHECK(!pending_permission_requests_.IsEmpty());
       auto* next_candidate = pending_permission_requests_.Peek();
 
       // Consider a case of infinite loop here (eg: 2 low priority requests can
@@ -345,14 +352,14 @@ bool PermissionRequestManager::ReprioritizeCurrentRequestIfNeeded() {
 
       pending_permission_requests_.Pop();
       PreemptAndRequeueCurrentRequest();
-      pending_permission_requests_.Push(next_candidate);
+      pending_permission_requests_.PushFront(next_candidate);
       ScheduleDequeueRequestIfNeeded();
       return false;
     }
     case CurrentRequestFate::kFinalize:
-      // FinalizeCurrentRequests will call ScheduleDequeueRequestIfNeeded on its
-      // own.
-      FinalizeCurrentRequests(PermissionAction::IGNORED);
+      // FinalizeCurrentRequests() will call ScheduleDequeueRequestIfNeeded on
+      // its own.
+      CurrentRequestsDecided(PermissionAction::IGNORED);
       return false;
   }
 
@@ -383,8 +390,7 @@ bool PermissionRequestManager::ValidateRequest(PermissionRequest* request,
 void PermissionRequestManager::QueueRequest(
     content::RenderFrameHost* source_frame,
     PermissionRequest* request) {
-  pending_permission_requests_.Push(request,
-                                    true /*reorder_based_on_priority*/);
+  pending_permission_requests_.Push(request);
   request_sources_map_.emplace(
       request, PermissionRequestSource({source_frame->GetGlobalId()}));
 }
@@ -392,7 +398,7 @@ void PermissionRequestManager::QueueRequest(
 void PermissionRequestManager::PreemptAndRequeueCurrentRequest() {
   ResetViewStateForCurrentRequest();
   for (auto* current_request : requests_) {
-    pending_permission_requests_.Push(current_request);
+    pending_permission_requests_.PushFront(current_request);
   }
 
   // Because the order of the requests is changed, we should not preignore it.
@@ -507,7 +513,7 @@ void PermissionRequestManager::OnVisibilityChanged(
           break;
         case PermissionPrompt::TabSwitchingBehavior::
             kDestroyPromptAndIgnoreRequest:
-          FinalizeCurrentRequests(PermissionAction::IGNORED);
+          CurrentRequestsDecided(PermissionAction::IGNORED);
           break;
         case PermissionPrompt::TabSwitchingBehavior::kKeepPromptAlive:
           break;
@@ -583,7 +589,7 @@ void PermissionRequestManager::Accept() {
   }
 
   NotifyRequestDecided(PermissionAction::GRANTED);
-  FinalizeCurrentRequests(PermissionAction::GRANTED);
+  CurrentRequestsDecided(PermissionAction::GRANTED);
 }
 
 void PermissionRequestManager::AcceptThisTime() {
@@ -601,7 +607,7 @@ void PermissionRequestManager::AcceptThisTime() {
   }
 
   NotifyRequestDecided(PermissionAction::GRANTED_ONCE);
-  FinalizeCurrentRequests(PermissionAction::GRANTED_ONCE);
+  CurrentRequestsDecided(PermissionAction::GRANTED_ONCE);
 }
 
 void PermissionRequestManager::Deny() {
@@ -631,7 +637,7 @@ void PermissionRequestManager::Deny() {
   }
 
   NotifyRequestDecided(PermissionAction::DENIED);
-  FinalizeCurrentRequests(PermissionAction::DENIED);
+  CurrentRequestsDecided(PermissionAction::DENIED);
 }
 
 void PermissionRequestManager::Dismiss() {
@@ -648,7 +654,7 @@ void PermissionRequestManager::Dismiss() {
   }
 
   NotifyRequestDecided(PermissionAction::DISMISSED);
-  FinalizeCurrentRequests(PermissionAction::DISMISSED);
+  CurrentRequestsDecided(PermissionAction::DISMISSED);
 }
 
 void PermissionRequestManager::Ignore() {
@@ -665,7 +671,30 @@ void PermissionRequestManager::Ignore() {
   }
 
   NotifyRequestDecided(PermissionAction::IGNORED);
-  FinalizeCurrentRequests(PermissionAction::IGNORED);
+  CurrentRequestsDecided(PermissionAction::IGNORED);
+}
+
+void PermissionRequestManager::FinalizeCurrentRequests() {
+  ResetViewStateForCurrentRequest();
+  std::vector<PermissionRequest*>::iterator requests_iter;
+  for (requests_iter = requests_.begin(); requests_iter != requests_.end();
+       requests_iter++) {
+    RequestFinishedIncludingDuplicates(*requests_iter);
+    validated_requests_set_.erase(*requests_iter);
+    request_sources_map_.erase(*requests_iter);
+  }
+
+  // No need to execute the preignore logic as we canceling currently active
+  // requests anyway.
+  preignore_timer_.AbandonAndStop();
+
+  requests_.clear();
+
+  for (Observer& observer : observer_list_) {
+    observer.OnRequestsFinalized();
+  }
+
+  ScheduleDequeueRequestIfNeeded();
 }
 
 void PermissionRequestManager::OpenHelpCenterLink(const ui::Event& event) {
@@ -753,7 +782,7 @@ bool PermissionRequestManager::RecreateView() {
     current_request_prompt_disposition_ =
         PermissionPromptDisposition::NONE_VISIBLE;
     if (ShouldDropCurrentRequestIfCannotShowQuietly()) {
-      FinalizeCurrentRequests(PermissionAction::IGNORED);
+      CurrentRequestsDecided(PermissionAction::IGNORED);
     }
     NotifyPromptRecreateFailed();
     return false;
@@ -824,9 +853,11 @@ void PermissionRequestManager::DequeueRequestIfNeeded() {
   // Mark the remaining pending requests as validated, so only the "new and has
   // not been validated" requests added to the queue could have effect to
   // priority order
-  for (auto* request : pending_permission_requests_) {
-    if (ValidateRequest(request, /* should_finalize */ false)) {
-      validated_requests_set_.insert(request);
+  for (const auto& request_list : pending_permission_requests_) {
+    for (auto* request : request_list) {
+      if (ValidateRequest(request, /* should_finalize */ false)) {
+        validated_requests_set_.insert(request);
+      }
     }
   }
 
@@ -980,7 +1011,7 @@ void PermissionRequestManager::ResetViewStateForCurrentRequest() {
     DeletePrompt();
 }
 
-void PermissionRequestManager::FinalizeCurrentRequests(
+void PermissionRequestManager::CurrentRequestsDecided(
     PermissionAction permission_action) {
   DCHECK(IsRequestInProgress());
   base::TimeDelta time_to_decision;
@@ -1051,28 +1082,19 @@ void PermissionRequestManager::FinalizeCurrentRequests(
               ShouldCurrentRequestUseQuietUI())) {
         embargo_status = PermissionEmbargoStatus::REPEATED_IGNORES;
       }
+    } else if (permission_action == PermissionAction::GRANTED_ONCE) {
+      autoblocker->RemoveEmbargoAndResetCounts(
+          request->requesting_origin(), request->GetContentSettingsType());
     }
     PermissionUmaUtil::RecordEmbargoStatus(embargo_status);
   }
-  ResetViewStateForCurrentRequest();
-  std::vector<PermissionRequest*>::iterator requests_iter;
-  for (requests_iter = requests_.begin(); requests_iter != requests_.end();
-       requests_iter++) {
-    RequestFinishedIncludingDuplicates(*requests_iter);
-    validated_requests_set_.erase(*requests_iter);
-    request_sources_map_.erase(*requests_iter);
+
+  // IGNORED is not a decision on the prompt and it occurs because of external
+  // factors (e.g. tab switching). Therefore |ShouldFinalizeRequestAfterDecided|
+  // does not take effect when the action is IGNORED.
+  if (ShouldFinalizeRequestAfterDecided(permission_action)) {
+    FinalizeCurrentRequests();
   }
-
-  // No need to execute the preignore logic as we canceling currently active
-  // requests anyway.
-  preignore_timer_.AbandonAndStop();
-
-  requests_.clear();
-
-  for (Observer& observer : observer_list_)
-    observer.OnRequestsFinalized();
-
-  ScheduleDequeueRequestIfNeeded();
 }
 
 void PermissionRequestManager::CleanUpRequests() {
@@ -1096,9 +1118,9 @@ void PermissionRequestManager::CleanUpRequests() {
       CancelledIncludingDuplicates(*requests_iter);
     }
 
-    FinalizeCurrentRequests(should_dismiss_current_request_
-                                ? PermissionAction::DISMISSED
-                                : PermissionAction::IGNORED);
+    CurrentRequestsDecided(should_dismiss_current_request_
+                               ? PermissionAction::DISMISSED
+                               : PermissionAction::IGNORED);
     should_dismiss_current_request_ = false;
   }
 }
@@ -1450,6 +1472,28 @@ void PermissionRequestManager::DoAutoResponseForTesting() {
     case NONE:
       NOTREACHED();
   }
+}
+
+bool PermissionRequestManager::
+    IsCurrentRequestEmbeddedPermissionElementInitiated() const {
+  return IsRequestInProgress() &&
+         requests_[0]->IsEmbeddedPermissionElementInitiated();
+}
+
+bool PermissionRequestManager::ShouldFinalizeRequestAfterDecided(
+    PermissionAction action) const {
+  // If the action is IGNORED, it is not coming from the prompt itself but
+  // rather from external circumstance (like tab switching) and therefore
+  // |view_->ShouldFinalizeRequestAfterDecided| is not queried.
+
+  // If there is an autoresponse set, or there is no |view_|, finalize the
+  // request since there won't be a separate |FinalizeCurrentRequests()| call.
+  if (action == PermissionAction::IGNORED || auto_response_for_test_ != NONE ||
+      !view_) {
+    return true;
+  }
+
+  return view_->ShouldFinalizeRequestAfterDecided();
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(PermissionRequestManager);

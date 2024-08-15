@@ -18,7 +18,7 @@
 #include "base/test/scoped_run_loop_timeout.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_restrictions.h"
-#include "chrome/test/base/js_test_api.h"
+#include "chrome/test/base/ash/js_test_api.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -32,7 +32,7 @@ void HandleTestFileRequestCallback(
   base::ScopedAllowBlockingForTesting allow_blocking;
 
   base::FilePath source_root;
-  base::PathService::Get(base::DIR_SOURCE_ROOT, &source_root);
+  base::PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, &source_root);
   const base::FilePath test_file_path =
       source_root.Append(test_file_location).AppendASCII(path);
 
@@ -130,7 +130,8 @@ void SandboxedWebUiAppTestBase::ConfigureDefaultTestRequestHandler(
 std::string SandboxedWebUiAppTestBase::LoadJsTestLibrary(
     const base::FilePath& script_path) {
   base::FilePath source_root;
-  EXPECT_TRUE(base::PathService::Get(base::DIR_SOURCE_ROOT, &source_root));
+  EXPECT_TRUE(
+      base::PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, &source_root));
   const auto full_script_path =
       script_path.IsAbsolute() ? script_path : source_root.Append(script_path);
 

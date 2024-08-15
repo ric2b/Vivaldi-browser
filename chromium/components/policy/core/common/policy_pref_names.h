@@ -40,6 +40,7 @@ extern const char kDlpRulesList[];
 extern const char kEnterpriseMDMManagementMac[];
 extern const char kScreenTimeEnabled[];
 #endif
+extern const char kFeedbackSurveysEnabled[];
 extern const char kLastPolicyStatisticsUpdate[];
 extern const char kNativeWindowOcclusionEnabled[];
 extern const char kSafeSitesFilterBehavior[];
@@ -72,6 +73,7 @@ extern const char kPolicyTestPageEnabled[];
 extern const char kAllowBackForwardCacheForCacheControlNoStorePageEnabled[];
 extern const char kLocalTestPoliciesForNextStartup[];
 extern const char kForcePermissionPolicyUnloadDefaultEnabled[];
+extern const char kPPAPISharedImagesForVideoDecoderAllowed[];
 
 }  // namespace policy_prefs
 }  // namespace policy

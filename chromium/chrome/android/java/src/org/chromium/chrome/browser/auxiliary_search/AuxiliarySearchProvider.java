@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.auxiliary_search;
 import android.text.TextUtils;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
 import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchGroupProto.AuxiliarySearchBookmarkGroup;
@@ -14,7 +15,6 @@ import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchGroupProto.Au
 import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchGroupProto.AuxiliarySearchTabGroup;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.url.GURL;
@@ -98,14 +98,19 @@ public class AuxiliarySearchProvider {
         });
     }
 
-    private static @Nullable AuxiliarySearchEntry tabToAuxiliarySearchEntry(Tab tab) {
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    static @Nullable AuxiliarySearchEntry tabToAuxiliarySearchEntry(@Nullable Tab tab) {
+        if (tab == null) {
+            return null;
+        }
+
         String title = tab.getTitle();
         GURL url = tab.getUrl();
         if (TextUtils.isEmpty(title) || url == null || !url.isValid()) return null;
 
         var tabBuilder = AuxiliarySearchEntry.newBuilder().setTitle(title).setUrl(url.getSpec());
-        final long lastAccessTime = CriticalPersistedTabData.from(tab).getTimestampMillis();
-        if (lastAccessTime != CriticalPersistedTabData.INVALID_TIMESTAMP) {
+        final long lastAccessTime = tab.getTimestampMillis();
+        if (lastAccessTime != Tab.INVALID_TIMESTAMP) {
             tabBuilder.setLastAccessTimestamp(lastAccessTime);
         }
 

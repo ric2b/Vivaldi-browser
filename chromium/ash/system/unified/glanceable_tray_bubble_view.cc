@@ -5,12 +5,14 @@
 #include "ash/system/unified/glanceable_tray_bubble_view.h"
 
 #include <algorithm>
+#include <memory>
 
+#include "ash/api/tasks/tasks_client.h"
+#include "ash/api/tasks/tasks_types.h"
 #include "ash/constants/ash_features.h"
 #include "ash/glanceables/classroom/glanceables_classroom_client.h"
-#include "ash/glanceables/glanceables_v2_controller.h"
-#include "ash/glanceables/tasks/glanceables_tasks_client.h"
-#include "ash/glanceables/tasks/glanceables_tasks_types.h"
+#include "ash/glanceables/glanceables_controller.h"
+#include "ash/glanceables/tasks/glanceables_tasks_view.h"
 #include "ash/public/cpp/session/user_info.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
@@ -23,8 +25,10 @@
 #include "ash/system/unified/classroom_bubble_teacher_view.h"
 #include "ash/system/unified/tasks_bubble_view.h"
 #include "base/check.h"
+#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "components/session_manager/session_manager_types.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/list_model.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
@@ -143,12 +147,12 @@ GlanceableTrayBubbleView::GlanceableTrayBubbleView(
       shelf_(shelf),
       detailed_view_delegate_(
           std::make_unique<DetailedViewDelegate>(/*tray_controller=*/nullptr)) {
-  Shell::Get()->glanceables_v2_controller()->RecordGlanceablesBubbleShowTime(
+  Shell::Get()->glanceables_controller()->RecordGlanceablesBubbleShowTime(
       base::TimeTicks::Now());
 }
 
 GlanceableTrayBubbleView::~GlanceableTrayBubbleView() {
-  Shell::Get()->glanceables_v2_controller()->NotifyGlanceablesBubbleClosed();
+  Shell::Get()->glanceables_controller()->NotifyGlanceablesBubbleClosed();
 }
 
 void GlanceableTrayBubbleView::InitializeContents() {
@@ -209,7 +213,7 @@ void GlanceableTrayBubbleView::InitializeContents() {
   }
 
   auto* const tasks_client =
-      Shell::Get()->glanceables_v2_controller()->GetTasksClient();
+      Shell::Get()->glanceables_controller()->GetTasksClient();
   if (should_show_non_calendar_glanceables && tasks_client) {
     CHECK(!tasks_bubble_view_);
     tasks_client->GetTaskLists(
@@ -223,7 +227,7 @@ void GlanceableTrayBubbleView::InitializeContents() {
   ChangeAnchorRect(shelf_->GetSystemTrayAnchorRect());
 
   auto* const classroom_client =
-      Shell::Get()->glanceables_v2_controller()->GetClassroomClient();
+      Shell::Get()->glanceables_controller()->GetClassroomClient();
   if (should_show_non_calendar_glanceables && classroom_client) {
     if (!classroom_bubble_student_view_) {
       classroom_client->IsStudentRoleActive(base::BindOnce(
@@ -307,16 +311,23 @@ void GlanceableTrayBubbleView::AddClassroomBubbleViewIfNeeded(
 }
 
 void GlanceableTrayBubbleView::AddTaskBubbleViewIfNeeded(
-    ui::ListModel<GlanceablesTaskList>* task_lists) {
+    ui::ListModel<api::TaskList>* task_lists) {
   if (task_lists->item_count() == 0) {
     return;
   }
   // Add tasks bubble before everything.
   auto* const scroll_contents = scroll_view_->contents();
-  tasks_bubble_view_ = scroll_contents->AddChildViewAt(
-      std::make_unique<TasksBubbleView>(detailed_view_delegate_.get(),
-                                        task_lists),
-      0);
+
+  std::unique_ptr<GlanceablesTasksViewBase> view;
+  if (base::FeatureList::IsEnabled(
+          features::kGlanceablesTimeManagementStableLaunch)) {
+    view = std::make_unique<GlanceablesTasksView>(detailed_view_delegate_.get(),
+                                                  task_lists);
+  } else {
+    view = std::make_unique<TasksBubbleView>(detailed_view_delegate_.get(),
+                                             task_lists);
+  }
+  tasks_bubble_view_ = scroll_contents->AddChildViewAt(std::move(view), 0);
 
   views::View* const default_focused_child =
       scroll_contents->GetChildrenFocusList().front();
@@ -346,5 +357,8 @@ void GlanceableTrayBubbleView::OnGlanceablesContainerHeightChanged(
     focused_view->ScrollViewToVisible();
   }
 }
+
+BEGIN_METADATA(GlanceableTrayBubbleView, TrayBubbleView)
+END_METADATA
 
 }  // namespace ash

@@ -15,8 +15,8 @@
 #import "ios/chrome/browser/shared/model/browser/browser_list.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/tabs/features.h"
-#import "ios/chrome/browser/tabs/tab_title_util.h"
+#import "ios/chrome/browser/tabs/model/features.h"
+#import "ios/chrome/browser/tabs/model/tab_title_util.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
 #import "ios/chrome/browser/ui/menu/action_factory.h"
 #import "ios/chrome/browser/ui/menu/tab_context_menu_delegate.h"
@@ -201,7 +201,7 @@ using PinnedState = WebStateSearchCriteria::PinnedState;
 }
 
 // Returns `YES` if the tab for the given `identifier` is pinned.
-- (BOOL)isTabPinnedForIdentifier:(NSString*)identifier {
+- (BOOL)isTabPinnedForIdentifier:(web::WebStateID)identifier {
   BrowserList* browserList =
       BrowserListFactory::GetForBrowserState(_browserState);
 
@@ -220,7 +220,7 @@ using PinnedState = WebStateSearchCriteria::PinnedState;
 }
 
 // Returns the TabItem object representing the tab with `identifier.
-- (TabItem*)tabItemForIdentifier:(NSString*)identifier {
+- (TabItem*)tabItemForIdentifier:(web::WebStateID)identifier {
   BrowserList* browserList =
       BrowserListFactory::GetForBrowserState(_browserState);
   std::set<Browser*> browsers = _incognito ? browserList->AllIncognitoBrowsers()

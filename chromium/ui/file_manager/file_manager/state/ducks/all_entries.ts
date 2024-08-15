@@ -2,24 +2,27 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {getParentEntry} from '../../common/js/api.js';
 import {DialogType} from '../../common/js/dialog_type.js';
-import {isDriveRootEntryList, isFakeEntryInDrives, isGrandRootEntryInDrives, isVolumeEntry, sortEntries} from '../../common/js/entry_utils.js';
+import {isDriveRootEntryList, isFakeEntryInDrives, isGrandRootEntryInDrives, isSameEntry, isVolumeEntry, sortEntries} from '../../common/js/entry_utils.js';
 import {FileType} from '../../common/js/file_type.js';
 import {EntryList, VolumeEntry} from '../../common/js/files_app_entry_types.js';
-import {metrics} from '../../common/js/metrics.js';
-import {str, util} from '../../common/js/util.js';
+import {isSinglePartitionFormatEnabled} from '../../common/js/flags.js';
+import {recordInterval, recordSmallCount, startInterval} from '../../common/js/metrics.js';
+import {getEntryLabel, str} from '../../common/js/translations.js';
+import {iconSetToCSSBackgroundImageValue} from '../../common/js/util.js';
 import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
 import {EntryLocation} from '../../externs/entry_location.js';
 import {FilesAppDirEntry, FilesAppEntry} from '../../externs/files_app_entry_interfaces.js';
 import {CurrentDirectory, EntryType, FileData, State, Volume, VolumeMap} from '../../externs/ts/state.js';
-import {VolumeInfo} from '../../externs/volume_info.js';
+import type {VolumeInfo} from '../../externs/volume_info.js';
 import {constants} from '../../foreground/js/constants.js';
 import {MetadataItem} from '../../foreground/js/metadata/metadata_item.js';
-import {ActionsProducerGen} from '../../lib/actions_producer.js';
+import type {ActionsProducerGen} from '../../lib/actions_producer.js';
 import {Slice} from '../../lib/base_store.js';
 import {hasDlpDisabledFiles} from '../ducks/current_directory.js';
 import {driveRootEntryListKey, getVolumeTypesNestedInMyFiles, makeRemovableParentKey, myFilesEntryListKey, recentRootKey, removableGroupKey} from '../ducks/volumes.js';
-import {FileKey} from '../file_key.js';
+import type {FileKey} from '../file_key.js';
 import {getEntry, getFileData, getStore} from '../store.js';
 
 /**
@@ -27,14 +30,14 @@ import {getEntry, getFileData, getStore} from '../store.js';
  * @suppress {checkTypes} TS already checks this file.
  */
 
-const slice = new Slice<State>('allEntries');
+const slice = new Slice<State, State['allEntries']>('allEntries');
 export {slice as allEntriesSlice};
 
 /**
  * Create action to scan `allEntries` and remove its stale entries.
  */
 export const clearCachedEntries =
-    slice.addReducer<void>('clear-stale-cache', clearCachedEntriesReducer);
+    slice.addReducer('clear-stale-cache', clearCachedEntriesReducer);
 
 function clearCachedEntriesReducer(state: State): State {
   const entries = state.allEntries;
@@ -189,8 +192,24 @@ function getEntryIcon(
       case VolumeManagerCommon.VolumeType.SMB:
         return constants.ICON_TYPES.SMB;
       case VolumeManagerCommon.VolumeType.PROVIDED:
-      case VolumeManagerCommon.VolumeType.DOCUMENTS_PROVIDER:
-        return entry.volumeInfo.iconSet!;
+      // Fallthrough
+      case VolumeManagerCommon.VolumeType.DOCUMENTS_PROVIDER: {
+        // Only return IconSet if there's valid background image generated.
+        const iconSet = entry.volumeInfo.iconSet;
+        if (iconSet) {
+          const backgroundImage =
+              iconSetToCSSBackgroundImageValue(entry.volumeInfo.iconSet);
+          if (backgroundImage !== 'none') {
+            return iconSet;
+          }
+        }
+        // If no background is generated from IconSet, set the icon to the
+        // generic one for certain volume type.
+        if (volumeType && VolumeManagerCommon.shouldProvideIcons(volumeType)) {
+          return constants.ICON_TYPES.GENERIC;
+        }
+        return '';
+      }
       case VolumeManagerCommon.VolumeType.MTP:
         return constants.ICON_TYPES.MTP;
       case VolumeManagerCommon.VolumeType.ARCHIVE:
@@ -213,7 +232,7 @@ function appendChildIfNotExisted(
     parentEntry: VolumeEntry|EntryList,
     childEntry: Entry|FilesAppEntry): boolean {
   if (!parentEntry.getUIChildren().find(
-          (entry) => util.isSameEntry(entry, childEntry))) {
+          (entry) => isSameEntry(entry, childEntry))) {
     parentEntry.addEntry(childEntry);
     return true;
   }
@@ -226,16 +245,19 @@ function appendChildIfNotExisted(
  */
 export function convertEntryToFileData(entry: Entry|FilesAppEntry): FileData {
   const {volumeManager, metadataModel} = window.fileManager;
-  const volumeInfo = volumeManager.getVolumeInfo(entry);
+  // When this function is triggered when mounting new volumes, volumeInfo is
+  // not available in the VolumeManager yet, we need to get volumeInfo from the
+  // entry itself.
+  const volumeInfo = 'volumeInfo' in entry ? entry.volumeInfo as VolumeInfo :
+                                             volumeManager.getVolumeInfo(entry);
   const locationInfo = volumeManager.getLocationInfo(entry);
-  // getEntryLabel() can accept locationInfo=null, but TS doesn't recognize the
-  // type definition in closure, hence the ! here.
-  const label = util.getEntryLabel(locationInfo!, entry);
+  const label = getEntryLabel(locationInfo, entry);
   // For FakeEntry, we need to read from entry.volumeType because it doesn't
   // have volumeInfo in the volume manager.
   const volumeType = 'volumeType' in entry && entry.volumeType ?
       entry.volumeType as VolumeManagerCommon.VolumeType :
       (volumeInfo?.volumeType || null);
+  const volumeId = volumeInfo?.volumeId || null;
   const icon = getEntryIcon(entry, locationInfo, volumeType);
 
   /**
@@ -256,7 +278,7 @@ export function convertEntryToFileData(entry: Entry|FilesAppEntry): FileData {
     type: getEntryType(entry),
     isDirectory: entry.isDirectory,
     label,
-    volumeType,
+    volumeId,
     rootType: locationInfo?.rootType ?? null,
     metadata,
     expanded: false,
@@ -495,9 +517,11 @@ export function volumeNestingEntries(
       // Also remove it from the children field.
       myFilesFileData.children = myFilesFileData.children.filter(
           childKey => childKey !== uiEntryPlaceholder.toURL());
-      // And remove it from the uiEntries if existed.
-      state.uiEntries = state.uiEntries.filter(
-          uiEntryKey => uiEntryKey !== uiEntryPlaceholder.toURL());
+      // Do not remove the placeholder ui entry from the store. Removing it from
+      // the MyFiles is sufficient to prevent it from showing in the directory
+      // tree. We keep it in the store (`state["uiEntries"]`) because when
+      // the corresponding volume unmounts, we need to use its existence to
+      // decide if we need to re-add the placeholder back to MyFiles.
     }
     appendChildIfNotExisted(myFilesEntry, newVolumeEntry);
     // Push the new entry to the children of FileData and sort them.
@@ -589,16 +613,24 @@ export function volumeNestingEntries(
     }
   }
 
+  state.allEntries[volumeRootKey].isEjectable =
+      (volumeInfo.source === VolumeManagerCommon.Source.DEVICE &&
+       volumeInfo.volumeType !== VolumeManagerCommon.VolumeType.MTP) ||
+      volumeInfo.source === VolumeManagerCommon.Source.FILE;
+
   if (volumeInfo.volumeType === VolumeType.REMOVABLE) {
-    // It should be nested/grouped when there is more than 1 partition in the
-    // same device.
     const groupingKey = removableGroupKey(volumeMetadata);
-    const shouldGroup = Object.values<Volume>(state.volumes).some(v => {
-      return (
-          v.volumeType === VolumeType.REMOVABLE &&
-          removableGroupKey(v) === groupingKey &&
-          v.volumeId != volumeInfo.volumeId);
-    });
+    // When the flag is on, we always group removable volume even there's only 1
+    // partition, otherwise the group only happens when there are more than 1
+    // partition in the same device.
+    const shouldGroup = isSinglePartitionFormatEnabled() ?
+        true :
+        Object.values<Volume>(state.volumes).some(v => {
+          return (
+              v.volumeType === VolumeType.REMOVABLE &&
+              removableGroupKey(v) === groupingKey &&
+              v.volumeId != volumeInfo.volumeId);
+        });
 
     if (shouldGroup) {
       const parentKey = makeRemovableParentKey(volumeMetadata);
@@ -614,8 +646,8 @@ export function volumeNestingEntries(
       }
       // Update the siblings too.
       for (const v of Object.values<Volume>(state.volumes)) {
-        // Ignore the partitions that already is nested via `prefixKey`. Note:
-        // `prefixKey` field is handled by AddVolume() reducer.
+        // Ignore the partitions that are already nested via `prefixKey`. Note:
+        // `prefixKey` field is handled by `addVolumeReducer`.
         if (v.volumeType === VolumeType.REMOVABLE &&
             removableGroupKey(v) === groupingKey && !v.prefixKey) {
           const fileData = getFileData(state, v.rootKey!);
@@ -642,12 +674,6 @@ export function volumeNestingEntries(
         icon: constants.ICON_TYPES.UNKNOWN_REMOVABLE,
         isEjectable: false,
       };
-    } else {
-      // Update the isEjectable only if the removable device is not grouped.
-      state.allEntries[volumeRootKey].isEjectable =
-          (volumeInfo.source === VolumeManagerCommon.Source.DEVICE &&
-           volumeInfo.volumeType !== VolumeManagerCommon.VolumeType.MTP) ||
-          volumeInfo.source === VolumeManagerCommon.Source.FILE;
     }
   }
 
@@ -717,7 +743,7 @@ export async function*
 
   // Track time for reading sub directories if metric for tracking is passed.
   if (metricNameForTracking) {
-    metrics.startInterval(metricNameForTracking);
+    startInterval(metricNameForTracking);
   }
 
   // Type casting here because TS can't exclude the invalid entry types via the
@@ -743,7 +769,7 @@ export async function*
 
   // Track time for reading sub directories if metric for tracking is passed.
   if (metricNameForTracking) {
-    metrics.recordInterval(metricNameForTracking);
+    recordInterval(metricNameForTracking);
   }
 
   // Read sub directories for children when recursive is true.
@@ -809,7 +835,7 @@ async function*
     // show them when there's at least one child entries inside.
     const grandChildEntries =
         await readChildEntriesForDirectoryEntry(childEntry);
-    metrics.recordSmallCount(
+    recordSmallCount(
         metricNameMap[childEntry.fullPath]!, grandChildEntries.length);
     if (grandChildEntries.length > 0) {
       filteredChildren.push(childEntry);
@@ -841,4 +867,24 @@ async function readChildEntriesForDirectoryEntry(
     };
     readEntry();
   });
+}
+
+/**
+ * Read child entries for the newly renamed directory entry.
+ * We need to read its parent's children first before reading its own children,
+ * because the newly renamed entry might not be in the store yet after renaming.
+ */
+export async function*
+    readSubDirectoriesForRenamedEntry(newEntry: Entry): ActionsProducerGen {
+  const parentDirectory = await getParentEntry(newEntry);
+  // Read the children of the parent first to make sure the newly added entry
+  // appears in the store.
+  for await (const action of readSubDirectories(parentDirectory)) {
+    yield action;
+  }
+  // Read the children of the newly renamed entry.
+  for await (
+      const action of readSubDirectories(newEntry, /* recursive= */ true)) {
+    yield action;
+  }
 }

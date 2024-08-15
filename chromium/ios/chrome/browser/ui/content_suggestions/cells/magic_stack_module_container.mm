@@ -5,16 +5,18 @@
 #import "ios/chrome/browser/ui/content_suggestions/cells/magic_stack_module_container.h"
 
 #import "base/notreached.h"
+#import "base/strings/sys_string_conversions.h"
+#import "ios/chrome/browser/ntp/home/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
+#import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/magic_stack_module_container_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
-#import "ios/chrome/grit/ios_chromium_strings.h"
+#import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
@@ -65,6 +67,7 @@ const CGFloat kTitleStackViewTrailingMargin = 16.0f;
   UILabel* _title;
   UILabel* _subtitle;
   BOOL _isPlaceholder;
+  UIButton* _seeMoreButton;
 }
 
 - (instancetype)initWithType:(ContentSuggestionsModuleType)type {
@@ -162,6 +165,8 @@ const CGFloat kTitleStackViewTrailingMargin = 16.0f;
           setContentHuggingPriority:UILayoutPriorityDefaultHigh
                             forAxis:UILayoutConstraintAxisHorizontal];
       [titleStackView addArrangedSubview:showMoreButton];
+      showMoreButton.accessibilityIdentifier = showMoreButton.titleLabel.text;
+      _seeMoreButton = showMoreButton;
     } else if ([self shouldShowSubtitle]) {
       // TODO(crbug.com/1474992): Update MagicStackModuleContainer to take an id
       // config in its initializer so the container can build itself from a
@@ -179,9 +184,11 @@ const CGFloat kTitleStackViewTrailingMargin = 16.0f;
       [_subtitle setContentHuggingPriority:UILayoutPriorityRequired
                                    forAxis:UILayoutConstraintAxisHorizontal];
       [_subtitle
-          setContentCompressionResistancePriority:UILayoutPriorityRequired
+          setContentCompressionResistancePriority:UILayoutPriorityDefaultHigh
                                           forAxis:
                                               UILayoutConstraintAxisHorizontal];
+      _subtitle.textAlignment =
+          UseRTLLayout() ? NSTextAlignmentLeft : NSTextAlignmentRight;
 
       [titleStackView addArrangedSubview:_subtitle];
     }
@@ -225,7 +232,16 @@ const CGFloat kTitleStackViewTrailingMargin = 16.0f;
     }
     [stackView addArrangedSubview:contentView];
 
-    self.accessibilityElements = @[ _title, contentView ];
+    NSMutableArray* accessibilityElements =
+        [[NSMutableArray alloc] initWithObjects:_title, nil];
+    if ([self shouldShowSeeMore]) {
+      [accessibilityElements addObject:_seeMoreButton];
+    }
+    [accessibilityElements addObject:contentView];
+    if ([self shouldShowSubtitle]) {
+      [accessibilityElements addObject:_subtitle];
+    }
+    self.accessibilityElements = accessibilityElements;
 
     _contentViewWidthAnchor = [contentView.widthAnchor
         constraintEqualToConstant:[self contentViewWidth]];
@@ -256,6 +272,7 @@ const CGFloat kTitleStackViewTrailingMargin = 16.0f;
   return self;
 }
 
+// Returns the module width (CGFloat) given `traitCollection`.
 + (CGFloat)moduleWidthForHorizontalTraitCollection:
     (UITraitCollection*)traitCollection {
   return traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassRegular
@@ -263,6 +280,7 @@ const CGFloat kTitleStackViewTrailingMargin = 16.0f;
              : kModuleWidthCompact;
 }
 
+// Returns the module's title, if any, given the Magic Stack module `type`.
 + (NSString*)titleStringForModule:(ContentSuggestionsModuleType)type {
   switch (type) {
     case ContentSuggestionsModuleType::kShortcuts:
@@ -286,20 +304,27 @@ const CGFloat kTitleStackViewTrailingMargin = 16.0f;
     case ContentSuggestionsModuleType::kSafetyCheckMultiRow:
     case ContentSuggestionsModuleType::kSafetyCheckMultiRowOverflow:
       return l10n_util::GetNSString(IDS_IOS_SAFETY_CHECK_TITLE);
+    case ContentSuggestionsModuleType::kParcelTracking:
+    case ContentSuggestionsModuleType::kParcelTrackingSeeMore:
+      return l10n_util::GetNSString(
+          IDS_IOS_CONTENT_SUGGESTIONS_PARCEL_TRACKING_MODULE_TITLE);
     default:
       NOTREACHED();
       return @"";
   }
 }
 
+// Returns the font for the module title string.
 + (UIFont*)fontForTitle {
   return CreateDynamicFont(UIFontTextStyleFootnote, UIFontWeightSemibold);
 }
 
+// Returns the font for the module subtitle string.
 + (UIFont*)fontForSubtitle {
   return CreateDynamicFont(UIFontTextStyleFootnote, UIFontWeightRegular);
 }
 
+// Returns the content insets.
 - (NSDirectionalEdgeInsets)contentMargins {
   NSDirectionalEdgeInsets contentMargins =
       NSDirectionalEdgeInsetsMake(kContentTopInset, kContentHorizontalInset,
@@ -320,6 +345,7 @@ const CGFloat kTitleStackViewTrailingMargin = 16.0f;
   return contentMargins;
 }
 
+// Returns the intrinsic content size.
 - (CGSize)intrinsicContentSize {
   // When the Most Visited Tiles module is not in the Magic Stack or if a module
   // is the only module in the Magic Stack in a wider screen, the module should
@@ -402,12 +428,16 @@ const CGFloat kTitleStackViewTrailingMargin = 16.0f;
     case ContentSuggestionsModuleType::kSetUpListDefaultBrowser:
     case ContentSuggestionsModuleType::kSetUpListAutofill:
     case ContentSuggestionsModuleType::kCompactedSetUpList:
+    case ContentSuggestionsModuleType::kParcelTracking:
+    case ContentSuggestionsModuleType::kParcelTrackingSeeMore:
       return YES;
     default:
       return NO;
   }
 }
 
+// Based on ContentSuggestionsModuleType, returns YES if the module should show
+// a subtitle.
 - (BOOL)shouldShowSubtitle {
   switch (_type) {
     case ContentSuggestionsModuleType::kSafetyCheck:
@@ -418,16 +448,22 @@ const CGFloat kTitleStackViewTrailingMargin = 16.0f;
   }
 }
 
+// Based on ContentSuggestionsModuleType, returns YES if a "See More" button
+// should be displayed in the module.
 - (BOOL)shouldShowSeeMore {
   switch (_type) {
     case ContentSuggestionsModuleType::kCompactedSetUpList:
     case ContentSuggestionsModuleType::kSafetyCheckMultiRowOverflow:
+    case ContentSuggestionsModuleType::kParcelTrackingSeeMore:
       return YES;
     default:
       return NO;
   }
 }
 
+// Based on ContentSuggestionsModuleType, returns YES if a separator should be
+// shown between the module title/subtitle row, and the remaining bottom-half of
+// the module.
 - (BOOL)shouldShowSeparator {
   switch (_type) {
     case ContentSuggestionsModuleType::kSetUpListSync:
@@ -457,6 +493,9 @@ const CGFloat kTitleStackViewTrailingMargin = 16.0f;
     case ContentSuggestionsModuleType::kCompactedSetUpList:
       return l10n_util::GetNSString(
           IDS_IOS_SET_UP_LIST_HIDE_MODULE_CONTEXT_MENU_TITLE);
+    case ContentSuggestionsModuleType::kParcelTracking:
+    case ContentSuggestionsModuleType::kParcelTrackingSeeMore:
+      return l10n_util::GetNSString(IDS_IOS_PARCEL_TRACKING_CONTEXT_MENU_TITLE);
     default:
       NOTREACHED_NORETURN();
   }
@@ -479,6 +518,12 @@ const CGFloat kTitleStackViewTrailingMargin = 16.0f;
     case ContentSuggestionsModuleType::kCompactedSetUpList:
       return l10n_util::GetNSString(
           IDS_IOS_SET_UP_LIST_HIDE_MODULE_CONTEXT_MENU_DESCRIPTION);
+    case ContentSuggestionsModuleType::kParcelTracking:
+    case ContentSuggestionsModuleType::kParcelTrackingSeeMore:
+      return l10n_util::GetNSStringF(
+          IDS_IOS_PARCEL_TRACKING_CONTEXT_MENU_DESCRIPTION,
+          base::SysNSStringToUTF16(l10n_util::GetNSString(
+              IDS_IOS_CONTENT_SUGGESTIONS_PARCEL_TRACKING_MODULE_TITLE)));
     default:
       NOTREACHED_NORETURN();
   }

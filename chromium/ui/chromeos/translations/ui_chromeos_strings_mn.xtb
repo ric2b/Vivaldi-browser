@@ -8,6 +8,7 @@
 <translation id="1056898198331236512">Анхааруулга</translation>
 <translation id="1060368002126861100">Файлуудыг <ph name="APP_NAME" />-р нээхийн тулд эхлээд тэдгээрийг Windows-н файлын фолдерт зөөнө үү.</translation>
 <translation id="1062407476771304334">Солих</translation>
+<translation id="1119383441774809183">Mессежийг харуулах</translation>
 <translation id="1119447706177454957">Дотоод алдаа</translation>
 <translation id="1120073797882051782">Хангыль Ромажа</translation>
 <translation id="112387589102719461">Programmer Dvorak гартай англи (АНУ)</translation>
@@ -328,6 +329,7 @@
 <translation id="3619115746895587757">Капучино</translation>
 <translation id="3619593063686672873">Саяхны видео байхгүй байна</translation>
 <translation id="3634507049637220048">Сүлжээ: <ph name="NETWORK_COUNT" />-н <ph name="NETWORK_INDEX" />, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, таны администратор удирддаг, дэлгэрэнгүй мэдээлэл</translation>
+<translation id="36451918667380448">Мобайл сүлжээ нийлүүлэгчийг түгжсэн. Тусламж авах бол нийлүүлэгчтэйгээ холбогдоно уу.</translation>
 <translation id="3645233063072417428"><ph name="NUMBER_OF_ITEMS" /> зүйлийг зөөсөн.</translation>
 <translation id="3658269352872031728"><ph name="SELECTED_FILE_COUNT" /> файл сонгосон</translation>
 <translation id="3685122418104378273">Гар утасны мэдээллийг ашиглаж байх үед Google Drive синк нь автоматаар идэвхгүй болно.</translation>
@@ -1011,6 +1013,7 @@
 <translation id="8698877009525468705">Энэхүү файл нь нууцлалтай ба администраторын бодлогын дагуу хязгаарлалттай.</translation>
 <translation id="8712637175834984815">Ойлголоо</translation>
 <translation id="8713112442029511308">Мальта</translation>
+<translation id="8714138378966541668">Үйлчилгээ үзүүлэгч түгжсэн</translation>
 <translation id="8714406895390098252">Унадаг дугуй</translation>
 <translation id="8719721339511222681"><ph name="ENTRY_NAME" /> сонгогдсон.</translation>
 <translation id="872537912056138402">Хорват</translation>

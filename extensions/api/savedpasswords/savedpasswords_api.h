@@ -10,7 +10,6 @@
 #include "base/memory/ref_counted.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
-#include "components/password_manager/core/browser/reauth_purpose.h"
 #include "content/public/browser/web_ui.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/schema/savedpasswords.h"

@@ -7,43 +7,56 @@
 
 #include <string>
 
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "chrome/browser/ash/input_method/editor_consent_enums.h"
+#include "chrome/browser/ash/input_method/editor_text_inserter.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chromeos/ash/services/orca/public/mojom/orca_service.mojom.h"
+#include "mojo/public/cpp/bindings/associated_receiver.h"
+#include "mojo/public/cpp/bindings/pending_associated_receiver.h"
+#include "url/gurl.h"
 
-namespace ash {
-namespace input_method {
+namespace ash::input_method {
 
-class EditorTextActuator {
+class EditorTextActuator : public orca::mojom::TextActuator {
  public:
-  EditorTextActuator();
-  ~EditorTextActuator();
+  class Delegate {
+   public:
+    virtual ~Delegate() = default;
+    virtual void OnTextInserted() = 0;
+    virtual void ProcessConsentAction(ConsentAction consent_action) = 0;
+    virtual void ShowUI() = 0;
+    virtual void CloseUI() = 0;
+    virtual EditorMode GetEditorMode() const = 0;
+    virtual size_t GetSelectedTextLength() = 0;
+  };
 
-  // Enqueues some text to be inserted in the next text client to be focused.
-  void InsertTextOnNextFocus(std::string_view text);
+  EditorTextActuator(
+      Profile* profile,
+      mojo::PendingAssociatedReceiver<orca::mojom::TextActuator> receiver,
+      Delegate* delegate);
+  ~EditorTextActuator() override;
 
-  // Text input event handlers.
+  // orca::mojom::TextActuator overrides
+  void InsertText(const std::string& text) override;
+  void ApproveConsent() override;
+  void DeclineConsent() override;
+  void OpenUrlInNewWindow(const GURL& url) override;
+  void ShowUI() override;
+  void CloseUI() override;
+  void SubmitFeedback(const std::string& description) override;
+
   void OnFocus(int context_id);
   void OnBlur();
 
  private:
-  // Holds the details of the currently focused text input's context.
-  struct TextClientContext {
-    int id;
-  };
+  raw_ptr<Profile> profile_;
+  mojo::AssociatedReceiver<orca::mojom::TextActuator> text_actuator_receiver_;
 
-  // Represents a pending text insertion command.
-  struct PendingTextInsert {
-    std::string text;
-  };
-
-  // Holds any pending text insertions. It is assumed that only one text
-  // insertion will be requested at any given time.
-  absl::optional<PendingTextInsert> pending_text_insert_;
-
-  // Holds the context of a focused text client.
-  absl::optional<TextClientContext> focused_client_;
+  // Not owned by this class.
+  raw_ptr<Delegate> delegate_;
+  EditorTextInserter inserter_;
 };
 
-}  // namespace input_method
-}  // namespace ash
+}  // namespace ash::input_method
 
 #endif  // CHROME_BROWSER_ASH_INPUT_METHOD_EDITOR_TEXT_ACTUATOR_H_

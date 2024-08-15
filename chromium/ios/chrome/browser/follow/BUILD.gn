@@ -61,7 +61,7 @@ source_set("tab_helper") {
     "//components/history/core/browser",
     "//components/keyed_service/core",
     "//ios/chrome/app/strings",
-    "//ios/chrome/browser/feature_engagement",
+    "//ios/chrome/browser/feature_engagement/model",
     "//ios/chrome/browser/follow:enums",
     "//ios/chrome/browser/follow:utils",
     "//ios/chrome/browser/history",
@@ -130,6 +130,7 @@ source_set("browser_agent") {
     "//ios/chrome/browser/follow:service",
     "//ios/chrome/browser/follow:service_factory",
     "//ios/chrome/browser/net:crurl",
+    "//ios/chrome/browser/ntp:features",
     "//ios/chrome/browser/shared/model/browser",
     "//ios/chrome/browser/shared/model/browser_state",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
@@ -137,6 +138,7 @@ source_set("browser_agent") {
     "//ios/chrome/browser/shared/public/features:system_flags",
     "//ios/chrome/browser/ui/follow",
     "//ios/chrome/browser/ui/ntp/metrics",
+    "//ios/chrome/browser/ui/ntp/metrics:constants",
     "//ui/base",
   ]
 }

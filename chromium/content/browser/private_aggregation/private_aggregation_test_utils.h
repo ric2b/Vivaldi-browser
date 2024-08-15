@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/functional/callback_forward.h"
+#include "base/time/time.h"
 #include "content/browser/aggregation_service/aggregatable_report.h"
 #include "content/browser/private_aggregation/private_aggregation_budget_key.h"
 #include "content/browser/private_aggregation/private_aggregation_budgeter.h"
@@ -23,10 +24,6 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/private_aggregation/aggregatable_report.mojom-forward.h"
 #include "third_party/blink/public/mojom/private_aggregation/private_aggregation_host.mojom-forward.h"
-
-namespace base {
-class Time;
-}
 
 namespace url {
 class Origin;
@@ -82,16 +79,18 @@ class MockPrivateAggregationHost : public PrivateAggregationHost {
                url::Origin,
                PrivateAggregationBudgetKey::Api,
                absl::optional<std::string>,
+               absl::optional<base::TimeDelta>,
+               absl::optional<url::Origin>,
                mojo::PendingReceiver<blink::mojom::PrivateAggregationHost>),
               (override));
 
   MOCK_METHOD(
       void,
-      SendHistogramReport,
-      (std::vector<blink::mojom::AggregatableReportHistogramContributionPtr>,
-       blink::mojom::AggregationServiceMode,
-       blink::mojom::DebugModeDetailsPtr),
+      ContributeToHistogram,
+      (std::vector<blink::mojom::AggregatableReportHistogramContributionPtr>),
       (override));
+
+  MOCK_METHOD(void, EnableDebugMode, (blink::mojom::DebugKeyPtr), (override));
 
  private:
   TestBrowserContext test_browser_context_;
@@ -108,6 +107,8 @@ class MockPrivateAggregationManagerImpl : public PrivateAggregationManagerImpl {
                url::Origin,
                PrivateAggregationBudgetKey::Api,
                absl::optional<std::string>,
+               absl::optional<base::TimeDelta>,
+               absl::optional<url::Origin>,
                mojo::PendingReceiver<blink::mojom::PrivateAggregationHost>),
               (override));
 
@@ -130,6 +131,12 @@ class MockPrivateAggregationContentBrowserClientBase : public SuperClass {
                const url::Origin& top_frame_origin,
                const url::Origin& reporting_origin),
               (override));
+  MOCK_METHOD(bool,
+              IsPrivateAggregationDebugModeAllowed,
+              (content::BrowserContext * browser_context,
+               const url::Origin& top_frame_origin,
+               const url::Origin& reporting_origin),
+              (override));
   MOCK_METHOD(void,
               LogWebFeatureForCurrentPage,
               (content::RenderFrameHost*, blink::mojom::WebFeature),
@@ -145,7 +152,8 @@ class MockPrivateAggregationContentBrowserClientBase : public SuperClass {
               IsPrivacySandboxReportingDestinationAttested,
               (content::BrowserContext * browser_context,
                const url::Origin& destination_origin,
-               content::PrivacySandboxInvokingAPI invoking_api),
+               content::PrivacySandboxInvokingAPI invoking_api,
+               bool post_impression_reporting),
               (override));
 };
 

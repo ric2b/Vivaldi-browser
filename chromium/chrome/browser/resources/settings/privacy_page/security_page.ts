@@ -21,15 +21,13 @@ import {HelpBubbleMixin} from 'chrome://resources/cr_components/help_bubble/help
 import {PrefsMixin} from 'chrome://resources/cr_components/settings_prefs/prefs_mixin.js';
 import {CrSettingsPrefs} from 'chrome://resources/cr_components/settings_prefs/prefs_types.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
-import {assert} from 'chrome://resources/js/assert_ts.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
-// <if expr="is_chromeos or chrome_root_store_supported">
 import {OpenWindowProxyImpl} from 'chrome://resources/js/open_window_proxy.js';
-// </if>
-
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {FocusConfig} from '../focus_config.js';
+import {HatsBrowserProxyImpl, SecurityPageInteraction} from '../hats_browser_proxy.js';
 import {loadTimeData} from '../i18n_setup.js';
 import {MetricsBrowserProxy, MetricsBrowserProxyImpl, PrivacyElementInteractions, SafeBrowsingInteractions} from '../metrics_browser_proxy.js';
 import {routes} from '../route.js';
@@ -83,11 +81,12 @@ export class SettingsSecurityPageElement extends
         notify: true,
       },
 
-      // <if expr="chrome_root_store_supported">
       /**
        * Whether we should adjust Manage Certificates links to indicate
        * support for Chrome Root Store.
        */
+      // TODO(crbug.com/1412591): remove when CRS enterprise policy is removed
+      // for ChromeOS and Linux
       showChromeRootStoreCertificates_: {
         type: Boolean,
         readOnly: true,
@@ -95,7 +94,6 @@ export class SettingsSecurityPageElement extends
           return loadTimeData.getBoolean('showChromeRootStoreCertificates');
         },
       },
-      // </if>
 
       /**
        * Whether the secure DNS setting should be displayed.
@@ -173,9 +171,7 @@ export class SettingsSecurityPageElement extends
       showDisableSafebrowsingDialog_: Boolean,
     };
   }
-  // <if expr="chrome_root_store_supported">
   private showChromeRootStoreCertificates_: boolean;
-  // </if>
   private showSecureDnsSetting_: boolean;
 
   // <if expr="is_chromeos">
@@ -245,8 +241,7 @@ export class SettingsSecurityPageElement extends
       const queryParams = Router.getInstance().getQueryParameters();
       const section = queryParams.get('q');
       if (section === 'enhanced') {
-        this.$.safeBrowsingEnhanced.expanded =
-            !loadTimeData.getBoolean('enableEsbCollapse');
+        this.$.safeBrowsingEnhanced.expanded = false;
         this.$.safeBrowsingStandard.expanded = false;
       }
     }
@@ -272,6 +267,7 @@ export class SettingsSecurityPageElement extends
     if (prefValue !== selected) {
       this.recordInteractionHistogramOnRadioChange_(selected);
       this.recordActionOnRadioChange_(selected);
+      this.interactedWithPage_(selected);
     }
     if (selected === SafeBrowsingSetting.DISABLED) {
       this.showDisableSafebrowsingDialog_ = true;
@@ -279,6 +275,13 @@ export class SettingsSecurityPageElement extends
       this.updateCollapsedButtons_();
       this.$.safeBrowsingRadioGroup.sendPrefChange();
     }
+  }
+
+  private interactedWithPage_(securityPageInteraction:
+                                  SecurityPageInteraction) {
+    const safeBrowsingValue = this.getPref('generated.safe_browsing').value;
+    HatsBrowserProxyImpl.getInstance().securityPageInteractionOccurred(
+        securityPageInteraction, safeBrowsingValue);
   }
 
   private getDisabledExtendedSafeBrowsing_(): boolean {
@@ -367,12 +370,10 @@ export class SettingsSecurityPageElement extends
         PrivacyElementInteractions.MANAGE_CERTIFICATES);
   }
 
-  // <if expr="chrome_root_store_supported">
   private onChromeCertificatesClick_() {
     OpenWindowProxyImpl.getInstance().openUrl(
         loadTimeData.getString('chromeRootStoreHelpCenterURL'));
   }
-  // </if>
 
   private onAdvancedProtectionProgramLinkClick_() {
     window.open(loadTimeData.getString('advancedProtectionURL'));
@@ -424,12 +425,16 @@ export class SettingsSecurityPageElement extends
     this.recordInteractionHistogramOnExpandButtonClicked_(
         SafeBrowsingSetting.ENHANCED);
     this.recordActionOnExpandButtonClicked_(SafeBrowsingSetting.ENHANCED);
+    this.interactedWithPage_(
+        SecurityPageInteraction.EXPAND_BUTTON_ENHANCED_CLICK);
   }
 
   private onStandardProtectionExpandButtonClicked_() {
     this.recordInteractionHistogramOnExpandButtonClicked_(
         SafeBrowsingSetting.STANDARD);
     this.recordActionOnExpandButtonClicked_(SafeBrowsingSetting.STANDARD);
+    this.interactedWithPage_(
+        SecurityPageInteraction.EXPAND_BUTTON_STANDARD_CLICK);
   }
 
   // <if expr="is_chromeos">

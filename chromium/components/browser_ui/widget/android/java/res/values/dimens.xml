@@ -46,7 +46,6 @@ found in the LICENSE file.
     <dimen name="list_menu_item_icon_size">24dp</dimen>
 
     <!-- Custom Menu dimensions -->
-    <dimen name="menu_divider_padding">8dp</dimen>
     <dimen name="menu_padding_start">16dp</dimen>
 
     <!-- Drag-Reorderable List dimensions -->
@@ -130,6 +129,9 @@ found in the LICENSE file.
     <dimen name="tile_view_min_height">86dp</dimen>
     <dimen name="tile_view_icon_size">48dp</dimen>
     <dimen name="tile_view_icon_size_modern">24dp</dimen>
+    <!-- QueryTile view dimensions -->
+    <dimen name="query_tile_view_width">86dp</dimen>
+    <dimen name="query_tile_view_height">86dp</dimen>
     <!-- TODO(crbug.com/900912): Fix and remove lint ignore -->
     <dimen tools:ignore="PxUsage" name="tile_view_icon_min_size">24px</dimen>
     <dimen name="tile_view_icon_corner_radius">4dp</dimen>
@@ -147,6 +149,8 @@ found in the LICENSE file.
     <dimen name="tile_view_padding_edge_portrait">12dp</dimen>
     <dimen name="tile_view_padding_landscape">16dp</dimen>
     <dimen name="tile_view_title_margin_top_modern">61dp</dimen>
+    <dimen name="tile_view_padding_edge_tablet_polish">20dp</dimen>
+    <dimen name="tile_view_padding_interval_tablet_polish">16dp</dimen>
 
     <!-- Chips default measures -->
     <item name="chip_outline_alpha" format="float" type="dimen">0.8</item>
@@ -198,11 +202,10 @@ found in the LICENSE file.
     <dimen name="menu_bg_color_elev">@dimen/default_elevation_0</dimen>
     <dimen name="dialog_elevation">@dimen/default_elevation_0</dimen>
 
-    <!-- Vertical divider dimens -->
-    <dimen name="horizontal_divider_vertical_margin">8dp</dimen>
-
     <!-- Empty view layout dimensions -->
     <dimen name="empty_state_text_width">341dp</dimen>
     <dimen name="empty_state_heading_padding_top">18dp</dimen>
     <dimen name="empty_state_subheading_padding_top">8dp</dimen>
+    <!-- Surface Polish -->
+    <dimen name="home_surface_background_color_elevation">@dimen/default_elevation_2</dimen>
 </resources>

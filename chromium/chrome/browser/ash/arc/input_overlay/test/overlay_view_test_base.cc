@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ash/arc/input_overlay/test/overlay_view_test_base.h"
 
-#include "ash/game_dashboard/game_dashboard_widget.h"
 #include "chrome/browser/ash/arc/input_overlay/actions/action.h"
 #include "chrome/browser/ash/arc/input_overlay/display_overlay_controller.h"
 #include "chrome/browser/ash/arc/input_overlay/touch_injector.h"
@@ -23,39 +22,31 @@ OverlayViewTestBase::~OverlayViewTestBase() = default;
 
 void OverlayViewTestBase::EnableEditMode() {
   EnableDisplayMode(DisplayMode::kEdit);
+  editing_list_ = controller_->GetEditingList();
+  // Ensure editing_list_ show up in edit mode.
+  ASSERT_TRUE(editing_list_);
 }
 
 ButtonOptionsMenu* OverlayViewTestBase::ShowButtonOptionsMenu(Action* action) {
-  // Hide the editing list first to click on the action touch point.
-  DCHECK(controller_->editing_list_widget_);
-  controller_->editing_list_widget_->Hide();
-
-  LeftClickOn(action->action_view()->touch_point());
-
+  action->action_view()->ShowButtonOptionsMenu();
   DCHECK(controller_->button_options_widget_);
-  auto* menu = static_cast<ButtonOptionsMenu*>(
-      controller_->button_options_widget_->GetContentsView());
-  // Reshow the editing list.
-  controller_->editing_list_widget_->Show();
-  return menu;
+  return controller_->GetButtonOptionsMenu();
 }
 
 // Create a GIO enabled window with default actions including two action tap and
 // one action move, enable it into edit mode.
 void OverlayViewTestBase::SetUp() {
   GameControlsTestBase::SetUp();
-  EnableEditMode();
 
   tap_action_ = touch_injector_->actions()[0].get();
   tap_action_two_ = touch_injector_->actions()[1].get();
   move_action_ = touch_injector_->actions()[2].get();
 
-  input_mapping_view_ = static_cast<InputMappingView*>(
-      controller_->input_mapping_widget_->GetContentsView());
+  input_mapping_view_ = controller_->GetInputMapping();
+  DCHECK(input_mapping_view_);
 
-  DCHECK(controller_->editing_list_widget_);
-  editing_list_ = static_cast<EditingList*>(
-      controller_->editing_list_widget_->GetContentsView());
+  EnableEditMode();
+
   DCHECK(editing_list_->scroll_content_);
   const auto& items = editing_list_->scroll_content_->children();
   DCHECK_EQ(items.size(), 3u);

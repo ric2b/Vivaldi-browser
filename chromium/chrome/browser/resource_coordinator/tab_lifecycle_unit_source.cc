@@ -197,7 +197,7 @@ void TabLifecycleUnitSource::UpdateFocusedTab() {
   //  guestview containing the tab is initialized. VB-87945 et al.
   Browser* const focused_browser =
       focused_web_contents
-          ? chrome::FindBrowserWithWebContents(focused_web_contents)
+          ? chrome::FindBrowserWithTab(focused_web_contents)
           : nullptr;
   if (focused_browser && focused_browser->is_vivaldi() &&
       focused_browser->is_session_restore()) {

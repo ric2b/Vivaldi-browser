@@ -18,10 +18,10 @@
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/web_app_tabbed_utils.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
-#include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
 #include "components/tab_groups/tab_group_id.h"
+#include "components/webapps/common/web_app_id.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/buildflags/buildflags.h"
@@ -253,7 +253,7 @@ void UnloadController::CancelWindowClose() {
   chrome::OnClosingAllBrowsers(false);
 
   if (vivaldi::IsVivaldiRunning()) {
-    VivaldiBrowserWindow::CancelWindowClose(browser_);
+    VivaldiBrowserWindow::CancelWindowClose();
   }
 }
 

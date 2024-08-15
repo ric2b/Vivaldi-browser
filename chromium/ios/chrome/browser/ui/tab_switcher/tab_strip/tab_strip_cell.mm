@@ -7,6 +7,7 @@
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/image/image_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/web/public/web_state_id.h"
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
@@ -20,36 +21,52 @@ namespace {
 // The size of the xmark symbol image.
 NSInteger kXmarkSymbolPointSize = 13;
 
-// Tab close button insets.
-const CGFloat kFaviconInset = 28;
+const CGFloat kFaviconLeadingMargin = 16;
+const CGFloat kCloseButtonMargin = 16;
 const CGFloat kTitleInset = 10.0;
 const CGFloat kFontSize = 14.0;
 
+const CGFloat kFaviconSize = 16.0;
+
+UIImage* DefaultFavicon() {
+
+  if (IsVivaldiRunning())
+    return [[UIImage imageNamed:vNTPSDFallbackFavicon]
+                imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  // End Vivaldi
+
+  return DefaultSymbolWithPointSize(kGlobeAmericasSymbol, 14);
+}
+
 }  // namespace
 
-@implementation TabStripCell
+@implementation TabStripCell {
+  UIButton* _closeButton;
+  UILabel* _titleLabel;
+  UIImageView* _faviconView;
+}
 
 - (instancetype)initWithFrame:(CGRect)frame {
   if ((self = [super initWithFrame:frame])) {
-    [self setupBackgroundViews];
+    // TODO(crbug.com/1490555): Remove the border once we get closer to the
+    // design.
+    self.layer.borderColor = UIColor.blackColor.CGColor;
+    self.layer.borderWidth = 1;
 
-    UIImage* favicon = [[UIImage imageNamed:@"default_world_favicon"]
-        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    _faviconView = [[UIImageView alloc] initWithImage:DefaultFavicon()];
+    _faviconView.contentMode = UIViewContentModeScaleAspectFit;
 
-    if (IsVivaldiRunning())
-      favicon = [[UIImage imageNamed:vNTPSDFallbackFavicon]
-                  imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-    // End Vivaldi
-
-    _faviconView = [[UIImageView alloc] initWithImage:favicon];
     [self.contentView addSubview:_faviconView];
     _faviconView.translatesAutoresizingMaskIntoConstraints = NO;
     [NSLayoutConstraint activateConstraints:@[
       [_faviconView.leadingAnchor
           constraintEqualToAnchor:self.contentView.leadingAnchor
-                         constant:kFaviconInset],
+                         constant:kFaviconLeadingMargin],
       [_faviconView.centerYAnchor
           constraintEqualToAnchor:self.contentView.centerYAnchor],
+      [_faviconView.widthAnchor constraintEqualToConstant:kFaviconSize],
+      [_faviconView.heightAnchor
+          constraintEqualToAnchor:_faviconView.widthAnchor],
     ]];
 
     UIImage* close =
@@ -61,7 +78,7 @@ const CGFloat kFontSize = 14.0;
     [NSLayoutConstraint activateConstraints:@[
       [_closeButton.trailingAnchor
           constraintEqualToAnchor:self.contentView.trailingAnchor
-                         constant:-kFaviconInset],
+                         constant:-kCloseButtonMargin],
       [_closeButton.centerYAnchor
           constraintEqualToAnchor:self.contentView.centerYAnchor],
     ]];
@@ -88,30 +105,25 @@ const CGFloat kFontSize = 14.0;
   return self;
 }
 
+- (void)setTitle:(NSString*)title {
+  _titleLabel.text = title;
+}
+
+- (void)setFaviconImage:(UIImage*)image {
+  if (!image) {
+    _faviconView.image = DefaultFavicon();
+  } else {
+    _faviconView.image = image;
+  }
+}
+
+#pragma mark - UICollectionViewCell
+
 - (void)prepareForReuse {
   [super prepareForReuse];
-  self.titleLabel.text = nil;
-  self.itemIdentifier = nil;
+  _titleLabel.text = nil;
   self.selected = NO;
-  self.faviconView = nil;
-}
-
-- (void)setupBackgroundViews {
-  self.backgroundView = [[UIImageView alloc]
-      initWithImage:[UIImage imageNamed:@"tabstrip_background_tab"]];
-  self.selectedBackgroundView = [[UIImageView alloc]
-      initWithImage:[UIImage imageNamed:@"tabstrip_foreground_tab"]];
-}
-
-- (BOOL)hasIdentifier:(NSString*)identifier {
-  return [self.itemIdentifier isEqualToString:identifier];
-}
-
-#pragma mark - UIView
-
-- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
-  [super traitCollectionDidChange:previousTraitCollection];
-  [self setupBackgroundViews];
+  [self setFaviconImage:nil];
 }
 
 #pragma mark - Private
@@ -123,15 +135,16 @@ const CGFloat kFontSize = 14.0;
 
 - (void)setSelected:(BOOL)selected {
   [super setSelected:selected];
+  self.backgroundColor = selected ? UIColor.blueColor : UIColor.whiteColor;
   // Style the favicon tint color.
-  self.faviconView.tintColor = selected ? [UIColor colorNamed:kCloseButtonColor]
-                                        : [UIColor colorNamed:kGrey500Color];
+  _faviconView.tintColor = selected ? [UIColor colorNamed:kCloseButtonColor]
+                                    : [UIColor colorNamed:kGrey500Color];
   // Style the close button tint color.
-  self.closeButton.tintColor = selected ? [UIColor colorNamed:kCloseButtonColor]
-                                        : [UIColor colorNamed:kGrey500Color];
+  _closeButton.tintColor = selected ? [UIColor colorNamed:kCloseButtonColor]
+                                    : [UIColor colorNamed:kGrey500Color];
   // Style the title tint color.
-  self.titleLabel.textColor = selected ? [UIColor colorNamed:kTextPrimaryColor]
-                                       : [UIColor colorNamed:kGrey600Color];
+  _titleLabel.textColor = selected ? [UIColor colorNamed:kTextPrimaryColor]
+                                   : [UIColor colorNamed:kGrey600Color];
 }
 
 @end

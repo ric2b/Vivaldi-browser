@@ -33,6 +33,7 @@
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/command_buffer/service/scheduler.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_factory.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
 #include "gpu/command_buffer/service/skia_utils.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
@@ -104,6 +105,11 @@
 #endif  // BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
 
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if !BUILDFLAG(IS_CHROMEOS)
+#include "components/ml/webnn/features.h"
+#include "services/webnn/webnn_context_provider_impl.h"
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_WIN)
 #include "components/viz/common/overlay_state/win/overlay_state_service.h"
@@ -408,8 +414,8 @@ GpuServiceImpl::GpuServiceImpl(
         },
         base::Unretained(this));
     dawn_context_provider_ = gpu::DawnContextProvider::Create(
-        gpu_preferences, dawn_caching_interface_factory_.get(),
-        std::move(cache_blob_callback));
+        gpu_preferences, gpu_driver_bug_workarounds_,
+        dawn_caching_interface_factory_.get(), std::move(cache_blob_callback));
     if (!dawn_context_provider_) {
       DLOG(ERROR) << "Failed to create Dawn context provider for Graphite.";
     }
@@ -921,6 +927,16 @@ void GpuServiceImpl::BindClientGmbInterface(
       client_id, std::move(pending_receiver), this, io_runner_);
 }
 
+#if !BUILDFLAG(IS_CHROMEOS)
+void GpuServiceImpl::BindWebNNContextProvider(
+    mojo::PendingReceiver<webnn::mojom::WebNNContextProvider> pending_receiver,
+    int client_id) {
+  CHECK(base::FeatureList::IsEnabled(
+      webnn::features::kEnableMachineLearningNeuralNetworkService));
+  webnn::WebNNContextProviderImpl::Create(std::move(pending_receiver));
+}
+#endif  // !BUILDFLAG(IS_CHROMEOS)
+
 void GpuServiceImpl::CreateGpuMemoryBuffer(
     gfx::GpuMemoryBufferId id,
     const gfx::Size& size,
@@ -1114,7 +1130,8 @@ void GpuServiceImpl::EstablishGpuChannel(int32_t client_id,
       // This returns a null handle, which is treated by the client as a failure
       // case.
       std::move(callback).Run(mojo::ScopedMessagePipeHandle(), gpu::GPUInfo(),
-                              gpu::GpuFeatureInfo());
+                              gpu::GpuFeatureInfo(),
+                              gpu::SharedImageCapabilities());
       return;
     }
 
@@ -1129,13 +1146,15 @@ void GpuServiceImpl::EstablishGpuChannel(int32_t client_id,
 
   auto channel_token = base::UnguessableToken::Create();
   gpu::GpuChannel* gpu_channel = gpu_channel_manager_->EstablishChannel(
-      channel_token, client_id, client_tracing_id, is_gpu_host);
+      channel_token, client_id, client_tracing_id, is_gpu_host, gpu_extra_info_,
+      gpu_memory_buffer_factory_.get());
 
   if (!gpu_channel) {
     // This returns a null handle, which is treated by the client as a failure
     // case.
     std::move(callback).Run(mojo::ScopedMessagePipeHandle(), gpu::GPUInfo(),
-                            gpu::GpuFeatureInfo());
+                            gpu::GpuFeatureInfo(),
+                            gpu::SharedImageCapabilities());
     return;
   }
   mojo::MessagePipe pipe;
@@ -1143,9 +1162,9 @@ void GpuServiceImpl::EstablishGpuChannel(int32_t client_id,
 
   media_gpu_channel_manager_->AddChannel(client_id, channel_token);
 
-  gpu_channel->SetGpuExtraInfo(gpu_extra_info_);
-  std::move(callback).Run(std::move(pipe.handle1), gpu_info_,
-                          gpu_feature_info_);
+  std::move(callback).Run(
+      std::move(pipe.handle1), gpu_info_, gpu_feature_info_,
+      gpu_channel->shared_image_stub()->factory()->MakeCapabilities());
 }
 
 void GpuServiceImpl::SetChannelClientPid(int32_t client_id,
@@ -1667,12 +1686,50 @@ void GpuServiceImpl::GetDawnInfo(bool collect_metrics,
                      collect_metrics, std::move(callback)));
 }
 
+BASE_FEATURE(kPauseWatchdogDuringDawnInfoCollection,
+             "PauseWatchdogDuringDawnInfoCollection",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kEnableDawnInfoCollectionWatchdogReportOnlyMode,
+             "EnableDawnInfoCollectionWatchdogReportOnlyMode",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 void GpuServiceImpl::GetDawnInfoOnMain(bool collect_metrics,
                                        GetDawnInfoCallback callback) {
   DCHECK(main_runner_->BelongsToCurrentThread());
+  static const bool pause_watchdog =
+      base::FeatureList::IsEnabled(kPauseWatchdogDuringDawnInfoCollection);
+  static const bool report_only_mode = base::FeatureList::IsEnabled(
+      kEnableDawnInfoCollectionWatchdogReportOnlyMode);
 
   std::vector<std::string> dawn_info_list;
-  gpu::CollectDawnInfo(gpu_preferences_, collect_metrics, &dawn_info_list);
+  // Pause the watchdog around Dawn info collection since it is known to be
+  // slow loading GPU drivers.
+  if (watchdog_thread_ && pause_watchdog) {
+    if (report_only_mode) {
+      watchdog_thread_->EnableReportOnlyMode();
+    } else {
+      watchdog_thread_->PauseWatchdog();
+    }
+  }
+
+  if (report_only_mode) {
+    SCOPED_UMA_HISTOGRAM_TIMER("GPU.Dawn.InfoCollectionTimeMS");
+    gpu::CollectDawnInfo(gpu_preferences_, collect_metrics, &dawn_info_list);
+  } else {
+    // Don't collect metrics if not in report only mode. Otherwise fast timings
+    // will be recorded, and very-slow timings will crash and not record,
+    // skewing the results.
+    gpu::CollectDawnInfo(gpu_preferences_, collect_metrics, &dawn_info_list);
+  }
+
+  if (watchdog_thread_ && pause_watchdog) {
+    if (report_only_mode) {
+      watchdog_thread_->DisableReportOnlyMode();
+    } else {
+      watchdog_thread_->ResumeWatchdog();
+    }
+  }
 
   io_runner_->PostTask(FROM_HERE,
                        base::BindOnce(std::move(callback), dawn_info_list));

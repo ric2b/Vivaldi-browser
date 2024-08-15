@@ -11,6 +11,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "chrome/browser/ash/app_mode/kiosk_controller.h"
 #include "chrome/browser/ash/external_metrics.h"
 #include "chrome/browser/ash/pcie_peripheral/ash_usb_detector.h"
 #include "chrome/browser/ash/wilco_dtc_supportd/wilco_dtc_supportd_manager.h"
@@ -25,13 +26,12 @@ class ImageDownloaderImpl;
 
 namespace arc {
 class ArcServiceLauncher;
+class ContainerAppKiller;
 }  // namespace arc
 
-namespace chromeos {
-namespace default_app_order {
+namespace chromeos::default_app_order {
 class ExternalLoader;
-}
-}  // namespace chromeos
+}  // namespace chromeos::default_app_order
 
 namespace crosapi {
 class BrowserManager;
@@ -96,20 +96,20 @@ class VideoConferenceAshFeatureClient;
 class WebKioskAppManager;
 class KioskAppManager;
 
+namespace carrier_lock {
+class CarrierLockManager;
+}
+
 namespace cros_healthd::internal {
 class DataCollector;
 }
 
-namespace device_activity {
-class DeviceActivityController;
+namespace report {
+class ReportController;
 }
 
 namespace internal {
 class DBusServices;
-}
-
-namespace input_method {
-class EditorMediator;
 }
 
 namespace mojo_service_manager {
@@ -174,9 +174,8 @@ class ChromeBrowserMainPartsAsh : public ChromeBrowserMainPartsLinux {
   void PostDestroyThreads() override;
 
  private:
-  // Helper which depends on device policies being loaded before initializing
-  // the |device_activity_controller_|.
-  void StartDeviceActivityController();
+  // Load device policies before initializing the |report_controller_|.
+  void StartReportController();
 
   std::unique_ptr<chromeos::default_app_order::ExternalLoader>
       app_order_loader_;
@@ -203,6 +202,8 @@ class ChromeBrowserMainPartsAsh : public ChromeBrowserMainPartsLinux {
 
   std::unique_ptr<EventRewriterDelegateImpl> event_rewriter_delegate_;
 
+  std::unique_ptr<carrier_lock::CarrierLockManager> carrier_lock_manager_;
+
   // Handles event dispatch to the accessibility component extensions.
   std::unique_ptr<AccessibilityEventRewriterDelegateImpl>
       accessibility_event_rewriter_delegate_;
@@ -223,6 +224,7 @@ class ChromeBrowserMainPartsAsh : public ChromeBrowserMainPartsLinux {
   std::unique_ptr<ArcKioskAppManager> arc_kiosk_app_manager_;
   std::unique_ptr<WebKioskAppManager> web_kiosk_app_manager_;
   std::unique_ptr<KioskAppManager> kiosk_app_manager_;
+  std::unique_ptr<KioskController> kiosk_controller_;
   std::unique_ptr<MultiCaptureNotifications> multi_capture_notifications_;
 
   std::unique_ptr<ShortcutMappingPrefService> shortcut_mapping_pref_service_;
@@ -254,8 +256,7 @@ class ChromeBrowserMainPartsAsh : public ChromeBrowserMainPartsLinux {
   std::unique_ptr<AshUsbDetector> ash_usb_detector_;
   std::unique_ptr<CrosUsbDetector> cros_usb_detector_;
 
-  std::unique_ptr<device_activity::DeviceActivityController>
-      device_activity_controller_;
+  std::unique_ptr<report::ReportController> report_controller_;
 
   std::unique_ptr<crostini::CrostiniUnsupportedActionNotifier>
       crostini_unsupported_action_notifier_;
@@ -300,6 +301,8 @@ class ChromeBrowserMainPartsAsh : public ChromeBrowserMainPartsLinux {
 
   std::unique_ptr<ApnMigrator> apn_migrator_;
 
+  std::unique_ptr<arc::ContainerAppKiller> arc_container_app_killer_;
+
   // Only temporarily owned, will be null after PostCreateMainMessageLoop().
   // The Accessor is constructed before initialization of FeatureList and should
   // only be used by ChromeFeaturesServiceProvider.
@@ -314,8 +317,6 @@ class ChromeBrowserMainPartsAsh : public ChromeBrowserMainPartsLinux {
       video_conference_manager_client_;
 
   std::unique_ptr<MisconfiguredUserCleaner> misconfigured_user_cleaner_;
-
-  std::unique_ptr<input_method::EditorMediator> editor_mediator_;
 
   base::WeakPtrFactory<ChromeBrowserMainPartsAsh> weak_ptr_factory_{this};
 };

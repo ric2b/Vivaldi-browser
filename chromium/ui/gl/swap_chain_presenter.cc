@@ -215,10 +215,6 @@ HRESULT ToggleIntelVpSuperResolution(ID3D11VideoContext* video_context,
   param = kIntelVpeVersion3;
   HRESULT hr = video_context->VideoProcessorSetOutputExtension(
       video_processor, &GUID_INTEL_VPE_INTERFACE, sizeof(ext), &ext);
-  base::UmaHistogramSparse(enable
-                               ? "GPU.IntelVpSuperResolution.On.VpeFnVersion"
-                               : "GPU.IntelVpSuperResolution.Off.VpeFnVersion",
-                           hr);
   if (FAILED(hr)) {
     DLOG(ERROR) << "VideoProcessorSetOutputExtension failed with error 0x"
                 << std::hex << hr;
@@ -229,9 +225,6 @@ HRESULT ToggleIntelVpSuperResolution(ID3D11VideoContext* video_context,
   param = enable ? kIntelVpeModePreproc : kIntelVpeModeNone;
   hr = video_context->VideoProcessorSetOutputExtension(
       video_processor, &GUID_INTEL_VPE_INTERFACE, sizeof(ext), &ext);
-  base::UmaHistogramSparse(enable ? "GPU.IntelVpSuperResolution.On.VpeFnMode"
-                                  : "GPU.IntelVpSuperResolution.Off.VpeFnMode",
-                           hr);
   if (FAILED(hr)) {
     DLOG(ERROR) << "VideoProcessorSetOutputExtension failed with error 0x"
                 << std::hex << hr;
@@ -243,10 +236,6 @@ HRESULT ToggleIntelVpSuperResolution(ID3D11VideoContext* video_context,
 
   hr = video_context->VideoProcessorSetStreamExtension(
       video_processor, 0, &GUID_INTEL_VPE_INTERFACE, sizeof(ext), &ext);
-  base::UmaHistogramSparse(enable
-                               ? "GPU.IntelVpSuperResolution.On.VpeFnScaling"
-                               : "GPU.IntelVpSuperResolution.Off.VpeFnScaling",
-                           hr);
   if (FAILED(hr)) {
     DLOG(ERROR) << "VideoProcessorSetStreamExtension failed with error 0x"
                 << std::hex << hr;
@@ -310,16 +299,50 @@ HRESULT ToggleVpSuperResolution(UINT gpu_vendor_id,
   return E_NOTIMPL;
 }
 
-HRESULT ToggleNvidiaVpTrueHDR(ID3D11VideoContext* video_context,
+constexpr GUID kNvidiaTrueHDRInterfaceGUID = {
+    0xfdd62bb4,
+    0x620b,
+    0x4fd7,
+    {0x9a, 0xb3, 0x1e, 0x59, 0xd0, 0xd5, 0x44, 0xb3}};
+
+bool NvidiaDriverSupportsTrueHDR(ID3D11VideoContext* video_context,
+                                 ID3D11VideoProcessor* video_processor) {
+  UINT driver_supports_true_hdr = 0;
+  HRESULT hr = video_context->VideoProcessorGetStreamExtension(
+      video_processor, 0, &kNvidiaTrueHDRInterfaceGUID,
+      sizeof(driver_supports_true_hdr), &driver_supports_true_hdr);
+
+  // The runtime never fails the GetStreamExtension hr unless a bad memory size
+  // is provided.
+  if (FAILED(hr)) {
+    DLOG(ERROR) << "VideoProcessorGetStreamExtension failed with error 0x"
+                << std::hex << hr;
+    return false;
+  }
+
+  return (driver_supports_true_hdr == 1);
+}
+
+bool GpuDriverSupportsVpAutoHDR(UINT gpu_vendor_id,
+                                ID3D11VideoContext* video_context,
+                                ID3D11VideoProcessor* video_processor) {
+  if (gpu_vendor_id == 0x10de) {
+    return NvidiaDriverSupportsTrueHDR(video_context, video_processor);
+  }
+
+  return false;
+}
+
+HRESULT ToggleNvidiaVpTrueHDR(bool driver_supports_vp_auto_hdr,
+                              ID3D11VideoContext* video_context,
                               ID3D11VideoProcessor* video_processor,
                               bool enable) {
   TRACE_EVENT1("gpu", "ToggleNvidiaVpTrueHDR", "on", enable);
 
-  constexpr GUID kNvidiaTrueHDRInterfaceGUID = {
-      0xfdd62bb4,
-      0x620b,
-      0x4fd7,
-      {0x9a, 0xb3, 0x1e, 0x59, 0xd0, 0xd5, 0x44, 0xb3}};
+  if (enable && !driver_supports_vp_auto_hdr) {
+    return E_NOTIMPL;
+  }
+
   constexpr UINT kStreamExtensionVersionV4 = 0x4;
   constexpr UINT kStreamExtensionMethodTrueHDR = 0x3;
   struct {
@@ -347,11 +370,13 @@ HRESULT ToggleNvidiaVpTrueHDR(ID3D11VideoContext* video_context,
 }
 
 HRESULT ToggleVpAutoHDR(UINT gpu_vendor_id,
+                        bool driver_supports_vp_auto_hdr,
                         ID3D11VideoContext* video_context,
                         ID3D11VideoProcessor* video_processor,
                         bool enable) {
   if (gpu_vendor_id == 0x10de) {
-    return ToggleNvidiaVpTrueHDR(video_context, video_processor, enable);
+    return ToggleNvidiaVpTrueHDR(driver_supports_vp_auto_hdr, video_context,
+                                 video_processor, enable);
   }
 
   return E_NOTIMPL;
@@ -1397,8 +1422,10 @@ bool SwapChainPresenter::PresentToSwapChain(DCLayerOverlayParams& params,
 
   bool content_is_hdr = input_color_space.IsHDR();
 
-  // Enable VideoProcessor-HDR for SDR content if the monitor and
-  // GPU driver support it
+  // Enable VideoProcessor-HDR for SDR content if the monitor supports it and
+  // the GPU driver version is not blocked (enable_vp_auto_hdr_). The actual GPU
+  // driver support will be queried right after InitializeVideoProcessor() and
+  // is checked in ToggleVpAutoHDR().
   bool use_vp_auto_hdr =
       !content_is_hdr &&
       DirectCompositionMonitorHDREnabled(layer_tree_->window()) &&
@@ -1753,9 +1780,10 @@ bool SwapChainPresenter::VideoProcessorBlt(
   bool is_yuv_swapchain = IsYUVSwapChainFormat(swap_chain_format_);
   gfx::ColorSpace output_color_space =
       GetOutputColorSpace(src_color_space, is_yuv_swapchain);
+  bool video_processor_recreated = false;
   VideoProcessorWrapper* video_processor_wrapper =
-      layer_tree_->InitializeVideoProcessor(content_rect.size(),
-                                            swap_chain_size_);
+      layer_tree_->InitializeVideoProcessor(
+          content_rect.size(), swap_chain_size_, video_processor_recreated);
   if (!video_processor_wrapper)
     return false;
 
@@ -1763,6 +1791,14 @@ bool SwapChainPresenter::VideoProcessorBlt(
       video_processor_wrapper->video_context;
   Microsoft::WRL::ComPtr<ID3D11VideoProcessor> video_processor =
       video_processor_wrapper->video_processor;
+
+  if (video_processor_recreated) {
+    bool supports_vp_auto_hdr = GpuDriverSupportsVpAutoHDR(
+        gpu_vendor_id_, video_context.Get(), video_processor.Get());
+    video_processor_wrapper->SetDriverSupportsVpAutoHdr(supports_vp_auto_hdr);
+  }
+  bool driver_supports_vp_auto_hdr =
+      video_processor_wrapper->GetDriverSupportsVpAutoHdr();
 
   Microsoft::WRL::ComPtr<IDXGISwapChain3> swap_chain3;
   Microsoft::WRL::ComPtr<ID3D11VideoContext1> context1;
@@ -1872,8 +1908,9 @@ bool SwapChainPresenter::VideoProcessorBlt(
     }
 
     if (enable_vp_auto_hdr_) {
-      hr = ToggleVpAutoHDR(gpu_vendor_id_, video_context.Get(),
-                           video_processor.Get(), use_vp_auto_hdr);
+      hr = ToggleVpAutoHDR(gpu_vendor_id_, driver_supports_vp_auto_hdr,
+                           video_context.Get(), video_processor.Get(),
+                           use_vp_auto_hdr);
       if (FAILED(hr)) {
         enable_vp_auto_hdr_ = false;
 
@@ -1944,8 +1981,8 @@ bool SwapChainPresenter::VideoProcessorBlt(
                      "after it failed with error 0x"
                   << std::hex << hr;
 
-      ToggleVpAutoHDR(gpu_vendor_id_, video_context.Get(),
-                      video_processor.Get(), false);
+      ToggleVpAutoHDR(gpu_vendor_id_, driver_supports_vp_auto_hdr,
+                      video_context.Get(), video_processor.Get(), false);
 
       if (!RevertSwapChainToSDR(video_device, video_processor,
                                 video_processor_enumerator, swap_chain3,

@@ -37,6 +37,10 @@ class MockAutofillClient : public autofill::TestContentAutofillClient {
   using autofill::TestContentAutofillClient::TestContentAutofillClient;
   MOCK_METHOD(autofill::LogManager*, GetLogManager, (), (const override));
   MOCK_METHOD(bool, IsContextSecure, (), (const override));
+  MOCK_METHOD(GeoIpCountryCode,
+              GetVariationConfigCountryCode,
+              (),
+              (const override));
 };
 
 class MockPersonalDataHelper : public FastCheckoutPersonalDataHelper {
@@ -72,7 +76,7 @@ class MockPersonalDataManager : public autofill::PersonalDataManager {
   ~MockPersonalDataManager() override = default;
 
   MOCK_METHOD(bool, IsAutofillProfileEnabled, (), (const override));
-  MOCK_METHOD(bool, IsAutofillCreditCardEnabled, (), (const override));
+  MOCK_METHOD(bool, IsAutofillPaymentMethodsEnabled, (), (const override));
 };
 
 class FastCheckoutTriggerValidatorTest
@@ -110,9 +114,12 @@ class FastCheckoutTriggerValidatorTest
             Return(std::vector<autofill::AutofillProfile*>{&profile_}));
     ON_CALL(*personal_data_helper(), GetPersonalDataManager)
         .WillByDefault(Return(pdm()));
-    ON_CALL(*pdm(), IsAutofillCreditCardEnabled).WillByDefault(Return(true));
+    ON_CALL(*pdm(), IsAutofillPaymentMethodsEnabled)
+        .WillByDefault(Return(true));
     ON_CALL(*pdm(), IsAutofillProfileEnabled).WillByDefault(Return(true));
     ON_CALL(*autofill_client(), IsContextSecure).WillByDefault(Return(true));
+    ON_CALL(*autofill_client(), GetVariationConfigCountryCode)
+        .WillByDefault(Return(GeoIpCountryCode("US")));
   }
 
   MockPersonalDataManager* pdm() { return pdm_.get(); }
@@ -225,7 +232,7 @@ TEST_F(FastCheckoutTriggerValidatorTest,
 
 TEST_F(FastCheckoutTriggerValidatorTest,
        ShouldRun_CreditCardDisabled_ReturnsFalse) {
-  ON_CALL(*pdm(), IsAutofillCreditCardEnabled).WillByDefault(Return(false));
+  ON_CALL(*pdm(), IsAutofillPaymentMethodsEnabled).WillByDefault(Return(false));
   EXPECT_EQ(ShouldRun(),
             FastCheckoutTriggerOutcome::kFailureAutofillCreditCardDisabled);
 }

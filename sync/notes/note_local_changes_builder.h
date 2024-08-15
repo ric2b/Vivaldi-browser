@@ -8,12 +8,9 @@
 #include "base/memory/raw_ptr.h"
 #include "components/sync/engine/commit_and_get_updates_types.h"
 
-namespace vivaldi {
-class NotesModel;
-}
-
 namespace sync_notes {
 
+class NoteModelView;
 class SyncedNoteTracker;
 
 class NoteLocalChangesBuilder {
@@ -21,7 +18,7 @@ class NoteLocalChangesBuilder {
   // |note_tracker| and |notes_model| must not be null and must outlive
   // this object.
   NoteLocalChangesBuilder(SyncedNoteTracker* note_tracker,
-                          vivaldi::NotesModel* notes_model);
+                          NoteModelView* notes_model);
 
   NoteLocalChangesBuilder(const NoteLocalChangesBuilder&) = delete;
   NoteLocalChangesBuilder& operator=(const NoteLocalChangesBuilder&) = delete;
@@ -31,7 +28,7 @@ class NoteLocalChangesBuilder {
 
  private:
   const raw_ptr<SyncedNoteTracker> note_tracker_;
-  const raw_ptr<vivaldi::NotesModel> notes_model_;
+  const raw_ptr<NoteModelView> notes_model_;
 };
 
 }  // namespace sync_notes

@@ -121,7 +121,7 @@ void BookmarkRestorer::BookmarkModelBeingDeleted(BookmarkModel* model) {
 void BookmarkRestorer::BookmarkModelLoaded(BookmarkModel* model,
                                            bool ids_reassigned) {
   model->RemoveObserver(this);
-  if (const auto* node = bookmarks::GetBookmarkNodeByUuid(model, guid_)) {
+  if (const auto* node = model->GetNodeByUuid(guid_)) {
     DoOpenBookmark(profile_, disposition_, node);
   }
   delete this;
@@ -140,7 +140,7 @@ void OpenBookmarkByGUID(WindowOpenDisposition disposition,
   if (!model)
     return;  // Should never be reached.
 
-  if (const auto* node = bookmarks::GetBookmarkNodeByUuid(model, guid)) {
+  if (const auto* node = model->GetNodeByUuid(guid)) {
     // BookmarkModel already loaded this bookmark. Open it immediately.
     DoOpenBookmark(profile, disposition, node);
   } else {
@@ -187,7 +187,7 @@ void OpenBookmarkByGUID(WindowOpenDisposition disposition,
     return;  // Unfortunately, we can't update a menu with a dead profile.
   const auto* model = BookmarkModelFactory::GetForBrowserContext(profile);
   base::Uuid guid = _bridge->TagToGUID([item tag]);
-  const auto* node = bookmarks::GetBookmarkNodeByUuid(model, guid);
+  const auto* node = model->GetNodeByUuid(guid);
   _bridge->UpdateMenu(menu, node, /*recurse=*/false);
 }
 

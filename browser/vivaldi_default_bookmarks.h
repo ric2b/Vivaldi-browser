@@ -30,7 +30,7 @@ class UpdaterClient {
   virtual const std::string& GetApplicationLocale() = 0;
 };
 
-extern bool g_bookmark_update_actve;
+extern bool g_bookmark_update_active;
 
 using UpdateCallback = base::OnceCallback<
     void(bool ok, bool no_version, const std::string& locale)>;

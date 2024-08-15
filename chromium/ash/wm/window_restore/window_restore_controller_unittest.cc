@@ -26,8 +26,6 @@
 #include "base/containers/flat_map.h"
 #include "base/functional/bind.h"
 #include "base/scoped_observation.h"
-#include "base/test/scoped_feature_list.h"
-#include "chromeos/ui/wm/features.h"
 #include "components/account_id/account_id.h"
 #include "components/app_restore/app_restore_info.h"
 #include "components/app_restore/full_restore_utils.h"
@@ -65,8 +63,7 @@ class WindowRestoreControllerTest : public AshTestBase,
     std::unique_ptr<app_restore::WindowInfo> info;
   };
 
-  WindowRestoreControllerTest()
-      : scoped_feature_list_(chromeos::wm::features::kWindowLayoutMenu) {}
+  WindowRestoreControllerTest() = default;
   WindowRestoreControllerTest(const WindowRestoreControllerTest&) = delete;
   WindowRestoreControllerTest& operator=(const WindowRestoreControllerTest&) =
       delete;
@@ -272,7 +269,7 @@ class WindowRestoreControllerTest : public AshTestBase,
 
   void TearDown() override {
     env_observation_.Reset();
-
+    WindowRestoreController::Get()->SetSaveWindowCallbackForTesting({});
     AshTestBase::TearDown();
   }
 
@@ -332,8 +329,6 @@ class WindowRestoreControllerTest : public AshTestBase,
   base::flat_map<int32_t, WindowInfo> fake_window_restore_file_;
 
   base::ScopedObservation<aura::Env, aura::EnvObserver> env_observation_{this};
-
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 // Tests window save with setting on or off.
@@ -508,7 +503,7 @@ TEST_F(WindowRestoreControllerTest, TabletModeChange) {
 }
 
 TEST_F(WindowRestoreControllerTest, DisplayAddRemove) {
-  UpdateDisplay("800x700,801+0-800x700");
+  UpdateDisplay("800x700, 800x700");
 
   auto window = CreateAppWindow(gfx::Rect(800, 0, 400, 400), AppType::BROWSER);
   ResetSaveWindowsCount();
@@ -524,6 +519,7 @@ TEST_F(WindowRestoreControllerTest, DisplayAddRemove) {
   // window and activate it, resulting in a double save.
   std::vector<display::ManagedDisplayInfo> display_info_list;
   display_info_list.push_back(primary_info);
+  EXPECT_EQ(0, GetSaveWindowsCount(window.get()));
   display_manager()->OnNativeDisplaysChanged(display_info_list);
   EXPECT_EQ(2, GetSaveWindowsCount(window.get()));
 

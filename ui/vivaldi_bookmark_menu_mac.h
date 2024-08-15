@@ -17,8 +17,12 @@ class BookmarkNode;
 
 namespace vivaldi {
 
+// Returns the ids of items in the bookmark menu that are not bookmarks.
 std::vector<int>& GetBookmarkMenuIds();
 bool IsBookmarkMenuId(int candidate);
+
+void SetBookmarkMenu(NSMenu* menu);
+NSMenu* GetBookmarkMenu();
 
 int GetMenuIndex();
 

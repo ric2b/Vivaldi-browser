@@ -17,12 +17,12 @@
 #include "components/sync/engine/commit_and_get_updates_types.h"
 
 namespace vivaldi {
-class NotesModel;
 class NoteNode;
 }  // namespace vivaldi
 
 namespace sync_notes {
 
+class NoteModelView;
 class SyncedNoteTracker;
 
 // Responsible for merging local and remote note models when note sync
@@ -34,7 +34,7 @@ class NoteModelMerger {
   // |note_model| and |note_tracker| must not be
   // null and must outlive this object.
   NoteModelMerger(syncer::UpdateResponseDataList updates,
-                  vivaldi::NotesModel* notes_model,
+                  NoteModelView* notes_model,
                   SyncedNoteTracker* note_tracker);
   NoteModelMerger(const NoteModelMerger&) = delete;
   NoteModelMerger& operator=(const NoteModelMerger&) = delete;
@@ -131,7 +131,7 @@ class NoteModelMerger {
   // that is not compatible (e.g. folder vs non-folder).
   static std::unordered_map<base::Uuid, GuidMatch, base::UuidHash>
   FindGuidMatchesOrReassignLocal(const RemoteForest& remote_forest,
-                                 vivaldi::NotesModel* note_model);
+                                 NoteModelView* note_model);
 
   // Merges a local and a remote subtrees. The input nodes are two equivalent
   // local and remote nodes. This method tries to recursively match their
@@ -199,7 +199,7 @@ class NoteModelMerger {
       size_t index,
       const std::string& suffix) const;
 
-  const raw_ptr<vivaldi::NotesModel> notes_model_;
+  const raw_ptr<NoteModelView> notes_model_;
   const raw_ptr<SyncedNoteTracker> note_tracker_;
   // Preprocessed remote nodes in the form a forest where each tree's root is a
   // permanent node. Computed upon construction via BuildRemoteForest().

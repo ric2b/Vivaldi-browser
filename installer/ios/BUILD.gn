@@ -41,6 +41,19 @@ template("sign_bundle") {
   }
 }
 
+sign_bundle("sign_open_extension") {
+  bindir = "$root_out_dir/ios_clang_arm64_app_ext/obj/ios/chrome/open_extension/appex"
+  gendir = "$root_out_dir/ios_clang_arm64_app_ext/gen/ios/chrome/open_extension/appex"
+
+  binary = "$bindir/open_extension"
+  entitlements = "$gendir/open_extension.appex.entitlements"
+  app = "${vivaldi_profiles}/open_extension.appex"
+  plists =[
+    "$gendir/appex_generate_info_plist.plist",
+    "$gendir/appex_partial_info.plist",
+  ]
+}
+
 sign_bundle("sign_credential_provider_extension") {
   bindir = "$root_out_dir/ios_clang_arm64_app_ext/obj/ios/chrome/credential_provider_extension/appex"
   gendir = "$root_out_dir/ios_clang_arm64_app_ext/gen/ios/chrome/credential_provider_extension/appex"
@@ -149,6 +162,7 @@ sign_bundle("sign_ios") {
   deps = [
     ":sign_Lottie",
     ":sign_MaterialComponents",
+    ":sign_open_extension",
     ":sign_credential_provider_extension",
     ":sign_search_widget_extension",
     ":sign_content_widget_extension",

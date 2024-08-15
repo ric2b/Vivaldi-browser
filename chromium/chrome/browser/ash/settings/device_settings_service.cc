@@ -18,8 +18,6 @@
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/notification_service.h"
-#include "content/public/browser/notification_source.h"
 
 #include "crypto/rsa_private_key.h"
 
@@ -159,6 +157,11 @@ void DeviceSettingsService::LoadIfNotPresent() {
 }
 
 void DeviceSettingsService::LoadImmediately() {
+  if (session_stopping_) {
+    LOG(WARNING) << "Fail the blocking request when the session is stopping";
+    // No need to HandleCompletedOperation, as there's no callback waiting.
+    return;
+  }
   std::unique_ptr<SessionManagerOperation> operation(new LoadSettingsOperation(
       /*request_key_load=*/true, /*force_immediate_load=*/true,
       base::BindOnce(&DeviceSettingsService::HandleCompletedOperation,
@@ -278,6 +281,10 @@ void DeviceSettingsService::PropertyChangeComplete(bool success) {
       !will_establish_consumer_ownership_) {
     EnsureReload(false);
   }
+}
+
+void DeviceSettingsService::SessionStopping() {
+  session_stopping_ = true;
 }
 
 void DeviceSettingsService::Enqueue(

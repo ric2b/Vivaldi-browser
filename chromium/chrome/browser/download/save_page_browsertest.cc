@@ -53,8 +53,6 @@
 #include "components/security_state/core/security_state.h"
 #include "components/services/quarantine/test_support.h"
 #include "content/public/browser/download_manager.h"
-#include "content/public/browser/notification_service.h"
-#include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
@@ -106,8 +104,8 @@ std::string ReadFileAndCollapseWhitespace(const base::FilePath& file_path) {
 // the SavePageAs logic.
 std::string WriteSavedFromPath(const std::string& file_contents,
                                const GURL& url) {
-  return base::StringPrintf(file_contents.c_str(), url.spec().length(),
-                            url.spec().c_str());
+  return base::StringPrintfNonConstexpr(
+      file_contents.c_str(), url.spec().length(), url.spec().c_str());
 }
 
 // Waits for an item record in the downloads database to match |filter|. See

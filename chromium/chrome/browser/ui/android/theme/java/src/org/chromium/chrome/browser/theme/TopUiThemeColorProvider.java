@@ -20,7 +20,7 @@ import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.ui.util.ColorUtils;
 
 // Vivaldi
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
 /**
  * Manages the theme color used on the top part of the UI based on Tab's theme color and other
@@ -154,7 +154,7 @@ public class TopUiThemeColorProvider extends ThemeColorProvider {
         // Note(david@vivaldi.com): Consider |show_tab_strip|.
         return (isThemingAllowed(tab) || tab.isNativePage()) && themeColor != TabState.UNSPECIFIED_THEME_COLOR
                 && (mAllowBrightThemeColors || !ColorUtils.isThemeColorTooBright(themeColor))
-               && !SharedPreferencesManager.getInstance().readBoolean("show_tab_strip", true);
+               && !ChromeSharedPreferences.getInstance().readBoolean("show_tab_strip", true);
     }
 
     /**

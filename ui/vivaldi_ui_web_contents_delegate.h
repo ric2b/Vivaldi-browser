@@ -12,7 +12,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "extensions/common/draggable_region.h"
+#include "extensions/common/mojom/frame.mojom.h"
 
 class VivaldiBrowserWindow;
 namespace content {
@@ -108,17 +108,11 @@ class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
                              content::RenderViewHost* new_host) override;
   void PrimaryMainFrameRenderProcessGone(
       base::TerminationStatus status) override;
-  bool OnMessageReceived(const IPC::Message& message,
-                         content::RenderFrameHost* sender) override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
   void DocumentOnLoadCompletedInPrimaryMainFrame() override;
   void PrimaryMainDocumentElementAvailable() override;
   void BeforeUnloadFired(bool proceed) override;
-
-  void UpdateDraggableRegions(
-      content::RenderFrameHost* sender,
-      const std::vector<extensions::DraggableRegion>& regions);
 
   bool has_resumed_ = false;
 

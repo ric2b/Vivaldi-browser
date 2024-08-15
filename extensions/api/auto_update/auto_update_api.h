@@ -12,22 +12,20 @@
 
 #include "extensions/api/auto_update/auto_update_status.h"
 #include "vivaldi/extensions/schema/autoupdate.h"
+#include "extensions/browser/browser_context_keyed_api_factory.h"
+#include "base/files/file_path_watcher.h"
 
 namespace extensions {
 
-class AutoUpdateAPI {
+class AutoUpdateAPI : public BrowserContextKeyedAPI {
  public:
-  static void Init() {
-#if BUILDFLAG(IS_WIN)
-    InitUpgradeDetection();
-#endif
-  }
+  explicit AutoUpdateAPI(content::BrowserContext* context);
+  ~AutoUpdateAPI() override;
 
-  static void Shutdown() {
-#if BUILDFLAG(IS_WIN)
-    ShutdownUpgradeDetection();
-#endif
-  }
+  void Shutdown() override;
+
+  // BrowserContextKeyedAPI implementation.
+  static BrowserContextKeyedAPIFactory<AutoUpdateAPI>* GetFactoryInstance();
 
   static void SendDidFindValidUpdate(const std::string& url,
                                      const base::Version& version);
@@ -41,9 +39,21 @@ class AutoUpdateAPI {
                                     const std::string& reason);
 
  private:
+  friend class BrowserContextKeyedAPIFactory<AutoUpdateAPI>;
+
 #if BUILDFLAG(IS_WIN)
   static void InitUpgradeDetection();
   static void ShutdownUpgradeDetection();
+#endif
+
+  static const char* service_name() {
+    return "AutoUpdateAPI";
+  }
+  const raw_ptr<content::BrowserContext> browser_context_;
+
+#if BUILDFLAG(IS_LINUX)
+  std::unique_ptr<base::FilePathWatcher> executable_file_watcher_;
+  scoped_refptr<base::SequencedTaskRunner> task_runner_;
 #endif
 };
 

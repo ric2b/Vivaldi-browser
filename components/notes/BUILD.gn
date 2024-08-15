@@ -1,0 +1,158 @@
+# Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
+
+import("//vivaldi/testing/testing.gni")
+
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
+
+static_library("notes") {
+  sources = [
+    "deprecated_note_attachment.cc",
+    "deprecated_note_attachment.h",
+    "note_constants.cc",
+    "note_constants.h",
+    "note_load_details.cc",
+    "note_load_details.h",
+    "note_model_loader.cc",
+    "note_model_loader.h",
+    "note_node.cc",
+    "note_node.h",
+    "notes_codec.cc",
+    "notes_codec.h",
+    "notes_model.cc",
+    "notes_model.h",
+    "notes_storage.cc",
+    "notes_storage.h",
+    "scoped_group_notes_actions.cc",
+    "scoped_group_notes_actions.h",
+  ]
+  if (is_android) {
+    sources += [
+      "note_id.cc",
+      "note_id.h",
+    ]
+  }
+  deps = [
+    "//base",
+    "//base:i18n",
+    #"//chrome:strings",
+    #"//chrome/common/importer:interfaces",
+    "//components/keyed_service/core:core",
+    "//skia",
+    "//third_party/icu",
+    "//ui/base:base",
+    "//url:url",
+    "//vivaldi/app:vivaldi_native_resources",
+    "//vivaldi/sync/notes:sync_notes",
+    "//vivaldi/sync/file_sync",
+  ]
+  public_deps = [
+    #"//chrome/browser",
+    "//components/bookmarks/browser",
+    "//components/sync/protocol",
+    #"//vivaldi/sync",
+  ]
+  allow_circular_includes_from = [
+    "//vivaldi/sync/notes:sync_notes",
+  ]
+  if(!is_ios) {
+    deps += [
+      "//components/keyed_service/content:content",
+      "//content/public/browser",
+      "//vivaldi/app:vivaldi_unscaled_native_resources",
+    ]
+  }
+}
+
+static_library("browser") {
+  sources = [
+    "notes_model_loaded_observer.cc",
+    "notes_model_loaded_observer.h",
+    "notes_model_observer.h",
+  ]
+  if (!is_ios) {
+    sources += [
+      "notes_factory.cc",
+      "notes_factory.h",
+    ]
+  }
+  if (is_linux || is_win) {
+    sources += [
+      "notes_submenu_observer_helper_views.cc",
+      "notes_submenu_observer_helper_views.h",
+    ]
+  }
+  if (is_mac) {
+    sources += [
+      "notes_submenu_observer_helper_mac.cc",
+      "notes_submenu_observer_helper_mac.h",
+    ]
+  }
+  if (is_android) {
+    sources += [
+      "notes_bridge.h",
+      "notes_bridge.cc"
+    ]
+  } else if (!is_ios) { #! is_android
+    sources += [
+      "notes_submenu_observer.cc",
+      "notes_submenu_observer.h",
+    ]
+  }
+
+  deps = [
+    "//base:base",
+    "//base:i18n",
+    "//components/keyed_service/core",
+    "//components/prefs",
+    "//skia",
+    "//vivaldi/prefs:prefs_files_generator",
+  ]
+  public_deps = [
+    ":notes",
+    "//components/bookmarks/browser",
+  ]
+  if (!is_android && !is_ios) {
+    deps += [
+      "//ui/views",
+    ]
+  }
+  if(!is_ios) {
+    deps += [
+      "//chrome:strings",
+      "//components/keyed_service/content",
+      "//components/renderer_context_menu",
+      "//content/public/browser",
+      "//vivaldi/app:vivaldi_native_strings",
+      "//vivaldi/sync/notes:sync_notes",
+    ]
+  }
+  allow_circular_includes_from = [
+    ":notes",
+  ]
+  if(!is_ios) {
+    allow_circular_includes_from += [
+      "//vivaldi/sync/notes:sync_notes",
+    ]
+  }
+}
+
+if (vivaldi_build_tests) {
+  source_set("unit_tests") {
+    testonly = true
+    sources = [
+      "notes_codec_unittest.cc"
+    ]
+    deps = [
+      "//base",
+      "//skia",
+      "//testing/gtest",
+      "//third_party/boringssl",
+    ]
+    public_deps = [
+      ":notes",
+      "tests:notes",
+    ]
+  }
+}

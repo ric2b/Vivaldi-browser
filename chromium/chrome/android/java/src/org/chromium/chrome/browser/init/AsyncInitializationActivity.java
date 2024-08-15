@@ -8,10 +8,6 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
-import android.graphics.Rect;
-import android.os.Build;
-import android.os.Build.VERSION;
-import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.SystemClock;
@@ -27,7 +23,6 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.SysUtils;
 import org.chromium.base.TraceEvent;
-import org.chromium.base.compat.ApiHelperForR;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LoaderErrors;
 import org.chromium.base.library_loader.ProcessInitException;
@@ -38,7 +33,6 @@ import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.LaunchIntentDispatcher;
 import org.chromium.chrome.browser.WarmupManager;
 import org.chromium.chrome.browser.firstrun.FirstRunFlowSequencer;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.metrics.SimpleStartupForegroundSessionDetector;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
@@ -53,7 +47,6 @@ import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.IntentRequestTracker;
 import org.chromium.ui.base.WindowAndroid;
-import org.chromium.ui.display.DisplayAndroid;
 import org.chromium.ui.display.DisplayUtil;
 
 import org.vivaldi.browser.common.VivaldiUtils;
@@ -152,7 +145,8 @@ public abstract class AsyncInitializationActivity
         // 2. To ensure mIsTablet only needs to be set once. Since the override lasts for the life
         //    of the activity, it will never change via onConfigurationUpdated().
         // See crbug.com/588838, crbug.com/662338, crbug.com/780593.
-        overrideConfig.smallestScreenWidthDp = getCurrentSmallestScreenWidth(baseContext);
+        overrideConfig.smallestScreenWidthDp =
+                DisplayUtil.getCurrentSmallestScreenWidth(baseContext);
         return true;
     }
 
@@ -315,6 +309,8 @@ public abstract class AsyncInitializationActivity
         boolean willCreate = onCreateInternal(savedInstanceState);
         if (!willCreate) {
             onAbortCreate();
+        } else {
+            onPostCreate();
         }
         TraceEvent.end("AsyncInitializationActivity.onCreate()");
     }
@@ -332,6 +328,14 @@ public abstract class AsyncInitializationActivity
     protected void onAbortCreate() {}
 
     /**
+     * Override to perform operations after the framework successfully calls {@link
+     * #onCreateInternal}. This method is used in the ChromeActivity derived class to increment the
+     * "Chrome.UMA.OnPostCreateCounter2" counter for the histogram
+     * UMA.AndroidPreNative.ChromeActivityCounter2.
+     */
+    protected void onPostCreate() {}
+
+    /**
      * Called from onCreate() to give derived classes a chance to dispatch the intent using
      * {@link LaunchIntentDispatcher}. If the method returns anything other than Action.CONTINUE,
      * the activity is aborted. Default implementation returns Action.CONTINUE.
@@ -346,7 +350,7 @@ public abstract class AsyncInitializationActivity
     /**
      * @return true if will proceed with Activity creation, false if will abort.
      */
-    private final boolean onCreateInternal(Bundle savedInstanceState) {
+    private boolean onCreateInternal(Bundle savedInstanceState) {
         initializeStartupMetrics();
         setIntent(IntentHandler.rewriteFromHistoryIntent(getIntent()));
 
@@ -429,13 +433,6 @@ public abstract class AsyncInitializationActivity
     public void startDelayedNativeInitializationForTests() {
         mStartupDelayed = true;
         startDelayedNativeInitialization();
-    }
-
-    /**
-     * @return Whether the native library initialization is delayed at this point.
-     */
-    protected boolean isStartupDelayed() {
-        return mStartupDelayed;
     }
 
     /**
@@ -748,36 +745,6 @@ public abstract class AsyncInitializationActivity
      */
     protected boolean isInstantStartEnabled() {
         return TabUiFeatureUtilities.supportInstantStart(isTablet(), this);
-    }
-
-    /**
-     * Get current smallest screen width in dp. This method uses {@link WindowManager} on
-     * Android R and above; otherwise, {@link DisplayUtil#getSmallestWidth(DisplayAndroid)}.
-     *
-     * @param context {@link Context} used to get system service and target display.
-     * @return Smallest screen width in dp.
-     */
-    protected int getCurrentSmallestScreenWidth(Context context) {
-        DisplayAndroid display = DisplayAndroid.getNonMultiDisplay(context);
-        // Android T does not receive updated width upon foldable unfold from window context.
-        // Continue to rely on context on this case.
-        Context windowManagerContext = (ChromeFeatureList.sFoldableJankFix.isEnabled()
-                                               && VERSION.SDK_INT >= VERSION_CODES.R
-                                               && VERSION.SDK_INT < VERSION_CODES.TIRAMISU)
-                ? (display.getWindowContext() != null ? display.getWindowContext() : context)
-                : context;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // Context#getSystemService(Context.WINDOW_SERVICE) is preferred over
-            // Activity#getWindowManager, because during #attachBaseContext, #getWindowManager
-            // is not ready yet and always returns null. See crbug.com/1252150.
-            WindowManager manager =
-                    (WindowManager) windowManagerContext.getSystemService(Context.WINDOW_SERVICE);
-            assert manager != null;
-            Rect bounds = ApiHelperForR.getMaximumWindowMetricsBounds(manager);
-            return DisplayUtil.pxToDp(
-                    display, Math.min(bounds.right - bounds.left, bounds.bottom - bounds.top));
-        }
-        return DisplayUtil.pxToDp(display, DisplayUtil.getSmallestWidth(display));
     }
 
     /**

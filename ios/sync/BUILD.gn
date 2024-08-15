@@ -11,9 +11,9 @@ source_set("sync_notes") {
   ]
 
   deps = [
-    "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/browser_state/model",
+    "//vivaldi/components/notes:browser",
     "//vivaldi/ios/sync:file_sync",
-    "//vivaldi/notes:browser",
     "//vivaldi/sync/notes:sync_notes",
     "//third_party/boringssl",
   ]
@@ -31,7 +31,7 @@ source_set("sync_notes") {
 #  ]
 #
 #  deps = [
-#    "//ios/chrome/browser/browser_state",
+#    "//ios/chrome/browser/browser_state/model",
 #    "//vivaldi/sync:invalidation",
 #    "//third_party/boringssl",
 #  ]
@@ -48,7 +48,7 @@ source_set("file_sync") {
   ]
 
   deps = [
-    "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/browser_state/model",
     "//vivaldi/sync/file_sync",
     "//third_party/boringssl",
   ]
@@ -89,20 +89,20 @@ source_set("sync") {
     "//components/version_info",
     "//ios/chrome/browser/autofill",
     "//ios/chrome/browser/bookmarks/model",
-    "//ios/chrome/browser/browser_state",
-    "//ios/chrome/browser/complex_tasks",
-    "//ios/chrome/browser/dom_distiller",
+    "//ios/chrome/browser/browser_state/model",
+    "//ios/chrome/browser/complex_tasks/model",
+    "//ios/chrome/browser/dom_distiller/model",
     "//ios/chrome/browser/favicon",
     "//ios/chrome/browser/history",
-    "//ios/chrome/browser/passwords:store_factory",
+    "//ios/chrome/browser/passwords/model:store_factory",
     "//ios/chrome/browser/policy",
-    "//ios/chrome/browser/reading_list",
-    "//ios/chrome/browser/search_engines",
+    "//ios/chrome/browser/reading_list/model",
+    "//ios/chrome/browser/search_engines/model",
     "//ios/chrome/browser/sessions",
-    "//ios/chrome/browser/sync/glue",
-    "//ios/chrome/browser/sync/sessions",
-    "//ios/chrome/browser/tabs",
-    "//ios/chrome/browser/webdata_services",
+    "//ios/chrome/browser/sync/model/glue",
+    "//ios/chrome/browser/sync/model/sessions",
+    "//ios/chrome/browser/tabs/model",
+    "//ios/chrome/browser/webdata_services/model",
     "//ios/chrome/common",
     "//ios/components/webui:url_constants",
     "//ios/web",

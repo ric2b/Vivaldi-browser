@@ -111,6 +111,8 @@
 #include "base/threading/platform_thread_win.h"
 #include "base/win/atl.h"
 #include "base/win/resource_exhaustion.h"
+#include "chrome/browser/chrome_browser_main_win.h"
+#include "chrome/browser/win/browser_util.h"
 #include "chrome/child/v8_crashpad_support_win.h"
 #include "chrome/chrome_elf/chrome_elf_main.h"
 #include "chrome/common/child_process_logging.h"
@@ -151,6 +153,7 @@
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chromeos/dbus/constants/dbus_paths.h"
 #include "components/crash/core/app/breakpad_linux.h"
+#include "ui/gfx/linux/gbm_util.h"  // nogncheck
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -474,8 +477,8 @@ void AddFeatureFlagsToCommandLine(
     const chromeos::BrowserParamsProxy& init_params) {
   base::ScopedAddFeatureFlags flags(base::CommandLine::ForCurrentProcess());
 
-  if (init_params.IsVariableRefreshRateEnabled()) {
-    flags.EnableIfNotSet(features::kEnableVariableRefreshRate);
+  if (init_params.IsVariableRefreshRateAlwaysOn()) {
+    flags.EnableIfNotSet(features::kEnableVariableRefreshRateAlwaysOn);
   }
 
   if (init_params.IsPdfOcrEnabled()) {
@@ -530,6 +533,51 @@ absl::optional<int> HandlePackExtensionSwitches(
 }
 #endif  // !BUILDFLAG(ENABLE_EXTENSIONS)
 
+#if BUILDFLAG(ENABLE_PROCESS_SINGLETON)
+absl::optional<int> AcquireProcessSingleton(
+    const base::FilePath& user_data_dir) {
+  // Take the Chrome process singleton lock. The process can become the
+  // Browser process if it succeed to take the lock. Otherwise, the
+  // command-line is sent to the actual Browser process and the current
+  // process can be exited.
+  ChromeProcessSingleton::CreateInstance(user_data_dir);
+
+  ProcessSingleton::NotifyResult notify_result =
+      ChromeProcessSingleton::GetInstance()->NotifyOtherProcessOrCreate();
+  UMA_HISTOGRAM_ENUMERATION("Chrome.ProcessSingleton.NotifyResult",
+                            notify_result, ProcessSingleton::kNumNotifyResults);
+
+  switch (notify_result) {
+    case ProcessSingleton::PROCESS_NONE:
+      break;
+
+    case ProcessSingleton::PROCESS_NOTIFIED: {
+      // Ensure there is an instance of ResourceBundle that is initialized for
+      // localized string resource accesses.
+      ui::ScopedStartupResourceBundle startup_resource_bundle;
+      printf("%s\n", base::SysWideToNativeMB(
+                         base::UTF16ToWide(l10n_util::GetStringUTF16(
+                             IDS_USED_EXISTING_BROWSER)))
+                         .c_str());
+      return chrome::RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED;
+    }
+
+    case ProcessSingleton::PROFILE_IN_USE:
+      return chrome::RESULT_CODE_PROFILE_IN_USE;
+
+    case ProcessSingleton::LOCK_ERROR:
+      LOG(ERROR) << "Failed to create a ProcessSingleton for your profile "
+                    "directory. This means that running multiple instances "
+                    "would start multiple browser processes rather than "
+                    "opening a new window in the existing process. Aborting "
+                    "now to avoid profile corruption.";
+      return chrome::RESULT_CODE_PROFILE_IN_USE;
+  }
+
+  return absl::nullopt;
+}
+#endif
+
 struct MainFunction {
   const char* name;
   int (*function)(content::MainFunctionParams);
@@ -537,6 +585,12 @@ struct MainFunction {
 
 // Initializes the user data dir. Must be called before InitializeLocalState().
 void InitializeUserDataDir(base::CommandLine* command_line) {
+#if BUILDFLAG(IS_CHROMEOS_LACROS) && DCHECK_IS_ON()
+  // In debug builds of Lacros, we keep track of when the user data dir
+  // is initialized, to ensure the cryptohome is not accessed before login
+  // when prelaunching at login screen.
+  chromeos::lacros_paths::SetInitializedUserDataDir();
+#endif
 #if BUILDFLAG(IS_WIN)
 #if defined(VIVALDI_BUILD)
   // NOTE(jarle@vivaldi.com): Do not override if the commandline has
@@ -729,68 +783,48 @@ absl::optional<int> ChromeMainDelegate::PostEarlyInitialization(
   const auto* invoked_in_browser =
       absl::get_if<InvokedInBrowserProcess>(&invoked_in);
   if (!invoked_in_browser) {
+#if BUILDFLAG(IS_CHROMEOS)
+    // At this point, the base::FeatureList has been initialized and the process
+    // should still be single threaded. Additionally, minigbm shouldn't have
+    // been used yet by this process. Therefore, it's a good time to ensure the
+    // Intel media compression environment flag for minigbm is correctly set
+    // (it's possible this environment variable wasn't inherited from the
+    // browser process).
+    ui::EnsureIntelMediaCompressionEnvVarIsSet();
+#endif  // BUILDFLAG(IS_CHROMEOS)
     CommonEarlyInitialization(invoked_in);
     return absl::nullopt;
   }
 
 #if BUILDFLAG(ENABLE_PROCESS_SINGLETON)
-  // Configure the early process singleton experiment.
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-  ChromeProcessSingleton::SetupEarlySingletonFeature(command_line);
+  // The User Data dir is guaranteed to be valid as per InitializeUserDataDir.
+  base::FilePath user_data_dir =
+      base::PathService::CheckedGet(chrome::DIR_USER_DATA);
 
-  if (ChromeProcessSingleton::IsEarlySingletonFeatureEnabled()) {
-    // Take the Chrome process singleton lock. The process can become the
-    // Browser process if it succeed to take the lock. Otherwise, the
-    // command-line is sent to the actual Browser process and the current
-    // process can be exited.
-    base::FilePath user_data_dir;
-    if (!base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir)) {
-      return chrome::RESULT_CODE_MISSING_DATA;
+  // On platforms that support the process rendezvous, acquire the process
+  // singleton. In case of failure, it means there is already a running browser
+  // instance that handled the command-line.
+  if (auto process_singleton_result = AcquireProcessSingleton(user_data_dir);
+      process_singleton_result.has_value()) {
+    // To ensure that the histograms emitted in this process are reported in
+    // case of early exit, report the metrics accumulated this session with a
+    // future session's metrics.
+    DeferBrowserMetrics(user_data_dir);
+
+#if BUILDFLAG(IS_WIN)
+    // In the case the process is not the singleton process, the uninstall tasks
+    // need to be executed here. A window will be displayed asking to close all
+    // running instances.
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+            switches::kUninstall)) {
+      // Ensure there is an instance of ResourceBundle that is initialized
+      // for localized string resource accesses.
+      ui::ScopedStartupResourceBundle startup_resource_bundle;
+      return DoUninstallTasks(browser_util::IsBrowserAlreadyRunning());
     }
+#endif
 
-    ChromeProcessSingleton::CreateInstance(user_data_dir);
-
-    ProcessSingleton::NotifyResult notify_result =
-        ChromeProcessSingleton::GetInstance()->NotifyOtherProcessOrCreate();
-    UMA_HISTOGRAM_ENUMERATION("Chrome.ProcessSingleton.NotifyResult",
-                              notify_result,
-                              ProcessSingleton::kNumNotifyResults);
-
-    // If |notify_result| is not PROCESS_NONE, this process will exit. To ensure
-    // that the histograms emitted in this process are reported, report the
-    // metrics accumulated this session with a future session's metrics.
-    if (notify_result != ProcessSingleton::PROCESS_NONE) {
-      DeferBrowserMetrics(user_data_dir);
-    }
-
-    switch (notify_result) {
-      case ProcessSingleton::PROCESS_NONE:
-        // No process already running, continue on to starting a new one.
-        break;
-
-      case ProcessSingleton::PROCESS_NOTIFIED: {
-        // Ensure there is an instance of ResourceBundle that is initialized for
-        // localized string resource accesses.
-        ui::ScopedStartupResourceBundle startup_resource_bundle;
-        printf("%s\n", base::SysWideToNativeMB(
-                           base::UTF16ToWide(l10n_util::GetStringUTF16(
-                               IDS_USED_EXISTING_BROWSER)))
-                           .c_str());
-        return chrome::RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED;
-      }
-
-      case ProcessSingleton::PROFILE_IN_USE:
-        return chrome::RESULT_CODE_PROFILE_IN_USE;
-
-      case ProcessSingleton::LOCK_ERROR:
-        LOG(ERROR) << "Failed to create a ProcessSingleton for your profile "
-                      "directory. This means that running multiple instances "
-                      "would start multiple browser processes rather than "
-                      "opening a new window in the existing process. Aborting "
-                      "now to avoid profile corruption.";
-        return chrome::RESULT_CODE_PROFILE_IN_USE;
-    }
+    return process_singleton_result;
   }
 #endif
 
@@ -805,8 +839,16 @@ absl::optional<int> ChromeMainDelegate::PostEarlyInitialization(
   // be scheduled in the main browser after taking the process singleton. They
   // cannot be scheduled immediately after InstantiatePersistentHistograms()
   // because ThreadPool is not ready at that time yet.
+  bool immediate_histogram_cleanup = true;
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  // When prelaunching Lacros at login screen, we want to postpone the
+  // cleanup of persistent histograms to when the user has logged in
+  // and the cryptohome is accessible.
+  immediate_histogram_cleanup = !chromeos::IsLaunchedWithPostLoginParams();
+#endif
   base::FilePath metrics_dir;
-  if (base::PathService::Get(chrome::DIR_USER_DATA, &metrics_dir)) {
+  if (immediate_histogram_cleanup &&
+      base::PathService::Get(chrome::DIR_USER_DATA, &metrics_dir)) {
     PersistentHistogramsCleanup(metrics_dir);
   }
 #endif  // !BUILDFLAG(IS_FUCHSIA)
@@ -846,6 +888,14 @@ absl::optional<int> ChromeMainDelegate::PostEarlyInitialization(
       chrome_content_browser_client_->startup_data()
           ->chrome_feature_list_creator();
   chrome_feature_list_creator->CreateFeatureList();
+
+#if BUILDFLAG(IS_CHROMEOS)
+  // At this point, the base::FeatureList has been initialized and the process
+  // should still be single threaded. Additionally, minigbm shouldn't have been
+  // used yet by this process. Therefore, it's a good time to ensure the Intel
+  // media compression environment flag for minigbm is correctly set.
+  ui::EnsureIntelMediaCompressionEnvVarIsSet();
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   content::InitializeMojoCore();
 
@@ -1065,7 +1115,12 @@ void ChromeMainDelegate::SetupTracing() {
   // sampler profiler because it can support java frames which is essential for
   // the main thread.
   base::RepeatingCallback tracing_factory =
+#if BUILDFLAG(IS_ANDROID)
+      base::BindRepeating(&CreateCoreUnwindersFactory,
+                          /*is_java_name_hashing_enabled=*/false);
+#else
       base::BindRepeating(&CreateCoreUnwindersFactory);
+#endif  // BUILDFLAG(IS_ANDROID)
   tracing::TracingSamplerProfiler::UnwinderType unwinder_type =
       tracing::TracingSamplerProfiler::UnwinderType::kCustomAndroid;
 #if BUILDFLAG(IS_ANDROID)
@@ -1382,6 +1437,9 @@ void ChromeMainDelegate::PreSandboxStartup() {
 
     // NOTE: When launching Lacros at login screen, after this point,
     // the user should have logged in. The cryptohome is now accessible.
+    if (chrome::ProcessNeedsProfileDir(process_type)) {
+      InitializeUserDataDir(base::CommandLine::ForCurrentProcess());
+    }
 
     // Redirect logs from system directory to cryptohome.
     RedirectLacrosLogging();
@@ -1408,8 +1466,16 @@ void ChromeMainDelegate::PreSandboxStartup() {
 #endif
 
   // Initialize the user data dir for any process type that needs it.
-  if (chrome::ProcessNeedsProfileDir(process_type))
+  bool initialize_user_data_dir = chrome::ProcessNeedsProfileDir(process_type);
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  // In Lacros, when prelaunching at login screen, we postpone the
+  // initialization of the user data directory.
+  // We verify that no access happens before login via DCHECKs.
+  initialize_user_data_dir &= !chromeos::IsLaunchedWithPostLoginParams();
+#endif
+  if (initialize_user_data_dir) {
     InitializeUserDataDir(base::CommandLine::ForCurrentProcess());
+  }
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   // Generate shared resource file only on browser process. This is to avoid
@@ -1467,9 +1533,19 @@ void ChromeMainDelegate::PreSandboxStartup() {
 #else
       chrome::DIR_INTERNAL_PLUGINS;
 #endif
+
+  int updated_components_dir =
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+      command_line.HasSwitch(switches::kEnableLacrosSharedComponentsDir)
+          ? static_cast<int>(chromeos::lacros_paths::LACROS_SHARED_DIR)
+          : static_cast<int>(chrome::DIR_USER_DATA);
+#else
+      chrome::DIR_USER_DATA;
+#endif
+
   component_updater::RegisterPathProvider(chrome::DIR_COMPONENTS,
                                           alt_preinstalled_components_dir,
-                                          chrome::DIR_USER_DATA);
+                                          updated_components_dir);
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN)
   // Android does InitLogging when library is loaded. Skip here.
@@ -1659,7 +1735,14 @@ void ChromeMainDelegate::SandboxInitialized(const std::string& process_type) {
   // Note: this is done before field trial initialization, so the values of
   // `kPersistentHistogramsFeature` and `kPersistentHistogramsStorage` will
   // not be used. Persist histograms to a memory-mapped file.
-  if (process_type.empty()) {
+  bool immediate_histogram_init = true;
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  // For Lacros, when prelaunching at login screen, we want to postpone the
+  // instantiation of persistent histograms to when the user has logged in
+  // and the cryptohome is accessible.
+  immediate_histogram_init = !chromeos::IsLaunchedWithPostLoginParams();
+#endif
+  if (immediate_histogram_init && process_type.empty()) {
     base::FilePath metrics_dir;
     if (base::PathService::Get(chrome::DIR_USER_DATA, &metrics_dir)) {
       InstantiatePersistentHistograms(
@@ -1720,8 +1803,7 @@ void ChromeMainDelegate::ProcessExiting(const std::string& process_type) {
   }
 
 #if BUILDFLAG(ENABLE_PROCESS_SINGLETON)
-  if (ChromeProcessSingleton::IsEarlySingletonFeatureEnabled())
-    ChromeProcessSingleton::DeleteInstance();
+  ChromeProcessSingleton::DeleteInstance();
 #endif  // BUILDFLAG(ENABLE_PROCESS_SINGLETON)
 
   if (SubprocessNeedsResourceBundle(process_type))

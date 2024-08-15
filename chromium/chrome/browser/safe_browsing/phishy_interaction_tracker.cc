@@ -143,6 +143,9 @@ void PhishyInteractionTracker::ResetLoggingHelpers() {
 }
 
 bool PhishyInteractionTracker::IsSitePhishy() {
+  if (!ui_manager_for_testing_ && !g_browser_process->safe_browsing_service()) {
+    return false;
+  }
   safe_browsing::SafeBrowsingUIManager* ui_manager_ =
       ui_manager_for_testing_
           ? ui_manager_for_testing_.get()
@@ -165,8 +168,9 @@ void PhishyInteractionTracker::HandlePhishyInteraction(
     const ClientSafeBrowsingReportRequest::PhishySiteInteraction::
         PhishySiteInteractionType& interaction) {
   int new_occurrence_count = 1;
-  int64_t new_first_timestamp = base::Time::Now().ToJavaTime();
-  int64_t new_last_timestamp = base::Time::Now().ToJavaTime();
+  int64_t new_first_timestamp =
+      base::Time::Now().InMillisecondsSinceUnixEpoch();
+  int64_t new_last_timestamp = base::Time::Now().InMillisecondsSinceUnixEpoch();
   last_interaction_ts_ = base::Time::Now();
   // Log if first occurrence of the interaction.
   if (!phishy_page_interaction_data_.contains(interaction)) {

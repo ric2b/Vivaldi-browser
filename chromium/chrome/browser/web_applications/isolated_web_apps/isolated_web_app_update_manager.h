@@ -7,22 +7,28 @@
 
 #include <memory>
 
+#include "base/callback_list.h"
+#include "base/cancelable_callback.h"
 #include "base/containers/circular_deque.h"
 #include "base/containers/flat_map.h"
 #include "base/files/file_error_or.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback_forward.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
-#include "base/timer/timer.h"
+#include "base/types/pass_key.h"
 #include "base/values.h"
+#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_location.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_update_apply_task.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_update_apply_waiter.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_update_discovery_task.h"
-#include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_install_manager_observer.h"
+#include "components/webapps/common/web_app_id.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class GURL;
 class Profile;
@@ -34,6 +40,7 @@ class SignedWebBundleId;
 namespace web_app {
 
 class IsolatedWebAppUrlInfo;
+class IsolatedWebAppURLLoaderFactory;
 class WebAppProvider;
 
 namespace {
@@ -69,27 +76,69 @@ class IsolatedWebAppUpdateManager : public WebAppInstallManagerObserver {
 
   base::Value AsDebugValue() const;
 
+  // Returns `true` if an update for the provided `app_id` is currently being
+  // applied or scheduled to be applied soon.
+  //
+  // Use of this method should be limited to the
+  // `IsolatedWebAppURLLoaderFactory`. If you have a different use case, please
+  // talk to iwa-dev@chromium.org first.
+  bool IsUpdateBeingApplied(base::PassKey<IsolatedWebAppURLLoaderFactory>,
+                            const webapps::AppId app_id) const;
+
+  // Starts an already scheduled update apply task for the provided `app_id`, if
+  // it is queued but not already running. This happens regardless of whether
+  // other update tasks are already running, and may therefore cause the task to
+  // run concurrently with another running update task.
+  //
+  // `callback` will be run once the update apply task for the provided `app_id`
+  // finishes.
+  //
+  // Use of this method should be limited to the
+  // `IsolatedWebAppURLLoaderFactory`. If you have a different use case, please
+  // talk to iwa-dev@chromium.org first.
+  void PrioritizeUpdateAndWait(
+      base::PassKey<IsolatedWebAppURLLoaderFactory>,
+      const webapps::AppId& app_id,
+      base::OnceCallback<void(IsolatedWebAppUpdateApplyTask::CompletionStatus)>
+          callback);
+
+  bool AreAutomaticUpdatesEnabled() const { return automatic_updates_enabled_; }
+
   void SetEnableAutomaticUpdatesForTesting(bool automatic_updates_enabled);
 
   // `WebAppInstallManagerObserver`:
-  void OnWebAppInstalled(const AppId& app_id) override;
+  void OnWebAppInstalled(const webapps::AppId& app_id) override;
   void OnWebAppUninstalled(
-      const AppId& app_id,
+      const webapps::AppId& app_id,
       webapps::WebappUninstallSource uninstall_source) override;
 
-  const base::RepeatingTimer& GetUpdateDiscoveryTimerForTesting() const {
-    return update_discovery_timer_;
-  }
+  // Used to queue update discovery tasks manually from the
+  // chrome://web-app-internals page. Returns the number of tasks queued.
+  size_t DiscoverUpdatesNow();
 
-  void DiscoverUpdatesNowForTesting();
+  // Tells the update system about a locally available update for a dev-mode app
+  // (as opposed to an update discovered through the Update Manifest of a
+  // production app), and prioritizes applying it.
+  void DiscoverApplyAndPrioritizeLocalDevModeUpdate(
+      const IsolatedWebAppLocation& location,
+      const IsolatedWebAppUrlInfo& url_info,
+      base::OnceCallback<void(base::expected<base::Version, std::string>)>
+          callback);
+
+  absl::optional<base::TimeTicks> GetNextUpdateDiscoveryTimeForTesting() const {
+    return next_update_discovery_check_.GetScheduledTime();
+  }
 
  private:
   // This queue manages update discovery and apply tasks. Tasks can be added to
   // the queue via its `Push` methods. The queue will never start a new task on
-  // its own. Tasks can be started via `MaybeStartNextTask`; only one task is
-  // scheduled to run at the same time, with update apply tasks having
+  // its own. Tasks can be started via `MaybeStartNextTask`; normally, only one
+  // task is scheduled to run at the same time, with update apply tasks having
   // precedence over update discovery tasks. This is mainly to conserve
-  // resources (because each update task requires a `WebContents`).
+  // resources (because each update task requires a `WebContents`). However,
+  // queued update apply tasks that are explicitly started via
+  // `EnsureQueuedUpdateApplyTaskHasStarted` will run concurrently with other
+  // potentially running tasks.
   class TaskQueue {
    public:
     explicit TaskQueue(IsolatedWebAppUpdateManager& update_manager);
@@ -106,9 +155,25 @@ class IsolatedWebAppUpdateManager : public WebAppInstallManagerObserver {
     void Push(std::unique_ptr<IsolatedWebAppUpdateApplyTask> task);
     void Clear();
 
+    // If an `IsolatedWebAppUpdateApplyTask` for the `app_id` is queued, start
+    // it immediately, even if other tasks are currently running. Returns
+    // `false` if a task for this `app_id` is neither queued nor running,
+    // returns `true` otherwise.
+    bool EnsureQueuedUpdateApplyTaskHasStarted(const webapps::AppId& app_id);
+
+    // Removes all tasks for the provided `app_id` that haven't yet started from
+    // the queue.
+    //
+    // TODO(crbug.com/1444407): Ideally, we'd also cancel tasks that have
+    // already started, especially update discovery tasks, but the task
+    // implementation currently does not support cancellation of ongoing tasks.
+    void ClearNonStartedTasksOfApp(const webapps::AppId& app_id);
+
     // Starts the next task if no task is currently running. Will prioritize
     // update apply over update discovery tasks.
     void MaybeStartNextTask();
+
+    bool IsUpdateApplyTaskQueued(const webapps::AppId& app_id) const;
 
    private:
     void StartUpdateDiscoveryTask(IsolatedWebAppUpdateDiscoveryTask* task_ptr);
@@ -144,15 +209,24 @@ class IsolatedWebAppUpdateManager : public WebAppInstallManagerObserver {
 
   bool IsAnyIwaInstalled();
 
-  void QueueUpdateDiscoveryTasks();
+  // Queues new update discovery tasks and returns the number of new tasks that
+  // have been queued.
+  size_t QueueUpdateDiscoveryTasks();
 
   base::flat_map<web_package::SignedWebBundleId, GURL>
   GetForceInstalledBundleIdToUpdateManifestUrlMap();
 
-  void MaybeStartUpdateDiscoveryTimer();
-  void MaybeStopUpdateDiscoveryTimer();
+  void MaybeScheduleUpdateDiscoveryCheck();
+  void MaybeResetScheduledUpdateDiscoveryCheck();
 
-  void CreateUpdateApplyWaiter(const IsolatedWebAppUrlInfo& url_info);
+  void CreateUpdateApplyWaiter(
+      const IsolatedWebAppUrlInfo& url_info,
+      base::OnceClosure on_update_apply_task_created = base::DoNothing());
+
+  void PrioritizeUpdateAndWaitImpl(
+      const webapps::AppId& app_id,
+      base::OnceCallback<void(IsolatedWebAppUpdateApplyTask::CompletionStatus)>
+          callback);
 
   void OnUpdateDiscoveryTaskCompleted(
       std::unique_ptr<IsolatedWebAppUpdateDiscoveryTask> task,
@@ -160,12 +234,25 @@ class IsolatedWebAppUpdateManager : public WebAppInstallManagerObserver {
 
   void OnUpdateApplyWaiterFinished(
       IsolatedWebAppUrlInfo url_info,
+      base::OnceClosure on_update_apply_task_created,
       std::unique_ptr<ScopedKeepAlive> keep_alive,
       std::unique_ptr<ScopedProfileKeepAlive> profile_keep_alive);
 
   void OnUpdateApplyTaskCompleted(
       std::unique_ptr<IsolatedWebAppUpdateApplyTask> task,
       IsolatedWebAppUpdateApplyTask::CompletionStatus status);
+
+  void OnLocalUpdateDiscovered(
+      IsolatedWebAppUrlInfo url_info,
+      base::OnceCallback<void(base::expected<base::Version, std::string>)>
+          callback,
+      base::expected<base::Version, std::string> update_discovery_result);
+
+  void OnLocalUpdateApplyTaskCreated(
+      IsolatedWebAppUrlInfo url_info,
+      base::Version update_version,
+      base::OnceCallback<void(base::expected<base::Version, std::string>)>
+          callback);
 
   raw_ref<Profile> profile_;
   bool automatic_updates_enabled_;
@@ -174,16 +261,49 @@ class IsolatedWebAppUpdateManager : public WebAppInstallManagerObserver {
 
   bool has_started_ = false;
 
+  class NextUpdateDiscoveryCheck {
+   public:
+    NextUpdateDiscoveryCheck();
+    ~NextUpdateDiscoveryCheck();
+
+    void ScheduleWithJitter(const base::TimeDelta& base_delay,
+                            base::OnceClosure callback);
+
+    absl::optional<base::TimeTicks> GetScheduledTime() const;
+    bool IsScheduled() const;
+    void Reset();
+
+    base::Value AsDebugValue() const;
+
+   private:
+    absl::optional<std::pair<base::TimeTicks,
+                             std::unique_ptr<base::CancelableOnceClosure>>>
+        next_check_;
+  };
+
   base::TimeDelta update_discovery_frequency_;
-  base::RepeatingTimer update_discovery_timer_;
+  NextUpdateDiscoveryCheck next_update_discovery_check_;
 
   TaskQueue task_queue_;
 
-  base::flat_map<AppId, std::unique_ptr<IsolatedWebAppUpdateApplyWaiter>>
+  base::flat_map<webapps::AppId,
+                 std::unique_ptr<IsolatedWebAppUpdateApplyWaiter>>
       update_apply_waiters_;
+
+  // Callbacks that are run once an update apply task for a given app id has
+  // finished (successfully or unsuccessfully).
+  base::flat_map<webapps::AppId,
+                 std::unique_ptr<base::OnceCallbackList<void(
+                     IsolatedWebAppUpdateApplyTask::CompletionStatus)>>>
+      on_update_finished_callbacks_;
 
   base::ScopedObservation<WebAppInstallManager, WebAppInstallManagerObserver>
       install_manager_observation_{this};
+
+  class LocalDevModeUpdateDiscoverer;
+  std::unique_ptr<LocalDevModeUpdateDiscoverer>
+      local_dev_mode_update_discoverer_;
+
   base::WeakPtrFactory<IsolatedWebAppUpdateManager> weak_factory_{this};
 };
 

@@ -64,9 +64,14 @@ void FullscreenModel::ForceEnterFullscreen() {
 }
 
 void FullscreenModel::ResetForNavigation() {
+  if (IsForceFullscreenMode()) {
+    return;
+  }
   progress_ = 1.0;
   scrolling_ = false;
-  base_offset_ = NAN;
+  if (base::FeatureList::IsEnabled(web::features::kSmoothScrollingDefault)) {
+    base_offset_ = NAN;
+  }
   ScopedIncrementer reset_incrementer(&observer_callback_count_);
   for (auto& observer : observers_) {
     observer.FullscreenModelWasReset(this);
@@ -93,7 +98,9 @@ void FullscreenModel::SetCollapsedTopToolbarHeight(CGFloat height) {
   }
   DCHECK_GE(height, 0.0);
   collapsed_top_toolbar_height_ = height;
-  base_offset_ = NAN;
+  if (base::FeatureList::IsEnabled(web::features::kSmoothScrollingDefault)) {
+    base_offset_ = NAN;
+  }
   ScopedIncrementer toolbar_height_incrementer(&observer_callback_count_);
   for (auto& observer : observers_) {
     observer.FullscreenModelToolbarHeightsUpdated(this);
@@ -110,7 +117,9 @@ void FullscreenModel::SetExpandedTopToolbarHeight(CGFloat height) {
   }
   DCHECK_GE(height, 0.0);
   expanded_top_toolbar_height_ = height;
-  base_offset_ = NAN;
+  if (base::FeatureList::IsEnabled(web::features::kSmoothScrollingDefault)) {
+    base_offset_ = NAN;
+  }
   ScopedIncrementer toolbar_height_incrementer(&observer_callback_count_);
   for (auto& observer : observers_) {
     observer.FullscreenModelToolbarHeightsUpdated(this);
@@ -127,7 +136,9 @@ void FullscreenModel::SetExpandedBottomToolbarHeight(CGFloat height) {
   }
   DCHECK_GE(height, 0.0);
   expanded_bottom_toolbar_height_ = height;
-  base_offset_ = NAN;
+  if (base::FeatureList::IsEnabled(web::features::kSmoothScrollingDefault)) {
+    base_offset_ = NAN;
+  }
   ScopedIncrementer toolbar_height_incrementer(&observer_callback_count_);
   for (auto& observer : observers_) {
     observer.FullscreenModelToolbarHeightsUpdated(this);
@@ -144,7 +155,9 @@ void FullscreenModel::SetCollapsedBottomToolbarHeight(CGFloat height) {
   }
   DCHECK_GE(height, 0.0);
   collapsed_bottom_toolbar_height_ = height;
-  base_offset_ = NAN;
+  if (base::FeatureList::IsEnabled(web::features::kSmoothScrollingDefault)) {
+    base_offset_ = NAN;
+  }
   ScopedIncrementer toolbar_height_incrementer(&observer_callback_count_);
   for (auto& observer : observers_) {
     observer.FullscreenModelToolbarHeightsUpdated(this);
@@ -192,6 +205,8 @@ void FullscreenModel::SetYContentOffset(CGFloat y_content_offset) {
       UpdateProgress();
       break;
     case ScrollAction::kUpdateBaseOffsetAndProgress:
+      CHECK(
+          base::FeatureList::IsEnabled(web::features::kSmoothScrollingDefault));
       UpdateBaseOffset();
       UpdateProgress();
       break;
@@ -281,7 +296,9 @@ void FullscreenModel::SetFreezeToolbarHeight(bool freeze_toolbar_height) {
     return;
   }
   freeze_toolbar_height_ = freeze_toolbar_height;
-  base_offset_ = NAN;
+  if (base::FeatureList::IsEnabled(web::features::kSmoothScrollingDefault)) {
+    base_offset_ = NAN;
+  }
   ScopedIncrementer toolbar_height_incrementer(&observer_callback_count_);
   for (auto& observer : observers_) {
     observer.FullscreenModelToolbarHeightsUpdated(this);
@@ -290,6 +307,14 @@ void FullscreenModel::SetFreezeToolbarHeight(bool freeze_toolbar_height) {
 
 bool FullscreenModel::GetFreezeToolbarHeight() const {
   return freeze_toolbar_height_;
+}
+
+void FullscreenModel::SetForceFullscreenMode(bool force_fullscreen_mode) {
+  is_force_fullscreen_mode_ = force_fullscreen_mode;
+}
+
+bool FullscreenModel::IsForceFullscreenMode() const {
+  return is_force_fullscreen_mode_;
 }
 
 FullscreenModel::ScrollAction FullscreenModel::ActionForScrollFromOffset(
@@ -328,8 +353,12 @@ FullscreenModel::ScrollAction FullscreenModel::ActionForScrollFromOffset(
 
   // All other scrolls should result in an updated progress value.  If the model
   // doesn't have a base offset, it should also be updated.
-  return has_base_offset() ? ScrollAction::kUpdateProgress
-                           : ScrollAction::kUpdateBaseOffsetAndProgress;
+  if (base::FeatureList::IsEnabled(web::features::kSmoothScrollingDefault)) {
+    return has_base_offset() ? ScrollAction::kUpdateProgress
+                             : ScrollAction::kUpdateBaseOffsetAndProgress;
+  } else {
+    return ScrollAction::kUpdateProgress;
+  }
 }
 
 void FullscreenModel::UpdateBaseOffset() {
@@ -394,6 +423,7 @@ void FullscreenModel::SetProgress(CGFloat progress) {
 }
 
 void FullscreenModel::OnScrollViewSizeBroadcasted(CGSize scroll_view_size) {
+  CHECK(base::FeatureList::IsEnabled(web::features::kSmoothScrollingDefault));
   SetScrollViewHeight(scroll_view_size.height);
 }
 
@@ -403,10 +433,12 @@ void FullscreenModel::OnScrollViewContentSizeBroadcasted(CGSize content_size) {
 
 void FullscreenModel::OnScrollViewContentInsetBroadcasted(
     UIEdgeInsets content_inset) {
+  CHECK(base::FeatureList::IsEnabled(web::features::kSmoothScrollingDefault));
   SetTopContentInset(content_inset.top);
 }
 
 void FullscreenModel::OnContentScrollOffsetBroadcasted(CGFloat offset) {
+  CHECK(base::FeatureList::IsEnabled(web::features::kSmoothScrollingDefault));
   SetYContentOffset(offset);
 }
 

@@ -32,6 +32,9 @@ enum : unsigned {
   // Used to paint SVG resource subtree for masks, filter images, etc.
   kPaintingResourceSubtree = 1 << 4,
 
+  // Used to paint SVG resource subtree for masks.
+  kPaintingSVGMask = 1 << 5,
+
   // Vivaldi-specific flag for capturing the whole page.
   kVivaldiPaintWholePage = 1 << 30,
 };

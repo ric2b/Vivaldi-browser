@@ -4,6 +4,7 @@
 
 #include "media/muxers/mp4_muxer_delegate.h"
 
+#include "base/logging.h"
 #include "components/version_info/version_info.h"
 #include "media/base/audio_parameters.h"
 #include "media/formats/mp4/avc.h"
@@ -12,6 +13,7 @@
 #include "media/muxers/mp4_box_writer.h"
 #include "media/muxers/mp4_fragment_box_writer.h"
 #include "media/muxers/mp4_movie_box_writer.h"
+#include "media/muxers/mp4_type_conversion.h"
 #include "media/muxers/output_position_tracker.h"
 
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
@@ -25,6 +27,7 @@ namespace {
 using mp4::writable_boxes::FragmentSampleFlags;
 using mp4::writable_boxes::TrackFragmentHeaderFlags;
 using mp4::writable_boxes::TrackFragmentRunFlags;
+using mp4::writable_boxes::TrackHeaderFlags;
 
 constexpr char kVideoHandlerName[] = "VideoHandler";
 constexpr char kAudioHandlerName[] = "SoundHandler";
@@ -47,12 +50,15 @@ uint32_t BuildFlags(const std::vector<T>& build_flags) {
 
 void BuildTrack(
     mp4::writable_boxes::Movie& moov,
-    int track_index,
+    size_t track_index,
     bool is_audio,
     uint32_t timescale,
     const mp4::writable_boxes::SampleDescription& sample_description) {
   mp4::writable_boxes::Track& track = moov.tracks[track_index];
   // `tkhd`.
+  track.header.flags = BuildFlags<TrackHeaderFlags>(
+      {TrackHeaderFlags::kTrackEnabled, TrackHeaderFlags::kTrackInMovie});
+
   track.header.track_id = track_index + 1;
   track.header.is_audio = is_audio;
 
@@ -152,6 +158,7 @@ void AddNewTrack(Mp4MuxerDelegate::Fragment& fragment,
           fragment_run_flags);
 
   // `tfdt`.
+  track_fragment.decode_time.track_id = track_fragment.header.track_id;
   track_fragment.decode_time.base_media_decode_time = decode_time;
 }
 
@@ -176,24 +183,24 @@ void CreateNewFragment(
   auto fragment = std::make_unique<Mp4MuxerDelegate::Fragment>();
   fragment->moof.header.sequence_number = fragments.size() + 1;
 
-  for (uint32_t i = 0; i < total_tracks_count; ++i) {
-    // Added track could be non-zero index so we have to add all track
-    // entries before that index.
-    AddTrackEntry(*fragment, i, decode_time, is_audio);
-  }
-
-  if (!fragments.empty()) {
-    DCHECK_LE(fragments.back()->moof.track_fragments.size(), 2u);
-    for (auto& prior_track_frag : fragments.back()->moof.track_fragments) {
-      if (prior_track_frag.run.sample_timestamps.empty()) {
-        // If no sample is added for the track, we don't add the last one.
-        continue;
-      }
-
-      // Add an additional timestamp on the previous fragment so that it can
-      // get sample duration during box writer for last sample.
-      prior_track_frag.run.sample_timestamps.emplace_back(timestamp);
+  // Keep consistent of the track index across the fragments.
+  if (total_tracks_count == 1) {
+    AddTrackEntry(*fragment, 0, decode_time, is_audio);
+  } else if (total_tracks_count == 2) {
+    // Ensures the order of the added track.
+    bool audio_is_first_track =
+        (is_audio && (track_index == 0)) || (!is_audio && (track_index == 1));
+    if (audio_is_first_track) {
+      AddTrackEntry(*fragment, 0, decode_time, /*is_audio=*/true);
     }
+    AddTrackEntry(*fragment, audio_is_first_track ? 1 : 0, decode_time,
+                  /*is_audio=*/false);
+    if (!audio_is_first_track) {
+      AddTrackEntry(*fragment, 1, decode_time, /*is_audio=*/true);
+    }
+  } else {
+    // Supports only video and audio track now.
+    NOTREACHED();
   }
 
   fragments.emplace_back(std::move(fragment));
@@ -271,7 +278,7 @@ void CreateFragmentOrAddTrackIfNeeded(
 
 void AddDataToMdat(Mp4MuxerDelegate::Fragment& fragment,
                    int track_index,
-                   base::StringPiece encoded_data) {
+                   std::string encoded_data) {
   // The parameter sets are supplied in-band at the sync samples.
   // It is a default on encoded stream, see
   // `VideoEncoder::produce_annexb=false`.
@@ -306,6 +313,19 @@ void CopyCreationTimeAndDuration(mp4::writable_boxes::Track& track,
   track.media.header.duration = track_duration;
 }
 
+void AddTimestampToPriorFragment(Mp4MuxerDelegate::Fragment* prior_fragment,
+                                 size_t index,
+                                 base::TimeTicks timestamp) {
+  if (prior_fragment->moof.track_fragments.size() <= index) {
+    return;
+  }
+
+  auto& prior_track_frag = prior_fragment->moof.track_fragments[index];
+  if (!prior_track_frag.run.sample_timestamps.empty()) {
+    prior_track_frag.run.sample_timestamps.emplace_back(timestamp);
+  }
+}
+
 }  // namespace
 
 Mp4MuxerDelegate::Mp4MuxerDelegate(
@@ -318,11 +338,13 @@ Mp4MuxerDelegate::~Mp4MuxerDelegate() = default;
 
 void Mp4MuxerDelegate::AddVideoFrame(
     const Muxer::VideoParameters& params,
-    base::StringPiece encoded_data,
+    std::string encoded_data,
     absl::optional<VideoEncoder::CodecDescription> codec_description,
     base::TimeTicks timestamp,
     bool is_key_frame) {
   if (!video_track_index_.has_value()) {
+    DVLOG(1) << __func__ << ", " << params.AsHumanReadableString();
+
     CHECK(codec_description.has_value());
     CHECK(is_key_frame);
     CHECK(start_video_time_.is_null());
@@ -334,7 +356,12 @@ void Mp4MuxerDelegate::AddVideoFrame(
     video_frame_rate_ = params.frame_rate;
 
     video_track_index_ = GetNextTrackIndex();
-    context_->SetVideoIndex(video_track_index_.value());
+    DVLOG(1) << __func__
+             << ", video track index:" << video_track_index_.value();
+
+    uint32_t timescale = video_frame_rate_ * kMillisecondsTimeScale;
+    context_->SetVideoTrack({video_track_index_.value(), timescale});
+    DVLOG(1) << __func__ << ", video track timescale:" << timescale;
 
     mp4::writable_boxes::Track track;
     moov_->tracks.emplace_back(std::move(track));
@@ -352,7 +379,7 @@ void Mp4MuxerDelegate::AddVideoFrame(
 
 void Mp4MuxerDelegate::BuildVideoTrackWithKeyframe(
     const Muxer::VideoParameters& params,
-    base::StringPiece encoded_data,
+    std::string encoded_data,
     VideoEncoder::CodecDescription codec_description) {
   DCHECK(video_track_index_.has_value());
 
@@ -376,9 +403,10 @@ void Mp4MuxerDelegate::BuildVideoTrackWithKeyframe(
   visual_entry.pixel_aspect_ratio = mp4::writable_boxes::PixelAspectRatioBox();
   description.visual_sample_entry = std::move(visual_entry);
 #endif
+  description.entry_count = 1;
 
   BuildTrack(*moov_, *video_track_index_, false,
-             video_frame_rate_ * kMillisecondsTimeScale, description);
+             context_->GetVideoTrack().value().timescale, description);
 
   mp4::writable_boxes::Track& video_track = moov_->tracks[*video_track_index_];
 
@@ -394,9 +422,11 @@ void Mp4MuxerDelegate::BuildVideoTrackWithKeyframe(
   // `vmhd`
   mp4::writable_boxes::VideoMediaHeader video_header = {};
   video_track.media.information.video_header = std::move(video_header);
+
+  DVLOG(1) << __func__ << ", video track created";
 }
 
-void Mp4MuxerDelegate::BuildVideoFragment(base::StringPiece encoded_data,
+void Mp4MuxerDelegate::BuildVideoFragment(std::string encoded_data,
                                           bool is_key_frame) {
   DCHECK(video_track_index_.has_value());
   CreateFragmentOrAddTrackIfNeeded(
@@ -406,7 +436,7 @@ void Mp4MuxerDelegate::BuildVideoFragment(base::StringPiece encoded_data,
 
   Fragment* fragment = fragments_.back().get();
   if (!fragment) {
-    // Don't add if the first frame does not have SPS/PPS.
+    DVLOG(1) << __func__ << ", no valid video fragment exists";
     return;
   }
 
@@ -423,6 +453,11 @@ void Mp4MuxerDelegate::BuildVideoFragment(base::StringPiece encoded_data,
   video_trun.sample_sizes.emplace_back(encoded_data.size());
 
   // Add sample timestamp.
+  if (video_trun.sample_timestamps.empty() && fragments_.size() > 1) {
+    // Needs to add timestamp to the previous fragment.
+    AddTimestampToPriorFragment(fragments_[fragments_.size() - 2].get(),
+                                *video_track_index_, last_video_time_);
+  }
   video_trun.sample_timestamps.emplace_back(last_video_time_);
 
   // Add sample data to the data box.
@@ -431,10 +466,12 @@ void Mp4MuxerDelegate::BuildVideoFragment(base::StringPiece encoded_data,
 
 void Mp4MuxerDelegate::AddAudioFrame(
     const AudioParameters& params,
-    base::StringPiece encoded_data,
+    std::string encoded_data,
     absl::optional<AudioEncoder::CodecDescription> codec_description,
     base::TimeTicks timestamp) {
   if (!audio_track_index_.has_value()) {
+    DVLOG(1) << __func__ << ", " << params.AsHumanReadableString();
+
     CHECK(codec_description.has_value());
     CHECK(start_audio_time_.is_null());
 
@@ -445,8 +482,8 @@ void Mp4MuxerDelegate::AddAudioFrame(
     audio_sample_rate_ = params.sample_rate();
 
     audio_track_index_ = GetNextTrackIndex();
-    context_->SetAudioIndex(audio_track_index_.value());
-
+    context_->SetAudioTrack({audio_track_index_.value(),
+                             static_cast<uint32_t>(audio_sample_rate_)});
     mp4::writable_boxes::Track track;
     moov_->tracks.emplace_back(std::move(track));
 
@@ -462,7 +499,7 @@ void Mp4MuxerDelegate::AddAudioFrame(
 
 void Mp4MuxerDelegate::BuildAudioTrack(
     const AudioParameters& params,
-    base::StringPiece encoded_data,
+    std::string encoded_data,
     AudioEncoder::CodecDescription codec_description) {
   DCHECK(audio_track_index_.has_value());
 
@@ -475,8 +512,10 @@ void Mp4MuxerDelegate::BuildAudioTrack(
       std::move(codec_description);
   description.audio_sample_entry = std::move(audio_entry);
 #endif
-  BuildTrack(*moov_, *audio_track_index_, true, audio_sample_rate_,
-             description);
+  description.entry_count = 1;
+
+  BuildTrack(*moov_, *audio_track_index_, true,
+             context_->GetAudioTrack().value().timescale, description);
 
   mp4::writable_boxes::Track& audio_track = moov_->tracks[*audio_track_index_];
 
@@ -489,9 +528,10 @@ void Mp4MuxerDelegate::BuildAudioTrack(
   // `smhd`
   mp4::writable_boxes::SoundMediaHeader sound_header = {};
   audio_track.media.information.sound_header = std::move(sound_header);
+  DVLOG(1) << __func__ << ", audio track created";
 }
 
-void Mp4MuxerDelegate::BuildAudioFragment(base::StringPiece encoded_data) {
+void Mp4MuxerDelegate::BuildAudioFragment(std::string encoded_data) {
   DCHECK(audio_track_index_.has_value());
   CreateFragmentOrAddTrackIfNeeded(true, fragments_, false, *audio_track_index_,
                                    next_track_index_, last_audio_time_,
@@ -500,7 +540,7 @@ void Mp4MuxerDelegate::BuildAudioFragment(base::StringPiece encoded_data) {
 
   Fragment* fragment = fragments_.back().get();
   if (!fragment) {
-    // Don't add if the first frame does not have SPS/PPS.
+    DVLOG(1) << __func__ << ", no valid audio fragment exists";
     return;
   }
 
@@ -517,6 +557,11 @@ void Mp4MuxerDelegate::BuildAudioFragment(base::StringPiece encoded_data) {
   audio_trun.sample_sizes.emplace_back(encoded_data.size());
 
   // Add sample timestamp.
+  if (audio_trun.sample_timestamps.empty() && fragments_.size() > 1) {
+    // Needs to add timestamp to the previous fragment.
+    AddTimestampToPriorFragment(fragments_[fragments_.size() - 2].get(),
+                                *audio_track_index_, last_audio_time_);
+  }
   audio_trun.sample_timestamps.emplace_back(last_audio_time_);
 
   // Add sample data to the data box.
@@ -538,6 +583,9 @@ bool Mp4MuxerDelegate::Flush() {
 
   // Finish movie box and write.
   BuildMovieBox();
+
+  // Log blob info.
+  LogBoxInfo();
 
   // Write `moov` box and its children.
   Mp4MovieBoxWriter movie_box_writer(*context_, *moov_);
@@ -660,8 +708,7 @@ void Mp4MuxerDelegate::BuildVideoTrackFragmentRandomAccess(
         fragment_random_access_box_writer,
     Fragment& fragment,
     size_t written_offset) {
-  if (*video_track_index_ >=
-      static_cast<int>(fragment.moof.track_fragments.size())) {
+  if (*video_track_index_ >= fragment.moof.track_fragments.size()) {
     // The front fragments could have only audio samples.
     return;
   }
@@ -675,7 +722,7 @@ void Mp4MuxerDelegate::BuildVideoTrackFragmentRandomAccess(
   CHECK(!run.sample_timestamps.empty());
   mp4::writable_boxes::TrackFragmentRandomAccessEntry entry;
   // `time` is a duration since its target track's start until the
-  // previous fragment.
+  // previous fragment, which is presentation time of the track.
   entry.time = run.sample_timestamps[0] - start_video_time_;
   entry.moof_offset = written_offset;
   entry.traf_number = 1;
@@ -735,6 +782,31 @@ void Mp4MuxerDelegate::Reset() {
 
 int Mp4MuxerDelegate::GetNextTrackIndex() {
   return next_track_index_++;
+}
+
+void Mp4MuxerDelegate::LogBoxInfo() const {
+  std::ostringstream s;
+
+  s << "movie timescale:" << moov_->header.timescale
+    << ", duration in seconds:" << moov_->header.duration.InSeconds();
+  if (video_track_index_.has_value()) {
+    mp4::writable_boxes::Track& track = moov_->tracks[*video_track_index_];
+    s << ", video track index:" << *video_track_index_
+      << ", video track timescale:"
+      << context_->GetVideoTrack().value().timescale
+      << ", video track duration:" << track.header.duration;
+  }
+
+  if (audio_track_index_.has_value()) {
+    mp4::writable_boxes::Track& track = moov_->tracks[*audio_track_index_];
+    s << ", audio track index:" << *audio_track_index_
+      << ", audio track timescale:"
+      << context_->GetAudioTrack().value().timescale
+      << ", audio track duration:" << track.header.duration;
+  }
+  s << ", Fragment counts:" << fragments_.size();
+
+  DVLOG(1) << __func__ << ", " << s.str();
 }
 
 Mp4MuxerDelegate::Fragment::Fragment() = default;

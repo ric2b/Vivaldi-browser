@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.tasks.tab_management;
 import android.content.Context;
 
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.tab_groups.EmptyTabGroupModelFilterObserver;
@@ -33,10 +32,10 @@ public abstract class TabGroupTitleEditor {
         mTabModelObserver = new TabModelObserver() {
             @Override
             public void tabClosureCommitted(Tab tab) {
-                int tabRootId = CriticalPersistedTabData.from(tab).getRootId();
+                int tabRootId = tab.getRootId();
                 TabGroupModelFilter filter =
                         (TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider()
-                                .getCurrentTabModelFilter(true); // Vivaldi
+                                .getCurrentTabModelFilter();
                 // If the group becomes a single tab after closing or we are closing a group, delete
                 // the stored title.
                 if (filter.getRelatedTabListForRootId(tabRootId).size() == 1) {
@@ -62,7 +61,7 @@ public abstract class TabGroupTitleEditor {
             public void willMoveTabOutOfGroup(Tab movedTab, int newRootId) {
                 TabGroupModelFilter filter =
                         (TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider()
-                                .getCurrentTabModelFilter(true); // Vivaldi
+                                .getCurrentTabModelFilter();
                 String title = getTabGroupTitle(getRootId(movedTab));
                 if (title == null) return;
                 // If the group size is 2, i.e. the group becomes a single tab after ungroup, delete
@@ -80,20 +79,20 @@ public abstract class TabGroupTitleEditor {
             }
 
             private int getRootId(Tab tab) {
-                return CriticalPersistedTabData.from(tab).getRootId();
+                return tab.getRootId();
             }
         };
 
         mTabModelSelector.getTabModelFilterProvider().addTabModelFilterObserver(mTabModelObserver);
-        assert mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(false, true) // Vivaldi
+        assert mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(false)
                         instanceof TabGroupModelFilter;
-        assert mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(true, true) // Vivaldi
+        assert mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(true)
                         instanceof TabGroupModelFilter;
         ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(
-                 false, true)) // Vivaldi
+                 false))
                 .addTabGroupObserver(mFilterObserver);
         ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(
-                 true, true)) // Vivaldi
+                 true))
                 .addTabGroupObserver(mFilterObserver);
     }
 
@@ -156,10 +155,10 @@ public abstract class TabGroupTitleEditor {
         mTabModelSelector.getTabModelFilterProvider().removeTabModelFilterObserver(
                 mTabModelObserver);
         ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(
-                 false, true)) // Vivaldi
+                 false))
                 .removeTabGroupObserver(mFilterObserver);
         ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(
-                 true, true)) // Vivaldi
+                 true))
                 .removeTabGroupObserver(mFilterObserver);
     }
 }

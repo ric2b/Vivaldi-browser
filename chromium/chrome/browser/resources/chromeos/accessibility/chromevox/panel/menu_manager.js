@@ -9,10 +9,13 @@ import {AsyncUtil} from '../../common/async_util.js';
 import {EventGenerator} from '../../common/event_generator.js';
 import {KeyCode} from '../../common/key_code.js';
 import {StringUtil} from '../../common/string_util.js';
+import {BackgroundBridge} from '../common/background_bridge.js';
+import {BrailleCommandData} from '../common/braille/braille_command_data.js';
 import {Command, CommandCategory} from '../common/command.js';
 import {CommandStore} from '../common/command_store.js';
+import {GestureCommandData} from '../common/gesture_command_data.js';
 import {KeyMap} from '../common/key_map.js';
-import {KeySequence} from '../common/key_sequence.js';
+import {KeyBinding, KeySequence} from '../common/key_sequence.js';
 import {KeyUtil} from '../common/key_util.js';
 import {Msgs} from '../common/msgs.js';
 import {PanelNodeMenuData, PanelNodeMenuId, PanelNodeMenuItemData} from '../common/panel_menu_data.js';
@@ -89,6 +92,37 @@ export class MenuManager {
   }
 
   /**
+   * @param {!KeyBinding} binding
+   * @param {PanelMenu} menu
+   * @param {boolean} isTouchScreen
+   */
+  addMenuItemFromKeyBinding(binding, menu, isTouchScreen) {
+    if (!binding.title || !menu) {
+      return;
+    }
+
+    const gestures = Object.keys(GestureCommandData.GESTURE_COMMAND_MAP);
+    let keyText;
+    let brailleText;
+    let gestureText;
+    if (isTouchScreen) {
+      const gestureData = Object.values(GestureCommandData.GESTURE_COMMAND_MAP);
+      const data = gestureData.find(data => data.command === binding.command);
+      if (data) {
+        gestureText = Msgs.getMsg(data.msgId);
+      }
+    } else {
+      keyText = binding.keySeq;
+      brailleText = BrailleCommandData.getDotShortcut(binding.command, true);
+    }
+
+    menu.addMenuItem(
+        binding.title, keyText, brailleText, gestureText,
+        () => BackgroundBridge.CommandHandler.onCommand(binding.command),
+        binding.command);
+  }
+
+  /**
    * Create a new node menu with the given name and add it to the menu bar.
    * @param {!PanelNodeMenuData} menuData The title/predicate for the new menu.
    */
@@ -155,6 +189,39 @@ export class MenuManager {
     $('menus_background').appendChild(this.searchMenu_.menuContainerElement);
     this.menus_.push(this.searchMenu_);
     return this.searchMenu_;
+  }
+
+  /** @param {!PanelMenu} touchMenu */
+  addTouchGestureMenuItems(touchMenu) {
+    const touchGestureItems = [];
+    for (const data of Object.values(GestureCommandData.GESTURE_COMMAND_MAP)) {
+      const command = data.command;
+      if (!command) {
+        continue;
+      }
+
+      const gestureText = Msgs.getMsg(data.msgId);
+      const msgForCmd = data.commandDescriptionMsgId ||
+          CommandStore.messageForCommand(command);
+      let titleText;
+      if (msgForCmd) {
+        titleText = Msgs.getMsg(msgForCmd);
+      } else {
+        console.error('No localization for: ' + command + ' (gesture)');
+        titleText = '';
+      }
+      touchGestureItems.push({titleText, gestureText, command});
+    }
+
+    touchGestureItems.sort(
+        (item1, item2) => item1.titleText.localeCompare(item2.titleText));
+
+    for (const item of touchGestureItems) {
+      touchMenu.addMenuItem(
+          item.titleText, '', '', item.gestureText,
+          () => BackgroundBridge.CommandHandler.onCommand(item.command),
+          item.command);
+    }
   }
 
   /**
@@ -239,8 +306,7 @@ export class MenuManager {
   }
 
   /**
-   * @return {!Promise<Array<Object<{command: string, sequence:
-   *     KeySequence}>>>}
+   * @return {!Promise<!Array<!KeyBinding>>}
    */
   async getSortedKeyBindings() {
     // TODO(accessibility): Commands should be based off of CommandStore and
@@ -257,7 +323,8 @@ export class MenuManager {
       if (!titleMsgId) {
         // Title messages are intentionally missing for some keyboard
         // shortcuts.
-        if (!(command in COMMANDS_WITH_NO_MSG_ID)) {
+        if (!(command in COMMANDS_WITH_NO_MSG_ID) &&
+            !MenuManager.disableMissingMsgsErrorsForTesting) {
           console.error('No localization for: ' + command);
         }
         binding.title = '';
@@ -294,6 +361,17 @@ export class MenuManager {
       [CommandCategory.OVERVIEW]: jumpMenu,
       [CommandCategory.TABLES]: jumpMenu,
     };
+  }
+  /**
+   * @param {!Array<!KeyBinding>} sortedBindings
+   * @return {!Map<!Command, !KeyBinding>}
+   */
+  makeBindingMap(sortedBindings) {
+    const bindingMap = new Map();
+    for (const binding of sortedBindings) {
+      bindingMap.set(binding.command, binding);
+    }
+    return bindingMap;
   }
 
   /**
@@ -392,6 +470,10 @@ export class MenuManager {
     this.searchMenu_ = menu;
   }
 }
+
+
+/** @type {boolean} */
+MenuManager.disableMissingMsgsErrorsForTesting = false;
 
 // Local to module.
 

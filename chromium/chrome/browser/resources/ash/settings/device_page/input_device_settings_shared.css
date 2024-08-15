@@ -12,7 +12,7 @@
 }
 
 .subsection {
-  margin-bottom: 16px;
+  margin-bottom: 8px;
   padding-inline-start: var(--cr-section-indent-width);
 }
 
@@ -68,4 +68,24 @@ cr-dialog [slot='title'] {
 cr-dialog #cancelButton {
   background-color: var(--cros-bg-color);
   border: solid 1px var(--cros-button-stroke-color-secondary);
+}
+
+.subpage-description {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+}
+
+.subpage-description > span {
+  color: var(--cros-text-color-secondary);
+  font-family: var(--cros-body-2-font-family);
+  line-height: 20px;
+  padding: 14px 0;
+}
+
+.subpage-description > iron-icon {
+  margin: 6px;
+  --iron-icon-height: 20px;
+  --iron-icon-width: 20px;
+  --iron-icon-fill-color: var(--cros-text-color-secondary);
 }

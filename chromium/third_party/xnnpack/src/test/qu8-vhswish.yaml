@@ -1,0 +1,20 @@
+# Copyright 2023 Google LLC
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
+# ARM NEON
+- name: xnn_qu8_vhswish_ukernel__neon_u8
+  init: xnn_init_qu8_hswish_neon_params
+- name: xnn_qu8_vhswish_ukernel__neon_u16
+  init: xnn_init_qu8_hswish_neon_params
+- name: xnn_qu8_vhswish_ukernel__neon_u32
+  init: xnn_init_qu8_hswish_neon_params
+
+# Scalar
+- name: xnn_qu8_vhswish_ukernel__scalar_u1
+  init: xnn_init_qu8_hswish_scalar_params
+- name: xnn_qu8_vhswish_ukernel__scalar_u2
+  init: xnn_init_qu8_hswish_scalar_params
+- name: xnn_qu8_vhswish_ukernel__scalar_u4
+  init: xnn_init_qu8_hswish_scalar_params

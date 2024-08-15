@@ -518,6 +518,9 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
                 // How long has it been since last we checked for an update?
                 NSDate *lastCheckDate = [self lastUpdateCheckDate];
                 if (!lastCheckDate) { lastCheckDate = [NSDate distantPast]; }
+                if ([lastCheckDate class] != [NSDate class]) {
+                  lastCheckDate = [NSDate distantPast];
+                }
                 intervalSinceCheck = [[NSDate date] timeIntervalSinceDate:lastCheckDate];
                 if (intervalSinceCheck < 0) {
                     // Last update check date is in the future and bogus, so reset it to current date

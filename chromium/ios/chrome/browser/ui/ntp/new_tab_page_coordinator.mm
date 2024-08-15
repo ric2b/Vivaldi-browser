@@ -18,8 +18,6 @@
 #import "components/feed/feed_feature_list.h"
 #import "components/policy/policy_constants.h"
 #import "components/pref_registry/pref_registry_syncable.h"
-#import "components/prefs/ios/pref_observer_bridge.h"
-#import "components/prefs/pref_change_registrar.h"
 #import "components/prefs/pref_service.h"
 #import "components/search_engines/default_search_manager.h"
 #import "components/search_engines/template_url.h"
@@ -38,17 +36,18 @@
 #import "ios/chrome/browser/follow/followed_web_site.h"
 #import "ios/chrome/browser/follow/followed_web_site_state.h"
 #import "ios/chrome/browser/ntp/features.h"
+#import "ios/chrome/browser/ntp/home/features.h"
 #import "ios/chrome/browser/ntp/new_tab_page_state.h"
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
-#import "ios/chrome/browser/search_engines/template_url_service_factory.h"
+#import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
-#import "ios/chrome/browser/shared/model/web_state_list/all_web_state_observation_forwarder.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
@@ -69,17 +68,16 @@
 #import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
 #import "ios/chrome/browser/signin/system_identity_manager.h"
-#import "ios/chrome/browser/sync/sync_service_factory.h"
+#import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/browser/ui/authentication/enterprise/enterprise_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_coordinator.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_mediator.h"
 #import "ios/chrome/browser/ui/context_menu/link_preview/link_preview_coordinator.h"
 #import "ios/chrome/browser/ui/ntp/discover_feed_constants.h"
 #import "ios/chrome/browser/ui/ntp/discover_feed_preview_delegate.h"
 #import "ios/chrome/browser/ui/ntp/feed_control_delegate.h"
-#import "ios/chrome/browser/ui/ntp/feed_delegate.h"
 #import "ios/chrome/browser/ui/ntp/feed_header_view_controller.h"
 #import "ios/chrome/browser/ui/ntp/feed_management/feed_management_coordinator.h"
 #import "ios/chrome/browser/ui/ntp/feed_menu_coordinator.h"
@@ -107,9 +105,8 @@
 #import "ios/chrome/browser/ui/ntp/new_tab_page_metrics_delegate.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_view_controller.h"
 #import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_controller.h"
-#import "ios/chrome/browser/ui/settings/utils/pref_backed_boolean.h"
 #import "ios/chrome/browser/ui/toolbar/public/fakebox_focuser.h"
-#import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
+#import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/ui_utils/ui_utils_api.h"
@@ -130,10 +127,10 @@ using vivaldi::IsVivaldiRunning;
 @interface NewTabPageCoordinator () <AppStateObserver,
                                      AuthenticationServiceObserving,
                                      BooleanObserver,
+                                     ContentSuggestionsDelegate,
                                      DiscoverFeedObserverBridgeDelegate,
                                      DiscoverFeedPreviewDelegate,
                                      FeedControlDelegate,
-                                     FeedDelegate,
                                      FeedMenuCoordinatorDelegate,
                                      FeedSignInPromoDelegate,
                                      FeedSignInPromoCoordinatorDelegate,
@@ -145,13 +142,7 @@ using vivaldi::IsVivaldiRunning;
                                      NewTabPageHeaderCommands,
                                      NewTabPageMetricsDelegate,
                                      OverscrollActionsControllerDelegate,
-                                     PrefObserverDelegate,
                                      SceneStateObserver> {
-  // Pref observer to track changes to prefs.
-  std::unique_ptr<PrefObserverBridge> _prefObserverBridge;
-  // Registrar for pref changes notifications.
-  std::unique_ptr<PrefChangeRegistrar> _prefChangeRegistrar;
-
   // Observes changes in the IdentityManager.
   std::unique_ptr<signin::IdentityManagerObserverBridge>
       _identityObserverBridge;
@@ -265,6 +256,7 @@ using vivaldi::IsVivaldiRunning;
 
 // Logo vendor to display the doodle on the NTP.
 @property(nonatomic, strong) id<LogoVendor> logoVendor;
+
 @end
 
 @implementation NewTabPageCoordinator
@@ -342,13 +334,12 @@ using vivaldi::IsVivaldiRunning;
   // Updates feed asynchronously if the account is subject to parental controls.
   [self updateFeedVisibilityForSupervision];
 
-  // Configures NTP components.
-  if ([self isFeedHeaderVisible]) {
+  [self configureNTPMediator];
+  if (self.NTPMediator.feedHeaderVisible) {
     [self configureFeedAndHeader];
   }
   [self configureHeaderViewController];
   [self configureContentSuggestionsCoordinator];
-  [self configureNTPMediator];
   [self configureFeedMetricsRecorder];
   [self configureNTPViewController];
   } // End Vivaldi
@@ -389,7 +380,7 @@ using vivaldi::IsVivaldiRunning;
   [self.containedViewController.view removeFromSuperview];
   [self.containedViewController removeFromParentViewController];
   self.containedViewController = nil;
-  self.NTPViewController.feedHeaderViewController = nil;
+  [self.NTPViewController invalidate];
   self.NTPViewController = nil;
   self.feedHeaderViewController.ntpDelegate = nil;
   self.feedHeaderViewController = nil;
@@ -423,8 +414,6 @@ using vivaldi::IsVivaldiRunning;
   [self.feedMenuCoordinator stop];
   self.feedMenuCoordinator = nil;
 
-  _prefChangeRegistrar.reset();
-  _prefObserverBridge.reset();
   _discoverFeedObserverBridge.reset();
   _identityObserverBridge.reset();
   _authServiceObserverBridge.reset();
@@ -490,7 +479,15 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (void)locationBarDidBecomeFirstResponder {
-  self.NTPViewController.omniboxFocused = YES;
+  [self.NTPViewController omniboxDidBecomeFirstResponder];
+}
+
+- (void)locationBarWillResignFirstResponder {
+  // Do not trigger defocus animation if the user is already navigating away
+  // from the NTP.
+  if (self.visible) {
+    [self.NTPViewController omniboxWillResignFirstResponder];
+  }
 }
 
 - (void)locationBarDidResignFirstResponder {
@@ -549,6 +546,13 @@ using vivaldi::IsVivaldiRunning;
   self.webState = nullptr;
 }
 
+- (BOOL)isFakeboxPinned {
+  if (self.browser->GetBrowserState()->IsOffTheRecord()) {
+    return YES;
+  }
+  return self.NTPViewController.isFakeboxPinned;
+}
+
 #pragma mark - Setters
 
 - (void)setSelectedFeed:(FeedType)selectedFeed {
@@ -580,19 +584,6 @@ using vivaldi::IsVivaldiRunning;
   DCHECK(self.prefService);
   DCHECK(self.headerViewController);
 
-  _prefChangeRegistrar = std::make_unique<PrefChangeRegistrar>();
-  _prefChangeRegistrar->Init(self.prefService);
-  _prefObserverBridge = std::make_unique<PrefObserverBridge>(self);
-  _prefObserverBridge->ObserveChangesForPreference(
-      prefs::kArticlesForYouEnabled, _prefChangeRegistrar.get());
-  _prefObserverBridge->ObserveChangesForPreference(
-      prefs::kNTPContentSuggestionsEnabled, _prefChangeRegistrar.get());
-  _prefObserverBridge->ObserveChangesForPreference(
-      prefs::kNTPContentSuggestionsForSupervisedUserEnabled,
-      _prefChangeRegistrar.get());
-  _prefObserverBridge->ObserveChangesForPreference(
-      DefaultSearchManager::kDefaultSearchProviderDataPrefName,
-      _prefChangeRegistrar.get());
   self.feedExpandedPref = [[PrefBackedBoolean alloc]
       initWithPrefService:self.prefService
                  prefName:feed::prefs::kArticlesListVisible];
@@ -627,7 +618,6 @@ using vivaldi::IsVivaldiRunning;
   self.headerViewController = [componentFactory headerViewController];
   self.NTPMediator =
       [componentFactory NTPMediatorForBrowser:browser
-                                     webState:self.webState
                      identityDiscImageUpdater:self.headerViewController];
   self.contentSuggestionsCoordinator =
       [componentFactory contentSuggestionsCoordinatorForBrowser:browser];
@@ -640,7 +630,7 @@ using vivaldi::IsVivaldiRunning;
 
 // Creates and configures the feed and feed header based on user prefs.
 - (void)configureFeedAndHeader {
-  CHECK([self isFeedHeaderVisible]);
+  CHECK(self.NTPMediator.feedHeaderVisible);
   CHECK(self.NTPViewController);
 
   if (!self.feedHeaderViewController) {
@@ -724,7 +714,7 @@ using vivaldi::IsVivaldiRunning;
 - (void)configureContentSuggestionsCoordinator {
   self.contentSuggestionsCoordinator.webState = self.webState;
   self.contentSuggestionsCoordinator.NTPDelegate = self;
-  self.contentSuggestionsCoordinator.feedDelegate = self;
+  self.contentSuggestionsCoordinator.delegate = self;
   self.contentSuggestionsCoordinator.NTPMetricsDelegate = self;
   [self.contentSuggestionsCoordinator start];
 }
@@ -782,7 +772,6 @@ using vivaldi::IsVivaldiRunning;
 // Configures the main ViewController managed by this Coordinator.
 - (void)configureMainViewControllerUsing:
     (UIViewController*)containedViewController {
-
   [containedViewController
       willMoveToParentViewController:self.containerViewController];
   [self.containerViewController addChildViewController:containedViewController];
@@ -966,7 +955,7 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (BOOL)shouldFeedBeVisible {
-  return [self isFeedHeaderVisible] && [self.feedExpandedPref value];
+  return self.NTPMediator.feedHeaderVisible && [self.feedExpandedPref value];
 }
 
 - (BOOL)isFollowingFeedAvailable {
@@ -978,7 +967,25 @@ using vivaldi::IsVivaldiRunning;
   return [self.feedWrapperViewController lastVisibleFeedCardIndex];
 }
 
-#pragma mark - FeedDelegate
+- (void)setFeedAndHeaderVisibility:(BOOL)visible {
+  if (!self.NTPViewController.viewLoaded) {
+    return;
+  }
+  [self updateNTPForFeed];
+  [self.NTPViewController setContentOffsetToTop];
+}
+
+- (void)updateFeedForDefaultSearchEngineChanged {
+  if (!self.NTPViewController.viewLoaded) {
+    return;
+  }
+  [self.feedHeaderViewController updateForDefaultSearchEngineChanged];
+  [self updateFeedLayout];
+  [self cancelOmniboxEdit];
+  [self.NTPViewController setContentOffsetToTop];
+}
+
+#pragma mark - ContentSuggestionsDelegate
 
 - (void)contentSuggestionsWasUpdated {
   [self.NTPViewController updateHeightAboveFeed];
@@ -1107,7 +1114,8 @@ using vivaldi::IsVivaldiRunning;
 #pragma mark - NewTabPageContentDelegate
 
 - (BOOL)isContentHeaderSticky {
-  return [self isFollowingFeedAvailable] && [self isFeedHeaderVisible] &&
+  return [self isFollowingFeedAvailable] &&
+         self.NTPMediator.feedHeaderVisible &&
          !IsStickyHeaderDisabledForFollowingFeed();
 }
 
@@ -1135,7 +1143,7 @@ using vivaldi::IsVivaldiRunning;
 - (void)focusOmnibox {
   id<FakeboxFocuser> fakeboxFocuserHandler =
       HandlerForProtocol(self.browser->GetCommandDispatcher(), FakeboxFocuser);
-  [fakeboxFocuserHandler fakeboxFocused];
+  [fakeboxFocuserHandler focusOmniboxFromFakeboxPinned:[self isFakeboxPinned]];
 }
 
 - (void)refreshNTPContent {
@@ -1258,6 +1266,11 @@ using vivaldi::IsVivaldiRunning;
                    [self isStartSurface]);
 }
 
+- (void)distantTabResumptionOpened {
+  RecordHomeAction(IOSHomeActionType::kOpenDistantTabResumption,
+                   [self isStartSurface]);
+}
+
 - (void)feedArticleOpened {
   RecordHomeAction(IOSHomeActionType::kFeedCard, [self isStartSurface]);
 }
@@ -1274,10 +1287,12 @@ using vivaldi::IsVivaldiRunning;
   RecordHomeAction(IOSHomeActionType::kSetUpList, [self isStartSurface]);
 }
 
-#pragma mark - LogoAnimationControllerOwnerOwner
+- (void)safetyCheckOpened {
+  RecordHomeAction(IOSHomeActionType::kSafetyCheck, [self isStartSurface]);
+}
 
-- (id<LogoAnimationControllerOwner>)logoAnimationControllerOwner {
-  return [self.headerViewController logoAnimationControllerOwner];
+- (void)parcelTrackingOpened {
+  RecordHomeAction(IOSHomeActionType::kParcelTracking, [self isStartSurface]);
 }
 
 #pragma mark - OverscrollActionsControllerDelegate
@@ -1413,24 +1428,6 @@ using vivaldi::IsVivaldiRunning;
   }
 }
 
-#pragma mark - PrefObserverDelegate
-
-- (void)onPreferenceChanged:(const std::string&)preferenceName {
-  if (!self.started) {
-    return;
-  }
-  if (preferenceName == prefs::kArticlesForYouEnabled ||
-      preferenceName == prefs::kNTPContentSuggestionsEnabled ||
-      preferenceName == prefs::kNTPContentSuggestionsForSupervisedUserEnabled) {
-    [self updateNTPForFeed];
-    [self setContentOffsetToTop];
-  }
-  if (preferenceName ==
-      DefaultSearchManager::kDefaultSearchProviderDataPrefName) {
-    [self defaultSearchEngineDidChange];
-  }
-}
-
 #pragma mark - SceneStateObserver
 
 - (void)sceneState:(SceneState*)sceneState
@@ -1488,10 +1485,6 @@ using vivaldi::IsVivaldiRunning;
 - (void)updateNTPForFeed {
   DCHECK(self.NTPViewController);
 
-  if (!self.started) {
-    return;
-  }
-
   [self.NTPViewController resetViewHierarchy];
 
   if (self.feedViewController) {
@@ -1508,7 +1501,7 @@ using vivaldi::IsVivaldiRunning;
 
   // Fetches feed header and conditionally fetches feed. Feed can only be
   // visible if feed header is visible.
-  if ([self isFeedHeaderVisible]) {
+  if (self.NTPMediator.feedHeaderVisible) {
     [self configureFeedAndHeader];
   } else {
     self.NTPViewController.feedHeaderViewController = nil;
@@ -1532,21 +1525,6 @@ using vivaldi::IsVivaldiRunning;
   [self.NTPViewController layoutContentInParentCollectionView];
 
   [self updateFeedLayout];
-}
-
-// Feed header is always visible unless it is disabled (eg. Disabled from Chrome
-// settings, enterprise policy, safe mode, etc.).
-- (BOOL)isFeedHeaderVisible {
-  // Feed is disabled in safe mode.
-  SceneState* sceneState =
-      SceneStateBrowserAgent::FromBrowser(self.browser)->GetSceneState();
-  BOOL isSafeMode = [sceneState.appState resumingFromSafeMode];
-
-  return self.prefService->GetBoolean(prefs::kArticlesForYouEnabled) &&
-         self.prefService->GetBoolean(prefs::kNTPContentSuggestionsEnabled) &&
-         !IsFeedAblationEnabled() &&
-         IsContentSuggestionsForSupervisedUserEnabled(self.prefService) &&
-         !isSafeMode;
 }
 
 // Returns `YES` if the feed is currently visible on the NTP.
@@ -1591,13 +1569,6 @@ using vivaldi::IsVivaldiRunning;
           }));
 }
 
-// Handles how the NTP reacts when the default search engine is changed.
-- (void)defaultSearchEngineDidChange {
-  [self.feedHeaderViewController updateForDefaultSearchEngineChanged];
-  [self updateFeedLayout];
-  [self.NTPViewController setContentOffsetToTop];
-}
-
 // Toggles feed visibility between hidden or expanded using the feed header
 // menu. A hidden feed will continue to show the header, with a modified label.
 // TODO(crbug.com/1304382): Modify this comment when Web Channels is launched.
@@ -1637,6 +1608,7 @@ using vivaldi::IsVivaldiRunning;
 // changed.
 - (void)handleFeedVisibilityDidChange {
   [self updateNTPForFeed];
+  [self cancelOmniboxEdit];
   [self setContentOffsetToTop];
   [self.feedHeaderViewController updateForFeedVisibilityChanged];
 }
@@ -1666,7 +1638,7 @@ using vivaldi::IsVivaldiRunning;
   if (!self.browser->GetBrowserState()->IsOffTheRecord()) {
     if (visible) {
       self.didAppearTime = base::TimeTicks::Now();
-      if ([self isFeedHeaderVisible]) {
+      if (self.NTPMediator.feedHeaderVisible) {
         if ([self.feedExpandedPref value]) {
           [self.NTPMetricsRecorder
               recordHomeImpression:IOSNTPImpressionType::kFeedVisible

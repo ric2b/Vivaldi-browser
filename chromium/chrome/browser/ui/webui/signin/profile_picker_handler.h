@@ -73,6 +73,9 @@ class ProfilePickerHandler : public content::WebUIMessageHandler,
                            HandleExtendedAccountInformation);
   FRIEND_TEST_ALL_PREFIXES(ProfilePickerCreationFlowBrowserTest,
                            CloseBrowserBeforeCreatingNewProfile);
+  FRIEND_TEST_ALL_PREFIXES(ProfilePickerCreationFlowBrowserTest, DeleteProfile);
+  FRIEND_TEST_ALL_PREFIXES(ProfilePickerCreationFlowBrowserTest,
+                           DeleteProfileFromOwnTab);
   FRIEND_TEST_ALL_PREFIXES(
       ProfilePickerEnterpriseCreationFlowBrowserTest,
       CreateSignedInProfileSigninAlreadyExists_ConfirmSwitch);
@@ -154,6 +157,9 @@ class ProfilePickerHandler : public content::WebUIMessageHandler,
   // Displays either a sign-in or an error dialog within the profile picker
   // using `profile`.
   void OnProfileForDialogLoaded(Profile* profile);
+  // Callback to the reauth failing, used to display an error dialog on top of
+  // the profile picker.
+  void OnReauthErrorCallback();
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   // GaiaId as input string.

@@ -45,9 +45,6 @@ void BroadcastEvent(const std::string& eventname,
 void BroadcastEventToAllProfiles(const std::string& eventname,
                                  base::Value::List args = {});
 
-// Return number of milliseconds for time
-double MilliSecondsFromTime(const base::Time& time);
-
 // Return time from milliseconds
 base::Time GetTime(double ms_from_epoch);
 

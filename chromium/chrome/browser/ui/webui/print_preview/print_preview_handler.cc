@@ -20,6 +20,7 @@
 #include "base/i18n/number_formatting.h"
 #include "base/json/json_reader.h"
 #include "base/lazy_instance.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -607,7 +608,8 @@ void PrintPreviewHandler::HandleGetPrinters(const base::Value::List& args) {
       base::BindRepeating(&PrintPreviewHandler::OnAddedPrinters,
                           weak_factory_.GetWeakPtr(), printer_type),
       base::BindOnce(&PrintPreviewHandler::OnGetPrintersDone,
-                     weak_factory_.GetWeakPtr(), callback_id));
+                     weak_factory_.GetWeakPtr(), callback_id, printer_type,
+                     base::TimeTicks::Now()));
 }
 
 void PrintPreviewHandler::HandleGetPrinterCapabilities(
@@ -737,7 +739,9 @@ void PrintPreviewHandler::HandleDoPrint(const base::Value::List& args) {
   DCHECK(data->front());
 
   // After validating |settings|, record metrics.
-  bool is_pdf = !print_preview_ui()->source_is_modifiable();
+  const mojom::RequestPrintPreviewParams* request_params = GetRequestParams();
+  CHECK(request_params);
+  bool is_pdf = !request_params->is_modifiable;
   if (last_preview_settings_.has_value())
     ReportPrintSettingsStats(settings, last_preview_settings_.value(), is_pdf);
   {
@@ -933,21 +937,30 @@ void PrintPreviewHandler::SendInitialSettings(
     const std::string& callback_id,
     base::Value::Dict policies,
     const std::string& default_printer) {
+  const mojom::RequestPrintPreviewParams* request_params = GetRequestParams();
+  mojom::RequestPrintPreviewParams dummy_params;
+  if (!request_params) {
+    // This only happens with a direct navigation to chrome://print, which can
+    // happen in some tests. Just use `dummy_params` to set up the test with
+    // some sane values, so it does not crash.
+    dummy_params.is_modifiable = true;
+    request_params = &dummy_params;
+  }
+
   base::Value::Dict initial_settings;
   initial_settings.Set(kDocumentTitle, print_preview_ui()->initiator_title());
   initial_settings.Set(kSettingPreviewModifiable,
-                       print_preview_ui()->source_is_modifiable());
+                       request_params->is_modifiable);
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  bool source_is_arc = print_preview_ui()->source_is_arc();
+  bool source_is_arc = request_params->is_from_arc;
 #else
   bool source_is_arc = false;
 #endif
   initial_settings.Set(kSettingPreviewIsFromArc, source_is_arc);
   initial_settings.Set(kSettingPrinterName, default_printer);
-  initial_settings.Set(kDocumentHasSelection,
-                       print_preview_ui()->source_has_selection());
+  initial_settings.Set(kDocumentHasSelection, request_params->has_selection);
   initial_settings.Set(kSettingShouldPrintSelectionOnly,
-                       print_preview_ui()->print_selection_only());
+                       request_params->selection_only);
   PrefService* prefs = GetPrefs();
   PrintPreviewStickySettings* sticky_settings =
       PrintPreviewStickySettings::GetInstance();
@@ -1038,6 +1051,13 @@ WebContents* PrintPreviewHandler::GetInitiator() {
   auto* dialog_controller = PrintPreviewDialogController::GetInstance();
   CHECK(dialog_controller);
   return dialog_controller->GetInitiator(preview_web_contents());
+}
+
+const mojom::RequestPrintPreviewParams*
+PrintPreviewHandler::GetRequestParams() {
+  auto* dialog_controller = PrintPreviewDialogController::GetInstance();
+  CHECK(dialog_controller);
+  return dialog_controller->GetRequestParams(preview_web_contents());
 }
 
 void PrintPreviewHandler::OnPrintPreviewReady(int preview_uid, int request_id) {
@@ -1204,7 +1224,10 @@ void PrintPreviewHandler::OnAddedPrinters(mojom::PrinterType printer_type,
   }
 }
 
-void PrintPreviewHandler::OnGetPrintersDone(const std::string& callback_id) {
+void PrintPreviewHandler::OnGetPrintersDone(const std::string& callback_id,
+                                            mojom::PrinterType printer_type,
+                                            const base::TimeTicks& start_time) {
+  RecordGetPrintersTimeHistogram(printer_type, start_time);
   ResolveJavascriptCallback(base::Value(callback_id), base::Value());
 }
 

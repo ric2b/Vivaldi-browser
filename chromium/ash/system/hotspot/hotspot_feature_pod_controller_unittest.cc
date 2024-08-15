@@ -120,10 +120,11 @@ class HotspotFeaturePodControllerTest : public AshTestBase {
   }
 
   void ExpectHotspotDetailedViewShown() {
-    TrayDetailedView* detailed_view = GetPrimaryUnifiedSystemTray()
-                                          ->bubble()
-                                          ->quick_settings_view()
-                                          ->GetDetailedViewForTest();
+    TrayDetailedView* detailed_view =
+        GetPrimaryUnifiedSystemTray()
+            ->bubble()
+            ->quick_settings_view()
+            ->GetDetailedViewForTest<TrayDetailedView>();
     ASSERT_TRUE(detailed_view);
     EXPECT_TRUE(views::IsViewClass<HotspotDetailedView>(detailed_view));
   }
@@ -281,11 +282,11 @@ TEST_F(HotspotFeaturePodControllerTest,
             hotspot_feature_tile_->GetTooltipText());
   EXPECT_STREQ(kHotspotOffIcon.name, GetVectorIconName());
 
-  // Press on the drive in label should toggle hotspot and navigate to the
-  // detailed page.
+  // Press on the drive in label should navigate to the detailed page without
+  // toggling hotspot.
   UpdateHotspotInfo(HotspotState::kDisabled, HotspotAllowStatus::kAllowed);
   PressLabel();
-  EXPECT_TRUE(hotspot_feature_tile_->IsToggled());
+  EXPECT_FALSE(hotspot_feature_tile_->IsToggled());
   EXPECT_TRUE(hotspot_feature_tile_->GetVisible());
   EXPECT_TRUE(hotspot_feature_tile_->GetEnabled());
   ExpectHotspotDetailedViewShown();
@@ -408,13 +409,13 @@ TEST_F(HotspotFeaturePodControllerTest, LabelUMATracking) {
   histogram_tester->ExpectTotalCount(kDiveInHistogram,
                                      /*expected_count=*/0);
 
-  // Toggle hotspot and show hotspot detailed view when pressing on the label.
+  // Press on the label to show detailed page.
   PressLabel();
   histogram_tester->ExpectTotalCount(kToggledOnHistogram,
-                                     /*expected_count=*/1);
+                                     /*expected_count=*/0);
   histogram_tester->ExpectBucketCount(kToggledOnHistogram,
                                       QsFeatureCatalogName::kHotspot,
-                                      /*expected_count=*/1);
+                                      /*expected_count=*/0);
   histogram_tester->ExpectTotalCount(kToggledOffHistogram,
                                      /*expected_count=*/0);
   histogram_tester->ExpectTotalCount(kDiveInHistogram,
@@ -422,6 +423,8 @@ TEST_F(HotspotFeaturePodControllerTest, LabelUMATracking) {
   histogram_tester->ExpectBucketCount(kDiveInHistogram,
                                       QsFeatureCatalogName::kHotspot,
                                       /*expected_count=*/1);
+
+  // Press on the icon to toggle hotspot and show detailed page.
   PressIcon();
   histogram_tester->ExpectTotalCount(kToggledOnHistogram,
                                      /*expected_count=*/1);
@@ -429,15 +432,15 @@ TEST_F(HotspotFeaturePodControllerTest, LabelUMATracking) {
                                       QsFeatureCatalogName::kHotspot,
                                       /*expected_count=*/1);
   histogram_tester->ExpectTotalCount(kToggledOffHistogram,
-                                     /*expected_count=*/1);
+                                     /*expected_count=*/0);
   histogram_tester->ExpectBucketCount(kToggledOffHistogram,
                                       QsFeatureCatalogName::kHotspot,
-                                      /*expected_count=*/1);
+                                      /*expected_count=*/0);
   histogram_tester->ExpectTotalCount(kDiveInHistogram,
-                                     /*expected_count=*/1);
+                                     /*expected_count=*/2);
   histogram_tester->ExpectBucketCount(kDiveInHistogram,
                                       QsFeatureCatalogName::kHotspot,
-                                      /*expected_count=*/1);
+                                      /*expected_count=*/2);
 }
 
 }  // namespace ash

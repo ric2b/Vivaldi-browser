@@ -15,6 +15,7 @@
 #include "build/build_config.h"
 #include "components/viz/common/resources/shared_image_format.h"
 #include "gpu/command_buffer/common/mailbox.h"
+#include "gpu/command_buffer/common/shared_image_capabilities.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "gpu/config/gpu_preferences.h"
@@ -150,6 +151,8 @@ class GPU_GLES2_EXPORT SharedImageFactory {
   void RegisterSharedImageBackingFactoryForTesting(
       SharedImageBackingFactory* factory);
 
+  gpu::SharedImageCapabilities MakeCapabilities();
+
  private:
   bool IsSharedBetweenThreads(uint32_t usage);
 
@@ -200,6 +203,8 @@ class GPU_GLES2_EXPORT SharedImageFactory {
   gfx::GpuExtraInfo gpu_extra_info_;
   gpu::GpuMemoryBufferConfigurationSet supported_gmb_configurations_;
   bool supported_gmb_configurations_inited_ = false;
+  gpu::GpuPreferences gpu_preferences_;
+  gpu::GpuDriverBugWorkarounds workarounds_;
 
   raw_ptr<SharedImageBackingFactory> backing_factory_for_testing_ = nullptr;
 };

@@ -303,7 +303,7 @@ void AnimationWorkletGlobalScope::MigrateAnimatorsTo(
     scoped_refptr<SerializedScriptValue> serialized_state;
     if (animator->IsStateful()) {
       ExceptionState exception_state(script_state->GetIsolate(),
-                                     ExceptionState::kExecutionContext,
+                                     ExceptionContextType::kOperationInvoke,
                                      "Animator", "state");
       // If an animator state function throws or the state is not
       // serializable, the animator will be removed from the global scope.
@@ -342,7 +342,7 @@ AnimatorDefinition* AnimationWorkletGlobalScope::FindDefinitionForTest(
     const String& name) {
   auto it = animator_definitions_.find(name);
   if (it != animator_definitions_.end())
-    return it->value;
+    return it->value.Get();
   return nullptr;
 }
 

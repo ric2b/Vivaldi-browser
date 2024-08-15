@@ -154,6 +154,11 @@ HEADER = headers.header(
                     alt = "Chromium Android console",
                 ),
                 headers.link(
+                    text = "checks",
+                    url = "/p/{}/g/checks".format(settings.project),
+                    alt = "Checks console",
+                ),
+                headers.link(
                     text = "clang",
                     url = "/p/{}/g/chromium.clang".format(settings.project),
                     alt = "Chromium Clang console",
@@ -307,6 +312,11 @@ HEADER = headers.header(
                     alt = "Fuchsia",
                 ),
                 headers.link(
+                    text = "fuzz",
+                    url = "/p/{}/g/tryserver.chromium.fuzz/builders".format(settings.project),
+                    alt = "Fuzz",
+                ),
+                headers.link(
                     text = "linux",
                     branch_selector = branches.selector.LINUX_BRANCHES,
                     url = "/p/{}/g/tryserver.chromium.linux/builders".format(settings.project),
@@ -381,7 +391,7 @@ HEADER = headers.header(
                 console_ids = [
                     "chromium/chromium.android",
                     "chrome/chrome.perf",
-                    "chromium/chromium.fuchsia.fyi",
+                    "chromium/sheriff.fuchsia",
                     "chromium/chromium.gpu.fyi",
                     "chromium/chromium.angle",
                     "chromium/chromium.swangle",

@@ -12,6 +12,7 @@
 #include "chrome/browser/ui/android/webid/internal/jni/AccountSelectionBridge_jni.h"
 #include "chrome/browser/ui/android/webid/jni_headers/Account_jni.h"
 #include "chrome/browser/ui/android/webid/jni_headers/ClientIdMetadata_jni.h"
+#include "chrome/browser/ui/android/webid/jni_headers/IdentityCredentialTokenError_jni.h"
 #include "chrome/browser/ui/android/webid/jni_headers/IdentityProviderMetadata_jni.h"
 #include "chrome/browser/ui/webid/account_selection_view.h"
 #include "content/public/browser/identity_request_dialog_controller.h"
@@ -52,6 +53,15 @@ ScopedJavaLocalRef<jobject> ConvertToJavaIdentityProviderMetadata(
       ui::OptionalSkColorToJavaColor(metadata.brand_background_color),
       java_brand_icon_url,
       url::GURLAndroid::FromNativeGURL(env, metadata.config_url));
+}
+
+ScopedJavaLocalRef<jobject> ConvertToJavaIdentityCredentialTokenError(
+    JNIEnv* env,
+    const absl::optional<TokenError>& error) {
+  return Java_IdentityCredentialTokenError_Constructor(
+      env,
+      base::android::ConvertUTF8ToJavaString(env, error ? error->code : ""),
+      url::GURLAndroid::FromNativeGURL(env, error ? error->url : GURL()));
 }
 
 ScopedJavaLocalRef<jobject> ConvertToJavaClientIdMetadata(
@@ -96,12 +106,11 @@ Account ConvertFieldsToAccount(
 
   GURL picture_url = *url::GURLAndroid::ToNativeGURL(env, picture_url_obj);
 
-  // The login hints and hosted domains are only used before account selection.
+  // The login hints and domain hints are only used before account selection.
   std::vector<std::string> login_hints;
-  std::vector<std::string> hosted_domains;
+  std::vector<std::string> domain_hints;
   return Account(account_id, email, name, given_name, picture_url,
-                 std::move(login_hints), std::move(hosted_domains),
-                 login_state);
+                 std::move(login_hints), std::move(domain_hints), login_state);
 }
 
 ScopedJavaLocalRef<jstring> ConvertRpContextToJavaString(
@@ -208,7 +217,23 @@ void AccountSelectionViewAndroid::ShowErrorDialog(
     const blink::mojom::RpContext& rp_context,
     const content::IdentityProviderMetadata& idp_metadata,
     const absl::optional<TokenError>& error) {
-  // TODO(crbug.com/1420642): Implement error dialog on Android.
+  if (!MaybeCreateJavaObject()) {
+    // It's possible that the constructor cannot access the bottom sheet clank
+    // component. That case may be temporary but we can't let users in a
+    // waiting state so report that AccountSelectionView is dismissed instead.
+    delegate_->OnDismiss(DismissReason::kOther);
+    return;
+  }
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> idp_metadata_obj =
+      ConvertToJavaIdentityProviderMetadata(env, idp_metadata);
+  Java_AccountSelectionBridge_showErrorDialog(
+      env, java_object_internal_,
+      ConvertUTF8ToJavaString(env, top_frame_for_display),
+      ConvertUTF8ToJavaString(env, iframe_for_display.value_or("")),
+      ConvertUTF8ToJavaString(env, idp_for_display), idp_metadata_obj,
+      ConvertRpContextToJavaString(env, rp_context),
+      ConvertToJavaIdentityCredentialTokenError(env, error));
 }
 
 std::string AccountSelectionViewAndroid::GetTitle() const {
@@ -269,6 +294,10 @@ void AccountSelectionViewAndroid::OnDismiss(JNIEnv* env, jint dismiss_reason) {
 
 void AccountSelectionViewAndroid::OnSignInToIdp(JNIEnv* env) {
   delegate_->OnSigninToIdP();
+}
+
+void AccountSelectionViewAndroid::OnMoreDetails(JNIEnv* env) {
+  delegate_->OnMoreDetails();
 }
 
 bool AccountSelectionViewAndroid::MaybeCreateJavaObject() {

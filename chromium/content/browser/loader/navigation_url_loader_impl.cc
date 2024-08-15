@@ -325,7 +325,10 @@ std::unique_ptr<network::ResourceRequest> CreateResourceRequest(
   new_request->has_storage_access =
       request_info.begin_params->has_storage_access;
 
-  new_request->attribution_reporting_support = AttributionManager::GetSupport();
+  new_request->attribution_reporting_support =
+      AttributionManager::GetAttributionSupport(
+          WebContents::FromFrameTreeNodeId(
+              frame_tree_node->frame_tree_node_id()));
 
   new_request->attribution_reporting_eligibility =
       request_info.begin_params->impression.has_value()
@@ -337,7 +340,9 @@ std::unique_ptr<network::ResourceRequest> CreateResourceRequest(
         request_info.begin_params->impression->runtime_features;
   }
 
-  new_request->shared_storage_writable = request_info.shared_storage_writable;
+  new_request->shared_storage_writable_eligible =
+      request_info.shared_storage_writable_eligible;
+  new_request->is_ad_tagged = request_info.is_ad_tagged;
 
   return new_request;
 }
@@ -351,27 +356,6 @@ void UnknownSchemeCallback(
   mojo::Remote<network::mojom::URLLoaderClient>(std::move(client))
       ->OnComplete(network::URLLoaderCompletionStatus(
           handled_externally ? net::ERR_ABORTED : net::ERR_UNKNOWN_URL_SCHEME));
-}
-
-uint32_t GetURLLoaderOptions(bool is_outermost_main_frame) {
-  uint32_t options = network::mojom::kURLLoadOptionNone;
-
-  // Ensure that Mime sniffing works.
-  options |= network::mojom::kURLLoadOptionSniffMimeType;
-
-  if (is_outermost_main_frame) {
-    // SSLInfo is not needed on subframe or fenced frame responses because users
-    // can inspect only the certificate for the main frame when using the info
-    // bubble.
-    options |= network::mojom::kURLLoadOptionSendSSLInfoWithResponse;
-  }
-
-  // When there's a certificate error for a frame load (regardless of whether
-  // the error caused the connection to fail), SSLInfo is useful for adjusting
-  // security UI accordingly.
-  options |= network::mojom::kURLLoadOptionSendSSLInfoForCertificateError;
-
-  return options;
 }
 
 void LogQueueTimeHistogram(base::StringPiece name,
@@ -554,19 +538,9 @@ void NavigationURLLoaderImpl::CreateInterceptors(
   }
 
   // Set up an interceptor for prefetch.
-
-  // TODO(crbug.com/1431387): Do not depend on the initiator liveness, e.g. by
-  // plumbing `GlobalRenderFrameHostId` or switching to `LocalFrameToken`. See
-  // https://chromium-review.googlesource.com/c/chromium/src/+/4372403/comment/ff141ba3_0ffd99ff/
-  // for more details.
-  GlobalRenderFrameHostId initiator_render_frame_host_id;
-  if (RenderFrameHost* initiator_render_frame_host =
-          initiator_document_.AsRenderFrameHostIfValid()) {
-    initiator_render_frame_host_id = initiator_render_frame_host->GetGlobalId();
-  }
   std::unique_ptr<PrefetchURLLoaderInterceptor> prefetch_interceptor =
       content::PrefetchURLLoaderInterceptor::MaybeCreateInterceptor(
-          frame_tree_node_id_, initiator_render_frame_host_id);
+          frame_tree_node_id_, request_info_->initiator_document_token);
   if (prefetch_interceptor) {
     interceptors_.push_back(std::move(prefetch_interceptor));
   }
@@ -691,10 +665,10 @@ void NavigationURLLoaderImpl::MaybeStartLoader(
     next_interceptor->MaybeCreateLoader(
         *resource_request_, browser_context_,
         base::BindOnce(&NavigationURLLoaderImpl::MaybeStartLoader,
-                       base::Unretained(this), next_interceptor),
+                       weak_factory_.GetWeakPtr(), next_interceptor),
         base::BindOnce(
             &NavigationURLLoaderImpl::FallbackToNonInterceptedRequest,
-            base::Unretained(this)));
+            weak_factory_.GetWeakPtr()));
     return;
   }
 
@@ -772,7 +746,12 @@ NavigationURLLoaderImpl::PrepareForNonInterceptedRequest() {
           request_info_->sandbox_flags,
           static_cast<ui::PageTransition>(resource_request_->transition_type),
           resource_request_->has_user_gesture, initiating_origin,
-          initiator_document_.AsRenderFrameHostIfValid(), &loader_factory);
+          request_info_->initiator_document_token
+              ? RenderFrameHostImpl::FromDocumentToken(
+                    request_info_->initiator_process_id,
+                    *request_info_->initiator_document_token)
+              : nullptr,
+          &loader_factory);
 
       if (loader_factory) {
         factory = base::MakeRefCounted<network::WrapperSharedURLLoaderFactory>(
@@ -1346,7 +1325,6 @@ NavigationURLLoaderImpl::NavigationURLLoaderImpl(
       url_(request_info_->common_params->url),
       frame_tree_node_id_(request_info_->frame_tree_node_id),
       global_request_id_(GlobalRequestID::MakeBrowserInitiated()),
-      initiator_document_(request_info_->initiator_document),
       web_contents_getter_(
           base::BindRepeating(&WebContents::FromFrameTreeNodeId,
                               frame_tree_node_id_)),

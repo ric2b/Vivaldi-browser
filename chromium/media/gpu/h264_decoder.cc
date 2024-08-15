@@ -102,7 +102,8 @@ H264Decoder::H264Accelerator::ParseEncryptedSliceHeader(
 
 H264Decoder::H264Accelerator::Status H264Decoder::H264Accelerator::SetStream(
     base::span<const uint8_t> stream,
-    const DecryptConfig* decrypt_config) {
+    const DecryptConfig* decrypt_config,
+    uint64_t secure_handle) {
   return H264Decoder::H264Accelerator::Status::kNotSupported;
 }
 
@@ -160,6 +161,8 @@ void H264Decoder::Reset() {
 
   recovery_frame_num_.reset();
   recovery_frame_cnt_.reset();
+
+  secure_handle_ = 0;
 
   // If we are in kDecoding, we can resume without processing an SPS.
   // The state becomes kDecoding again, (1) at the first IDR slice or (2) at
@@ -1073,6 +1076,8 @@ bool H264Decoder::FinishPicture(scoped_refptr<H264Picture> pic) {
     dpb_.StorePic(std::move(pic));
   }
 
+  secure_handle_ = 0;
+
   return true;
 }
 
@@ -1113,9 +1118,7 @@ bool H264Decoder::UpdateMaxNumReorderFrames(const H264SPS* sps) {
   return true;
 }
 
-bool H264Decoder::ProcessSPS(int sps_id,
-                             bool* need_new_buffers,
-                             bool* color_space_changed) {
+bool H264Decoder::ProcessSPS(int sps_id, bool* need_new_buffers) {
   DVLOG(4) << "Processing SPS id:" << sps_id;
 
   const H264SPS* sps = parser_.GetSPS(sps_id);
@@ -1212,33 +1215,30 @@ bool H264Decoder::ProcessSPS(int sps_id,
     new_color_space = container_color_space_;
   }
 
+  bool is_color_space_change = false;
+  if (base::FeatureList::IsEnabled(kAVDColorSpaceChanges)) {
+    is_color_space_change = new_color_space.IsSpecified() &&
+                            new_color_space != picture_color_space_;
+  }
+
   if (pic_size_ != new_pic_size || dpb_.max_num_pics() != max_dpb_size ||
-      profile_ != new_profile || bit_depth_ != new_bit_depth) {
-    if (!Flush())
+      profile_ != new_profile || bit_depth_ != new_bit_depth ||
+      is_color_space_change) {
+    if (!Flush()) {
       return false;
+    }
     DVLOG(1) << "Codec profile: " << GetProfileName(new_profile)
              << ", level: " << base::strict_cast<int>(level)
              << ", DPB size: " << max_dpb_size
              << ", Picture size: " << new_pic_size.ToString()
-             << ", bit depth: " << base::strict_cast<int>(new_bit_depth);
+             << ", bit depth: " << base::strict_cast<int>(new_bit_depth)
+             << ", color_space: " << new_color_space.ToString();
     *need_new_buffers = true;
     profile_ = new_profile;
     bit_depth_ = new_bit_depth;
     pic_size_ = new_pic_size;
     picture_color_space_ = new_color_space;
     dpb_.set_max_num_pics(max_dpb_size);
-  }
-
-  // If the new color space is specified and different from picture color space
-  // then trigger color space change.
-  if (new_color_space.IsSpecified() &&
-      new_color_space != picture_color_space_) {
-    if (!Flush()) {
-      return false;
-    }
-    DVLOG(1) << "New color space: " << new_color_space.ToString();
-    picture_color_space_ = new_color_space;
-    *color_space_changed = true;
   }
 
   gfx::Rect new_visible_rect = sps->GetVisibleRect().value_or(gfx::Rect());
@@ -1445,6 +1445,12 @@ void H264Decoder::SetStream(int32_t id, const DecoderBuffer& decoder_buffer) {
     parser_.SetStream(ptr, size);
     current_decrypt_config_ = nullptr;
   }
+  if (decoder_buffer.has_side_data() &&
+      decoder_buffer.side_data()->secure_handle) {
+    secure_handle_ = decoder_buffer.side_data()->secure_handle;
+  } else {
+    secure_handle_ = 0;
+  }
 }
 
 H264Decoder::DecodeResult H264Decoder::Decode() {
@@ -1458,7 +1464,7 @@ H264Decoder::DecodeResult H264Decoder::Decode() {
     // originally set in case the accelerator needs to return kTryAgain.
     H264Accelerator::Status result = accelerator_->SetStream(
         base::span<const uint8_t>(current_stream_, current_stream_size_),
-        current_decrypt_config_.get());
+        current_decrypt_config_.get(), secure_handle_);
     switch (result) {
       case H264Accelerator::Status::kOk:
       case H264Accelerator::Status::kNotSupported:
@@ -1591,8 +1597,7 @@ H264Decoder::DecodeResult H264Decoder::Decode() {
           SET_ERROR_AND_RETURN();
 
         bool need_new_buffers = false;
-        bool color_space_changed = false;
-        if (!ProcessSPS(sps_id, &need_new_buffers, &color_space_changed)) {
+        if (!ProcessSPS(sps_id, &need_new_buffers)) {
           SET_ERROR_AND_RETURN();
         }
         accelerator_->ProcessSPS(
@@ -1604,7 +1609,7 @@ H264Decoder::DecodeResult H264Decoder::Decode() {
         if (state_ == State::kNeedStreamMetadata)
           state_ = State::kAfterReset;
 
-        if (need_new_buffers || color_space_changed) {
+        if (need_new_buffers) {
           curr_pic_ = nullptr;
           curr_nalu_ = nullptr;
           ref_pic_list_p0_.clear();
@@ -1614,9 +1619,6 @@ H264Decoder::DecodeResult H264Decoder::Decode() {
         // Perfer config changes over color space changes.
         if (need_new_buffers) {
           return kConfigChange;
-        }
-        if (color_space_changed) {
-          return kColorSpaceChange;
         }
         break;
       }

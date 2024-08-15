@@ -10,7 +10,6 @@ import {constants} from '../../common/constants.js';
 import {LocalStorage} from '../../common/local_storage.js';
 import {StringUtil} from '../../common/string_util.js';
 import {BackgroundBridge} from '../common/background_bridge.js';
-import {BrailleCommandData} from '../common/braille/braille_command_data.js';
 import {BridgeConstants} from '../common/bridge_constants.js';
 import {BridgeHelper} from '../common/bridge_helper.js';
 import {Command} from '../common/command.js';
@@ -228,6 +227,8 @@ export class Panel extends PanelInterface {
       case PanelCommandType.CLOSE_CHROMEVOX:
         this.onClose_();
       case PanelCommandType.ENABLE_TEST_HOOKS:
+        window.MenuManager = MenuManager;
+        window.Msgs = Msgs;
         window.Panel = Panel;
         break;
     }
@@ -338,72 +339,16 @@ export class Panel extends PanelInterface {
       const sortedBindings = await this.menuManager_.getSortedKeyBindings();
 
       // Insert items from the bindings into the menus.
-      const sawBindingSet = {};
-      const bindingMap = new Map();
-      const gestures = Object.keys(GestureCommandData.GESTURE_COMMAND_MAP);
-      sortedBindings.forEach(binding => {
-        const command = binding.command;
-        bindingMap.set(binding.command, binding);
-        if (sawBindingSet[command]) {
-          return;
-        }
-        sawBindingSet[command] = true;
+      const bindingMap = this.menuManager_.makeBindingMap(sortedBindings);
+      for (const binding of bindingMap.values()) {
         const category = CommandStore.categoryForCommand(binding.command);
         const menu = category ? categoryToMenu[category] : null;
-        if (binding.title && menu) {
-          let keyText;
-          let brailleText;
-          let gestureText;
-          if (touchScreen) {
-            for (let i = 0, gesture; gesture = gestures[i]; i++) {
-              const data = GestureCommandData.GESTURE_COMMAND_MAP[gesture];
-              if (data && data.command === command) {
-                gestureText = Msgs.getMsg(data.msgId);
-                break;
-              }
-            }
-          } else {
-            keyText = binding.keySeq;
-            brailleText =
-                BrailleCommandData.getDotShortcut(binding.command, true);
-          }
-
-          menu.addMenuItem(
-              binding.title, keyText, brailleText, gestureText,
-              () => BackgroundBridge.CommandHandler.onCommand(binding.command),
-              binding.command);
-        }
-      });
+        this.menuManager_.addMenuItemFromKeyBinding(binding, menu, touchScreen);
+      }
 
       // Add Touch Gestures menu items.
-      if (touchScreen) {
-        const touchGestureItems = [];
-        for (const key in GestureCommandData.GESTURE_COMMAND_MAP) {
-          const command =
-              GestureCommandData.GESTURE_COMMAND_MAP[key]['command'];
-          if (!command) {
-            continue;
-          }
-
-          const gestureText =
-              Msgs.getMsg(GestureCommandData.GESTURE_COMMAND_MAP[key]['msgId']);
-          const msgForCmd =
-              GestureCommandData
-                  .GESTURE_COMMAND_MAP[key]['commandDescriptionMsgId'] ||
-              CommandStore.messageForCommand(command);
-          const titleText = Msgs.getMsg(msgForCmd);
-          touchGestureItems.push({titleText, gestureText, command});
-        }
-
-        touchGestureItems.sort(
-            (item1, item2) => item1.titleText.localeCompare(item2.titleText));
-
-        for (const item of touchGestureItems) {
-          touchMenu.addMenuItem(
-              item.titleText, '', '', item.gestureText,
-              () => BackgroundBridge.CommandHandler.onCommand(item.command),
-              item.command);
-        }
+      if (touchMenu) {
+        this.menuManager_.addTouchGestureMenuItems(touchMenu);
       }
 
       if (this.sessionState_ !== 'IN_SESSION') {
@@ -429,8 +374,11 @@ export class Panel extends PanelInterface {
           continue;
         }
         const commandName = CommandStore.commandForMessage(actionMsg);
-        const command = bindingMap.get(commandName);
-        const shortcutName = command ? command.keySeq : '';
+        let shortcutName = '';
+        if (commandName) {
+          const commandBinding = bindingMap.get(commandName);
+          shortcutName = commandBinding ? commandBinding.keySeq : '';
+        }
         const actionDesc = Msgs.getMsg(actionMsg);
         actionsMenu.addMenuItem(
             actionDesc, shortcutName, '' /* menuItemBraille */,

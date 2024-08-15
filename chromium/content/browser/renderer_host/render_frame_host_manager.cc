@@ -132,10 +132,12 @@ bool ShouldSwapBrowsingInstancesForDynamicIsolation(
   // process if we left it in the current BrowsingInstance.  If so, there's no
   // need to swap BrowsingInstances.
   auto& current_isolation_context = current_instance->GetIsolationContext();
-  auto current_site_info = SiteInfo::Create(current_isolation_context,
-                                            destination_effective_url_info);
-  if (current_site_info.RequiresDedicatedProcess(current_isolation_context))
+  auto site_info_in_current_context = SiteInfo::Create(
+      current_isolation_context, destination_effective_url_info);
+  if (site_info_in_current_context.RequiresDedicatedProcess(
+          current_isolation_context)) {
     return false;
+  }
 
   // Finally, check whether `destination_effective_url_info` would require a
   // dedicated process if we were to swap to a fresh BrowsingInstance.  To check
@@ -143,9 +145,10 @@ bool ShouldSwapBrowsingInstancesForDynamicIsolation(
   // current_instance->GetIsolationContext().
   IsolationContext future_isolation_context(
       current_instance->GetBrowserContext());
-  auto future_site_info = SiteInfo::Create(future_isolation_context,
-                                           destination_effective_url_info);
-  return future_site_info.RequiresDedicatedProcess(future_isolation_context);
+  auto site_info_in_future_context = SiteInfo::Create(
+      future_isolation_context, destination_effective_url_info);
+  return site_info_in_future_context.RequiresDedicatedProcess(
+      future_isolation_context);
 }
 
 // Helper function to determine whether |dest_url_info| should be loaded in the
@@ -963,7 +966,11 @@ void RenderFrameHostManager::PrepareForCollectingPage(
     if (group->IsRelatedSiteInstanceGroup(it.second->site_instance_group())) {
       DCHECK(base::Contains(*render_view_hosts,
                             it.second->GetRenderViewHost()->GetSafeRef()));
-      (*proxy_hosts)[it.first] = std::move(it.second);
+      auto pair = proxy_hosts->insert({it.first, std::move(it.second)});
+      bool insertion_took_place = pair.second;
+      // There should be only one proxy for any given SiteInstanceGroup, so this
+      // should never replace an existing element.
+      CHECK(insertion_took_place);
     }
   }
 
@@ -1114,6 +1121,17 @@ void RenderFrameHostManager::UnloadOldFrame(
                 "bfcache_eligibility",
                 bfcache_eligibility.flattened_reasons.ToString());
     if (can_store) {
+      bool is_same_process =
+          (old_render_frame_host->GetProcess() ==
+           frame_tree_node_->current_frame_host()->GetProcess());
+      if (old_render_frame_host->GetSiteInstance()->IsSameSiteWithURL(
+              frame_tree_node_->current_url())) {
+        base::UmaHistogramBoolean("BackForwardCache.ProcessReuse.SameSite",
+                                  is_same_process);
+      } else {
+        base::UmaHistogramBoolean("BackForwardCache.ProcessReuse.CrossSite",
+                                  is_same_process);
+      }
       auto stored_page = CollectPage(std::move(old_render_frame_host));
       auto entry =
           std::make_unique<BackForwardCacheImpl::Entry>(std::move(stored_page));
@@ -1342,21 +1360,8 @@ void RenderFrameHostManager::DidCreateNavigationRequest(
   } else {
     BrowsingContextGroupSwap ignored_bcg_swap_info =
         BrowsingContextGroupSwap::CreateDefault();
-    std::string reason;
-    auto result =
-        GetFrameHostForNavigation(request, &ignored_bcg_swap_info, &reason);
+    auto result = GetFrameHostForNavigation(request, &ignored_bcg_swap_info);
     if (result.has_value()) {
-      if (frame_tree_node_->frame_tree().is_prerendering() &&
-          result.value() == speculative_render_frame_host_.get()) {
-        (*result)->SetCreationInfoForBug1425281(
-            render_frame_host_->GetSiteInstance()
-                ->GetSiteInfo()
-                .GetDebugString(),
-            speculative_render_frame_host_->GetSiteInstance()
-                ->GetSiteInfo()
-                .GetDebugString(),
-            reason, request->GetURL());
-      }
       DCHECK(result.value());
     } else if (result.error() ==
                GetFrameHostForNavigationFailed::kBlockedByPendingCommit) {
@@ -1368,8 +1373,44 @@ void RenderFrameHostManager::DidCreateNavigationRequest(
   }
 }
 
-void RenderFrameHostManager::PerformEarlyRenderFrameHostSwapIfNeeded(
+bool RenderFrameHostManager::ShouldPerformEarlySwapForNavigationTransition(
     NavigationRequest* request) {
+  if (!base::FeatureList::IsEnabled(
+          features::kEarlyDocumentSwapForBackForwardTransitions)) {
+    return false;
+  }
+
+  // Early swaps are allowed in outermost main frames only, as that's where
+  // a navigation transition may be shown.
+  if (!frame_tree_node_->IsOutermostMainFrame()) {
+    return false;
+  }
+
+  // Same-document navigations stay in the same RenderFrameHost and hence
+  // cannot do the early swap.
+  if (request->IsSameDocument()) {
+    return false;
+  }
+
+  // Only browser-initiated navigations are eligible for navigation transitions.
+  if (request->IsRendererInitiated()) {
+    return false;
+  }
+
+  // Check for back/forward history navigations.  These should have both the
+  // dest_site_instance() set from the NavigationEntry and have the back/forward
+  // page transition.  Note that this explicitly excludes reloads.
+  //
+  // TODO(alexmos, creis): For now, the early swap is done for all back/forward
+  // navigations.  In the future, there will be other APIs for deciding when to
+  // do it.
+  return request->dest_site_instance() &&
+         (request->GetPageTransition() & ui::PAGE_TRANSITION_FORWARD_BACK);
+}
+
+void RenderFrameHostManager::PerformEarlyRenderFrameHostSwapIfNeeded(
+    NavigationRequest* request,
+    bool is_called_after_did_start_navigation) {
   // The early swap is possible only when there's a speculative RenderFrameHost
   // to swap with the current one.
   if (!speculative_render_frame_host_) {
@@ -1388,32 +1429,54 @@ void RenderFrameHostManager::PerformEarlyRenderFrameHostSwapIfNeeded(
     return;
   }
 
-  // Currently, only non-live frames do the early swap.  This is possible in
-  // two cases: (1) if a frame's process dies (e.g., due to a crash or OOM),
-  // and (2) if we navigate a frame immediately after its creation, and the
-  // navigation cannot reuse the initial non-live RFH and must create a
-  // speculative RFH. The latter case is possible with WebUI and <webview>
-  // tags.
-  if (render_frame_host_->IsRenderFrameLive()) {
-    return;
-  }
-
-  // Skip the early swap if we explicitly do not want it when recovering from a
-  // crash.
-  if (ShouldSkipEarlyCommitPendingForCrashedFrame() &&
-      render_frame_host_->must_be_replaced()) {
-    return;
-  }
-
-  // Remember why the early swap is occurring for metrics. Note that we're
-  // being slightly imprecise here by using kCrashedFrame for
-  // must_be_replaced(), which includes all cases where a RenderFrameHost has
-  // had a process in the past but then lost it via RenderProcessGone, which
-  // also includes cases like OOM.
   using EarlySwapType = NavigationRequest::EarlyRenderFrameHostSwapType;
-  EarlySwapType early_swap_type = render_frame_host_->must_be_replaced()
-                                      ? EarlySwapType::kCrashedFrame
-                                      : EarlySwapType::kInitialFrame;
+  EarlySwapType early_swap_type = EarlySwapType::kNone;
+
+  // Currently, the early swap might be invoked in two places:
+  // - (Legacy timing) At the very beginning of navigation, as part of picking
+  //   the target RenderFrameHost via GetFrameHostForNavigation().
+  // - (New timing) After DidStartNavigation has been dispatched to observers
+  //   and WillStartRequest navigation throttle events have been processed.
+  //
+  // `is_called_after_did_start_navigation` determines which timing was used
+  // (legacy timing when false, new timing when true).  Currently, the legacy
+  // timing is used when doing early RenderFrameHost swap for initial and
+  // crashed frames, and the new timing is used for experimental early swaps for
+  // back/forward navigations. Eventually, we want to only have the new timing
+  // and to move all early swaps to happen after
+  // DidStartNavigation/WillStartRequest.  See crbug.com/1467011.
+  if (is_called_after_did_start_navigation) {
+    // Perform the early swap for navigations that will be subject to navigation
+    // transitions.
+    if (ShouldPerformEarlySwapForNavigationTransition(request)) {
+      early_swap_type = EarlySwapType::kNavigationTransition;
+    }
+  } else if (!render_frame_host_->IsRenderFrameLive()) {
+    // Currently, non-live frames do the early swap before reaching
+    // DidStartNavigation.  This is possible in two cases: (1) if a frame's
+    // process dies (e.g., due to a crash or OOM), and (2) if we navigate a
+    // frame immediately after its creation, and the navigation cannot reuse the
+    // initial non-live RFH and must create a speculative RFH.  For case (1),
+    // must_be_replaced() will always be true, but note that there's also an
+    // experimental feature that skips the early swap for case (1).  Case (2) is
+    // possible in cases like WebUI, <webview> tags, and dynamic isolation on
+    // Android.
+    if (render_frame_host_->must_be_replaced()) {
+      if (!ShouldSkipEarlyCommitPendingForCrashedFrame()) {
+        // Note that we're being slightly imprecise here by using
+        // kCrashedFrame for must_be_replaced(), which includes all cases
+        // where a RenderFrameHost has had a process in the past but then lost
+        // it via RenderProcessGone, which also includes cases like OOM.
+        early_swap_type = EarlySwapType::kCrashedFrame;
+      }
+    } else {
+      early_swap_type = EarlySwapType::kInitialFrame;
+    }
+  }
+
+  if (early_swap_type == EarlySwapType::kNone) {
+    return;
+  }
 
   // Now, proceed with the early swap. There's no reason to sit around with a
   // sad tab or a newly created RFH while we wait for the navigation to
@@ -1682,9 +1745,10 @@ RenderFrameHostManager::GetFrameHostForNavigation(
     request->SetAssociatedRFHType(
         NavigationRequest::AssociatedRenderFrameHostType::SPECULATIVE);
 
-    // TODO(crbug.com/1467011): Move the early swap to happen after
-    // DidStartNavigation.
-    PerformEarlyRenderFrameHostSwapIfNeeded(request);
+    // TODO(crbug.com/1467011): Move this early swap to happen after
+    // DidStartNavigation, together with the back/forward early swap.
+    PerformEarlyRenderFrameHostSwapIfNeeded(
+        request, /*is_called_after_did_start_navigation=*/false);
   }
 
   DCHECK(navigation_rfh &&
@@ -1849,7 +1913,8 @@ void RenderFrameHostManager::CreateWebUIForNavigationIfNeeded(
       // type if it will be reused.
       CHECK_EQ(render_frame_host_->web_ui_type(),
                WebUIControllerFactoryRegistry::GetInstance()->GetWebUIType(
-                   browser_context, request->common_params().url));
+                   browser_context, request->common_params().url))
+          << "WebUI type mismatch for " << request->common_params().url;
       render_frame_host_->web_ui()->RenderFrameReused(render_frame_host_.get());
     } else if (!render_frame_host_->web_ui()) {
       // It is possible to reuse a RenderFrameHost when going to a WebUI URL
@@ -2251,10 +2316,31 @@ RenderFrameHostManager::ShouldSwapBrowsingInstancesForNavigation(
       return BrowsingContextGroupSwap::CreateSecuritySwap();
     }
   } else {
-    // Force a swap if it's a Web UI URL.
+    // Force a swap if the current frame is not WebUI but the navigation is to a
+    // Web UI URL. Exclude the case where the navigation starts from an initial
+    // RenderFrameHost in an unassigned SiteInstance and unused process, since
+    // in that case the WebUI navigation can safely reuse them.
+    //
+    // Subtle: using both !has_committed_any_navigation() and
+    // is_initial_empty_document() to check for an initial RFH is intentional.
+    // has_committed_any_navigation() becomes true when the first navigation
+    // sends a CommitNavigation IPC, which avoids races where a WebUI navigation
+    // incorrectly tries to reuse an initial RFH while another navigation in it
+    // is pending commit. is_initial_empty_document() is additionally used to
+    // avoid reusing an initial RFH after crashes and after document.open().
+    // See https://crbug.com/1492076 and https://crbug.com/1485586.
     if (WebUIControllerFactoryRegistry::GetInstance()->UseWebUIForURL(
             browser_context, destination_effective_url)) {
-      return BrowsingContextGroupSwap::CreateSecuritySwap();
+      bool starts_from_initial_rfh =
+          render_frame_host_->GetProcess()->IsUnused() &&
+          !current_instance->HasSite() &&
+          !render_frame_host_->has_committed_any_navigation() &&
+          render_frame_host_->is_initial_empty_document();
+      if (!starts_from_initial_rfh ||
+          !base::FeatureList::IsEnabled(
+              features::kReuseInitialRenderFrameHostForWebUI)) {
+        return BrowsingContextGroupSwap::CreateSecuritySwap();
+      }
     }
   }
 
@@ -2375,10 +2461,9 @@ RenderFrameHostManager::ShouldProactivelySwapBrowsingInstance(
   if (render_frame_host_->HasTestDisabledProactiveBrowsingInstanceSwap())
     return BrowsingContextGroupSwap::CreateNoSwap(
         ShouldSwapBrowsingInstance::kNo_ProactiveSwapDisabled);
-  // We should only do proactive swap when either the flag is enabled, or if
-  // it's needed for the back-forward cache (and the bfcache flag is enabled).
-  if (!IsProactivelySwapBrowsingInstanceEnabled() &&
-      !IsBackForwardCacheEnabled()) {
+  // We should only do proactive swap if it's needed for
+  // the back-forward cache (and the bfcache flag is enabled).
+  if (!IsBackForwardCacheEnabled()) {
     return BrowsingContextGroupSwap::CreateNoSwap(
         ShouldSwapBrowsingInstance::kNo_ProactiveSwapDisabled);
   }
@@ -2460,29 +2545,6 @@ RenderFrameHostManager::ShouldProactivelySwapBrowsingInstance(
   }
 
   bool same_site = is_same_site.Get(*render_frame_host_, destination_url_info);
-  if (same_site) {
-    // If it's a same-site navigation, we should only swap if same-site
-    // ProactivelySwapBrowsingInstance is enabled, or if BackForwardCache
-    // is enabled and the current RFH is eligible for back/forward cache
-    // (checked later).
-    if (IsProactivelySwapBrowsingInstanceOnSameSiteNavigationEnabled()) {
-      return BrowsingContextGroupSwap::CreateProactiveSwap(
-          ShouldSwapBrowsingInstance::kYes_SameSiteProactiveSwap);
-    }
-    if (!IsBackForwardCacheEnabled()) {
-      return BrowsingContextGroupSwap::CreateNoSwap(
-          ShouldSwapBrowsingInstance::kNo_SameSiteNavigation);
-    }
-  }
-
-  if (IsProactivelySwapBrowsingInstanceEnabled()) {
-    return BrowsingContextGroupSwap::CreateProactiveSwap(
-        ShouldSwapBrowsingInstance::kYes_CrossSiteProactiveSwap);
-  }
-
-  // If BackForwardCache is enabled, swap BrowsingInstances only when the
-  // previous page can be stored in the back-forward cache.
-  DCHECK(IsBackForwardCacheEnabled());
 
   auto bfcache_eligibility = GetNavigationController()
                                  .GetBackForwardCache()
@@ -2655,8 +2717,6 @@ RenderFrameHostManager::GetSiteInstanceForNavigation(
   UpdateProcessReusePolicyForProcessPerSiteWithMainFrameThreshold(
       new_instance.get(), frame_tree_node_);
 
-  bool is_proactive_swap = (should_swap_result->type() ==
-                            BrowsingContextGroupSwapType::kProactiveSwap);
   bool is_same_site_proactive_swap =
       (should_swap_result->reason() ==
        ShouldSwapBrowsingInstance::kYes_SameSiteProactiveSwap);
@@ -2674,27 +2734,16 @@ RenderFrameHostManager::GetSiteInstanceForNavigation(
   RenderProcessHost* process_to_reuse = nullptr;
 
   // Process-reuse cases include:
-  // 1) When ProactivelySwapBrowsingInstance with process-reuse is explicitly
-  // enabled. In this case, we will try to reuse process on both cross-site and
-  // same-site navigations.
-  if (IsProactivelySwapBrowsingInstanceWithProcessReuseEnabled() &&
-      is_proactive_swap &&
-      (!current_instance->RequiresDedicatedProcess() ||
-       is_same_site_proactive_swap)) {
-    process_to_reuse = current_instance->GetProcess();
-  }
-
-  // 2) When BackForwardCache is enabled.
+  // 1) When BackForwardCache is enabled and we did a same-site proactive
+  // BrowsingInstance swap.
   // Note 1: When BackForwardCache is disabled, we typically reuse processes on
   // same-site navigations. This follows that behavior.
-  // Note 2: This doesn't cover cross-site navigations. Cross-site process-reuse
-  // is being experimented independently and is covered in path #1 above.
   // See crbug.com/1122974 for further details.
   if (IsBackForwardCacheEnabled() && is_same_site_proactive_swap) {
     process_to_reuse = current_instance->GetProcess();
   }
 
-  // 3) When we're doing a same-site history navigation with different
+  // 2) When we're doing a same-site history navigation with different
   // BrowsingInstances. We typically do not swap BrowsingInstances on same-site
   // navigations. This might indicate that the original navigation did a
   // proactive BrowsingInstance swap (and process-reuse) before, so we should
@@ -2703,7 +2752,6 @@ RenderFrameHostManager::GetSiteInstanceForNavigation(
   bool swapped_browsing_instance =
       !new_instance->IsRelatedSiteInstance(current_instance);
   bool is_same_site_proactive_swap_enabled =
-      IsProactivelySwapBrowsingInstanceOnSameSiteNavigationEnabled() ||
       IsBackForwardCacheEnabled();
   if (is_same_site_proactive_swap_enabled && is_history_navigation &&
       swapped_browsing_instance &&
@@ -2711,7 +2759,7 @@ RenderFrameHostManager::GetSiteInstanceForNavigation(
     process_to_reuse = current_instance->GetProcess();
   }
 
-  // 4) When we're swapping BrowsingInstances due to a COOP mismatch, and we
+  // 3) When we're swapping BrowsingInstances due to a COOP mismatch, and we
   // have an existing process that's suitable for the new SiteInstance. This
   // has two cases:
   //
@@ -3040,10 +3088,10 @@ RenderFrameHostManager::DetermineSiteInstanceForURL(
                                     SiteInstanceRelation::RELATED);
     }
 
-    // For extensions, Web UI URLs (such as the new tab page), and apps we do
-    // not want to use the `current_instance` if it has no site, since it
-    // will have a non-privileged RenderProcessHost. Create a new SiteInstance
-    // for this URL instead (with the correct process type).
+    // For extensions and apps we do not want to use the `current_instance` if
+    // it has no site, since it will have a non-privileged
+    // RenderProcessHost. Create a new SiteInstance for this URL instead (with
+    // the correct process type).
     if (!current_instance->IsSuitableForUrlInfo(dest_url_info)) {
       AppendReason(reason,
                    "DetermineSiteInstanceForURL / !current->HasSite / "

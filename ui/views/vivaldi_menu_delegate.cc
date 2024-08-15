@@ -32,4 +32,7 @@ void MenuDelegate::VivaldiGetContextMenuPosition(
     const gfx::Rect& monitor_bounds,
     const gfx::Rect& anchor_bounds) const {}
 
+
+
+
 }  // namespace views

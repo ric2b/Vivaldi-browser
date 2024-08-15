@@ -93,37 +93,44 @@ enum class ProfileSignout {
   // (eg. using history sync promo in recent tabs), but declined history sync
   // eventually.
   kUserDeclinedHistorySyncAfterDedicatedSignIn = 27,
+  // If the device lock is removed from an Android automotive device, the
+  // current account is automatically signed out.
+  kDeviceLockRemovedOnAutomotive = 28,
+
+  // User revoked Sync from the Settings by pressing "Turn off" in the "Sync and
+  // Google Services" page.
+  kRevokeSyncFromSettings = 29,
 
   // Keep this as the last enum.
-  kMaxValue = kUserDeclinedHistorySyncAfterDedicatedSignIn
+  kMaxValue = kRevokeSyncFromSettings
 };
 
-// Enum values used for use with "AutoLogin.Reverse" histograms.
+// Enum values used for use with "Signin.AllAccessPointActions" histograms.
 enum AccessPointAction {
   // The infobar was shown to the user.
-  HISTOGRAM_SHOWN,
+  HISTOGRAM_SHOWN = 0,
   // The user pressed the accept button to perform the suggested action.
-  HISTOGRAM_ACCEPTED,
+  HISTOGRAM_ACCEPTED = 1,
   // The user pressed the reject to turn off the feature.
-  HISTOGRAM_REJECTED,
+  // Deprecated: HISTOGRAM_REJECTED = 2,
   // The user pressed the X button to dismiss the infobar this time.
-  HISTOGRAM_DISMISSED,
+  // Deprecated: HISTOGRAM_DISMISSED = 3,
   // The user completely ignored the infobar.  Either they navigated away, or
   // they used the page as is.
-  HISTOGRAM_IGNORED,
+  // Deprecated: HISTOGRAM_IGNORED = 4,
   // The user clicked on the learn more link in the infobar.
-  HISTOGRAM_LEARN_MORE,
+  // Deprecated: HISTOGRAM_LEARN_MORE = 5,
   // The sync was started with default settings.
-  HISTOGRAM_WITH_DEFAULTS,
+  HISTOGRAM_WITH_DEFAULTS = 6,
   // The sync was started with advanced settings.
-  HISTOGRAM_WITH_ADVANCED,
+  HISTOGRAM_WITH_ADVANCED = 7,
   // The sync was started through auto-accept with default settings.
-  HISTOGRAM_AUTO_WITH_DEFAULTS,
+  // Deprecated: HISTOGRAM_AUTO_WITH_DEFAULTS = 8,
   // The sync was started through auto-accept with advanced settings.
-  HISTOGRAM_AUTO_WITH_ADVANCED,
+  // Deprecated: HISTOGRAM_AUTO_WITH_ADVANCED = 9,
   // The sync was aborted with an undo button.
-  HISTOGRAM_UNDO,
-  HISTOGRAM_MAX
+  // Deprecated: HISTOGRAM_UNDO = 10,
+  HISTOGRAM_MAX = 11
 };
 
 // Enum values which enumerates all access points where sign in could be
@@ -199,6 +206,12 @@ enum class AccessPoint : int {
   ACCESS_POINT_SET_UP_LIST = 51,
   // Access point for the local password migration warning on Android.
   ACCESS_POINT_PASSWORD_MIGRATION_WARNING_ANDROID = 52,
+  // Access point for the Save to Photos feature on iOS.
+  ACCESS_POINT_SAVE_TO_PHOTOS_IOS = 53,
+  // Access point for the Chrome Signin Intercept Bubble.
+  ACCESS_POINT_CHROME_SIGNIN_INTERCEPT_BUBBLE = 54,
+  // Restore primary account info in case it was lost.
+  ACCESS_POINT_RESTORE_PRIMARY_ACCOUNT_ON_PROFILE_LOAD = 55,
 
   // Add values above this line with a corresponding label to the
   // "SigninAccessPoint" enum in tools/metrics/histograms/enums.xml
@@ -300,8 +313,8 @@ enum class AccountConsistencyPromoAction : int {
   TIMEOUT_ERROR_SHOWN = 17,
   // The web sign-in is not shown because the user is already signed in.
   SUPPRESSED_ALREADY_SIGNED_IN = 18,
-  // AuthenticationFlow failed to sign-in.
-  SIGN_IN_FAILED = 19,
+  // AuthenticationFlow on iOS is cancelled or failed to sign-in.
+  IOS_AUTH_FLOW_CANCELLED_OR_FAILED = 19,
   // The promo was shown to the user, with no existing on-device account. (i.e.
   // the no-account menu was shown)
   SHOWN_WITH_NO_DEVICE_ACCOUNT = 20,
@@ -425,8 +438,10 @@ enum class SourceForRefreshTokenOperation {
   // kSupervisedUser_InitSync = 2,
   kInlineLoginHandler_Signin = 3,
   kPrimaryAccountManager_ClearAccount = 4,
-  kPrimaryAccountManager_LegacyPreDiceSigninFlow = 5,
-  kUserMenu_RemoveAccount = 6,
+  // DEPRECATED
+  // kPrimaryAccountManager_LegacyPreDiceSigninFlow = 5,
+  // DEPRECATED
+  // kUserMenu_RemoveAccount = 6,
   kUserMenu_SignOutAllAccounts = 7,
   kSettings_Signout = 8,
   kSettings_PauseSync = 9,
@@ -441,8 +456,9 @@ enum class SourceForRefreshTokenOperation {
   // DEPRECATED on 09/2021 (used for force migration to DICE)
   // kAccountReconcilor_RevokeTokensNotInCookies = 18,
   kLogoutTabHelper_PrimaryPageChanged = 19,
+  kForceSigninReauthWithDifferentAccount = 20,
 
-  kMaxValue = kLogoutTabHelper_PrimaryPageChanged,
+  kMaxValue = kForceSigninReauthWithDifferentAccount,
 };
 
 // Different types of reporting. This is used as a histogram suffix.

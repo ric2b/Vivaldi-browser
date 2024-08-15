@@ -278,9 +278,6 @@ ASH_EXPORT void ShowKeyboardShortcutViewer();
 // Opens Shortcut Customization.
 ASH_EXPORT void ShowShortcutCustomizationApp();
 
-// Shows stylus tools.
-ASH_EXPORT void ShowStylusTools();
-
 // Brings up task manager.
 ASH_EXPORT void ShowTaskManager();
 
@@ -382,6 +379,9 @@ ASH_EXPORT void ToggleResizeLockMenu();
 // Turns ChromeVox (spoken feedback) on or off.
 ASH_EXPORT void ToggleSpokenFeedback();
 
+// Toggles the stylus tools bubble on or off.
+ASH_EXPORT void ToggleStylusTools();
+
 // Turns the system tray on or off.
 ASH_EXPORT void ToggleSystemTrayBubble();
 
@@ -409,6 +409,9 @@ ASH_EXPORT void VolumeDown();
 
 // Volume mute.
 ASH_EXPORT void VolumeMute();
+
+// Volume mute toggle.
+ASH_EXPORT void VolumeMuteToggle();
 
 // Volume up.
 ASH_EXPORT void VolumeUp();

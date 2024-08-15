@@ -62,23 +62,27 @@ class DlpWarnDialog : public PolicyDialogBase {
   };
 
   DlpWarnDialog() = delete;
-  DlpWarnDialog(OnDlpRestrictionCheckedCallback callback,
-                DlpWarnDialogOptions options);
+  DlpWarnDialog(WarningCallback callback, DlpWarnDialogOptions options);
   DlpWarnDialog(const DlpWarnDialog& other) = delete;
   DlpWarnDialog& operator=(const DlpWarnDialog& other) = delete;
   ~DlpWarnDialog() override;
 
  private:
+  // Splits `callback` and assigns to accept and cancel callbacks.
+  void SetWarningCallback(WarningCallback callback);
+
   // PolicyDialogBase overrides:
   views::Label* AddTitle(const std::u16string& title) override;
   views::Label* AddMessage(const std::u16string& message) override;
   void MaybeAddConfidentialRows() override;
   std::u16string GetOkButton() override;
-  std::u16string GetCancelButton() override;
   std::u16string GetTitle() override;
   std::u16string GetMessage() override;
   void AddConfidentialRow(const gfx::ImageSkia& icon,
                           const std::u16string& title) override;
+
+  // Returns the Cancel button label.
+  std::u16string GetCancelButton();
 
   Restriction restriction_;
   absl::optional<std::u16string> application_title_;

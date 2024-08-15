@@ -96,13 +96,10 @@ void ExtensionsGuestView::ExtensionCanExecuteContentScript(
     auto* web_contents = content::WebContents::FromRenderFrameHost(rfh);
 
     if (web_contents) {
-      guest_view::GuestViewBase* guest = guest_view::GuestViewBase::FromWebContents(web_contents);
+      guest_view::GuestViewBase* guest =
+          guest_view::GuestViewBase::FromWebContents(web_contents);
       if (guest) {
-        GURL owner_site_url = guest->GetOwnerSiteURL();
-        if (owner_site_url.SchemeIs(kExtensionScheme) &&
-            owner_site_url.host_piece() == extension_id) {
-          allowScript = true;
-        }
+        allowScript = guest->owner_host() == extension_id;
       }
     }
   }

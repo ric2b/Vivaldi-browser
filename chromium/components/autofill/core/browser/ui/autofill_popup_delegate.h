@@ -19,11 +19,13 @@ namespace autofill {
 // of events by the controller.
 class AutofillPopupDelegate {
  public:
-  // Called when the Autofill popup is shown.
+  // Called when the Autofill popup is shown. If the popup supports sub-popups
+  // only the root one triggers it.
   virtual void OnPopupShown() = 0;
 
   // Called when the Autofill popup is hidden. This may also get called if the
   // popup was never shown at all, e.g. because of insufficient space.
+  // If the popup supports sub-popups only the root one triggers it.
   virtual void OnPopupHidden() = 0;
 
   // Called when the autofill `suggestion` has been temporarily selected (e.g.,
@@ -39,6 +41,12 @@ class AutofillPopupDelegate {
       const Suggestion& suggestion,
       int position,
       AutofillSuggestionTriggerSource trigger_source) = 0;
+
+  // Informs the delegate that the user chose to perform the button action
+  // associated with `suggestion`. Actions are currently implemented only on
+  // Desktop.
+  virtual void DidPerformButtonActionForSuggestion(
+      const Suggestion& suggestion) = 0;
 
   // Returns whether the given value can be deleted, and if true,
   // fills out |title| and |body|.

@@ -25,6 +25,14 @@
 
 namespace blink {
 
+constexpr char kKAnonKeyForAdComponentBidPrefix[] = "ComponentBid\n";
+constexpr char kKAnonKeyForAdBidPrefix[] = "AdBid\n";
+constexpr char kKAnonKeyForAdNameReportingBuyerAndSellerIdPrefix[] =
+    "BuyerAndSellerReportId\n";
+constexpr char kKAnonKeyForAdNameReportingBuyerReportIdPrefix[] =
+    "BuyerReportId\n";
+constexpr char kKAnonKeyForAdNameReportingNamePrefix[] = "NameReport\n";
+
 // Interest group used by FLEDGE auctions. Typemapped to
 // blink::mojom::InterestGroup, primarily so the typemap can include validity
 // checks on the origins of the provided URLs.
@@ -121,8 +129,9 @@ struct BLINK_COMMON_EXPORT InterestGroup {
   AuctionServerRequestFlags auction_server_request_flags;
 
   absl::optional<AdditionalBidKey> additional_bid_key;
+  absl::optional<url::Origin> aggregation_coordinator_origin;
 
-  static_assert(__LINE__ == 125, R"(
+  static_assert(__LINE__ == 134, R"(
 If modifying InterestGroup fields, make sure to also modify:
 
 * IsValid(), EstimateSize(), and IsEqualForTesting() in this class
@@ -135,9 +144,8 @@ If modifying InterestGroup fields, make sure to also modify:
 * interest_group_mojom_traits[.h/.cc/.test]
 * bidder_worklet.cc (to pass the InterestGroup to generateBid())
 
-In interest_group_storage.cc, add the new field and any respective indices,
-update `ClearExcessiveStorage()`, add a new database version and migration, and
-migration test.
+In interest_group_storage.cc, add the new field and any respective indices, add
+a new database version and migration, and migration test.
 
 If the new field is to be updatable via dailyUpdateUrl, also update *all* of
 these:
@@ -158,6 +166,7 @@ support the new field.
 
 // A unique identifier for interest groups.
 struct InterestGroupKey {
+  InterestGroupKey() = default;
   InterestGroupKey(url::Origin o, std::string n)
       : owner(std::move(o)), name(std::move(n)) {}
   inline bool operator<(const InterestGroupKey& other) const {

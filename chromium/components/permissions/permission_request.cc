@@ -4,6 +4,8 @@
 
 #include "components/permissions/permission_request.h"
 
+#include <string>
+
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "build/build_config.h"
@@ -219,14 +221,17 @@ std::u16string PermissionRequest::GetMessageTextFragment() const {
     case RequestType::kDiskQuota:
       message_id = IDS_REQUEST_QUOTA_PERMISSION_FRAGMENT;
       break;
-    case RequestType::kLocalFonts:
-      message_id = IDS_FONT_ACCESS_PERMISSION_FRAGMENT;
+    case RequestType::kFileSystemAccess:
+      message_id = IDS_SITE_SETTINGS_TYPE_FILE_SYSTEM_ACCESS_WRITE;
       break;
     case RequestType::kGeolocation:
       message_id = IDS_GEOLOCATION_INFOBAR_PERMISSION_FRAGMENT;
       break;
     case RequestType::kIdleDetection:
       message_id = IDS_IDLE_DETECTION_PERMISSION_FRAGMENT;
+      break;
+    case RequestType::kLocalFonts:
+      message_id = IDS_FONT_ACCESS_PERMISSION_FRAGMENT;
       break;
     case RequestType::kMicStream:
       message_id = IDS_MEDIA_CAPTURE_AUDIO_ONLY_PERMISSION_FRAGMENT;
@@ -304,6 +309,29 @@ ContentSettingsType PermissionRequest::GetContentSettingsType() const {
   if (type.has_value())
     return type.value();
   return ContentSettingsType::DEFAULT;
+}
+
+std::u16string PermissionRequest::GetPermissionNameTextFragment() const {
+  int message_id = 0;
+  switch (request_type()) {
+    case RequestType::kCameraStream:
+      message_id = IDS_CAMERA_PERMISSION_NAME_FRAGMENT;
+      break;
+    case RequestType::kMicStream:
+      message_id = IDS_MICROPHONE_PERMISSION_NAME_FRAGMENT;
+      break;
+    default:
+      NOTREACHED();
+      return std::u16string();
+  }
+  DCHECK_NE(0, message_id);
+  return l10n_util::GetStringUTF16(message_id);
+}
+
+void PermissionRequest::SetEmbeddedPermissionElementInitiatedForTesting(
+    bool embedded_permission_element_initiated) {
+  data_.embedded_permission_element_initiated =
+      embedded_permission_element_initiated;
 }
 
 }  // namespace permissions

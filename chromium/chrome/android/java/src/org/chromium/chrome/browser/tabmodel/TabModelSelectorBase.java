@@ -19,9 +19,6 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import java.util.ArrayList;
 import java.util.List;
 
-// Vivaldi
-import org.vivaldi.browser.tabmodel.VivaldiTabModelFilterProvider;
-
 /**
  * Implement methods shared across the different model implementations.
  */
@@ -38,7 +35,7 @@ public abstract class TabModelSelectorBase
      * This is a placeholder implementation intended to stub out TabModelFilterProvider before
      * native is ready.
      */
-    private TabModelFilterProvider mTabModelFilterProvider = new VivaldiTabModelFilterProvider();
+    private TabModelFilterProvider mTabModelFilterProvider = new TabModelFilterProvider();
 
     private final TabModelFilterFactory mTabModelFilterFactory;
     private int mActiveModelIndex;

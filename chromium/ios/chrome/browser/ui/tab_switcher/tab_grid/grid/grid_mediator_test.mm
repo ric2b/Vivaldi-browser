@@ -4,9 +4,10 @@
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_mediator_test.h"
 
+#import "base/containers/contains.h"
 #import "base/test/ios/wait_util.h"
 #import "components/unified_consent/pref_names.h"
-#import "ios/chrome/browser/commerce/shopping_persisted_data_tab_helper.h"
+#import "ios/chrome/browser/commerce/model/shopping_persisted_data_tab_helper.h"
 #import "ios/chrome/browser/history/history_service_factory.h"
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper_delegate.h"
@@ -24,11 +25,11 @@
 #import "ios/chrome/browser/signin/fake_authentication_service_delegate.h"
 #import "ios/chrome/browser/signin/fake_system_identity.h"
 #import "ios/chrome/browser/signin/fake_system_identity_manager.h"
-#import "ios/chrome/browser/snapshots/snapshot_browser_agent.h"
-#import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
-#import "ios/chrome/browser/sync/mock_sync_service_utils.h"
-#import "ios/chrome/browser/sync/sync_service_factory.h"
-#import "ios/chrome/browser/tabs/closing_web_state_observer_browser_agent.h"
+#import "ios/chrome/browser/snapshots/model/snapshot_browser_agent.h"
+#import "ios/chrome/browser/snapshots/model/snapshot_tab_helper.h"
+#import "ios/chrome/browser/sync/model/mock_sync_service_utils.h"
+#import "ios/chrome/browser/sync/model/sync_service_factory.h"
+#import "ios/chrome/browser/tabs/model/closing_web_state_observer_browser_agent.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/base_grid_mediator.h"
 #import "ios/chrome/browser/ui/tab_switcher/test/fake_tab_collection_consumer.h"
 #import "ios/chrome/browser/web/features.h"
@@ -114,7 +115,6 @@ void GridMediatorTestClass::SetUp() {
   auth_service_->SignIn(identity,
                         signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
 
-  NSMutableSet<NSString*>* identifiers = [[NSMutableSet alloc] init];
   browser_ = std::make_unique<TestBrowser>(
       browser_state_.get(),
       std::make_unique<TabHelperFakeWebStateListDelegate>());
@@ -129,20 +129,21 @@ void GridMediatorTestClass::SetUp() {
   // Insert some web states.
   std::vector<std::string> urls{"https://foo/bar", "https://car/tar",
                                 "https://hello/world"};
+  std::vector<web::WebStateID> identifiers;
   for (int i = 0; i < 3; i++) {
     auto web_state = CreateFakeWebStateWithURL(GURL(urls[i]));
-    NSString* identifier = web_state.get()->GetStableIdentifier();
+    web::WebStateID identifier = web_state.get()->GetUniqueIdentifier();
     // Tab IDs should be unique.
-    ASSERT_FALSE([identifiers containsObject:identifier]);
-    [identifiers addObject:identifier];
+    ASSERT_FALSE(base::Contains(identifiers, identifier));
+    identifiers.push_back(identifier);
     browser_->GetWebStateList()->InsertWebState(
         i, std::move(web_state), WebStateList::INSERT_FORCE_INDEX,
         WebStateOpener());
   }
-  original_identifiers_ = [identifiers copy];
+  original_identifiers_ = identifiers;
   browser_->GetWebStateList()->ActivateWebStateAt(1);
   original_selected_identifier_ =
-      browser_->GetWebStateList()->GetWebStateAt(1)->GetStableIdentifier();
+      browser_->GetWebStateList()->GetWebStateAt(1)->GetUniqueIdentifier();
   consumer_ = [[FakeTabCollectionConsumer alloc] init];
 }
 
@@ -181,7 +182,7 @@ bool GridMediatorTestClass::WaitForConsumerUpdates(size_t expected_count) {
   return WaitUntilConditionOrTimeout(
       kWaitForTabCollectionConsumerUpdateTimeout, ^{
         base::RunLoop().RunUntilIdle();
-        return expected_count == consumer_.items.count;
+        return expected_count == consumer_.items.size();
       });
 }
 

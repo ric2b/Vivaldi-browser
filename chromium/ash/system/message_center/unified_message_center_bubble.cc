@@ -22,6 +22,7 @@
 #include "ash/system/unified/unified_system_tray_bubble.h"
 #include "ash/system/unified/unified_system_tray_controller.h"
 #include "ash/system/unified/unified_system_tray_view.h"
+#include "ash/wm/window_properties.h"
 #include "base/i18n/rtl.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/layer.h"
@@ -87,8 +88,7 @@ UnifiedMessageCenterBubble::UnifiedMessageCenterBubble(UnifiedSystemTray* tray)
   bubble_view_ = new TrayBubbleView(init_params);
 
   notification_center_view_ =
-      bubble_view_->AddChildView(std::make_unique<NotificationCenterView>(
-          nullptr /* parent */, tray->model(), this));
+      bubble_view_->AddChildView(std::make_unique<NotificationCenterView>());
 
   time_to_click_recorder_ =
       std::make_unique<TimeToClickRecorder>(this, notification_center_view_);
@@ -101,11 +101,13 @@ void UnifiedMessageCenterBubble::ShowBubble() {
   bubble_widget_->AddObserver(this);
   TrayBackgroundView::InitializeBubbleAnimations(bubble_widget_);
 
+  aura::Window* bubble_window = bubble_widget_->GetNativeWindow();
+  bubble_window->SetProperty(kStayInOverviewOnActivationKey, true);
+
   // Stack system tray bubble's window above message center's window, such that
   // message center's shadow will not cover on system tray.
   tray_->GetBubbleWindowContainer()->StackChildAbove(
-      tray_->bubble()->GetBubbleWidget()->GetNativeWindow(),
-      bubble_widget_->GetNativeWindow());
+      tray_->bubble()->GetBubbleWidget()->GetNativeWindow(), bubble_window);
 
   if (features::IsSystemTrayShadowEnabled()) {
     // Create a shadow for bubble widget.
@@ -118,13 +120,13 @@ void UnifiedMessageCenterBubble::ShowBubble() {
   notification_center_view_->Init();
   UpdateBubbleState();
 
-  tray_->tray_event_filter()->AddBubble(this);
+  tray_event_filter_ = std::make_unique<TrayEventFilter>(
+      bubble_widget_, bubble_view_, /*tray_button=*/tray_);
   tray_->bubble()->unified_view()->AddObserver(this);
 }
 
 UnifiedMessageCenterBubble::~UnifiedMessageCenterBubble() {
   if (bubble_widget_) {
-    tray_->tray_event_filter()->RemoveBubble(this);
     if (tray_->bubble()->unified_view()) {
       tray_->bubble()->unified_view()->RemoveObserver(this);
     }
@@ -143,82 +145,13 @@ gfx::Rect UnifiedMessageCenterBubble::GetBoundsInScreen() const {
   return bubble_view_->GetBoundsInScreen();
 }
 
-void UnifiedMessageCenterBubble::CollapseMessageCenter() {
-  if (notification_center_view_->collapsed())
-    return;
+void UnifiedMessageCenterBubble::CollapseMessageCenter() {}
 
-  notification_center_view_->SetCollapsed(true /*animate*/);
-}
+void UnifiedMessageCenterBubble::ExpandMessageCenter() {}
 
-void UnifiedMessageCenterBubble::ExpandMessageCenter() {
-  if (!notification_center_view_->collapsed())
-    return;
+void UnifiedMessageCenterBubble::UpdatePosition() {}
 
-  if (tray_->IsShowingCalendarView())
-    tray_->bubble()->unified_system_tray_controller()->TransitionToMainView(
-        /*restore_focus=*/true);
-  notification_center_view_->SetExpanded();
-  UpdatePosition();
-  tray_->EnsureQuickSettingsCollapsed(true /*animate*/);
-}
-
-void UnifiedMessageCenterBubble::UpdatePosition() {
-  int available_height = CalculateAvailableHeight();
-
-  notification_center_view_->SetMaxHeight(available_height);
-  notification_center_view_->SetAvailableHeight(available_height);
-
-  if (!tray_->bubble())
-    return;
-
-  // Shelf bubbles need to be offset from the shelf, otherwise they will be
-  // flush with the shelf. The bounds can't be shifted via insets because this
-  // enlarges the layer bounds and this can break ARC notification rounded
-  // corners. Apply the offset to the anchor rect.
-  gfx::Rect anchor_rect = tray_->shelf()->GetSystemTrayAnchorRect();
-  gfx::Insets tray_bubble_insets =
-      GetTrayBubbleInsets(tray_->GetBubbleWindowContainer());
-
-  int offset;
-  switch (tray_->shelf()->alignment()) {
-    case ShelfAlignment::kLeft:
-      offset = tray_bubble_insets.left();
-      break;
-    case ShelfAlignment::kRight:
-      offset = -tray_bubble_insets.right();
-      break;
-    case ShelfAlignment::kBottom:
-    case ShelfAlignment::kBottomLocked:
-      if (base::i18n::IsRTL()) {
-        offset = tray_bubble_insets.left();
-        break;
-      }
-      offset = -tray_bubble_insets.right();
-      break;
-  }
-
-  anchor_rect.set_x(anchor_rect.x() + offset);
-  anchor_rect.set_y(anchor_rect.y() - tray_->bubble()->GetCurrentTrayHeight() -
-                    tray_bubble_insets.bottom() -
-                    kUnifiedMessageCenterBubbleSpacing);
-  bubble_view_->ChangeAnchorRect(anchor_rect);
-
-  notification_center_view_->UpdateNotificationBar();
-
-  if (shadow_) {
-    // When the last notification is removed, the content bounds of message
-    // center may become too small such which makes the shadow's bounds smaller
-    // than its blur region. To avoid this, we hide the shadow when the message
-    // center has no notifications.
-    shadow_->GetLayer()->SetVisible(
-        notification_center_view_->notification_list_view()
-            ->GetTotalNotificationCount());
-  }
-}
-
-void UnifiedMessageCenterBubble::FocusEntered(bool reverse) {
-  notification_center_view_->FocusEntered(reverse);
-}
+void UnifiedMessageCenterBubble::FocusEntered(bool reverse) {}
 
 bool UnifiedMessageCenterBubble::FocusOut(bool reverse) {
   return tray_->FocusQuickSettings(reverse);
@@ -234,7 +167,7 @@ bool UnifiedMessageCenterBubble::IsMessageCenterVisible() {
 }
 
 bool UnifiedMessageCenterBubble::IsMessageCenterCollapsed() {
-  return notification_center_view_->collapsed();
+  return false;
 }
 
 TrayBackgroundView* UnifiedMessageCenterBubble::GetTray() const {
@@ -255,6 +188,10 @@ std::u16string UnifiedMessageCenterBubble::GetAccessibleNameForBubble() {
 
 bool UnifiedMessageCenterBubble::ShouldEnableExtraKeyboardAccessibility() {
   return Shell::Get()->accessibility_controller()->spoken_feedback().enabled();
+}
+
+void UnifiedMessageCenterBubble::HideBubble(const TrayBubbleView* bubble_view) {
+  tray_->CloseBubble();
 }
 
 void UnifiedMessageCenterBubble::OnViewPreferredSizeChanged(
@@ -292,7 +229,6 @@ void UnifiedMessageCenterBubble::OnViewIsDeleting(views::View* observed_view) {
 
 void UnifiedMessageCenterBubble::OnWidgetDestroying(views::Widget* widget) {
   CHECK_EQ(bubble_widget_, widget);
-  tray_->tray_event_filter()->RemoveBubble(this);
   tray_->bubble()->unified_view()->RemoveObserver(this);
   notification_center_view_->RemoveObserver(this);
   bubble_widget_->RemoveObserver(this);
@@ -316,22 +252,7 @@ void UnifiedMessageCenterBubble::OnDisplayConfigurationChanged() {
   UpdateBubbleState();
 }
 
-void UnifiedMessageCenterBubble::UpdateBubbleState() {
-  if (CalculateAvailableHeight() < kMessageCenterCollapseThreshold &&
-      notification_center_view_->notification_list_view()
-          ->GetTotalNotificationCount()) {
-    if (tray_->IsQuickSettingsExplicitlyExpanded()) {
-      notification_center_view_->SetCollapsed(false /*animate*/);
-    } else {
-      notification_center_view_->SetExpanded();
-      tray_->EnsureQuickSettingsCollapsed(false /*animate*/);
-    }
-  } else if (notification_center_view_->collapsed()) {
-    notification_center_view_->SetExpanded();
-  }
-
-  UpdatePosition();
-}
+void UnifiedMessageCenterBubble::UpdateBubbleState() {}
 
 int UnifiedMessageCenterBubble::CalculateAvailableHeight() {
   // TODO(crbug/1311738): Temporary fix to prevent crashes in case the quick

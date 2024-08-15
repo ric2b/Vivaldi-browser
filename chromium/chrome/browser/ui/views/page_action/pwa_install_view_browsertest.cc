@@ -14,7 +14,6 @@
 #include "chrome/browser/banners/test_app_banner_manager_desktop.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/ui/browser_commands.h"
-#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
@@ -23,6 +22,7 @@
 #include "chrome/browser/ui/views/page_action/page_action_icon_view.h"
 #include "chrome/browser/ui/views/web_apps/pwa_confirmation_bubble_view.h"
 #include "chrome/browser/ui/web_applications/web_app_dialog_utils.h"
+#include "chrome/browser/ui/web_applications/web_app_dialogs.h"
 #include "chrome/browser/web_applications/install_bounce_metric.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
@@ -233,13 +233,13 @@ class PwaInstallViewBrowserTest : public extensions::ExtensionBrowserTest {
     app_banner_manager_->WaitForInstallableCheckTearDown();
   }
 
-  web_app::AppId ExecutePwaInstallIcon() {
-    chrome::SetAutoAcceptPWAInstallConfirmationForTesting(true);
+  webapps::AppId ExecutePwaInstallIcon() {
+    web_app::SetAutoAcceptPWAInstallConfirmationForTesting(true);
 
-    web_app::AppId app_id;
+    webapps::AppId app_id;
     base::RunLoop run_loop;
     web_app::SetInstalledCallbackForTesting(base::BindLambdaForTesting(
-        [&app_id, &run_loop](const web_app::AppId& installed_app_id,
+        [&app_id, &run_loop](const webapps::AppId& installed_app_id,
                              webapps::InstallResultCode code) {
           app_id = installed_app_id;
           run_loop.Quit();
@@ -249,12 +249,12 @@ class PwaInstallViewBrowserTest : public extensions::ExtensionBrowserTest {
 
     run_loop.Run();
 
-    chrome::SetAutoAcceptPWAInstallConfirmationForTesting(false);
+    web_app::SetAutoAcceptPWAInstallConfirmationForTesting(false);
 
     return app_id;
   }
 
-  void UninstallWebApp(const web_app::AppId& app_id) {
+  void UninstallWebApp(const webapps::AppId& app_id) {
     base::RunLoop run_loop;
     web_app::WebAppProvider::GetForTest(browser()->profile())
         ->scheduler()
@@ -279,7 +279,7 @@ class PwaInstallViewBrowserTest : public extensions::ExtensionBrowserTest {
 
     web_app::SetInstallBounceMetricTimeForTesting(test_time);
 
-    const web_app::AppId app_id = ExecutePwaInstallIcon();
+    const webapps::AppId app_id = ExecutePwaInstallIcon();
 
     web_app::SetInstallBounceMetricTimeForTesting(test_time + install_duration);
 
@@ -382,7 +382,7 @@ IN_PROC_BROWSER_TEST_F(PwaInstallViewBrowserTest,
                        PwaSetToOpenInTabIsInstallable) {
   bool installable = OpenTab(GetInstallableAppURL()).installable;
   ASSERT_TRUE(installable);
-  web_app::AppId app_id = ExecutePwaInstallIcon();
+  webapps::AppId app_id = ExecutePwaInstallIcon();
 
   // Change launch container to open in tab.
   web_app::WebAppProvider::GetForTest(browser()->profile())
@@ -588,7 +588,7 @@ IN_PROC_BROWSER_TEST_F(PwaInstallViewBrowserTest,
   GURL app_url = GetInstallableAppURL();
   bool installable = OpenTab(app_url).installable;
   ASSERT_TRUE(installable);
-  const web_app::AppId app_id = ExecutePwaInstallIcon();
+  const webapps::AppId app_id = ExecutePwaInstallIcon();
 
   // Use a new tab because installed app may have opened in new window.
   OpenTabResult result = OpenTab(app_url);

@@ -18,8 +18,7 @@
 #import "ios/chrome/browser/ui/bookmarks/bookmark_earl_grey_ui.h"
 #import "ios/chrome/browser/ui/settings/google_services/accounts_table_view_controller_constants.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_constants.h"
-#import "ios/chrome/browser/ui/settings/signin_settings_app_interface.h"
-#import "ios/chrome/grit/ios_chromium_strings.h"
+#import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
@@ -77,8 +76,6 @@ constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
   GREYAssertEqual(
       [ChromeEarlGrey numberOfSyncEntitiesWithType:syncer::BOOKMARKS], 0,
       @"No bookmarks should exist before tests start.");
-  // TODO(crbug.com/1450472): Remove when kHideSettingsSyncPromo is launched.
-  [SigninSettingsAppInterface setSettingsSigninPromoDisplayedCount:INT_MAX];
 }
 
 - (AppLaunchConfiguration)appConfigurationForTestCase {
@@ -99,6 +96,9 @@ constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
       // Sync can't be turned on anymore.
       [self isRunningTest:@selector(testSignOutFooterForSignInAndSyncUser)]) {
     config.features_disabled.push_back(
+        syncer::kReplaceSyncPromosWithSignInPromos);
+  } else {
+    config.features_enabled.push_back(
         syncer::kReplaceSyncPromosWithSignInPromos);
   }
 
@@ -132,6 +132,11 @@ constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
 // Tests that the Sync and Account Settings screen are correctly popped if the
 // signed in account is removed.
 - (void)testSignInPopUpAccountOnSyncSettings {
+  // TODO(crbug.com/1493677): Test fails on iPad.
+  if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_DISABLED(@"Fails on iPad.");
+  }
+
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
 
   // Sign In `identity`, then open the Sync Settings.
@@ -141,6 +146,7 @@ constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
   // Forget `fakeIdentity`, screens should be popped back to the Main Settings.
   [ChromeEarlGreyUI waitForAppToIdle];
   [SigninEarlGrey forgetFakeIdentity:fakeIdentity];
+  [ChromeEarlGreyUI waitForAppToIdle];
 
   [[EarlGrey selectElementWithMatcher:SettingsSignInRowMatcher()]
       assertWithMatcher:grey_sufficientlyVisible()];
@@ -154,7 +160,6 @@ constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
 // account is removed while the "Disconnect Account" dialog is up.
 - (void)testSignInPopUpAccountOnDisconnectAccount {
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
-  [SigninEarlGrey addFakeIdentity:fakeIdentity];
 
   // Sign In `fakeIdentity`, then open the Account Settings.
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
@@ -164,6 +169,7 @@ constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
   // Forget `fakeIdentity`, screens should be popped back to the Main Settings.
   [ChromeEarlGreyUI waitForAppToIdle];
   [SigninEarlGrey forgetFakeIdentity:fakeIdentity];
+  [ChromeEarlGreyUI waitForAppToIdle];
 
   [ChromeEarlGrey
       waitForSufficientlyVisibleElementWithMatcher:SettingsSignInRowMatcher()];
@@ -208,7 +214,16 @@ constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
   [self openAccountSettings];
 
   // Open MyGoogleUI.
-  [SigninEarlGreyUI openMyGoogleDialogWithFakeIdentity:fakeIdentity];
+  [[EarlGrey
+      selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabel(
+                                   fakeIdentity.userEmail)]
+      performAction:grey_tap()];
+  [[EarlGrey
+      selectElementWithMatcher:
+          chrome_test_util::ButtonWithAccessibilityLabel(
+              l10n_util::GetNSString(IDS_IOS_MANAGE_YOUR_GOOGLE_ACCOUNT_TITLE))]
+      performAction:grey_tap()];
+  [ChromeEarlGreyUI waitForAppToIdle];
 
   // Forget Identity.
   [SigninEarlGrey forgetFakeIdentity:fakeIdentity];
@@ -358,7 +373,6 @@ constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
 - (void)testSwitchingAccountsWithClearedData {
   FakeSystemIdentity* fakeIdentity1 = [FakeSystemIdentity fakeIdentity1];
   FakeSystemIdentity* fakeIdentity2 = [FakeSystemIdentity fakeIdentity2];
-  [SigninEarlGrey addFakeIdentity:fakeIdentity1];
   [SigninEarlGrey addFakeIdentity:fakeIdentity2];
 
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity1];
@@ -433,7 +447,6 @@ constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
 // account while the dialog is still opened.
 - (void)testRemovePrimaryAccountWhileSignOutConfirmation {
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
-  [SigninEarlGrey addFakeIdentity:fakeIdentity];
 
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
 
@@ -461,7 +474,6 @@ constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
 - (void)testRemoveSecondaryAccountWhileSignOutConfirmation {
   FakeSystemIdentity* fakeIdentity1 = [FakeSystemIdentity fakeIdentity1];
   FakeSystemIdentity* fakeIdentity2 = [FakeSystemIdentity fakeIdentity2];
-  [SigninEarlGrey addFakeIdentity:fakeIdentity1];
   [SigninEarlGrey addFakeIdentity:fakeIdentity2];
 
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity1];
@@ -492,7 +504,6 @@ constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
 // in appConfigurationForTestCase.
 - (void)MAYBE_testInterruptDuringSignOutConfirmation {
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
-  [SigninEarlGrey addFakeIdentity:fakeIdentity];
 
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
 
@@ -516,7 +527,6 @@ constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
 // not affect the user's sign-in state.
 - (void)testDismissSignOutConfirmationTwice {
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
-  [SigninEarlGrey addFakeIdentity:fakeIdentity];
 
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
 
@@ -550,7 +560,6 @@ constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
 // Tests to sign out with a non managed account without syncing.
 - (void)testSignOutWithNonManagedAccountFromNoneSyncingAccount {
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
-  [SigninEarlGrey addFakeIdentity:fakeIdentity];
 
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity enableSync:NO];
 
@@ -594,7 +603,6 @@ constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
 // Tests that the sign-out footer is not shown when the user is not syncing.
 - (void)testSignOutFooterForSignInOnlyUser {
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
-  [SigninEarlGrey addFakeIdentity:fakeIdentity];
 
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity enableSync:NO];
   [self openAccountSettings];
@@ -609,7 +617,6 @@ constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
 // Tests that the sign-out footer is shown when the user is syncing.
 - (void)testSignOutFooterForSignInAndSyncUser {
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
-  [SigninEarlGrey addFakeIdentity:fakeIdentity];
 
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity enableSync:YES];
   [self openAccountSettings];

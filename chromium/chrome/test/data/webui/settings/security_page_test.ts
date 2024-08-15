@@ -6,20 +6,16 @@
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {SafeBrowsingSetting, SettingsSecurityPageElement} from 'chrome://settings/lazy_load.js';
-import {MetricsBrowserProxyImpl, PrivacyElementInteractions, PrivacyPageBrowserProxyImpl, Router, routes, SafeBrowsingInteractions, SecureDnsMode, SettingsToggleButtonElement} from 'chrome://settings/settings.js';
-// <if expr="chrome_root_store_supported">
-import {OpenWindowProxyImpl} from 'chrome://settings/settings.js';
-// </if>
+import {HatsBrowserProxyImpl, CrSettingsPrefs, MetricsBrowserProxyImpl, OpenWindowProxyImpl, PrivacyElementInteractions, PrivacyPageBrowserProxyImpl, Router, routes, SafeBrowsingInteractions, SecureDnsMode, SecurityPageInteraction, SettingsPrefsElement, SettingsToggleButtonElement} from 'chrome://settings/settings.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {isChildVisible} from 'chrome://webui-test/test_util.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
+import {TestHatsBrowserProxy} from './test_hats_browser_proxy.js';
 import {TestMetricsBrowserProxy} from './test_metrics_browser_proxy.js';
 
-// <if expr="chrome_root_store_supported">
 import {TestOpenWindowProxy} from 'chrome://webui-test/test_open_window_proxy.js';
 
-// </if>
 import {TestPrivacyPageBrowserProxy} from './test_privacy_page_browser_proxy.js';
 
 // clang-format on
@@ -48,9 +44,7 @@ suite('Main', function() {
   let testMetricsBrowserProxy: TestMetricsBrowserProxy;
   let testPrivacyBrowserProxy: TestPrivacyPageBrowserProxy;
   let page: SettingsSecurityPageElement;
-  // <if expr="chrome_root_store_supported">
   let openWindowProxy: TestOpenWindowProxy;
-  // </if>
 
   suiteSetup(function() {
     loadTimeData.overrideValues({
@@ -64,10 +58,8 @@ suite('Main', function() {
     MetricsBrowserProxyImpl.setInstance(testMetricsBrowserProxy);
     testPrivacyBrowserProxy = new TestPrivacyPageBrowserProxy();
     PrivacyPageBrowserProxyImpl.setInstance(testPrivacyBrowserProxy);
-    // <if expr="chrome_root_store_supported">
     openWindowProxy = new TestOpenWindowProxy();
     OpenWindowProxyImpl.setInstance(openWindowProxy);
-    // </if>
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
     page = document.createElement('settings-security-page');
     page.prefs = pagePrefs();
@@ -89,7 +81,6 @@ suite('Main', function() {
   });
   // </if>
 
-  // <if expr="chrome_root_store_supported">
   test('ChromeRootStorePage', async function() {
     const row =
         page.shadowRoot!.querySelector<HTMLElement>('#chromeCertificates');
@@ -98,7 +89,6 @@ suite('Main', function() {
     const url = await openWindowProxy.whenCalled('openUrl');
     assertEquals(url, loadTimeData.getString('chromeRootStoreHelpCenterURL'));
   });
-  // </if>
 
   // <if expr="not chromeos_lacros">
   // TODO(crbug.com/1148302): This class directly calls
@@ -152,6 +142,49 @@ suite('Main', function() {
         'prefs.generated.https_first_mode_enabled.userControlDisabled', true);
     flush();
     assertEquals(lockedSubLabel, toggle.subLabel);
+  });
+});
+
+suite('SecurityPageHappinessTrackingSurveys', function() {
+  let testHatsBrowserProxy: TestHatsBrowserProxy;
+  let settingsPrefs: SettingsPrefsElement;
+  let page: SettingsSecurityPageElement;
+
+  suiteSetup(function() {
+    settingsPrefs = document.createElement('settings-prefs');
+    return CrSettingsPrefs.initialized;
+  });
+
+  setup(function() {
+    testHatsBrowserProxy = new TestHatsBrowserProxy();
+    HatsBrowserProxyImpl.setInstance(testHatsBrowserProxy);
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    page = document.createElement('settings-security-page');
+    page.prefs = settingsPrefs.prefs;
+    document.body.appendChild(page);
+    return flushTasks();
+  });
+
+  teardown(function() {
+    page.remove();
+    Router.getInstance().navigateTo(routes.BASIC);
+  });
+
+  test('SecurityPageRadioButtonTriggerTest', async function() {
+    page.$.safeBrowsingEnhanced.click();
+    const args = await testHatsBrowserProxy.whenCalled(
+        'securityPageInteractionOccurred');
+    assertEquals(SecurityPageInteraction.RADIO_BUTTON_ENHANCED_CLICK, args[0]);
+    assertEquals(SafeBrowsingSetting.STANDARD, args[1]);
+  });
+
+  test('SecurityPageExpandButtonTriggerTest', async function() {
+    const radioButton = page.$.safeBrowsingEnhanced;
+    radioButton.$.expandButton.click();
+    const args = await testHatsBrowserProxy.whenCalled(
+        'securityPageInteractionOccurred');
+    assertEquals(SecurityPageInteraction.EXPAND_BUTTON_ENHANCED_CLICK, args[0]);
+    assertEquals(SafeBrowsingSetting.ENHANCED, args[1]);
   });
 });
 
@@ -274,9 +307,7 @@ suite('SafeBrowsing', function() {
   let testMetricsBrowserProxy: TestMetricsBrowserProxy;
   let testPrivacyBrowserProxy: TestPrivacyPageBrowserProxy;
   let page: SettingsSecurityPageElement;
-  // <if expr="chrome_root_store_supported">
   let openWindowProxy: TestOpenWindowProxy;
-  // </if>
 
   function setUpPage() {
     page = document.createElement('settings-security-page');
@@ -296,10 +327,8 @@ suite('SafeBrowsing', function() {
     MetricsBrowserProxyImpl.setInstance(testMetricsBrowserProxy);
     testPrivacyBrowserProxy = new TestPrivacyPageBrowserProxy();
     PrivacyPageBrowserProxyImpl.setInstance(testPrivacyBrowserProxy);
-    // <if expr="chrome_root_store_supported">
     openWindowProxy = new TestOpenWindowProxy();
     OpenWindowProxyImpl.setInstance(openWindowProxy);
-    // </if>
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
     setUpPage();
   });
@@ -769,24 +798,9 @@ suite('SafeBrowsing', function() {
     assertTrue(page.$.safeBrowsingStandard.expanded);
   });
 
-  test('enhancedProtectionExpandedIfEsbCollapseDisabled', function() {
-    // Enhanced protection should be pre-expanded if the param is set to
-    // enhanced and enableEsbCollapse is false.
-    loadTimeData.overrideValues({enableEsbCollapse: false});
-    Router.getInstance().navigateTo(
-        routes.SECURITY,
-        /* dynamicParams= */ new URLSearchParams('q=enhanced'));
-    assertEquals(
-        page.prefs.generated.safe_browsing.value, SafeBrowsingSetting.STANDARD);
-    assertTrue(page.$.safeBrowsingEnhanced.expanded);
-    assertFalse(page.$.safeBrowsingStandard.expanded);
-  });
-
-  test('enhancedProtectionCollapsedIfEsbCollapseEnabled', function() {
+  test('enhancedProtectionCollapsedIfParamIsEnhanced', function() {
     // Enhanced protection should be collapsed if the param is set to
-    // enhanced and enableEsbCollapse is true.
-    loadTimeData.overrideValues({enableEsbCollapse: true});
-
+    // enhanced.
     Router.getInstance().navigateTo(
         routes.SECURITY,
         /* dynamicParams= */ new URLSearchParams('q=enhanced'));

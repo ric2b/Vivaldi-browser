@@ -87,8 +87,8 @@ void UpdateIconKey(apps::AppServiceProxy& proxy, const std::string& app_id) {
   apps::AppPtr app = std::make_unique<apps::App>(app_type, app_id);
   app->icon_key = std::move(*icon_key);
   apps.push_back(std::move(app));
-  proxy.AppRegistryCache().OnApps(std::move(apps), apps::AppType::kUnknown,
-                                  false /* should_notify_initialized */);
+  proxy.OnApps(std::move(apps), apps::AppType::kUnknown,
+               false /* should_notify_initialized */);
 }
 
 }  // namespace
@@ -338,7 +338,7 @@ TEST_F(AppSearchProviderTest, FetchInternalApp) {
 }
 
 TEST_F(AppSearchProviderTest, WebApp) {
-  const web_app::AppId app_id = web_app::test::InstallDummyWebApp(
+  const webapps::AppId app_id = web_app::test::InstallDummyWebApp(
       testing_profile(), kWebAppName, GURL(kWebAppUrl));
 
   // Allow async callbacks to run.

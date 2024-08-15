@@ -8,6 +8,11 @@
 #include <vector>
 
 #include "base/barrier_closure.h"
+#include "base/base_paths.h"
+#include "base/files/file_enumerator.h"
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
+#include "base/path_service.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "components/ad_blocker/adblock_known_sources_handler.h"
@@ -19,6 +24,23 @@
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace adblock_filter {
+
+namespace {
+void DeleteLeakedCompilationResult() {
+  // Webkit fails to delete intermediary compilation results if the browser is
+  // shut down while compilation takes place. We clean up for it here.
+  base::FilePath temp_dir;
+  if (!base::PathService::Get(base::DIR_TEMP, &temp_dir))
+    return;
+  base::FileEnumerator enumerator(temp_dir, false, base::FileEnumerator::FILES,
+                                  FILE_PATH_LITERAL("ContentRuleList*"));
+
+  for (base::FilePath path = enumerator.Next(); !path.empty();
+       path = enumerator.Next()) {
+    base::DeleteFile(path);
+  }
+}
+}  // namespace
 
 struct RuleServiceImpl::LoadData {
   std::array<std::unique_ptr<AdBlockerContentRuleListProvider>, kRuleGroupCount>
@@ -60,7 +82,7 @@ void RuleServiceImpl::Load() {
   LoadData* load_data_ptr = load_data.get();
 
   auto on_loading_done = base::BarrierClosure(
-      kRuleGroupCount + 1,
+      kRuleGroupCount + 2,
       base::BindOnce(&RuleServiceImpl::OnStateLoaded,
                      weak_ptr_factory_.GetWeakPtr(), std::move(load_data)));
 
@@ -72,6 +94,11 @@ void RuleServiceImpl::Load() {
             base::BindRepeating(&RuleServiceImpl::OnDoneApplyingRules,
                                 weak_ptr_factory_.GetWeakPtr(), group));
   }
+
+  base::ThreadPool::PostTaskAndReply(
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(&DeleteLeakedCompilationResult),
+      base::BindOnce(on_loading_done));
 
   state_store_->Load(base::BindOnce(
       [](base::RepeatingClosure on_loading_done, LoadData* load_data,
@@ -91,6 +118,20 @@ void RuleServiceImpl::Shutdown() {
     state_store_->OnRuleServiceShutdown();
     rule_manager_->RemoveObserver(this);
   }
+}
+
+void RuleServiceImpl::SetIncognitoBrowserState(
+    web::BrowserState* browser_state) {
+  incognito_browser_state_ = browser_state;
+  if (is_loaded_) {
+    for (auto group :
+         {RuleGroup::kTrackingRules, RuleGroup::kAdBlockingRules}) {
+      organized_rules_manager_[static_cast<size_t>(group)]
+          ->SetIncognitoBrowserState(browser_state);
+    }
+  }
+
+  content_injection_handler_->SetIncognitoBrowserState(browser_state);
 }
 
 bool RuleServiceImpl::IsRuleGroupEnabled(RuleGroup group) const {
@@ -149,6 +190,9 @@ void RuleServiceImpl::OnStateLoaded(std::unique_ptr<LoadData> load_data) {
         base::BindRepeating(&RuleServiceImpl::OnStartApplyingRules,
                             base::Unretained(this), group),
         file_task_runner_);
+
+    organized_rules_manager_[static_cast<size_t>(group)]
+        ->SetIncognitoBrowserState(incognito_browser_state_);
   }
 
   is_loaded_ = true;

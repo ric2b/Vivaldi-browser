@@ -26,9 +26,9 @@
 #import "components/sync/service/sync_service.h"
 #import "components/sync/service/sync_user_settings.h"
 #import "ios/chrome/browser/net/crurl.h"
-#import "ios/chrome/browser/settings/sync/utils/account_error_ui_info.h"
-#import "ios/chrome/browser/settings/sync/utils/identity_error_util.h"
-#import "ios/chrome/browser/settings/sync/utils/sync_util.h"
+#import "ios/chrome/browser/settings/model/sync/utils/account_error_ui_info.h"
+#import "ios/chrome/browser/settings/model/sync/utils/identity_error_util.h"
+#import "ios/chrome/browser/settings/model/sync/utils/sync_util.h"
 #import "ios/chrome/browser/shared/ui/list_model/list_model.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_detail_icon_item.h"
@@ -43,9 +43,9 @@
 #import "ios/chrome/browser/signin/chrome_account_manager_service.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service_observer_bridge.h"
 #import "ios/chrome/browser/signin/constants.h"
-#import "ios/chrome/browser/sync/enterprise_utils.h"
-#import "ios/chrome/browser/sync/sync_observer_bridge.h"
-#import "ios/chrome/browser/sync/sync_setup_service.h"
+#import "ios/chrome/browser/sync/model/enterprise_utils.h"
+#import "ios/chrome/browser/sync/model/sync_observer_bridge.h"
+#import "ios/chrome/browser/sync/model/sync_setup_service.h"
 #import "ios/chrome/browser/ui/authentication/cells/table_view_central_account_item.h"
 #import "ios/chrome/browser/ui/authentication/history_sync/history_sync_utils.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_image_detail_text_item.h"
@@ -56,7 +56,7 @@
 #import "ios/chrome/browser/ui/settings/google_services/sync_error_settings_command_handler.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/table_view/table_view_cells_constants.h"
-#import "ios/chrome/grit/ios_chromium_strings.h"
+#import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "url/gurl.h"
@@ -194,14 +194,17 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
 - (void)autofillAlertConfirmed:(BOOL)value {
   _syncService->GetUserSettings()->SetSelectedType(
       syncer::UserSelectableType::kAutofill, value);
-  // When the auto fill data type is updated, the autocomplete wallet
-  // should be updated too. Autocomplete wallet should not be enabled
-  // when auto fill data type disabled. This behaviour not be
-  // implemented in the UI code. This code can be removed once
-  // either of crbug.com/937234 (move logic to infra layers) or
-  // crbug.com/1435431 (remove the coupling) is fixed.
-  _syncService->GetUserSettings()->SetSelectedType(
-      syncer::UserSelectableType::kPayments, value);
+  if (!base::FeatureList::IsEnabled(
+          syncer::kSyncDecoupleAddressPaymentSettings)) {
+    // When the auto fill data type is updated, the autocomplete wallet
+    // should be updated too. Autocomplete wallet should not be enabled
+    // when auto fill data type disabled. This behaviour not be
+    // implemented in the UI code. This code can be removed once
+    // either of crbug.com/937234 (move logic to infra layers) or
+    // crbug.com/1435431 (remove the coupling) is fixed.
+    _syncService->GetUserSettings()->SetSelectedType(
+        syncer::UserSelectableType::kPayments, value);
+  }
 }
 
 #pragma mark - Loads sync data type section
@@ -316,17 +319,18 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
         // It's possible that the sync everything pref remains true when a
         // policy change doesn't allow to sync everthing anymore. Fix that here.
         BOOL isSyncingEverything =
-            self.syncSetupService->IsSyncEverythingEnabled();
+            _syncService->GetUserSettings()->IsSyncEverythingEnabled();
         BOOL canSyncEverything = self.allItemsAreSynceable;
         if (isSyncingEverything && !canSyncEverything) {
-          self.syncSetupService->SetSyncEverythingEnabled(NO);
+          _syncService->GetUserSettings()->SetSelectedTypes(
+              false, _syncService->GetUserSettings()->GetSelectedTypes());
         }
         return;
       }
 
       BOOL shouldSyncEverythingBeEditable = !self.disabledBecauseOfSyncError;
       BOOL shouldSyncEverythingItemBeOn =
-          self.syncSetupService->IsSyncEverythingEnabled();
+          _syncService->GetUserSettings()->IsSyncEverythingEnabled();
       SyncSwitchItem* syncEverythingItem =
           base::apple::ObjCCastStrict<SyncSwitchItem>(self.syncEverythingItem);
       BOOL needsUpdate =
@@ -376,14 +380,16 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
     syncer::UserSelectableType dataType =
         static_cast<syncer::UserSelectableType>(syncSwitchItem.dataType);
     BOOL isDataTypeSynced =
-        self.syncSetupService->IsDataTypePreferred(dataType);
+        _syncService->GetUserSettings()->GetSelectedTypes().Has(dataType);
     BOOL isEnabled = self.shouldSyncDataItemEnabled &&
                      ![self isManagedSyncSettingsDataType:dataType];
 
     // kPayments can only be selected if kAutofill is also selected.
     // TODO(crbug.com/1435431): Remove this coupling.
-    if (dataType == syncer::UserSelectableType::kPayments &&
-        !self.syncSetupService->IsDataTypePreferred(
+    if (!base::FeatureList::IsEnabled(
+            syncer::kSyncDecoupleAddressPaymentSettings) &&
+        dataType == syncer::UserSelectableType::kPayments &&
+        !_syncService->GetUserSettings()->GetSelectedTypes().Has(
             syncer::UserSelectableType::kAutofill)) {
       isEnabled = false;
     }
@@ -395,10 +401,11 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
       // cases they may not, e.g. if one of them is disabled by policy. In that
       // case, show the toggle as on if at least one of them is enabled. The
       // toggle should reflect the value of the non-disabled type.
-      isDataTypeSynced = self.syncSetupService->IsDataTypePreferred(
-                             syncer::UserSelectableType::kHistory) ||
-                         self.syncSetupService->IsDataTypePreferred(
-                             syncer::UserSelectableType::kTabs);
+      isDataTypeSynced =
+          _syncService->GetUserSettings()->GetSelectedTypes().Has(
+              syncer::UserSelectableType::kHistory) ||
+          _syncService->GetUserSettings()->GetSelectedTypes().Has(
+              syncer::UserSelectableType::kTabs);
       isEnabled = self.shouldSyncDataItemEnabled &&
                   (![self isManagedSyncSettingsDataType:
                               syncer::UserSelectableType::kHistory] ||
@@ -579,7 +586,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   TableViewModel* model = self.consumer.tableViewModel;
   NSInteger syncDataTypeSectionIndex =
       [model sectionForSectionIdentifier:SyncDataTypeSectionIdentifier];
-  DCHECK_NE(NSNotFound, syncDataTypeSectionIndex);
+  CHECK_NE(NSNotFound, syncDataTypeSectionIndex);
   [model insertSectionWithIdentifier:SignOutSectionIdentifier
                              atIndex:syncDataTypeSectionIndex + 1];
   TableViewTextItem* item =
@@ -654,7 +661,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
           ? [model
                 sectionForSectionIdentifier:AdvancedSettingsSectionIdentifier]
           : [model sectionForSectionIdentifier:SyncDataTypeSectionIdentifier];
-  DCHECK_NE(NSNotFound, previousSection);
+  CHECK_NE(NSNotFound, previousSection);
   [model insertSectionWithIdentifier:SignOutSectionIdentifier
                              atIndex:previousSection + 1];
 
@@ -738,6 +745,8 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   item.image = CustomSymbolWithPointSize(kCloudAndArrowUpSymbol,
                                          kBatchUploadSymbolPointSize);
   item.imageViewTintColor = [UIColor colorNamed:kBlueColor];
+  item.accessibilityIdentifier =
+      kBatchUploadRecommendationItemAccessibilityIdentifier;
   return item;
 }
 
@@ -931,7 +940,21 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   DCHECK_NE(itemType, 0);
   DCHECK_NE(textStringID, 0);
   DCHECK(accessibilityIdentifier);
-  if (![self isManagedSyncSettingsDataType:dataType]) {
+
+  BOOL isToggleEnabled = ![self isManagedSyncSettingsDataType:dataType];
+  if (self.syncAccountState == SyncSettingsAccountState::kSignedIn &&
+      dataType == syncer::UserSelectableType::kHistory) {
+    // kHistory toggle represents both kHistory and kTabs in this case.
+    // kHistory and kTabs should usually have the same value, but in some
+    // cases they may not, e.g. if one of them is disabled by policy. In that
+    // case, show the toggle as on if at least one of them is enabled. The
+    // toggle should reflect the value of the non-disabled type.
+    isToggleEnabled =
+        ![self isManagedSyncSettingsDataType:syncer::UserSelectableType::
+                                                 kHistory] ||
+        ![self isManagedSyncSettingsDataType:syncer::UserSelectableType::kTabs];
+  }
+  if (isToggleEnabled) {
     SyncSwitchItem* switchItem = [[SyncSwitchItem alloc] initWithType:itemType];
     switchItem.text = GetNSString(textStringID);
     switchItem.dataType = static_cast<NSInteger>(dataType);
@@ -977,7 +1000,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
       return !self.disabledBecauseOfSyncError;
     case SyncSettingsAccountState::kSyncing:
     case SyncSettingsAccountState::kAdvancedInitialSyncSetup:
-      return (!self.syncSetupService->IsSyncEverythingEnabled() ||
+      return (!_syncService->GetUserSettings()->IsSyncEverythingEnabled() ||
               !self.allItemsAreSynceable) &&
              !self.disabledBecauseOfSyncError;
   }
@@ -1009,11 +1032,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
 - (SyncSettingsAccountState)syncAccountState {
   // As the manage sync settings mediator is running, the sync account state
   // does not change except only when the user signs out of their account.
-  //  The TransportState::PAUSED can show up temporarily if a signout is
-  //  triggered from another device.
-  if (_syncService->GetAccountInfo().IsEmpty() ||
-      _syncService->GetTransportState() ==
-          syncer::SyncService::TransportState::PAUSED) {
+  if (_syncService->GetAccountInfo().IsEmpty()) {
     return SyncSettingsAccountState::kSignedOut;
   }
   return _initialAccountState;
@@ -1086,6 +1105,12 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   }
 }
 
+- (void)onChromeAccountManagerServiceShutdown:
+    (ChromeAccountManagerService*)accountManagerService {
+  // TODO(crbug.com/1489595): Remove `[self disconnect]`.
+  [self disconnect];
+}
+
 #pragma mark - ManageSyncSettingsServiceDelegate
 
 - (void)toggleSwitchItem:(TableViewItem*)item withValue:(BOOL)value {
@@ -1116,7 +1141,8 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
           return;
         }
 
-        self.syncSetupService->SetSyncEverythingEnabled(value);
+        _syncService->GetUserSettings()->SetSelectedTypes(
+            value, _syncService->GetUserSettings()->GetSelectedTypes());
         break;
       case HistoryDataTypeItemType: {
         DCHECK(syncSwitchItem);
@@ -1156,7 +1182,9 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
 
         _syncService->GetUserSettings()->SetSelectedType(dataType, value);
 
-        if (dataType == syncer::UserSelectableType::kAutofill) {
+        if (!base::FeatureList::IsEnabled(
+                syncer::kSyncDecoupleAddressPaymentSettings) &&
+            dataType == syncer::UserSelectableType::kAutofill) {
           // When the auto fill data type is updated, the autocomplete wallet
           // should be updated too. Autocomplete wallet should not be enabled
           // when auto fill data type disabled. This behaviour not be
@@ -1303,13 +1331,13 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
 
       // Also override the title to be more accurate, if only passwords are
       // being encrypted.
-      if (!self.syncSetupService->IsEncryptEverythingEnabled()) {
+      if (!_syncService->GetUserSettings()->IsEncryptEverythingEnabled()) {
         syncErrorItem.text = GetNSString(IDS_IOS_SYNC_PASSWORDS_ERROR_TITLE);
       }
       break;
     case SyncTrustedVaultRecoverabilityDegradedErrorItemType:
       syncErrorItem.detailText = GetNSString(
-          self.syncSetupService->IsEncryptEverythingEnabled()
+          _syncService->GetUserSettings()->IsEncryptEverythingEnabled()
               ? IDS_IOS_GOOGLE_SERVICES_SETTINGS_SYNC_FIX_RECOVERABILITY_DEGRADED_FOR_EVERYTHING
               : IDS_IOS_GOOGLE_SERVICES_SETTINGS_SYNC_FIX_RECOVERABILITY_DEGRADED_FOR_PASSWORDS);
 
@@ -1409,6 +1437,14 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
     // updating it's items.
     errorSectionAlreadyExists = NO;
     [self removeSyncErrorsSection:notifyConsumer];
+  }
+
+  if (self.syncAccountState == SyncSettingsAccountState::kSignedIn &&
+      GetAccountErrorUIInfo(_syncService) == nil) {
+    // In some transient states like in SyncService::TransportState::PAUSED,
+    // GetAccountErrorUIInfo returns nil and thus will not be able to fetch the
+    // current error data. In this case, do not update/add the error item.
+    return;
   }
 
   // Create the new sync error item.

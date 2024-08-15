@@ -11,6 +11,7 @@
 #include <shellapi.h>
 #include <shlobj.h>
 #include <windows.h>
+#include <winhttp.h>
 #include <wrl/client.h>
 
 #include <algorithm>
@@ -35,6 +36,7 @@
 #include "base/memory/free_deleter.h"
 #include "base/path_service.h"
 #include "base/process/kill.h"
+#include "base/process/launch.h"
 #include "base/process/process.h"
 #include "base/process/process_iterator.h"
 #include "base/ranges/algorithm.h"
@@ -294,7 +296,7 @@ std::wstring GetAppCohortKey(const std::string& app_id) {
 }
 
 std::wstring GetAppCohortKey(const std::wstring& app_id) {
-  return base::StrCat({COHORT_KEY, app_id});
+  return base::StrCat({GetAppClientStateKey(app_id), L"\\", kRegKeyCohort});
 }
 
 std::wstring GetAppCommandKey(const std::wstring& app_id,
@@ -449,8 +451,10 @@ std::string GetUACState() {
                         is_user_non_elevated_admin.value());
   }
 
-  base::StringAppendF(&s, "IsUACOn: %d, IsElevatedWithUACOn: %d", IsUACOn(),
+  base::StringAppendF(&s, "IsUACOn: %d, IsElevatedWithUACOn: %d, ", IsUACOn(),
                       IsElevatedWithUACOn());
+
+  base::StringAppendF(&s, "LUA: %d", base::win::UserAccountControlIsEnabled());
   return s;
 }
 
@@ -758,6 +762,11 @@ bool EnableProcessHeapMetadataProtection() {
 }
 
 absl::optional<base::ScopedTempDir> CreateSecureTempDir() {
+  // This function uses `base::CreateNewTempDirectory` and then a
+  // `base::ScopedTempDir` as owner, instead of just
+  // `base::ScopedTempDir::CreateUniqueTempDir`, because the former allows
+  // setting a more recognizable prefix of `COMPANY_SHORTNAME_STRING` on the
+  // temp directory.
   base::FilePath temp_dir;
   if (!base::CreateNewTempDirectory(FILE_PATH_LITERAL(COMPANY_SHORTNAME_STRING),
                                     &temp_dir)) {
@@ -1049,6 +1058,51 @@ absl::optional<base::FilePath> GetInstallDirectoryX86(UpdaterScope scope) {
   }
   return install_dir.AppendASCII(COMPANY_SHORTNAME_STRING)
       .AppendASCII(PRODUCT_FULLNAME_STRING);
+}
+
+absl::optional<std::wstring> GetRegKeyContents(const std::wstring& reg_key) {
+  base::FilePath system_path;
+  if (!base::PathService::Get(base::DIR_SYSTEM, &system_path)) {
+    return {};
+  }
+
+  std::string output;
+  if (!base::GetAppOutput(
+          base::StrCat({system_path.Append(L"reg.exe").value(), L" query ",
+                        base::CommandLine::QuoteForCommandLineToArgvW(reg_key),
+                        L" /s"}),
+          &output)) {
+    return {};
+  }
+  return base::ASCIIToWide(output);
+}
+
+std::wstring GetTextForSystemError(int error) {
+  if (static_cast<HRESULT>(error & 0xFFFF0000) ==
+      MAKE_HRESULT(SEVERITY_ERROR, FACILITY_WIN32, 0)) {
+    error = HRESULT_CODE(error);
+  }
+
+  HMODULE source = nullptr;
+  DWORD format_options =
+      FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+      FORMAT_MESSAGE_IGNORE_INSERTS | FORMAT_MESSAGE_MAX_WIDTH_MASK;
+
+  if (error >= WINHTTP_ERROR_BASE && error <= WINHTTP_ERROR_LAST) {
+    source = ::GetModuleHandle(_T("winhttp.dll"));
+    if (source) {
+      format_options |= FORMAT_MESSAGE_FROM_HMODULE;
+    }
+  }
+  wchar_t* system_allocated_buffer = nullptr;
+  const DWORD chars_written = ::FormatMessage(
+      format_options, source, error, 0,
+      reinterpret_cast<wchar_t*>(&system_allocated_buffer), 0, nullptr);
+  base::win::ScopedLocalAllocTyped<wchar_t> free_buffer(
+      system_allocated_buffer);
+  return chars_written > 0
+             ? system_allocated_buffer
+             : base::ASCIIToWide(base::StringPrintf("%#x", error));
 }
 
 }  // namespace updater

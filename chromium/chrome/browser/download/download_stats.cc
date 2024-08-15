@@ -40,11 +40,6 @@ void RecordDownloadOpen(ChromeDownloadOpenMethod open_method,
                                 download::DownloadContent::MAX);
 }
 
-void RecordDownloadOpenButtonPressed(bool is_download_completed) {
-  base::UmaHistogramBoolean("Download.OpenButtonPressed.IsDownloadCompleted",
-                            is_download_completed);
-}
-
 void RecordDatabaseAvailability(bool is_available) {
   base::UmaHistogramBoolean("Download.Database.IsAvailable", is_available);
 }
@@ -82,11 +77,6 @@ void RecordDownloadShelfDragInfo(DownloadDragInfo drag_info) {
                                 DownloadDragInfo::COUNT);
 }
 
-void RecordDownloadBubbleDragInfo(DownloadDragInfo drag_info) {
-  base::UmaHistogramEnumeration("Download.Bubble.DragInfo", drag_info,
-                                DownloadDragInfo::COUNT);
-}
-
 void RecordDownloadStartPerProfileType(Profile* profile) {
   base::UmaHistogramEnumeration(
       "Download.Start.PerProfileType",
@@ -105,9 +95,6 @@ DownloadShelfContextMenuAction DownloadCommandToShelfAction(
     DownloadCommands::Command download_command,
     bool clicked) {
   switch (download_command) {
-    case DownloadCommands::Command::MAX:
-      NOTREACHED();
-      return DownloadShelfContextMenuAction::kMaxValue;
     case DownloadCommands::Command::SHOW_IN_FOLDER:
       return clicked ? DownloadShelfContextMenuAction::kShowInFolderClicked
                      : DownloadShelfContextMenuAction::kShowInFolderEnabled;
@@ -154,7 +141,7 @@ DownloadShelfContextMenuAction DownloadCommandToShelfAction(
     case DownloadCommands::Command::DEEP_SCAN:
       return clicked ? DownloadShelfContextMenuAction::kDeepScanClicked
                      : DownloadShelfContextMenuAction::kDeepScanEnabled;
-    case DownloadCommands::Command::BYPASS_DEEP_SCANNING:
+    case DownloadCommands::BYPASS_DEEP_SCANNING_AND_OPEN:
       return clicked
                  ? DownloadShelfContextMenuAction::kBypassDeepScanningClicked
                  : DownloadShelfContextMenuAction::kBypassDeepScanningEnabled;
@@ -166,6 +153,7 @@ DownloadShelfContextMenuAction DownloadCommandToShelfAction(
     case DownloadCommands::Command::CANCEL_DEEP_SCAN:
     case DownloadCommands::Command::LEARN_MORE_DOWNLOAD_BLOCKED:
     case DownloadCommands::Command::OPEN_SAFE_BROWSING_SETTING:
+    case DownloadCommands::Command::BYPASS_DEEP_SCANNING:
       NOTREACHED();
       return DownloadShelfContextMenuAction::kNotReached;
   }

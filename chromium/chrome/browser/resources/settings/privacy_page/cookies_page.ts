@@ -21,11 +21,12 @@ import './do_not_track_toggle.js';
 import '/shared/settings/controls/settings_radio_group.js';
 
 import {SettingsRadioGroupElement} from '/shared/settings/controls/settings_radio_group.js';
+import {SettingsToggleButtonElement} from '/shared/settings/controls/settings_toggle_button.js';
 import {PrefsMixin} from 'chrome://resources/cr_components/settings_prefs/prefs_mixin.js';
 import {CrToastElement} from 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
-import {assert} from 'chrome://resources/js/assert_ts.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -133,6 +134,18 @@ export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
         value: () => !loadTimeData.getBoolean(
             'isPerformanceSettingsPreloadingSubpageEnabled'),
       },
+
+      is3pcdRedesignEnabled_: {
+        type: Boolean,
+        value: () =>
+            loadTimeData.getBoolean('is3pcdCookieSettingsRedesignEnabled'),
+      },
+
+      showTrackingProtectionRollbackNotice_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean(
+            'showTrackingProtectionSettingsRollbackNotice'),
+      },
     };
   }
 
@@ -150,6 +163,7 @@ export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
   private enableFirstPartySetsUI_: boolean;
   private isPrivacySandboxSettings4_: boolean;
   private showPreloadingSubpage_: boolean;
+  private is3pcdRedesignEnabled_: boolean;
 
   private metricsBrowserProxy_: MetricsBrowserProxy =
       MetricsBrowserProxyImpl.getInstance();
@@ -162,9 +176,15 @@ export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
       assert(toFocus);
       focusWithoutInk(toFocus);
     };
-    this.focusConfig.set(
-        `${routes.SITE_SETTINGS_ALL.path}_${routes.COOKIES.path}`,
-        selectSiteDataLinkRow);
+    if (this.is3pcdRedesignEnabled_) {
+      this.focusConfig.set(
+          `${routes.SITE_SETTINGS_ALL.path}_${routes.TRACKING_PROTECTION.path}`,
+          selectSiteDataLinkRow);
+    } else {
+      this.focusConfig.set(
+          `${routes.SITE_SETTINGS_ALL.path}_${routes.COOKIES.path}`,
+          selectSiteDataLinkRow);
+    }
 
     if (this.showPreloadingSubpage_) {
       const selectPreloadingLinkRow = () => {
@@ -180,7 +200,11 @@ export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
   }
 
   override currentRouteChanged(route: Route) {
-    if (route !== routes.COOKIES) {
+    if (this.is3pcdRedesignEnabled_) {
+      if (route !== routes.TRACKING_PROTECTION) {
+        this.$.toast.hide();
+      }
+    } else if (route !== routes.COOKIES) {
       this.$.toast.hide();
     }
   }
@@ -251,6 +275,16 @@ export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
           controlledBy: sessionOnlyPref.controlledBy,
           controlledByName: sessionOnlyPref.controlledByName,
         }));
+  }
+
+  private onBlockAll3pcToggleChanged_(event: Event) {
+    this.metricsBrowserProxy_.recordSettingsPageHistogram(
+        PrivacyElementInteractions.BLOCK_ALL_THIRD_PARTY_COOKIES);
+    const target = event.target as SettingsToggleButtonElement;
+    if (target.checked) {
+      this.metricsBrowserProxy_.recordAction(
+          'Settings.PrivacySandbox.Block3PCookies');
+    }
   }
 
   private onCookieControlsModeChanged_() {
@@ -370,7 +404,7 @@ export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
 
     // NetworkPredictionOptions.WIFI_ONLY_DEPRECATED is treated the same as
     // NetworkPredictionOptions.STANDARD.
-    // See chrome/browser/prefetch/prefetch_prefs.h.
+    // See chrome/browser/preloading/preloading_prefs.h.
     return this.i18n('preloadingPageStandardPreloadingTitle');
   }
 
@@ -392,6 +426,14 @@ export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
 
     return this.getPref('generated.cookie_primary_setting').value !==
         CookiePrimarySetting.BLOCK_THIRD_PARTY;
+  }
+
+  private isPrivacySandboxSettings4CookieSettingsEnabled_(): boolean {
+    return this.isPrivacySandboxSettings4_ && !this.is3pcdRedesignEnabled_;
+  }
+
+  private isPrivacySandboxSettings3CookieSettingsEnabled_(): boolean {
+    return !this.isPrivacySandboxSettings4_ && !this.is3pcdRedesignEnabled_;
   }
 }
 

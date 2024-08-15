@@ -26,9 +26,6 @@ class NetworkStateHandler;
 class COMPONENT_EXPORT(CHROMEOS_NETWORK) ApnMigrator
     : public NetworkStateHandlerObserver {
  public:
-  // Notification ID prefix prepended to the cellular network GUID.
-  static const char kShowApnConfigurationDisabledNotificationIdPrefix[];
-
   ApnMigrator(
       ManagedCellularPrefHandler* managed_cellular_pref_handler,
       ManagedNetworkConfigurationHandler* managed_network_configuration_handler,
@@ -71,6 +68,14 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) ApnMigrator
                               const std::string& service_path,
                               absl::optional<base::Value::Dict> properties,
                               absl::optional<std::string> error);
+
+  void CreateCustomApn(const std::string& iccid,
+                       const std::string& network_guid,
+                       chromeos::network_config::mojom::ApnPropertiesPtr apn,
+                       absl::optional<base::OnceCallback<void(bool)>>
+                           success_callback = absl::nullopt);
+
+  void CompleteMigrationAttempt(const std::string& iccid, bool success);
 
   NetworkMetadataStore* GetNetworkMetadataStore();
 

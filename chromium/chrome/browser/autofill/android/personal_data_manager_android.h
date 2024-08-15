@@ -66,6 +66,11 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& unused_obj);
 
+  // Determines the country for for the newly created address profile.
+  base::android::ScopedJavaLocalRef<jstring> GetDefaultCountryCodeForNewAddress(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& unused_obj) const;
+
   // Users based in unsupported countries and profiles with a country value set
   // to an unsupported country are not eligible for account storage. This
   // function determines if the `country_code` is eligible.
@@ -112,31 +117,16 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
       jboolean include_country_in_label);
 
   // Returns the shipping label of the given profile for PaymentRequest. This
-  // label does not contain the full name or the email address. All other fields
-  // are included in the label.
+  // label does not contain the full name or the email address but will include
+  // the country depending on the value of |include_country_in_label|. All other
+  // fields are included in the label.
   base::android::ScopedJavaLocalRef<jstring>
-  GetShippingAddressLabelWithCountryForPaymentRequest(
+  GetShippingAddressLabelForPaymentRequest(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& unused_obj,
-      const base::android::JavaParamRef<jobject>& jprofile);
-
-  // Returns the shipping label of the given profile for PaymentRequest. This
-  // label does not contain the full name, the email address or the country. All
-  // other fields are included in the label.
-  base::android::ScopedJavaLocalRef<jstring>
-  GetShippingAddressLabelWithoutCountryForPaymentRequest(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& unused_obj,
-      const base::android::JavaParamRef<jobject>& jprofile);
-
-  // Returns the billing label of the given profile for PaymentRequest. This
-  // label does not contain the company name, the phone number, the country or
-  // the email address. All other fields are included in the label.
-  base::android::ScopedJavaLocalRef<jstring>
-  GetBillingAddressLabelForPaymentRequest(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& unused_obj,
-      const base::android::JavaParamRef<jobject>& jprofile);
+      const base::android::JavaParamRef<jobject>& jprofile,
+      const base::android::JavaParamRef<jstring>& jguid,
+      bool include_country_in_label);
 
   // These functions act on local credit cards.
   // --------------------
@@ -210,6 +200,9 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
   void RemoveByGUID(JNIEnv* env,
                     const base::android::JavaParamRef<jobject>& unused_obj,
                     const base::android::JavaParamRef<jstring>& jguid);
+
+  // Delete all local credit cards.
+  void DeleteAllLocalCreditCards(JNIEnv* env);
 
   // Resets the given unmasked card back to the masked state.
   void ClearUnmaskedCache(
@@ -353,16 +346,6 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
       bool include_organization_in_label,
       bool include_country_in_label,
       std::vector<AutofillProfile*> profiles);
-
-  // Returns the shipping label of the given profile for PaymentRequest. This
-  // label does not contain the full name or the email address but will include
-  // the country depending on the value of |include_country_in_label|. All other
-  // fields are included in the label.
-  base::android::ScopedJavaLocalRef<jstring>
-  GetShippingAddressLabelForPaymentRequest(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& jprofile,
-      bool inlude_country_in_label);
 
   // Pointer to the java counterpart.
   JavaObjectWeakGlobalRef weak_java_obj_;

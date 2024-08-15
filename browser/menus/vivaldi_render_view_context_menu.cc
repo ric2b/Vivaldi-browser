@@ -28,13 +28,14 @@
 #include "chrome/browser/extensions/context_menu_matcher.h"
 #include "chrome/browser/renderer_context_menu/context_menu_content_type_factory.h"
 #include "chrome/browser/renderer_context_menu/spelling_options_submenu_observer.h"
-#include "chrome/browser/sync/send_tab_to_self_sync_service_factory.h"
 #include "chrome/browser/send_tab_to_self/send_tab_to_self_util.h"
+#include "chrome/browser/sync/send_tab_to_self_sync_service_factory.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/qrcode_generator/qrcode_generator_bubble_controller.h"
 #include "chrome/common/url_constants.h"
 #include "chromium/content/public/browser/navigation_entry.h"
+#include "components/notes/notes_submenu_observer.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
@@ -50,7 +51,6 @@
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "media/base/media_switches.h"
-#include "notes/notes_submenu_observer.h"
 #include "third_party/blink/public/common/context_menu_data/context_menu_data.h"
 #include "third_party/blink/public/common/context_menu_data/edit_flags.h"
 #include "ui/base/emoji/emoji_panel_helper.h"
@@ -79,16 +79,18 @@ bool QRCodeGeneratorEnabled(content::WebContents* web_contents) {
                            IsGeneratorAvailable(entry->GetURL());
 }
 
-bool DoesInputFieldTypeSupportEmoji(
-    blink::mojom::ContextMenuDataInputFieldType text_input_type) {
-  // Disable emoji for input types that definitely do not support emoji.
-  switch (text_input_type) {
-    case blink::mojom::ContextMenuDataInputFieldType::kNumber:
-    case blink::mojom::ContextMenuDataInputFieldType::kTelephone:
-    case blink::mojom::ContextMenuDataInputFieldType::kOther:
-      return false;
-    default:
+bool DoesFormControlTypeSupportEmoji(
+    blink::mojom::FormControlType form_control_type) {
+  switch (form_control_type) {
+    case blink::mojom::FormControlType::kInputEmail:
+    case blink::mojom::FormControlType::kInputPassword:
+    case blink::mojom::FormControlType::kInputSearch:
+    case blink::mojom::FormControlType::kInputText:
+    case blink::mojom::FormControlType::kInputUrl:
+    case blink::mojom::FormControlType::kTextArea:
       return true;
+    default:
+      return false;
   }
 }
 
@@ -225,7 +227,7 @@ bool VivaldiRenderViewContextMenu::SupportsInspectTools() {
 
 void VivaldiRenderViewContextMenu::InitMenu() {
   using namespace extensions::vivaldi;
-  Browser* browser = FindBrowserWithWebContents(embedder_web_contents_);
+  Browser* browser = FindBrowserWithTab(embedder_web_contents_);
   if (!browser) {
     // This happens when we request a menu from the UI document (edit fields).
     VivaldiBrowserWindow* window =
@@ -296,17 +298,19 @@ void VivaldiRenderViewContextMenu::InitMenu() {
           ContextMenuContentType::ITEM_GROUP_ALL_EXTENSION) ||
       content_type->SupportsGroup(
           ContextMenuContentType::ITEM_GROUP_CURRENT_EXTENSION);
-  //request.support.sendpagetodevices = send_tab_to_self::ShouldOfferFeature(
-  //    browser->tab_strip_model()->GetActiveWebContents());
-  // Link support was fully removed with ch 102. Keeping the code around to see
-  // if we can reintroduce it.
-  //request.support.sendlinktodevices = send_tab_to_self::ShouldOfferToShareUrl(
-  //    SendTabToSelfSyncServiceFactory::GetForProfile(browser->profile()),
-  //    params_.link_url);
+  // request.support.sendpagetodevices = send_tab_to_self::ShouldOfferFeature(
+  //     browser->tab_strip_model()->GetActiveWebContents());
+  //  Link support was fully removed with ch 102. Keeping the code around to see
+  //  if we can reintroduce it.
+  // request.support.sendlinktodevices =
+  // send_tab_to_self::ShouldOfferToShareUrl(
+  //     SendTabToSelfSyncServiceFactory::GetForProfile(browser->profile()),
+  //     params_.link_url);
   request.support.qrcode = QRCodeGeneratorEnabled(embedder_web_contents_);
-  request.support.emoji =
-      DoesInputFieldTypeSupportEmoji(params_.input_field_type) &&
-      ui::IsEmojiPanelSupported();
+  request.support.emoji = params_.form_control_type.has_value()
+    ? DoesFormControlTypeSupportEmoji(*params_.form_control_type) &&
+        ui::IsEmojiPanelSupported()
+    : false;
   request.support.editoptions =
       params_.misspelled_word.empty() &&
       !content_type->SupportsGroup(
@@ -770,16 +774,19 @@ VivaldiRenderViewContextMenu::HandleCommand(int command_id, int event_flags) {
     // not be executed without vivaldi specific handling.
     case IDC_CONTENT_CONTEXT_OPENLINKNEWTAB:
       OpenURLWithExtraHeaders(params_.link_url, GetDocumentURL(params_),
+                              url::Origin(),
                               GetNewTabDispostion(source_web_contents_),
                               ui::PAGE_TRANSITION_LINK, "", true);
       break;
     case IDC_VIV_OPEN_LINK_BACKGROUND_TAB:
       OpenURLWithExtraHeaders(params_.link_url, GetDocumentURL(params_),
+                              url::Origin(),
                               WindowOpenDisposition::NEW_BACKGROUND_TAB,
                               ui::PAGE_TRANSITION_LINK, "", true);
       break;
     case IDC_VIV_OPEN_LINK_CURRENT_TAB:
       OpenURLWithExtraHeaders(params_.link_url, GetDocumentURL(params_),
+                              url::Origin(),
                               WindowOpenDisposition::CURRENT_TAB,
                               ui::PAGE_TRANSITION_LINK, "", true);
       break;
@@ -791,31 +798,38 @@ VivaldiRenderViewContextMenu::HandleCommand(int command_id, int event_flags) {
       // will only open a new incognito window if the window is a
       // non-incognito window and otherwise a new tab in the existing window.
       RenderViewContextMenu::ExecuteCommand(
-        embedder_web_contents_->GetBrowserContext()->IsOffTheRecord() ?
-            IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW : command_id, event_flags);
+          embedder_web_contents_->GetBrowserContext()->IsOffTheRecord()
+              ? IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW
+              : command_id,
+          event_flags);
       break;
     case IDC_VIV_OPEN_IMAGE_CURRENT_TAB:
       OpenURLWithExtraHeaders(params_.src_url, GetDocumentURL(params_),
+                              url::Origin(),
                               WindowOpenDisposition::CURRENT_TAB,
                               ui::PAGE_TRANSITION_LINK, "", true);
       break;
     case IDC_VIV_OPEN_IMAGE_NEW_FOREGROUND_TAB:
       OpenURLWithExtraHeaders(params_.src_url, GetDocumentURL(params_),
+                              url::Origin(),
                               GetNewTabDispostion(GetWebContents()),
                               ui::PAGE_TRANSITION_LINK, "", true);
       break;
     case IDC_VIV_OPEN_IMAGE_NEW_BACKGROUND_TAB:
       OpenURLWithExtraHeaders(params_.src_url, GetDocumentURL(params_),
+                              url::Origin(),
                               WindowOpenDisposition::NEW_BACKGROUND_TAB,
                               ui::PAGE_TRANSITION_LINK, "", true);
       break;
     case IDC_VIV_OPEN_IMAGE_NEW_WINDOW:
       OpenURLWithExtraHeaders(params_.src_url, GetDocumentURL(params_),
+                              url::Origin(),
                               WindowOpenDisposition::NEW_WINDOW,
                               ui::PAGE_TRANSITION_LINK, "", true);
       break;
     case IDC_VIV_OPEN_IMAGE_NEW_PRIVATE_WINDOW:
       OpenURLWithExtraHeaders(params_.src_url, GetDocumentURL(params_),
+                              url::Origin(),
                               WindowOpenDisposition::OFF_THE_RECORD,
                               ui::PAGE_TRANSITION_LINK, "", true);
       break;
@@ -891,7 +905,6 @@ void VivaldiRenderViewContextMenu::AddNotesController(
     ui::SimpleMenuModel* menu_model,
     int id,
     bool is_folder) {
-
   if (!note_submenu_observer_) {
     note_submenu_observer_.reset(
         new NotesSubMenuObserver(this, toolkit_delegate()));

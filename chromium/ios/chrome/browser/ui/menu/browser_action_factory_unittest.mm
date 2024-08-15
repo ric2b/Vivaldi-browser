@@ -26,8 +26,8 @@
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/ui/menu/menu_action_type.h"
 #import "ios/chrome/browser/ui/menu/menu_histograms.h"
-#import "ios/chrome/browser/url_loading/url_loading_params.h"
-#import "ios/chrome/browser/window_activities/window_activity_helpers.h"
+#import "ios/chrome/browser/url_loading/model/url_loading_params.h"
+#import "ios/chrome/browser/window_activities/model/window_activity_helpers.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
 #import "testing/gmock/include/gmock/gmock.h"
@@ -450,12 +450,8 @@ TEST_F(BrowserActionFactoryTest, SaveImageInGooglePhotosAction) {
                                            scenario:kTestMenuScenario];
 
 #if BUILDFLAG(IOS_USE_BRANDED_SYMBOLS)
-  UIImage* expectedImage = CustomSymbolWithConfiguration(
-      kGooglePhotosSymbol,
-      [UIImageSymbolConfiguration
-          configurationWithPointSize:kSymbolActionPointSize
-                              weight:UIImageSymbolWeightThin
-                               scale:UIImageSymbolScaleMedium]);
+  UIImage* expectedImage =
+      CustomSymbolWithPointSize(kGooglePhotosSymbol, kSymbolActionPointSize);
 #else
   UIImage* expectedImage = DefaultSymbolWithPointSize(kSaveImageActionSymbol,
                                                       kSymbolActionPointSize);
@@ -470,7 +466,8 @@ TEST_F(BrowserActionFactoryTest, SaveImageInGooglePhotosAction) {
   UIAction* action =
       [factory actionToSaveToPhotosWithImageURL:fakeImageURL
                                        referrer:fakeImageReferrer
-                                       webState:fakeWebState.get()];
+                                       webState:fakeWebState.get()
+                                          block:nil];
 
   EXPECT_TRUE([expectedTitle isEqualToString:action.title]);
   EXPECT_EQ(expectedImage, action.image);

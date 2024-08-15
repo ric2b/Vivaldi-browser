@@ -14,7 +14,7 @@
         "swarming": {
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-10.13"
+            "os": "Mac-13"
           },
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
@@ -29,7 +29,7 @@
         "swarming": {
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-10.13"
+            "os": "Mac-13"
           },
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
@@ -73,16 +73,6 @@
         "test": "content_unittests",
         "test_id_prefix": "ninja://content/test:content_unittests/"
       }
-    ]
-  },
-  "android-archive-dbg-goma-rbe-ats-canary": {
-    "additional_compile_targets": [
-      "chromedriver_webview_shell_apk"
-    ]
-  },
-  "android-archive-dbg-goma-rbe-canary": {
-    "additional_compile_targets": [
-      "chromedriver_webview_shell_apk"
     ]
   },
   "chromeos-amd64-generic-rel-goma-rbe-canary": {
@@ -178,7 +168,7 @@
         "swarming": {
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-10.13"
+            "os": "Mac-13"
           },
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
@@ -193,7 +183,7 @@
         "swarming": {
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-10.13"
+            "os": "Mac-13"
           },
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },

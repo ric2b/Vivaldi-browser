@@ -16,6 +16,7 @@
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
+#include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/paint/filter_effect_builder.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/filter_operation.h"
@@ -327,31 +328,31 @@ void CanvasRenderingContext2DState::SetFontStretch(
   FontSelectionValue stretch_value;
   switch (font_stretch.AsEnum()) {
     case (V8CanvasFontStretch::Enum::kUltraCondensed):
-      stretch_value = UltraCondensedWidthValue();
+      stretch_value = kUltraCondensedWidthValue;
       break;
     case (V8CanvasFontStretch::Enum::kExtraCondensed):
-      stretch_value = ExtraCondensedWidthValue();
+      stretch_value = kExtraCondensedWidthValue;
       break;
     case (V8CanvasFontStretch::Enum::kCondensed):
-      stretch_value = CondensedWidthValue();
+      stretch_value = kCondensedWidthValue;
       break;
     case (V8CanvasFontStretch::Enum::kSemiCondensed):
-      stretch_value = SemiCondensedWidthValue();
+      stretch_value = kSemiCondensedWidthValue;
       break;
     case (V8CanvasFontStretch::Enum::kNormal):
-      stretch_value = NormalWidthValue();
+      stretch_value = kNormalWidthValue;
       break;
     case (V8CanvasFontStretch::Enum::kUltraExpanded):
-      stretch_value = UltraExpandedWidthValue();
+      stretch_value = kUltraExpandedWidthValue;
       break;
     case (V8CanvasFontStretch::Enum::kExtraExpanded):
-      stretch_value = ExtraExpandedWidthValue();
+      stretch_value = kExtraExpandedWidthValue;
       break;
     case (V8CanvasFontStretch::Enum::kExpanded):
-      stretch_value = ExpandedWidthValue();
+      stretch_value = kExpandedWidthValue;
       break;
     case (V8CanvasFontStretch::Enum::kSemiExpanded):
-      stretch_value = SemiExpandedWidthValue();
+      stretch_value = kSemiExpandedWidthValue;
       break;
     default:
       NOTREACHED();
@@ -432,7 +433,8 @@ sk_sp<PaintFilter> CanvasRenderingContext2DState::GetFilterForOffscreenCanvas(
   FilterEffectBuilder filter_effect_builder(
       gfx::RectF(gfx::SizeF(canvas_size)),
       1.0f,  // Deliberately ignore zoom on the canvas element.
-      &fill_flags_for_filter, &stroke_flags_for_filter);
+      Color::kBlack, mojom::blink::ColorScheme::kLight, &fill_flags_for_filter,
+      &stroke_flags_for_filter);
 
   FilterEffect* last_effect = filter_effect_builder.BuildFilterEffect(
       operations, !context->OriginClean());
@@ -479,8 +481,8 @@ sk_sp<PaintFilter> CanvasRenderingContext2DState::GetFilter(
     // Must set font in case the filter uses any font-relative units (em, ex)
     // If font_for_filter_ was never set (ie frame-less documents) use base font
     if (UNLIKELY(!font_for_filter_.GetFontSelector())) {
-      if (const ComputedStyle* computed_style = document.GetComputedStyle()) {
-        font = &computed_style->GetFont();
+      if (LayoutView* layout_view = document.GetLayoutView()) {
+        font = &layout_view->StyleRef().GetFont();
       } else {
         return nullptr;
       }
@@ -502,7 +504,8 @@ sk_sp<PaintFilter> CanvasRenderingContext2DState::GetFilter(
   FilterEffectBuilder filter_effect_builder(
       gfx::RectF(gfx::SizeF(canvas_size)),
       1.0f,  // Deliberately ignore zoom on the canvas element.
-      &fill_flags_for_filter, &stroke_flags_for_filter);
+      Color::kBlack, mojom::blink::ColorScheme::kLight, &fill_flags_for_filter,
+      &stroke_flags_for_filter);
 
   FilterEffect* last_effect = filter_effect_builder.BuildFilterEffect(
       operations, !context->OriginClean());

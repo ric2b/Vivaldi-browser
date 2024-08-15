@@ -18,7 +18,6 @@
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/renderer_host/delegated_frame_host.h"
-#include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/browser/renderer_host/input/mouse_wheel_phase_handler.h"
 #include "content/browser/renderer_host/input/synthetic_gesture_target_base.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
@@ -31,6 +30,7 @@
 #include "content/browser/renderer_host/text_input_manager.h"
 #include "content/browser/renderer_host/visible_time_request_trigger.h"
 #include "content/common/content_switches_internal.h"
+#include "content/common/input/event_with_latency_info.h"
 #include "content/public/common/page_visibility_state.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/frame/intrinsic_sizing_info.mojom.h"
@@ -287,7 +287,7 @@ RenderWidgetHostViewBase::CreateVideoCapturer() {
   std::unique_ptr<viz::ClientFrameSinkVideoCapturer> video_capturer =
       GetHostFrameSinkManager()->CreateVideoCapturer();
   video_capturer->ChangeTarget(viz::VideoCaptureTarget(GetFrameSinkId()),
-                               /*crop_version=*/0);
+                               /*sub_capture_target_version=*/0);
   return video_capturer;
 }
 
@@ -1086,6 +1086,37 @@ void RenderWidgetHostViewBase::OnShowWithPageVisibility(
   // visibility metrics.)
   CancelSuccessfulPresentationTimeRequestForHostAndDelegate();
   return;
+}
+
+void RenderWidgetHostViewBase::SetIsFrameSinkIdOwner(bool is_owner) {
+  if (is_frame_sink_id_owner_ == is_owner) {
+    return;
+  }
+
+  is_frame_sink_id_owner_ = is_owner;
+  UpdateFrameSinkIdRegistration();
+}
+
+void RenderWidgetHostViewBase::UpdateFrameSinkIdRegistration() {
+  // If Destroy() has been called before we get here, host_ may be null.
+  if (!host() || !host()->delegate() ||
+      !host()->delegate()->GetInputEventRouter()) {
+    return;
+  }
+
+  // Let the page-level input event router know about our frame sink ID
+  // for surface-based hit testing.
+  auto* router = host()->delegate()->GetInputEventRouter();
+  if (is_frame_sink_id_owner_) {
+    if (!router->IsViewInMap(this)) {
+      router->AddFrameSinkIdOwner(GetFrameSinkId(), this);
+    }
+  } else if (router->IsViewInMap(this)) {
+    // Ensure this view is the owner before removing the associated FrameSinkId
+    // from input tracking. Speculative views start as non-owing and will not
+    // register until ownership has been transferred.
+    router->RemoveFrameSinkIdOwner(GetFrameSinkId());
+  }
 }
 
 }  // namespace content

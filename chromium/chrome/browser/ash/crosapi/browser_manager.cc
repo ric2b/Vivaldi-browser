@@ -81,10 +81,12 @@
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/common/channel_info.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/logging_chrome.h"
 #include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
+#include "chromeos/ash/components/standalone_browser/browser_support.h"
 #include "chromeos/crosapi/cpp/crosapi_constants.h"
 #include "chromeos/crosapi/cpp/lacros_startup_state.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom-shared.h"
@@ -347,7 +349,7 @@ ResourcesFileSharingMode ClearOrMoveSharedResourceFile(
 // This method runs some work on a background thread prior to launching lacros.
 // The returns struct is used by the main thread as parameters to launch Lacros.
 LaunchParamsFromBackground DoLacrosBackgroundWorkPreLaunch(
-    base::FilePath lacros_dir,
+    base::FilePath lacros_binary,
     bool clear_shared_resource_file,
     bool launching_at_login_screen) {
   LaunchParamsFromBackground params;
@@ -372,6 +374,9 @@ LaunchParamsFromBackground DoLacrosBackgroundWorkPreLaunch(
   }
 
   params.logfd = base::ScopedFD(fd);
+
+  params.enable_shared_components_dir =
+      base::FeatureList::IsEnabled(features::kLacrosSharedComponentsDir);
 
   params.enable_resource_file_sharing =
       base::FeatureList::IsEnabled(features::kLacrosResourcesFileSharing);
@@ -415,7 +420,7 @@ LaunchParamsFromBackground DoLacrosBackgroundWorkPreLaunch(
   // This speeds up the perceived startup time, as they will be loaded anyway
   // in the later stages of Lacros's lifetime.
   if (launching_at_login_screen) {
-    PreloadLacrosFiles(lacros_dir);
+    PreloadLacrosFiles(lacros_binary.DirName());
   }
 
   return params;
@@ -495,6 +500,38 @@ void RecordDataVerForPrimaryUser() {
   crosapi::browser_util::RecordDataVer(g_browser_process->local_state(),
                                        user_id_hash,
                                        version_info::GetVersion());
+}
+
+bool ShouldPrelaunchLacrosAtLoginScreen() {
+  if (!base::FeatureList::IsEnabled(kLacrosLaunchAtLoginScreen)) {
+    LOG(WARNING)
+        << "Lacros will not be prelaunched: prelaunching feature is disabled";
+    return false;
+  }
+
+  // If the CPU of the device does not support running Lacros,
+  // prelaunching should be blocked too.
+  if (!ash::standalone_browser::BrowserSupport::IsCpuSupported()) {
+    LOG(WARNING) << "Lacros will not be prelaunched: CPU is not supported";
+    return false;
+  }
+
+  // We only want to pre-launch Lacros if Ash is launched in login
+  // manager mode. When the `kLoginUser` switch is passed, we are
+  // restarting the session for an already logged in user, either in
+  // production, or after PRE_ tests. In both of those cases, the user
+  // is already logged in, and we do not want Lacros to prelaunch.
+  // Originally introduced because of https://crbug.com/1432779, which
+  // causes PRE_ tests to restart back to login screen, but with the
+  // user still "logged in" (UserManager::IsUserLoggedIn() == true).
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          ash::switches::kLoginUser)) {
+    LOG(WARNING)
+        << "Lacros will not be prelaunched: login-user switch was passed";
+    return false;
+  }
+
+  return true;
 }
 
 // The delegate keeps track of the most recent lacros-chrome binary version
@@ -599,18 +636,7 @@ BrowserManager::BrowserManager(
     component_updater::ComponentUpdateService* update_service)
     : browser_loader_(std::move(browser_loader)),
       environment_provider_(std::make_unique<EnvironmentProvider>()),
-      launch_at_login_screen_(
-          // NOTE: We only want to pre-launch Lacros if Ash is launched in login
-          // manager mode. When the `kLoginUser` switch is passed, we are
-          // restarting the session for an already logged in user, either in
-          // production, or after PRE_ tests. In both of those cases, the user
-          // is already logged in, and we do not want Lacros to prelaunch.
-          // Originally introduced because of https://crbug.com/1432779, which
-          // causes PRE_ tests to restart back to login screen, but with the
-          // user still "logged in" (UserManager::IsUserLoggedIn() == true).
-          !base::CommandLine::ForCurrentProcess()->HasSwitch(
-              ash::switches::kLoginUser) &&
-          base::FeatureList::IsEnabled(kLacrosLaunchAtLoginScreen)),
+      launch_at_login_screen_(ShouldPrelaunchLacrosAtLoginScreen()),
       disabled_for_testing_(g_disabled_for_testing),
       device_ownership_waiter_(std::make_unique<DeviceOwnershipWaiterImpl>()) {
   DCHECK(!g_instance);
@@ -1079,15 +1105,15 @@ void BrowserManager::StartWithLogFile(bool launching_at_login_screen,
     return;
   }
 
-  // If the user is already logged in and we are inside the session,
-  // call |RecordDataverForPrimaryUser| now.
+  // If we are not launching at the login screen, we must be inside a
+  // user session, so call `RecordDataVerForPrimaryUser` now.
   // Otherwise, if we're pre-launching at login screen, this will be
   // done later, once the user logs in and the session is started.
-  if (user_manager::UserManager::Get()->IsUserLoggedIn()) {
-    RecordDataVerForPrimaryUser();
+  if (!launching_at_login_screen) {
+    WaitForProfileAddedAndThen(base::BindOnce(&RecordDataVerForPrimaryUser));
   }
 
-  std::string chrome_path = lacros_path_.MaybeAsASCII() + "/chrome";
+  std::string chrome_path = lacros_path_.MaybeAsASCII();
   LOG(WARNING) << "Launching lacros-chrome at " << chrome_path;
 
   // If Ash is an unknown channel then this is not a production build and we
@@ -1222,7 +1248,9 @@ void BrowserManager::StartWithLogFile(bool launching_at_login_screen,
     argv.push_back(std::string("--vmodule=")
                    // TODO(crbug.com/1371493): Remove after fix.
                    + ",wayland_window_drag_controller=1,wayland_data_source=1" +
-                   ",tab_drag_controller=1");
+                   ",tab_drag_controller=1" +
+                   // TODO(crbug.com/1472682): Remove after fix.
+                   ",wayland_data_drag_controller=1");
 
     if (launching_at_login_screen &&
         !command_line->HasSwitch(switches::kDisableLoggingRedirect)) {
@@ -1313,6 +1341,12 @@ void BrowserManager::StartWithLogFile(bool launching_at_login_screen,
     // run with enabling the feature as well since the feature is based on some
     // ash behavior(clear or move cached shared resource file at lacros launch).
     command_line.AppendSwitch(switches::kEnableResourcesFileSharing);
+  }
+
+  if (params.enable_shared_components_dir) {
+    // Pass a flag to enable using a location shared across users for browser
+    // components.
+    command_line.AppendSwitch(switches::kEnableLacrosSharedComponentsDir);
   }
 
   LOG(WARNING) << "Launching lacros with command: "
@@ -1694,36 +1728,31 @@ void BrowserManager::ResumeLaunch() {
 
   LOG(WARNING) << "Resuming lacros-chrome launch";
 
-  // Execute actions that we couldn't run when pre-launching at login screen,
-  // because they required the user to be logged in.
-  PrepareLacrosPolicies();
-  RecordLacrosLaunchMode();
-  crosapi::lacros_startup_state::SetLacrosStartupState(is_lacros_enabled);
-  RecordDataVerForPrimaryUser();
-
   // Once Lacros starts and BrowserService is connected,
   // the following action will be executed.
   pending_actions_.Push(BrowserAction::GetActionForSessionStart());
 
   WaitForDeviceOwnerFetchedAndThen(
-      base::BindOnce(&BrowserManager::WaitForProfileAddedBeforeResuming,
-                     weak_factory_.GetWeakPtr()),
+      base::BindOnce(
+          &BrowserManager::WaitForProfileAddedAndThen,
+          weak_factory_.GetWeakPtr(),
+          base::BindOnce(&BrowserManager::ResumeLaunchAfterProfileAdded,
+                         weak_factory_.GetWeakPtr())),
       /*launching_at_login_screen=*/false);
 }
 
-void BrowserManager::WaitForProfileAddedBeforeResuming() {
+void BrowserManager::WaitForProfileAddedAndThen(base::OnceClosure cb) {
+  DCHECK(!primary_profile_creation_waiter_);
   primary_profile_creation_waiter_ = PrimaryProfileCreationWaiter::WaitOrRun(
-      g_browser_process->profile_manager(),
-      base::BindOnce(&BrowserManager::WritePostLoginData,
-                     weak_factory_.GetWeakPtr()));
+      g_browser_process->profile_manager(), std::move(cb));
 }
 
 void BrowserManager::WaitForDeviceOwnerFetchedAndThen(
     base::OnceClosure cb,
     bool launching_at_login_screen) {
   device_ownership_waiter_called_ = true;
-  device_ownership_waiter_->WaitForOwnerhipFetched(std::move(cb),
-                                                   launching_at_login_screen);
+  device_ownership_waiter_->WaitForOwnershipFetched(std::move(cb),
+                                                    launching_at_login_screen);
 }
 
 void BrowserManager::OnLaunchParamsFetched(bool launching_at_login_screen,
@@ -1735,8 +1764,13 @@ void BrowserManager::OnLaunchParamsFetched(bool launching_at_login_screen,
       launching_at_login_screen);
 }
 
-void BrowserManager::WritePostLoginData() {
-  primary_profile_creation_waiter_.reset();
+void BrowserManager::ResumeLaunchAfterProfileAdded() {
+  // Execute actions that we couldn't run when pre-launching at login screen,
+  // because they required the user to be logged in.
+  PrepareLacrosPolicies();
+  RecordLacrosLaunchMode();
+  crosapi::lacros_startup_state::SetLacrosStartupState(true);
+  RecordDataVerForPrimaryUser();
 
   lacros_resume_time_ = base::TimeTicks::Now();
   // Write post-login parameters into the anonymous pipe.

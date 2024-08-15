@@ -29,6 +29,11 @@ namespace features {
 
 GFX_SWITCHES_EXPORT BASE_DECLARE_FEATURE(kOddHeightMultiPlanarBuffers);
 GFX_SWITCHES_EXPORT BASE_DECLARE_FEATURE(kOddWidthMultiPlanarBuffers);
+GFX_SWITCHES_EXPORT BASE_DECLARE_FEATURE(kUseSmartRefForGPUFenceHandle);
+
+#if BUILDFLAG(IS_CHROMEOS)
+GFX_SWITCHES_EXPORT BASE_DECLARE_FEATURE(kEnableIntelMediaCompression);
+#endif
 
 }  // namespace features
 

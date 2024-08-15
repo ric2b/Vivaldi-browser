@@ -50,7 +50,7 @@ class MockSyncServiceCryptoDelegate : public SyncServiceCrypto::Delegate {
   MOCK_METHOD(void, CryptoStateChanged, (), (override));
   MOCK_METHOD(void, CryptoRequiredUserActionChanged, (), (override));
   MOCK_METHOD(void, ReconfigureDataTypesDueToCrypto, (), (override));
-  MOCK_METHOD(void, SetPassphraseType, (PassphraseType), (override));
+  MOCK_METHOD(void, PassphraseTypeChanged, (PassphraseType), (override));
   MOCK_METHOD(absl::optional<PassphraseType>,
               GetPassphraseType,
               (),
@@ -104,11 +104,24 @@ TEST_F(SyncUserSettingsImplTest, PreferredTypesSyncEverything) {
       MakeSyncUserSettings(GetUserTypes());
 
   ModelTypeSet expected_types = GetUserTypes();
+  UserSelectableTypeSet all_registered_types =
+      sync_user_settings->GetRegisteredSelectableTypes();
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  // Apps sync is controlled by a dedicated preference on Lacros,
+  // corresponding to the Apps toggle in OS Sync settings. That pref
+  // isn't set up in this test.
+  if (base::FeatureList::IsEnabled(kSyncChromeOSAppsToggleSharing)) {
+    ASSERT_TRUE(all_registered_types.Has(UserSelectableType::kApps));
+    ASSERT_FALSE(sync_prefs_->IsAppsSyncEnabledByOs());
+    expected_types.RemoveAll({APPS, APP_SETTINGS, WEB_APPS});
+    all_registered_types.Remove(UserSelectableType::kApps);
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+
   EXPECT_TRUE(sync_user_settings->IsSyncEverythingEnabled());
   EXPECT_EQ(expected_types, GetPreferredUserTypes(*sync_user_settings));
 
-  UserSelectableTypeSet all_registered_types =
-      sync_user_settings->GetRegisteredSelectableTypes();
   for (UserSelectableType type : all_registered_types) {
     sync_user_settings->SetSelectedTypes(/*sync_everything=*/true, {type});
     EXPECT_EQ(expected_types, GetPreferredUserTypes(*sync_user_settings));
@@ -184,8 +197,20 @@ TEST_F(SyncUserSettingsImplTest, SetSelectedTypeInFullSyncMode) {
       MakeSyncUserSettings(GetUserTypes(),
                            SyncPrefs::SyncAccountState::kSyncing);
 
-  const UserSelectableTypeSet registered_types =
+  UserSelectableTypeSet registered_types =
       sync_user_settings->GetRegisteredSelectableTypes();
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  if (base::FeatureList::IsEnabled(kSyncChromeOSAppsToggleSharing)) {
+    // Apps sync is controlled by a dedicated preference on Lacros,
+    // corresponding to the Apps toggle in OS Sync settings. That pref
+    // isn't set up in this test.
+    ASSERT_TRUE(registered_types.Has(UserSelectableType::kApps));
+    ASSERT_FALSE(sync_prefs_->IsAppsSyncEnabledByOs());
+    registered_types.Remove(UserSelectableType::kApps);
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+
   const UserSelectableTypeSet registered_types_except_passwords =
       base::Difference(registered_types,
                        UserSelectableTypeSet({UserSelectableType::kPasswords}));
@@ -246,6 +271,18 @@ TEST_F(SyncUserSettingsImplTest, PreferredTypesNotKeepEverythingSynced) {
 
   UserSelectableTypeSet all_registered_types =
       sync_user_settings->GetRegisteredSelectableTypes();
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  if (base::FeatureList::IsEnabled(kSyncChromeOSAppsToggleSharing)) {
+    // Apps sync is controlled by a dedicated preference on Lacros,
+    // corresponding to the Apps toggle in OS Sync settings. That pref
+    // isn't set up in this test.
+    ASSERT_TRUE(all_registered_types.Has(UserSelectableType::kApps));
+    ASSERT_FALSE(sync_prefs_->IsAppsSyncEnabledByOs());
+    all_registered_types.Remove(UserSelectableType::kApps);
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+
   for (UserSelectableType type : all_registered_types) {
     ModelTypeSet expected_preferred_types =
         UserSelectableTypeToAllModelTypes(type);
@@ -432,67 +469,10 @@ TEST_F(SyncUserSettingsImplTest, AppsAreHandledByOsSettings) {
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
-TEST_F(SyncUserSettingsImplTest,
-       ShouldSyncSessionsIfHistoryOrOpenTabsAreSelectedPreFullHistorySync) {
-  base::test::ScopedFeatureList features;
-  features.InitAndDisableFeature(kSyncEnableHistoryDataType);
-
-  ASSERT_FALSE(AlwaysPreferredUserTypes().Has(TYPED_URLS));
+TEST_F(SyncUserSettingsImplTest, ShouldSyncSessionsOnlyIfOpenTabsIsSelected) {
   ASSERT_FALSE(AlwaysPreferredUserTypes().Has(HISTORY));
   ASSERT_FALSE(AlwaysPreferredUserTypes().Has(HISTORY_DELETE_DIRECTIVES));
   ASSERT_FALSE(AlwaysPreferredUserTypes().Has(SESSIONS));
-  ASSERT_FALSE(AlwaysPreferredUserTypes().Has(PROXY_TABS));
-
-  std::unique_ptr<SyncUserSettingsImpl> sync_user_settings =
-      MakeSyncUserSettings(GetUserTypes());
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  // GetPreferredUserTypes() returns ModelTypes, which includes both browser
-  // and OS types. However, this test exercises browser UserSelectableTypes,
-  // so disable OS selectable types.
-  sync_user_settings->SetSelectedOsTypes(/*sync_all_os_types=*/false,
-                                         UserSelectableOsTypeSet());
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-  // History and OpenTabs enabled: All the history-related ModelTypes should be
-  // enabled. Note that this includes HISTORY - this type will be disabled by
-  // its controller instead of here.
-  sync_user_settings->SetSelectedTypes(
-      /*sync_everything=*/false,
-      /*types=*/{UserSelectableType::kHistory, UserSelectableType::kTabs});
-  EXPECT_EQ(GetPreferredUserTypes(*sync_user_settings),
-            Union(AlwaysPreferredUserTypes(),
-                  {TYPED_URLS, HISTORY, HISTORY_DELETE_DIRECTIVES, SESSIONS,
-                   PROXY_TABS, USER_EVENTS}));
-
-  // History only: PROXY_TABS is gone, but SESSIONS is still enabled since it's
-  // needed for history.
-  sync_user_settings->SetSelectedTypes(
-      /*sync_everything=*/false,
-      /*types=*/{UserSelectableType::kHistory});
-  EXPECT_EQ(GetPreferredUserTypes(*sync_user_settings),
-            Union(AlwaysPreferredUserTypes(),
-                  {TYPED_URLS, HISTORY, HISTORY_DELETE_DIRECTIVES, SESSIONS,
-                   USER_EVENTS}));
-
-  // OpenTabs only: SESSIONS (the actual data) and PROXY_TABS (as a "flag"
-  // indicating OpenTabs is enabled).
-  sync_user_settings->SetSelectedTypes(
-      /*sync_everything=*/false,
-      /*types=*/{UserSelectableType::kTabs});
-  EXPECT_EQ(GetPreferredUserTypes(*sync_user_settings),
-            Union(AlwaysPreferredUserTypes(), {SESSIONS, PROXY_TABS}));
-}
-
-TEST_F(SyncUserSettingsImplTest,
-       ShouldSyncSessionsOnlyIfOpenTabsIsSelectedPostFullHistorySync) {
-  base::test::ScopedFeatureList features(kSyncEnableHistoryDataType);
-
-  ASSERT_FALSE(AlwaysPreferredUserTypes().Has(TYPED_URLS));
-  ASSERT_FALSE(AlwaysPreferredUserTypes().Has(HISTORY));
-  ASSERT_FALSE(AlwaysPreferredUserTypes().Has(HISTORY_DELETE_DIRECTIVES));
-  ASSERT_FALSE(AlwaysPreferredUserTypes().Has(SESSIONS));
-  ASSERT_FALSE(AlwaysPreferredUserTypes().Has(PROXY_TABS));
 
   std::unique_ptr<SyncUserSettingsImpl> sync_user_settings =
       MakeSyncUserSettings(GetUserTypes());
@@ -507,33 +487,27 @@ TEST_F(SyncUserSettingsImplTest,
 
   // History and OpenTabs enabled: All the history-related ModelTypes should be
   // enabled.
-  // TODO(crbug.com/1365291): For now this still includes TYPED_URLS; that type
-  // is disabled via its controller instead. Eventually it should be removed
-  // from here.
   sync_user_settings->SetSelectedTypes(
       /*sync_everything=*/false,
       /*types=*/{UserSelectableType::kHistory, UserSelectableType::kTabs});
   EXPECT_EQ(GetPreferredUserTypes(*sync_user_settings),
             Union(AlwaysPreferredUserTypes(),
-                  {TYPED_URLS, HISTORY, HISTORY_DELETE_DIRECTIVES, SESSIONS,
-                   PROXY_TABS, USER_EVENTS}));
+                  {HISTORY, HISTORY_DELETE_DIRECTIVES, SESSIONS, USER_EVENTS}));
 
-  // History only: PROXY_TABS and SESSIONS are gone.
+  // History only: SESSIONS is gone.
   sync_user_settings->SetSelectedTypes(
       /*sync_everything=*/false,
       /*types=*/{UserSelectableType::kHistory});
-  EXPECT_EQ(
-      GetPreferredUserTypes(*sync_user_settings),
-      Union(AlwaysPreferredUserTypes(),
-            {TYPED_URLS, HISTORY, HISTORY_DELETE_DIRECTIVES, USER_EVENTS}));
+  EXPECT_EQ(GetPreferredUserTypes(*sync_user_settings),
+            Union(AlwaysPreferredUserTypes(),
+                  {HISTORY, HISTORY_DELETE_DIRECTIVES, USER_EVENTS}));
 
-  // OpenTabs only: SESSIONS (the actual data) and PROXY_TABS (as a "flag"
-  // indicating OpenTabs is enabled).
+  // OpenTabs only: Only SESSIONS is there.
   sync_user_settings->SetSelectedTypes(
       /*sync_everything=*/false,
       /*types=*/{UserSelectableType::kTabs});
   EXPECT_EQ(GetPreferredUserTypes(*sync_user_settings),
-            Union(AlwaysPreferredUserTypes(), {SESSIONS, PROXY_TABS}));
+            Union(AlwaysPreferredUserTypes(), {SESSIONS}));
 }
 
 TEST_F(SyncUserSettingsImplTest, ShouldMutePassphrasePrompt) {

@@ -23,12 +23,16 @@ const char kOfferToSavePasswordsEnabledGMS[] =
     "profile.save_passwords_enabed_gms";
 const char kSavePasswordsSuspendedByError[] =
     "profile.save_passwords_suspended_by_error";
-const char kSettingsMigratedToUPM[] = "profile.settings_migrated_to_upm";
+const char kSettingsMigratedToUPMLocal[] =
+    "profile.settings_migrated_to_upm_local";
 
 const char kCurrentMigrationVersionToGoogleMobileServices[] =
     "current_migration_version_to_google_mobile_services";
 
 const char kTimeOfLastMigrationAttempt[] = "time_of_last_migration_attempt";
+
+const char kPasswordsUseUPMLocalAndSeparateStores[] =
+    "passwords_use_upm_local_and_separate_stores";
 
 const char kRequiresMigrationAfterSyncStatusChange[] =
     "requires_migration_after_sync_status_change";
@@ -56,6 +60,9 @@ const char kLocalPasswordMigrationWarningShownAtStartup[] =
     "local_passwords_migration_warning_shown_at_startup";
 const char kLocalPasswordMigrationWarningPrefsVersion[] =
     "local_passwords_migration_warning_reset_count";
+
+const char kPasswordGenerationBottomSheetDismissCount[] =
+    "password_generation_bottom_sheet_dismiss_count";
 #endif
 
 #if BUILDFLAG(IS_WIN)
@@ -141,6 +148,9 @@ const char kAccountStorageNewFeatureIconImpressions[] =
 const char kPasswordManagerPromoCardsList[] =
     "password_manager.password_promo_cards_list";
 #endif
+
+const char kPasswordSharingEnabled[] =
+    "password_manager.password_sharing_enabled";
 
 }  // namespace prefs
 }  // namespace password_manager

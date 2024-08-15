@@ -26,6 +26,7 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.shared_preferences.SharedPreferencesManager;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.bottombar.ephemeraltab.EphemeralTabCoordinator;
@@ -41,7 +42,7 @@ import org.chromium.chrome.browser.lens.LensIntentParams;
 import org.chromium.chrome.browser.lens.LensMetrics;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.read_later.ReadingListUtils;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
@@ -50,6 +51,7 @@ import org.chromium.chrome.browser.share.LensUtils;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.share.ShareDelegate.ShareOrigin;
 import org.chromium.chrome.browser.share.ShareHelper;
+import org.chromium.chrome.browser.share.ShareUtils;
 import org.chromium.chrome.browser.share.link_to_text.LinkToTextHelper;
 import org.chromium.components.browser_ui.share.ShareParams;
 import org.chromium.components.embedder_support.contextmenu.ContextMenuParams;
@@ -78,6 +80,7 @@ import java.util.List;
 // Vivaldi
 import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
  * A {@link ContextMenuPopulator} used for showing the default Chrome context menu.
@@ -242,7 +245,11 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
             if (FirstRunStatus.getFirstRunFlowComplete() && !isEmptyUrl(mParams.getUrl())
                     && UrlUtilities.isAcceptedScheme(mParams.getUrl())) {
                 if (mMode == ContextMenuMode.NORMAL) {
-                    linkGroup.add(createListItem(Item.OPEN_IN_NEW_TAB_IN_GROUP));
+                    // Vivaldi, check if tab stacks are enabled
+                    if (VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                            VivaldiPreferences.ENABLE_TAB_STACK, false)) {
+                        linkGroup.add(createListItem(Item.OPEN_IN_NEW_TAB_IN_GROUP));
+                    }
                     linkGroup.add(createListItem(Item.OPEN_IN_NEW_TAB));
 
                     // Vivaldi
@@ -283,7 +290,9 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
                 }
                 // Vivaldi
                 if (!BuildConfig.IS_OEM_AUTOMOTIVE_BUILD)
-                linkGroup.add(createShareListItem(Item.SHARE_LINK, Item.DIRECT_SHARE_LINK));
+                if (enableShareFromContextMenu()) {
+                    linkGroup.add(createShareListItem(Item.SHARE_LINK, Item.DIRECT_SHARE_LINK));
+                }
                 if (UrlUtilities.isTelScheme(mParams.getLinkUrl())) {
                     if (mItemDelegate.supportsCall()) {
                         linkGroup.add(createListItem(Item.CALL));
@@ -343,7 +352,7 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
             // If set, show 'Share Image' before 'Search with Google Lens'.
             // IMPORTANT: Must stay consistent with logic after the below Lens block.
             boolean addedShareImageAboveLens = false;
-            if (LensUtils.orderShareImageBeforeLens()) {
+            if (LensUtils.orderShareImageBeforeLens() && enableShareFromContextMenu()) {
                 // Vivaldi
                 if (!BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
                 addedShareImageAboveLens = true;
@@ -366,8 +375,9 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
                         maybeRecordUkmSearchByImageShown();
                     }
                 } else if (ChromeFeatureList.isEnabled(
-                                   ChromeFeatureList.CONTEXT_MENU_SEARCH_WITH_GOOGLE_LENS)) {
-                    LensMetrics.recordLensSupportStatus(LENS_SUPPORT_STATUS_HISTOGRAM_NAME,
+                        ChromeFeatureList.CONTEXT_MENU_SEARCH_WITH_GOOGLE_LENS)) {
+                    LensMetrics.recordLensSupportStatus(
+                            LENS_SUPPORT_STATUS_HISTOGRAM_NAME,
                             LensMetrics.LensSupportStatus.SEARCH_BY_IMAGE_UNAVAILABLE);
                 }
             }
@@ -376,7 +386,7 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
             // IMPORTANT: Must stay consistent with logic before the above Lens block.
             // Vivaldi
             if (!BuildConfig.IS_OEM_AUTOMOTIVE_BUILD)
-            if (!addedShareImageAboveLens) {
+            if (!addedShareImageAboveLens && enableShareFromContextMenu()) {
                 imageGroup.add(createShareListItem(Item.SHARE_IMAGE, Item.DIRECT_SHARE_IMAGE));
             }
 
@@ -416,7 +426,7 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
                 } else if (mMode == ContextMenuMode.CUSTOM_TAB && !mItemDelegate.isIncognito()) {
                     boolean addNewEntries = !UrlUtilities.isInternalScheme(mParams.getUrl())
                             && !isEmptyUrl(mParams.getUrl());
-                    if (SharedPreferencesManager.getInstance().readBoolean(
+                    if (ChromeSharedPreferences.getInstance().readBoolean(
                                 ChromePreferenceKeys.CHROME_DEFAULT_BROWSER, false)
                             && addNewEntries) {
                         if (mItemDelegate.isIncognitoSupported()) {
@@ -583,7 +593,7 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
         } else if (itemId == R.id.contextmenu_search_with_google_lens) {
             recordContextMenuSelection(ContextMenuUma.Action.SEARCH_WITH_GOOGLE_LENS);
             searchWithGoogleLens(LensEntryPoint.CONTEXT_MENU_SEARCH_MENU_ITEM);
-            SharedPreferencesManager prefManager = SharedPreferencesManager.getInstance();
+            SharedPreferencesManager prefManager = ChromeSharedPreferences.getInstance();
             prefManager.writeBoolean(
                     ChromePreferenceKeys.CONTEXT_MENU_SEARCH_WITH_GOOGLE_LENS_CLICKED, true);
         } else if (itemId == R.id.contextmenu_search_by_image) {
@@ -1002,5 +1012,10 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
     /** Returns the profile of the current tab via the item delegate. */
     private Profile getProfile() {
         return Profile.fromWebContents(mItemDelegate.getWebContents());
+    }
+
+    private boolean enableShareFromContextMenu() {
+        return ShareUtils.enableShareForAutomotive(
+                mMode == ContextMenuMode.CUSTOM_TAB || mMode == ContextMenuMode.WEB_APP);
     }
 }

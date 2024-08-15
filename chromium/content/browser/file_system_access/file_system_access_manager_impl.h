@@ -154,6 +154,8 @@ class CONTENT_EXPORT FileSystemAccessManagerImpl
       const std::vector<uint8_t>& bits,
       mojo::PendingReceiver<blink::mojom::FileSystemAccessTransferToken> token)
       override;
+  void Clone(mojo::PendingReceiver<storage::mojom::FileSystemAccessContext>
+                 receiver) override;
 
   // FileSystemAccessEntryFactory:
   blink::mojom::FileSystemAccessEntryPtr CreateFileEntryFromPath(
@@ -186,11 +188,17 @@ class CONTENT_EXPORT FileSystemAccessManagerImpl
                         const storage::FileSystemURL& url,
                         const SharedHandleState& handle_state);
 
-  // Attempts to take a lock of `lock_type` on `url`. Returns the lock if
-  // successful. The lock is released when the returned object is destroyed.
-  scoped_refptr<FileSystemAccessLockManager::Lock> TakeLock(
-      const storage::FileSystemURL& url,
-      FileSystemAccessLockManager::LockType lock_type);
+  // Attempts to take a lock of `lock_type` on `url`. Passes a handle of the
+  // lock to `callback` if successful. The lock is released when there are no
+  // handles to it.
+  void TakeLock(const storage::FileSystemURL& url,
+                FileSystemAccessLockManager::LockType lock_type,
+                FileSystemAccessLockManager::TakeLockCallback callback);
+
+  // Returns true if there is not an existing lock on `url` that is contentious
+  // with `lock_type`.
+  bool IsContentious(const storage::FileSystemURL& url,
+                     FileSystemAccessLockManager::LockType lock_type);
 
   // Creates a new shared lock type for testing.
   [[nodiscard]] FileSystemAccessLockManager::LockType
@@ -219,21 +227,22 @@ class CONTENT_EXPORT FileSystemAccessManagerImpl
   // Creates a new FileSystemAccessFileWriterImpl for a given target and
   // swap file URLs. Assumes the passed in URLs are valid and represent files.
   mojo::PendingRemote<blink::mojom::FileSystemAccessFileWriter>
-  CreateFileWriter(const BindingContext& binding_context,
-                   const storage::FileSystemURL& url,
-                   const storage::FileSystemURL& swap_url,
-                   scoped_refptr<FileSystemAccessLockManager::Lock> lock,
-                   scoped_refptr<FileSystemAccessLockManager::Lock> swap_lock,
-                   const SharedHandleState& handle_state,
-                   bool auto_close);
+  CreateFileWriter(
+      const BindingContext& binding_context,
+      const storage::FileSystemURL& url,
+      const storage::FileSystemURL& swap_url,
+      scoped_refptr<FileSystemAccessLockManager::LockHandle> lock,
+      scoped_refptr<FileSystemAccessLockManager::LockHandle> swap_lock,
+      const SharedHandleState& handle_state,
+      bool auto_close);
   // Returns a weak pointer to a newly created FileSystemAccessFileWriterImpl.
   // Useful for tests
   base::WeakPtr<FileSystemAccessFileWriterImpl> CreateFileWriter(
       const BindingContext& binding_context,
       const storage::FileSystemURL& url,
       const storage::FileSystemURL& swap_url,
-      scoped_refptr<FileSystemAccessLockManager::Lock> lock,
-      scoped_refptr<FileSystemAccessLockManager::Lock> swap_lock,
+      scoped_refptr<FileSystemAccessLockManager::LockHandle> lock,
+      scoped_refptr<FileSystemAccessLockManager::LockHandle> swap_lock,
       const SharedHandleState& handle_state,
       mojo::PendingReceiver<blink::mojom::FileSystemAccessFileWriter> receiver,
       bool has_transient_user_activation,
@@ -251,7 +260,7 @@ class CONTENT_EXPORT FileSystemAccessManagerImpl
           blink::mojom::FileSystemAccessCapacityAllocationHost>
           capacity_allocation_host_receiver,
       int64_t file_size,
-      scoped_refptr<FileSystemAccessLockManager::Lock> lock,
+      scoped_refptr<FileSystemAccessLockManager::LockHandle> lock,
       base::ScopedClosureRunner on_close_callback);
 
   // Create a transfer token for a specific file or directory.
@@ -575,8 +584,8 @@ class CONTENT_EXPORT FileSystemAccessManagerImpl
   const scoped_refptr<ChromeBlobStorageContext> blob_context_;
   base::SequenceBound<storage::FileSystemOperationRunner> operation_runner_
       GUARDED_BY_CONTEXT(sequence_checker_);
-  raw_ptr<FileSystemAccessPermissionContext, AcrossTasksDanglingUntriaged>
-      permission_context_ GUARDED_BY_CONTEXT(sequence_checker_);
+  raw_ptr<FileSystemAccessPermissionContext> permission_context_
+      GUARDED_BY_CONTEXT(sequence_checker_);
 
   // All the mojo receivers for this FileSystemAccessManager itself. Keeps
   // track of associated origin and other state as well to not have to rely on

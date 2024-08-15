@@ -17,6 +17,8 @@
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/animation/animation_test_api.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/flex_layout.h"
@@ -32,11 +34,6 @@ namespace views {
 
 namespace {
 
-// This should probably be a definition on AnimationTestApi.
-using RenderModeLock = std::invoke_result<
-    decltype(&gfx::AnimationTestApi::SetRichAnimationRenderMode),
-    gfx::Animation::RichAnimationRenderMode>::type;
-
 constexpr gfx::Size kChildViewSize{10, 10};
 
 // Returns a size which is the intersection of |size| and the constraints
@@ -49,6 +46,8 @@ gfx::Size ConstrainSizeToBounds(const gfx::Size& size,
 
 // View that allows directly setting minimum size.
 class TestView : public View {
+  METADATA_HEADER(TestView, View)
+
  public:
   using View::View;
   ~TestView() override = default;
@@ -72,6 +71,9 @@ class TestView : public View {
   absl::optional<gfx::Size> minimum_size_;
   bool fix_area_ = false;
 };
+
+BEGIN_METADATA(TestView)
+END_METADATA
 
 // Layout that provides a predictable target layout for an
 // AnimatingLayoutManager.
@@ -264,7 +266,7 @@ class AnimatingLayoutManagerTest : public testing::Test {
       nullptr;
   base::test::TaskEnvironment task_environment_;
   std::unique_ptr<gfx::AnimationContainerTestApi> container_test_api_;
-  RenderModeLock render_mode_lock_;
+  gfx::AnimationTestApi::RenderModeResetter render_mode_lock_;
 };
 
 const FlexSpecification AnimatingLayoutManagerTest::kDropOut =
@@ -5194,7 +5196,7 @@ class AnimatingLayoutManagerSequenceTest : public ViewsTestBase {
   std::unique_ptr<View> parent_view_ptr_;
   std::unique_ptr<View> layout_view_ptr_;
   WidgetAutoclosePtr widget_;
-  RenderModeLock render_mode_lock_;
+  gfx::AnimationTestApi::RenderModeResetter render_mode_lock_;
 };
 
 TEST_F(AnimatingLayoutManagerSequenceTest,

@@ -297,14 +297,14 @@ class PagePopupChromeClient final : public EmptyChromeClient {
     popup_->widget_base_->ClearKeyboardTriggeredTooltip();
   }
 
-  void InjectGestureScrollEvent(LocalFrame& local_frame,
-                                WebGestureDevice device,
-                                const gfx::Vector2dF& delta,
-                                ui::ScrollGranularity granularity,
-                                cc::ElementId scrollable_area_element_id,
-                                WebInputEvent::Type injected_type) override {
-    popup_->InjectGestureScrollEvent(device, delta, granularity,
-                                     scrollable_area_element_id, injected_type);
+  void InjectScrollbarGestureScroll(
+      LocalFrame& local_frame,
+      const gfx::Vector2dF& delta,
+      ui::ScrollGranularity granularity,
+      cc::ElementId scrollable_area_element_id,
+      WebInputEvent::Type injected_type) override {
+    popup_->InjectScrollbarGestureScroll(
+        delta, granularity, scrollable_area_element_id, injected_type);
   }
 
   WebPagePopupImpl* popup_;
@@ -444,7 +444,8 @@ void WebPagePopupImpl::InitializeCompositing(
   // much work here.
   widget_base_->InitializeCompositing(*page_->GetPageScheduler(), screen_infos,
                                       settings,
-                                      /*frame_widget_input_handler=*/nullptr);
+                                      /*frame_widget_input_handler=*/nullptr,
+                                      /*previous_widget=*/nullptr);
   cc::LayerTreeDebugState debug_state =
       widget_base_->LayerTreeHost()->GetDebugState();
   debug_state.TurnOffHudInfoDisplay();
@@ -572,17 +573,17 @@ void WebPagePopupImpl::DestroyPage() {
   page_.Clear();
 }
 
-AXObject* WebPagePopupImpl::RootAXObject() {
+AXObject* WebPagePopupImpl::RootAXObject(Element* popup_owner) {
   if (!page_)
     return nullptr;
   // If |page_| is non-null, the main frame must have a Document.
   Document* document = MainFrame().GetDocument();
-  AXObjectCache* cache = document->ExistingAXObjectCache();
+  AXObjectCacheBase* cache =
+      To<AXObjectCacheBase>(document->ExistingAXObjectCache());
   // There should never be a circumstance when RootAXObject() is triggered
   // and the AXObjectCache doesn't already exist. It's called when trying
   // to attach the accessibility tree of the pop-up to the host page.
-  DCHECK(cache);
-  return To<AXObjectCacheBase>(cache)->GetOrCreate(document->GetLayoutView());
+  return cache->GetOrCreate(document, cache->Get(popup_owner));
 }
 
 void WebPagePopupImpl::SetWindowRect(const gfx::Rect& rect_in_screen) {
@@ -741,35 +742,35 @@ WebInputEventResult WebPagePopupImpl::HandleGestureEvent(
         event.PositionInScreen(),
         WebFeature::kPopupGestureTapExceedsOwnerWindowBounds);
   }
-  if (base::FeatureList::IsEnabled(::features::kScrollUnification)) {
-    if (event.GetType() == WebInputEvent::Type::kGestureScrollBegin) {
-      HitTestLocation locationScroll(event.PositionInWidget());
-      HitTestResult resultScroll =
-          MainFrame().GetEventHandler().HitTestResultAtLocation(locationScroll);
-      scrollable_node_ = FindFirstScroller(resultScroll.InnerNode());
-      RecordScrollReasonsMetric(
-          event.SourceDevice(),
-          cc::MainThreadScrollingReason::kPopupNoThreadedInput);
-      return WebInputEventResult::kHandledSystem;
+  if (event.GetType() == WebInputEvent::Type::kGestureScrollBegin) {
+    HitTestLocation locationScroll(event.PositionInWidget());
+    HitTestResult resultScroll =
+        MainFrame().GetEventHandler().HitTestResultAtLocation(locationScroll);
+    scrollable_node_ = FindFirstScroller(resultScroll.InnerNode());
+    RecordScrollReasonsMetric(
+        event.SourceDevice(),
+        cc::MainThreadScrollingReason::kPopupNoThreadedInput);
+    return WebInputEventResult::kHandledSystem;
+  }
+  if (event.GetType() == WebInputEvent::Type::kGestureScrollUpdate) {
+    if (!scrollable_node_) {
+      return WebInputEventResult::kNotHandled;
     }
-    if (event.GetType() == WebInputEvent::Type::kGestureScrollUpdate) {
-      if (!scrollable_node_)
-        return WebInputEventResult::kNotHandled;
 
-      ScrollableArea* scrollable = ToScrollableArea(scrollable_node_);
+    ScrollableArea* scrollable = ToScrollableArea(scrollable_node_);
 
-      if (!scrollable)
-        return WebInputEventResult::kNotHandled;
-      ScrollOffset scroll_offset(-event.data.scroll_update.delta_x,
-                                 -event.data.scroll_update.delta_y);
-      scrollable->UserScroll(event.data.scroll_update.delta_units,
-                             scroll_offset, ScrollableArea::ScrollCallback());
-      return WebInputEventResult::kHandledSystem;
+    if (!scrollable) {
+      return WebInputEventResult::kNotHandled;
     }
-    if (event.GetType() == WebInputEvent::Type::kGestureScrollEnd) {
-      scrollable_node_ = nullptr;
-      return WebInputEventResult::kHandledSystem;
-    }
+    ScrollOffset scroll_offset(-event.data.scroll_update.delta_x,
+                               -event.data.scroll_update.delta_y);
+    scrollable->UserScroll(event.data.scroll_update.delta_units, scroll_offset,
+                           ScrollableArea::ScrollCallback());
+    return WebInputEventResult::kHandledSystem;
+  }
+  if (event.GetType() == WebInputEvent::Type::kGestureScrollEnd) {
+    scrollable_node_ = nullptr;
+    return WebInputEventResult::kHandledSystem;
   }
   WebGestureEvent scaled_event =
       TransformWebGestureEvent(MainFrame().View(), event);
@@ -1021,14 +1022,13 @@ gfx::Rect WebPagePopupImpl::WindowRectInScreen() const {
   return widget_base_->WindowRect();
 }
 
-void WebPagePopupImpl::InjectGestureScrollEvent(
-    WebGestureDevice device,
+void WebPagePopupImpl::InjectScrollbarGestureScroll(
     const gfx::Vector2dF& delta,
     ui::ScrollGranularity granularity,
     cc::ElementId scrollable_area_element_id,
     WebInputEvent::Type injected_type) {
-  widget_base_->input_handler().InjectGestureScrollEvent(
-      device, delta, granularity, scrollable_area_element_id, injected_type);
+  widget_base_->input_handler().InjectScrollbarGestureScroll(
+      delta, granularity, scrollable_area_element_id, injected_type);
 }
 
 void WebPagePopupImpl::ScreenRectToEmulated(gfx::Rect& screen_rect) {

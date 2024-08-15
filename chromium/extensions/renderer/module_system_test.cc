@@ -17,6 +17,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/lazy_instance.h"
+#include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string_piece.h"
@@ -99,7 +100,8 @@ class GetAPINatives : public ObjectBackedNativeHandler {
   }
 
  private:
-  NativeExtensionBindingsSystem* bindings_system_ = nullptr;
+  raw_ptr<NativeExtensionBindingsSystem, ExperimentalRenderer>
+      bindings_system_ = nullptr;
 };
 
 }  // namespace
@@ -169,7 +171,8 @@ ModuleSystemTestEnvironment::ModuleSystemTestEnvironment(
   context_->v8_context()->Enter();
   assert_natives_ = new AssertNatives(context_);
 
-  bindings_system_ = std::make_unique<NativeExtensionBindingsSystem>(nullptr);
+  bindings_system_ = std::make_unique<NativeExtensionBindingsSystem>(
+      /*delegate=*/nullptr, /*ipc_message_sender=*/nullptr);
 
   {
     std::unique_ptr<ModuleSystem> module_system(

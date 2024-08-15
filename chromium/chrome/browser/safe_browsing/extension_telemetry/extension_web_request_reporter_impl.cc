@@ -4,6 +4,7 @@
 
 #include "chrome/browser/safe_browsing/extension_telemetry/extension_web_request_reporter_impl.h"
 
+#include "base/metrics/histogram_functions.h"
 #include "chrome/browser/safe_browsing/extension_telemetry/extension_telemetry_service.h"
 #include "chrome/browser/safe_browsing/extension_telemetry/extension_telemetry_service_factory.h"
 #include "chrome/browser/safe_browsing/extension_telemetry/remote_host_contacted_signal.h"
@@ -12,6 +13,33 @@
 #include "content/public/browser/browser_thread.h"
 
 namespace safe_browsing {
+
+namespace {
+
+// TODO(crbug.com/1494413): Use EnumTraits for these methods.
+safe_browsing::RemoteHostInfo::ProtocolType
+WebRequestProtocolTypeToRemoteHostInfoProtocolType(
+    mojom::WebRequestProtocolType protocol_type) {
+  switch (protocol_type) {
+    case mojom::WebRequestProtocolType::kHttpHttps:
+      return safe_browsing::RemoteHostInfo::HTTP_HTTPS;
+    case mojom::WebRequestProtocolType::kWebSocket:
+      return safe_browsing::RemoteHostInfo::WEBSOCKET;
+  }
+}
+
+safe_browsing::RemoteHostInfo::ContactInitiator
+WebRequestContactInitatorToRemoteHostInfoContactInitiator(
+    mojom::WebRequestContactInitiatorType contact_initiator_type) {
+  switch (contact_initiator_type) {
+    case mojom::WebRequestContactInitiatorType::kExtension:
+      return safe_browsing::RemoteHostInfo::EXTENSION;
+    case mojom::WebRequestContactInitiatorType::kContentScript:
+      return safe_browsing::RemoteHostInfo::CONTENT_SCRIPT;
+  }
+}
+
+}  // namespace
 
 const int ExtensionWebRequestReporterImpl::kUserDataKey;
 
@@ -50,7 +78,14 @@ ExtensionWebRequestReporterImpl::~ExtensionWebRequestReporterImpl() = default;
 void ExtensionWebRequestReporterImpl::SendWebRequestData(
     const std::string& origin_extension_id,
     const GURL& telemetry_url,
-    mojom::WebRequestProtocolType protocol_type) {
+    mojom::WebRequestProtocolType protocol_type,
+    mojom::WebRequestContactInitiatorType contact_initiator_type) {
+  if (protocol_type == mojom::WebRequestProtocolType::kWebSocket) {
+    // Logging "true" represents the data being *received*.
+    base::UmaHistogramBoolean(
+        "SafeBrowsing.ExtensionTelemetry.WebSocketRequestDataSentOrReceived",
+        true);
+  }
   auto* telemetry_service =
       safe_browsing::ExtensionTelemetryServiceFactory::GetForProfile(profile_);
   if (!telemetry_service || !telemetry_service->enabled() ||
@@ -60,16 +95,16 @@ void ExtensionWebRequestReporterImpl::SendWebRequestData(
     return;
   }
 
-  safe_browsing::RemoteHostInfo::ProtocolType protocol =
-      safe_browsing::RemoteHostInfo::UNSPECIFIED;
-  if (protocol_type == mojom::WebRequestProtocolType::kHttpHttps) {
-    protocol = safe_browsing::RemoteHostInfo::HTTP_HTTPS;
-  } else if (protocol_type == mojom::WebRequestProtocolType::kWebSocket) {
-    protocol = safe_browsing::RemoteHostInfo::WEBSOCKET;
-  }
-
+  // TODO(crbug.com/1494413): Use unspecified contact initiator for websocket
+  // connections until that information becomes available in the renderer
+  // throttle.
   auto remote_host_signal = std::make_unique<RemoteHostContactedSignal>(
-      origin_extension_id, telemetry_url, protocol);
+      origin_extension_id, telemetry_url,
+      WebRequestProtocolTypeToRemoteHostInfoProtocolType(protocol_type),
+      protocol_type == mojom::WebRequestProtocolType::kWebSocket
+          ? safe_browsing::RemoteHostInfo::CONTACT_INITIATOR_UNSPECIFIED
+          : WebRequestContactInitatorToRemoteHostInfoContactInitiator(
+                contact_initiator_type));
   telemetry_service->AddSignal(std::move(remote_host_signal));
 }
 

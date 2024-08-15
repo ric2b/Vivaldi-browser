@@ -181,8 +181,6 @@ void CloseAllChromeProcesses(const base::FilePath& target_path) {
   ProcessPathPrefixFilter target_path_filter(target_path.value());
   base::CleanupProcesses(installer::kChromeExe, base::TimeDelta(),
                          content::RESULT_CODE_HUNG, &target_path_filter);
-  base::CleanupProcesses(installer::kNaClExe, base::TimeDelta(),
-                         content::RESULT_CODE_HUNG, &target_path_filter);
 }
 
 // Updates shortcuts to |old_target_exe| that have non-empty args, making them
@@ -590,6 +588,23 @@ void DeleteWerRegistryKeys(const installer::InstallerState& installer_state) {
   work_item_list->Do();
 }
 
+bool DeleteVivaldiToastNoticatorKeys(const InstallerState& installer_state,
+                                     HKEY root) {
+  const base::FilePath chrome_exe(
+      installer_state.target_path().Append(kChromeExe));
+  // Delete Software\Classes\CLSID\|toast_activator_clsid|.
+  base::FilePath target_exe = chrome_exe;
+
+  const std::wstring toast_activator_reg_path =
+      InstallUtil::GetToastActivatorRegistryPath(&target_exe);
+  if (!toast_activator_reg_path.empty()) {
+    DeleteRegistryKey(root, toast_activator_reg_path, WorkItem::kWow64Default);
+  } else {
+    LOG(DFATAL) << "Cannot retrieve the toast activator registry path";
+  }
+  return true;
+}
+
 bool DeleteChromeRegistrationKeys(const InstallerState& installer_state,
                                   HKEY root,
                                   const std::wstring& browser_entry_suffix,
@@ -613,18 +628,6 @@ bool DeleteChromeRegistrationKeys(const InstallerState& installer_state,
 
   // TODO(https://crbug.com/414141): Delete ChromePDF ProgId once support for
   // PDF docs has landed.
-
-  // NOTE(andre@vivaldi.com) : Clear any clsid target exe key.
-  installer_state.ClearToastActivatorTargetExe();
-
-  // Delete Software\Classes\CLSID\|toast_activator_clsid|.
-  const std::wstring toast_activator_reg_path =
-      InstallUtil::GetToastActivatorRegistryPath();
-  if (!toast_activator_reg_path.empty()) {
-    DeleteRegistryKey(root, toast_activator_reg_path, WorkItem::kWow64Default);
-  } else {
-    LOG(DFATAL) << "Cannot retrieve the toast activator registry path";
-  }
 
   if (installer_state.system_install()) {
     if (!InstallServiceWorkItem::DeleteService(
@@ -901,6 +904,10 @@ InstallStatus UninstallProduct(const ModifyParams& modify_params,
   }
 
   DeleteShortcuts(installer_state, {chrome_exe, std::move(chrome_proxy_exe)});
+
+  // Remove any toastnotification clsids before the toastid is removed in
+  // Software\Vivaldi\ToastActivatorCLSID.
+  DeleteVivaldiToastNoticatorKeys(installer_state, HKEY_CURRENT_USER);
 
   // Delete the registry keys (Uninstall key and Version key).
   HKEY reg_root = installer_state.root_key();

@@ -31,6 +31,7 @@
 #include "components/supervised_user/core/common/features.h"
 #include "components/supervised_user/core/common/pref_names.h"
 #include "components/supervised_user/core/common/supervised_user_constants.h"
+#include "components/supervised_user/test_support/supervised_user_url_filter_test_utils.h"
 #include "components/sync/test/mock_sync_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
@@ -45,11 +46,6 @@ const char kExampleUrl0[] = "http://www.example0.com";
 const char kExampleUrl1[] = "http://www.example1.com/123";
 
 }  // namespace
-
-class FilterDelegateImpl : public SupervisedUserURLFilter::Delegate {
- public:
-  std::string GetCountryCode() override { return std::string(); }
-};
 
 class SupervisedUserServiceTestBase : public ::testing::Test {
  public:
@@ -73,7 +69,7 @@ class SupervisedUserServiceTestBase : public ::testing::Test {
         syncable_pref_service_, settings_service_, sync_service_,
         /*check_webstore_url_callback=*/
         base::BindRepeating([](const GURL& url) { return false; }),
-        std::make_unique<FilterDelegateImpl>(),
+        std::make_unique<FakeURLFilterDelegate>(),
         /*can_show_first_time_interstitial_banner=*/true);
 
     service_->Init();
@@ -121,9 +117,11 @@ TEST_F(SupervisedUserServiceTest, IsURLFilteringEnabled) {
 
 TEST_F(SupervisedUserServiceTest,
        AreExtensionsPermissionsEnabledWithExtensionsPermissionsFlagDisabled) {
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndDisableFeature(
       kEnableExtensionsPermissionsForSupervisedUsersOnDesktop);
+#endif
 
 #if BUILDFLAG(IS_CHROMEOS)
   EXPECT_TRUE(service_->AreExtensionsPermissionsEnabled());
@@ -134,8 +132,10 @@ TEST_F(SupervisedUserServiceTest,
 
 TEST_F(SupervisedUserServiceTest,
        AreExtensionsPermissionsEnabledWithExtensionsPermissionsFlagEnabled) {
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
   base::test::ScopedFeatureList feature_list(
       kEnableExtensionsPermissionsForSupervisedUsersOnDesktop);
+#endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   EXPECT_TRUE(service_->AreExtensionsPermissionsEnabled());

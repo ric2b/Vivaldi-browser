@@ -65,7 +65,7 @@ class SubtargetGeometry {
       : node_(node), quad_(quad) {}
   void Trace(Visitor* visitor) const { visitor->Trace(node_); }
 
-  Node* GetNode() const { return node_; }
+  Node* GetNode() const { return node_.Get(); }
   gfx::QuadF Quad() const { return quad_; }
   gfx::Rect BoundingBox() const {
     return gfx::ToEnclosingRect(quad_.BoundingBox());
@@ -550,7 +550,6 @@ bool FindBestTouchAdjustmentCandidate(
     const gfx::Point& touch_hotspot,
     const gfx::Rect& touch_area,
     const HeapVector<Member<Node>>& nodes) {
-  // TODO(https://crbug.com/1469267): A CHECK here caused failures on Android!
   DCHECK(touch_area.Contains(touch_hotspot));
   touch_adjustment::NodeFilter node_filter;
   touch_adjustment::AppendSubtargetsForNode append_subtargets_for_node;

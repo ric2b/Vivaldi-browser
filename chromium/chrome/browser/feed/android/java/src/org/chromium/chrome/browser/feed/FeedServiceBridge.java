@@ -7,11 +7,12 @@ package org.chromium.chrome.browser.feed;
 import android.content.Context;
 import android.util.DisplayMetrics;
 
+import org.jni_zero.CalledByNative;
+import org.jni_zero.JNINamespace;
+import org.jni_zero.NativeClassQualifiedName;
+import org.jni_zero.NativeMethods;
+
 import org.chromium.base.ContextUtils;
-import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.annotations.JNINamespace;
-import org.chromium.base.annotations.NativeClassQualifiedName;
-import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.browser.feed.v2.ContentOrder;
 import org.chromium.chrome.browser.feed.v2.FeedUserActionType;
 import org.chromium.chrome.browser.xsurface.ImageCacheHelper;
@@ -28,7 +29,7 @@ import java.util.Locale;
 public final class FeedServiceBridge {
     // Access to JNI test hooks for other libraries. This can go away once more Feed code is
     // migrated to chrome/browser/feed.
-    public static org.chromium.base.JniStaticTestMocker<FeedServiceBridge.Natives>
+    public static org.jni_zero.JniStaticTestMocker<FeedServiceBridge.Natives>
     getTestHooksForTesting() {
         return FeedServiceBridgeJni.TEST_HOOKS;
     }
@@ -36,8 +37,9 @@ public final class FeedServiceBridge {
     private static FeedServiceDependencyProviderFactory getDependencyProviderFactory() {
         Class<?> dependencyProviderFactoryClazz;
         try {
-            dependencyProviderFactoryClazz = Class.forName(
-                    "org.chromium.chrome.browser.app.feed.FeedServiceDependencyProviderFactoryImpl");
+            dependencyProviderFactoryClazz =
+                    Class.forName(
+                            "org.chromium.chrome.browser.app.feed.FeedServiceDependencyProviderFactoryImpl");
         } catch (ClassNotFoundException e) {
             return null;
         }

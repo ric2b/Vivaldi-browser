@@ -131,7 +131,8 @@ IdentityManagerDependenciesOwner::IdentityManagerDependenciesOwner(
           std::move(remote),
           /*remote_version=*/std::numeric_limits<uint32_t>::max(),
           /*account_manager_for_tests=*/
-          account_manager_factory_->GetAccountManager(std::string()));
+          account_manager_factory_->GetAccountManager(std::string())
+              ->GetWeakPtr());
 #endif
 }
 
@@ -341,7 +342,7 @@ IdentityTestEnvironment::FinishBuildIdentityManagerForTests(
   std::unique_ptr<PrimaryAccountManager> primary_account_manager =
       std::make_unique<PrimaryAccountManager>(
           signin_client, token_service.get(), account_tracker_service.get());
-  primary_account_manager->Initialize(pref_service);
+  primary_account_manager->Initialize();
 
   std::unique_ptr<GaiaCookieManagerService> gaia_cookie_manager_service =
       std::make_unique<GaiaCookieManagerService>(
@@ -383,9 +384,7 @@ IdentityTestEnvironment::FinishBuildIdentityManagerForTests(
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   init_params.account_manager_facade = account_manager_facade;
 #endif
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
   init_params.signin_client = signin_client;
-#endif
 
   return std::make_unique<IdentityManager>(std::move(init_params));
 }

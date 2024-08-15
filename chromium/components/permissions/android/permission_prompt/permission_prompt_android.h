@@ -43,6 +43,7 @@ class PermissionPromptAndroid : public PermissionPrompt {
   bool UpdateAnchor() override;
   TabSwitchingBehavior GetTabSwitchingBehavior() override;
   absl::optional<gfx::Rect> GetViewBoundsInScreen() const override;
+  bool ShouldFinalizeRequestAfterDecided() const override;
 
   void Closing();
   void Accept();
@@ -58,9 +59,10 @@ class PermissionPromptAndroid : public PermissionPrompt {
   size_t PermissionCount() const;
   ContentSettingsType GetContentSettingType(size_t position) const;
   int GetIconId() const;
-  std::u16string GetTitleText() const;
   std::u16string GetMessageText() const;
+  bool ShouldUseRequestingOriginFavicon() const;
 
+  GURL GetRequestingOrigin() const;
   content::WebContents* web_contents() { return web_contents_; }
 
  private:

@@ -14,7 +14,9 @@ namespace blink {
 
 class MLOperand;
 class MLOperator;
-base::expected<webnn::mojom::blink::OperatorPtr, String> ConvertToMojoOperator(
+
+base::expected<webnn::mojom::blink::OperationPtr, String>
+ConvertToMojoOperation(
     const HeapHashMap<Member<const MLOperand>, uint64_t>& operand_to_id_map,
     const MLOperator* op);
 

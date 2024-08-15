@@ -8,15 +8,14 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/views/web_apps/pwa_confirmation_bubble_view.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
+#include "chrome/browser/ui/web_applications/web_app_dialogs.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
-#include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_prefs_utils.h"
 #include "chrome/common/chrome_features.h"
@@ -28,6 +27,7 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/webapps/browser/installable/ml_install_operation_tracker.h"
 #include "components/webapps/browser/installable/ml_installability_promoter.h"
+#include "components/webapps/common/web_app_id.h"
 #include "content/public/test/browser_test.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/widget/any_widget_observer.h"
@@ -77,7 +77,7 @@ IN_PROC_BROWSER_TEST_F(PWAConfirmationBubbleViewBrowserTest,
   app_info->title = u"Test app";
   app_info->start_url = GURL("https://example.com");
   Profile* profile = browser()->profile();
-  AppId app_id = test::InstallWebApp(profile, std::move(app_info));
+  webapps::AppId app_id = test::InstallWebApp(profile, std::move(app_info));
   Browser* browser = ::web_app::LaunchWebAppBrowser(profile, app_id);
 
   app_info = GetAppInfo();
@@ -85,9 +85,9 @@ IN_PROC_BROWSER_TEST_F(PWAConfirmationBubbleViewBrowserTest,
       GetInstallTracker(browser);
 
   // Tests that we don't crash when showing the install prompt in a PWA window.
-  chrome::ShowPWAInstallBubble(
-      browser->tab_strip_model()->GetActiveWebContents(), std::move(app_info),
-      std::move(install_tracker), base::DoNothing());
+  ShowPWAInstallBubble(browser->tab_strip_model()->GetActiveWebContents(),
+                       std::move(app_info), std::move(install_tracker),
+                       base::DoNothing());
 }
 
 IN_PROC_BROWSER_TEST_F(PWAConfirmationBubbleViewBrowserTest,
@@ -99,7 +99,7 @@ IN_PROC_BROWSER_TEST_F(PWAConfirmationBubbleViewBrowserTest,
 
   base::RunLoop loop;
   // Show the PWA install dialog.
-  chrome::ShowPWAInstallBubble(
+  ShowPWAInstallBubble(
       browser()->tab_strip_model()->GetActiveWebContents(), std::move(app_info),
       std::move(install_tracker),
       base::BindLambdaForTesting(
@@ -131,14 +131,14 @@ IN_PROC_BROWSER_TEST_F(PWAConfirmationBubbleViewBrowserTest,
       GetInstallTracker(browser());
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  chrome::ShowPWAInstallBubble(
+  ShowPWAInstallBubble(
       web_contents, std::move(app_info), std::move(install_tracker),
       base::BindLambdaForTesting(
           [&](bool accepted,
               std::unique_ptr<WebAppInstallInfo> app_info_callback) {
             loop.Quit();
           }),
-      chrome::PwaInProductHelpState::kShown);
+      PwaInProductHelpState::kShown);
 
   PWAConfirmationBubbleView* bubble_dialog =
       PWAConfirmationBubbleView::GetBubble();
@@ -151,7 +151,8 @@ IN_PROC_BROWSER_TEST_F(PWAConfirmationBubbleViewBrowserTest,
                                       ->GetActiveWebContents()
                                       ->GetBrowserContext())
           ->GetPrefs();
-  AppId app_id = GenerateAppId(/*manifest_id=*/absl::nullopt, start_url);
+  webapps::AppId app_id =
+      GenerateAppId(/*manifest_id=*/absl::nullopt, start_url);
   EXPECT_EQ(GetIntWebAppPref(pref_service, app_id, kIphIgnoreCount).value(), 1);
   EXPECT_TRUE(
       GetTimeWebAppPref(pref_service, app_id, kIphLastIgnoreTime).has_value());
@@ -167,7 +168,8 @@ IN_PROC_BROWSER_TEST_F(PWAConfirmationBubbleViewBrowserTest,
                        AcceptDialogResetIphCounters) {
   auto app_info = GetAppInfo();
   GURL start_url = app_info->start_url;
-  AppId app_id = GenerateAppId(/*manifest_id=*/absl::nullopt, start_url);
+  webapps::AppId app_id =
+      GenerateAppId(/*manifest_id=*/absl::nullopt, start_url);
   PrefService* pref_service =
       Profile::FromBrowserContext(browser()
                                       ->tab_strip_model()
@@ -184,7 +186,7 @@ IN_PROC_BROWSER_TEST_F(PWAConfirmationBubbleViewBrowserTest,
   // Show the PWA install dialog.
   std::unique_ptr<webapps::MlInstallOperationTracker> install_tracker =
       GetInstallTracker(browser());
-  chrome::ShowPWAInstallBubble(
+  ShowPWAInstallBubble(
       browser()->tab_strip_model()->GetActiveWebContents(), std::move(app_info),
       std::move(install_tracker),
       base::BindLambdaForTesting(
@@ -192,7 +194,7 @@ IN_PROC_BROWSER_TEST_F(PWAConfirmationBubbleViewBrowserTest,
               std::unique_ptr<WebAppInstallInfo> app_info_callback) {
             loop.Quit();
           }),
-      chrome::PwaInProductHelpState::kShown);
+      PwaInProductHelpState::kShown);
 
   PWAConfirmationBubbleView* bubble_dialog =
       PWAConfirmationBubbleView::GetBubble();
@@ -214,7 +216,7 @@ IN_PROC_BROWSER_TEST_F(PWAConfirmationBubbleViewBrowserTest,
 
   std::unique_ptr<webapps::MlInstallOperationTracker> install_tracker =
       GetInstallTracker(browser());
-  chrome::ShowPWAInstallBubble(
+  ShowPWAInstallBubble(
       browser()->tab_strip_model()->GetActiveWebContents(), GetAppInfo(),
       std::move(install_tracker),
       base::BindLambdaForTesting(

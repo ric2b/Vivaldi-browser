@@ -12,8 +12,6 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/extension_set.h"
 
-#include "app/vivaldi_apptools.h"
-
 namespace extensions {
 
 namespace {
@@ -31,7 +29,9 @@ ExtensionErrorController::ExtensionErrorController(
     content::BrowserContext* context,
     bool is_first_run)
     : browser_context_(context),
-      is_first_run_(is_first_run) {}
+      is_first_run_(is_first_run) {
+
+}
 
 ExtensionErrorController::~ExtensionErrorController() {}
 
@@ -41,17 +41,6 @@ void ExtensionErrorController::ShowErrorIfNeeded() {
   }
 
   IdentifyAlertableExtensions();
-
-  // NOTE(jarle@vivaldi.com): Workaround for crash on startup, VB-34070.
-  if (vivaldi::IsVivaldiRunning()) {
-    for (ExtensionSet::const_iterator iter = blocklisted_extensions_.begin();
-         iter != blocklisted_extensions_.end();
-         ++iter) {
-      LOG(ERROR) << "Blocklisted extension: " << (*iter)->id();
-    }
-    blocklisted_extensions_.Clear();
-    return;
-  }
 
   // Make sure there's something to show, and that there isn't currently a
   // bubble displaying.

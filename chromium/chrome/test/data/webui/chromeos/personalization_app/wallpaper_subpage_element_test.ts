@@ -3,11 +3,10 @@
 // found in the LICENSE file.
 
 import 'chrome://personalization/strings.m.js';
-import 'chrome://webui-test/mojo_webui_test_support.js';
 
 import {Paths, PersonalizationRouterElement, WallpaperSubpageElement} from 'chrome://personalization/js/personalization_app.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
-import {assertEquals, assertFalse} from 'chrome://webui-test/chai_assert.js';
+import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 import {TestMock} from 'chrome://webui-test/test_mock.js';
 
@@ -40,6 +39,15 @@ suite('WallpaperSubpageElementTest', function() {
         personalizationStore.notifyObservers();
         await waitAfterNextRender(wallpaperSubpage);
 
+        // Wallpaper Selected is displayed.
+        const wallpaperSubpageTopElement =
+            wallpaperSubpage!.shadowRoot!.querySelector(
+                'wallpaper-subpage-top');
+        const wallpaperSelected =
+            wallpaperSubpageTopElement!.shadowRoot!.querySelector(
+                'wallpaper-selected');
+        assertTrue(!!wallpaperSelected);
+
         // Check whether Google Photos collection is displayed.
         const googlePhotosCollections =
             wallpaperSubpage!.shadowRoot!.querySelector(
@@ -59,5 +67,29 @@ suite('WallpaperSubpageElementTest', function() {
     const googlePhotosCollections =
         wallpaperSubpage!.shadowRoot!.querySelector('google-photos-collection');
     assertFalse(!!googlePhotosCollections);
+  });
+
+  test('shows SeaPen collection', async () => {
+    loadTimeData.overrideValues({isSeaPenEnabled: true});
+    wallpaperSubpage =
+        initElement(WallpaperSubpageElement, {path: Paths.SEA_PEN_COLLECTION});
+    await waitAfterNextRender(wallpaperSubpage);
+
+    // SeaPen collection is displayed.
+    const seaPenCollection =
+        wallpaperSubpage!.shadowRoot!.querySelector('sea-pen-collection');
+    assertTrue(!!seaPenCollection);
+  });
+
+  test('hides SeaPen collection for ineligible users', async () => {
+    loadTimeData.overrideValues({isSeaPenEnabled: false});
+    wallpaperSubpage =
+        initElement(WallpaperSubpageElement, {path: Paths.SEA_PEN_COLLECTION});
+    await waitAfterNextRender(wallpaperSubpage);
+
+    // SeaPen collection is not displayed.
+    const seaPenCollection =
+        wallpaperSubpage!.shadowRoot!.querySelector('sea-pen-collection');
+    assertFalse(!!seaPenCollection);
   });
 });

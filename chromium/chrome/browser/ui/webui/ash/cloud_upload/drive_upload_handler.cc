@@ -18,15 +18,13 @@
 #include "chrome/browser/ash/drive/file_system_util.h"
 #include "chrome/browser/ash/file_manager/copy_or_move_io_task.h"
 #include "chrome/browser/ash/file_manager/delete_io_task.h"
-#include "chrome/browser/ash/file_manager/file_tasks.h"
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
 #include "chrome/browser/ash/file_manager/io_task.h"
+#include "chrome/browser/ash/file_manager/office_file_tasks.h"
 #include "chrome/browser/ash/file_manager/volume_manager.h"
 #include "chrome/browser/ui/webui/ash/cloud_upload/cloud_upload_util.h"
 #include "chrome/grit/generated_resources.h"
-#include "content/public/browser/browser_task_traits.h"
-#include "content/public/browser/browser_thread.h"
-#include "google_apis/common/task_util.h"
+#include "chromeos/ash/components/drivefs/drivefs_host.h"
 #include "ui/base/l10n/l10n_util.h"
 
 using storage::FileSystemURL;
@@ -71,18 +69,22 @@ std::string GetTargetAppName(base::FilePath file_path) {
 }  // namespace
 
 // static.
-void DriveUploadHandler::Upload(Profile* profile,
-                                const FileSystemURL& source_url,
-                                UploadCallback callback) {
+void DriveUploadHandler::Upload(
+    Profile* profile,
+    const FileSystemURL& source_url,
+    UploadCallback callback,
+    base::SafeRef<CloudOpenMetrics> cloud_open_metrics) {
   scoped_refptr<DriveUploadHandler> drive_upload_handler =
-      new DriveUploadHandler(profile, source_url);
+      new DriveUploadHandler(profile, source_url, cloud_open_metrics);
   // Keep `drive_upload_handler` alive until `UploadDone` executes.
   drive_upload_handler->Run(
       base::BindOnce(&OnUploadDone, drive_upload_handler, std::move(callback)));
 }
 
-DriveUploadHandler::DriveUploadHandler(Profile* profile,
-                                       const FileSystemURL source_url)
+DriveUploadHandler::DriveUploadHandler(
+    Profile* profile,
+    const FileSystemURL source_url,
+    base::SafeRef<CloudOpenMetrics> cloud_open_metrics)
     : profile_(profile),
       file_system_context_(
           file_manager::util::GetFileManagerFileSystemContext(profile)),
@@ -98,23 +100,13 @@ DriveUploadHandler::DriveUploadHandler(Profile* profile,
               // TODO(b/242685536) Update when support for multi-files is added.
               /*num_files=*/1,
               upload_type_)),
-      source_url_(source_url) {
+      source_url_(source_url),
+      cloud_open_metrics_(cloud_open_metrics) {
   observed_copy_task_id_ = -1;
   observed_delete_task_id_ = -1;
 }
 
-DriveUploadHandler::~DriveUploadHandler() {
-  // Stop observing IO task updates.
-  if (io_task_controller_) {
-    io_task_controller_->RemoveObserver(this);
-  }
-
-  // Stop observing Drive updates.
-  if (drive_integration_service_) {
-    drive_integration_service_->RemoveObserver(this);
-    drive_integration_service_->GetDriveFsHost()->RemoveObserver(this);
-  }
-}
+DriveUploadHandler::~DriveUploadHandler() = default;
 
 void DriveUploadHandler::Run(UploadCallback callback) {
   DCHECK(callback);
@@ -160,11 +152,12 @@ void DriveUploadHandler::Run(UploadCallback callback) {
   }
 
   // Observe IO tasks updates.
-  io_task_controller_->AddObserver(this);
+  io_task_controller_observer_.Observe(io_task_controller_);
 
   // Observe Drive updates.
-  drive_integration_service_->AddObserver(this);
-  drive_integration_service_->GetDriveFsHost()->AddObserver(this);
+  drive::DriveIntegrationService::Observer::Observe(drive_integration_service_);
+  drivefs::DriveFsHost::Observer::Observe(
+      drive_integration_service_->GetDriveFsHost());
 
   if (!drive_integration_service_->IsMounted()) {
     LOG(ERROR) << "Google Drive is not mounted";
@@ -257,7 +250,7 @@ void DriveUploadHandler::OnEndCopy(base::expected<GURL, std::string> hosted_url,
 void DriveUploadHandler::OnEndUpload(
     base::expected<GURL, std::string> hosted_url,
     OfficeFilesUploadResult result_metric) {
-  UMA_HISTOGRAM_ENUMERATION(kGoogleDriveUploadResultMetricName, result_metric);
+  cloud_open_metrics_->LogUploadResult(result_metric);
   // TODO (b/243095484) Define error behavior on invalid hosted URL.
   observed_relative_drive_path_.clear();
   // Stop suppressing Drive events for the observed file.
@@ -386,9 +379,11 @@ void DriveUploadHandler::ShowIOTaskError(
   base::File::Error file_error =
       GetFirstTaskError(status).value_or(base::File::FILE_ERROR_FAILED);
 
-  base::UmaHistogramExactLinear(
-      copy ? kGoogleDriveCopyErrorMetricName : kGoogleDriveMoveErrorMetricName,
-      -file_error, -base::File::FILE_ERROR_MAX);
+  if (copy) {
+    cloud_open_metrics_->LogCopyError(file_error);
+  } else {
+    cloud_open_metrics_->LogMoveError(file_error);
+  }
 
   switch (file_error) {
     case base::File::FILE_ERROR_NO_SPACE:
@@ -471,14 +466,19 @@ void DriveUploadHandler::OnSyncingStatusUpdate(
         CheckAlternateUrl(/*timed_out=*/false);
         return;
       case drivefs::mojom::ItemEvent::State::kFailed:
-        LOG(ERROR) << "Drive sync error";
+        LOG(ERROR) << "Drive sync error: failed";
         OnEndCopy(base::unexpected(GetGenericErrorMessage()),
-                  OfficeFilesUploadResult::kCloudError);
+                  OfficeFilesUploadResult::kSyncError);
         return;
-      default:
-        LOG(ERROR) << "Drive sync error + invalid sync state";
+      case drivefs::mojom::ItemEvent::State::kCancelledAndDeleted:
+        LOG(ERROR) << "Drive sync error: cancelled and deleted";
         OnEndCopy(base::unexpected(GetGenericErrorMessage()),
-                  OfficeFilesUploadResult::kCloudError);
+                  OfficeFilesUploadResult::kSyncCancelledAndDeleted);
+        return;
+      case drivefs::mojom::ItemEvent::State::kCancelledAndTrashed:
+        LOG(ERROR) << "Drive sync error: cancelled and trashed";
+        OnEndCopy(base::unexpected(GetGenericErrorMessage()),
+                  OfficeFilesUploadResult::kSyncCancelledAndTrashed);
         return;
     }
   }
@@ -511,10 +511,6 @@ void DriveUploadHandler::OnError(const drivefs::mojom::DriveError& error) {
       OnEndCopy(base::unexpected(GetGenericErrorMessage()),
                 OfficeFilesUploadResult::kPinningFailedDiskFull);
       break;
-    default:
-      LOG(ERROR) << "Cloud error";
-      OnEndCopy(base::unexpected(GetGenericErrorMessage()),
-                OfficeFilesUploadResult::kCloudError);
   }
 }
 
@@ -549,7 +545,7 @@ void DriveUploadHandler::OnGetDriveMetadata(
     if (timed_out) {
       LOG(ERROR) << "Invalid alternate URL - Drive editing unavailable";
       OnEndCopy(base::unexpected(GetGenericErrorMessage()),
-                OfficeFilesUploadResult::kCloudMetadataError);
+                OfficeFilesUploadResult::kInvalidAlternateUrl);
     } else {
       alternate_url_poll_timer_.Start(
           FROM_HERE, base::Milliseconds(kAlternateUrlPollInterval),
@@ -565,7 +561,7 @@ void DriveUploadHandler::OnGetDriveMetadata(
     if (timed_out) {
       LOG(ERROR) << "Unexpected alternate URL - Drive editing unavailable";
       OnEndCopy(base::unexpected(GetGenericErrorMessage()),
-                OfficeFilesUploadResult::kCloudMetadataError);
+                OfficeFilesUploadResult::kUnexpectedAlternateUrlHost);
     } else {
       alternate_url_poll_timer_.Start(
           FROM_HERE, base::Milliseconds(kAlternateUrlPollInterval),

@@ -7,26 +7,28 @@
 #include <sstream>
 #include <vector>
 
-#include "ash/accessibility/accessibility_delegate.h"
-#include "ash/constants/ash_constants.h"
+#include "ash/capture_mode/capture_mode_test_util.h"
+#include "ash/constants/app_types.h"
 #include "ash/frame/non_client_frame_view_ash.h"
-#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/test/shell_test_api.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
 #include "ash/test/test_widget_builder.h"
+#include "ash/wm/overview/overview_controller.h"
+#include "ash/wm/overview/overview_test_util.h"
 #include "ash/wm/resize_shadow.h"
 #include "ash/wm/resize_shadow_controller.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace_controller_test_api.h"
 #include "base/functional/bind.h"
-#include "base/functional/callback.h"
-#include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/mock_callback.h"
+#include "base/test/scoped_feature_list.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/app_restore/window_properties.h"
 #include "components/exo/buffer.h"
+#include "components/exo/client_controlled_shell_surface.h"
 #include "components/exo/permission.h"
 #include "components/exo/security_delegate.h"
 #include "components/exo/shell_surface_util.h"
@@ -45,6 +47,9 @@
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
+#include "ui/aura/window_event_dispatcher.h"
+#include "ui/aura/window_targeter.h"
+#include "ui/aura/window_tree_host.h"
 #include "ui/base/hit_test.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
@@ -53,8 +58,10 @@
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/display/test/display_manager_test_api.h"
+#include "ui/display/types/display_constants.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
+#include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/shadow_controller.h"
@@ -161,7 +168,7 @@ TEST_F(ShellSurfaceTest, AcknowledgeConfigure) {
   const uint32_t kSerial = 1;
   shell_surface->set_configure_callback(
       base::BindRepeating(&ConfigureFullscreen, kSerial));
-  shell_surface->SetFullscreen(true);
+  shell_surface->SetFullscreen(true, display::kInvalidDisplayId);
 
   // Surface origin should not change until configure request is acknowledged.
   EXPECT_EQ(origin.ToString(),
@@ -293,7 +300,7 @@ TEST_F(ShellSurfaceTest, MaximizeFromFullscreen) {
           .BuildShellSurface();
   // Act: Maximize after fullscreen
   shell_surface->root_surface()->Commit();
-  shell_surface->SetFullscreen(true);
+  shell_surface->SetFullscreen(true, display::kInvalidDisplayId);
   shell_surface->root_surface()->Commit();
   shell_surface->Maximize();
   shell_surface->root_surface()->Commit();
@@ -313,7 +320,7 @@ TEST_F(ShellSurfaceTest, MaximizeExitsFullscreen) {
   shell_surface->root_surface()->Commit();
   shell_surface->GetWidget()->GetNativeWindow()->SetProperty(
       kRestoreOrMaximizeExitsFullscreen, true);
-  shell_surface->SetFullscreen(true);
+  shell_surface->SetFullscreen(true, display::kInvalidDisplayId);
   shell_surface->root_surface()->Commit();
   shell_surface->Maximize();
   shell_surface->root_surface()->Commit();
@@ -376,7 +383,7 @@ TEST_F(ShellSurfaceTest, RestoreFromFullscreen) {
           .BuildShellSurface();
 
   // Act: Restore after fullscreen
-  shell_surface->SetFullscreen(true);
+  shell_surface->SetFullscreen(true, display::kInvalidDisplayId);
   shell_surface->root_surface()->Commit();
   shell_surface->Restore();
   shell_surface->root_surface()->Commit();
@@ -394,7 +401,7 @@ TEST_F(ShellSurfaceTest, RestoreExitsFullscreen) {
   shell_surface->root_surface()->Commit();
   shell_surface->GetWidget()->GetNativeWindow()->SetProperty(
       kRestoreOrMaximizeExitsFullscreen, true);
-  shell_surface->SetFullscreen(true);
+  shell_surface->SetFullscreen(true, display::kInvalidDisplayId);
   shell_surface->Restore();
   shell_surface->root_surface()->Commit();
 
@@ -443,7 +450,7 @@ TEST_F(ShellSurfaceTest, HostWindowBoundsUpdatedWithNegativeCoordinate) {
   EXPECT_EQ(gfx::Rect(-20, -20, 300, 300),
             shell_surface->host_window()->bounds());
   // Root surface origin must be adjusted relative to host window.
-  EXPECT_EQ(gfx::Point(20, 20), shell_surface->root_surface_origin());
+  EXPECT_EQ(gfx::Point(20, 20), shell_surface->root_surface_origin_pixel());
 }
 
 TEST_F(ShellSurfaceTest, HostWindowIncludesAllSubSurfaces) {
@@ -485,7 +492,7 @@ TEST_F(ShellSurfaceTest, HostWindowIncludesAllSubSurfaces) {
   EXPECT_EQ(gfx::Rect(-10, -10, 292, 292),
             shell_surface->host_window()->bounds());
   // Root surface origin must be adjusted relative to host window.
-  EXPECT_EQ(gfx::Point(10, 10), shell_surface->root_surface_origin());
+  EXPECT_EQ(gfx::Point(10, 10), shell_surface->root_surface_origin_pixel());
 }
 
 TEST_F(ShellSurfaceTest, HostWindowIncludesAllSubSurfacesWithScaleFactor) {
@@ -532,7 +539,357 @@ TEST_F(ShellSurfaceTest, HostWindowIncludesAllSubSurfacesWithScaleFactor) {
   EXPECT_EQ(gfx::Rect(-5, -5, 146, 146),
             shell_surface->host_window()->bounds());
   // Root surface origin must be adjusted relative to host window.
-  EXPECT_EQ(gfx::Point(10, 10), shell_surface->root_surface_origin());
+  EXPECT_EQ(gfx::Point(10, 10), shell_surface->root_surface_origin_pixel());
+}
+
+TEST_F(ShellSurfaceTest, LocalSurfaceIdUpdatedOnHostWindowOriginChanged) {
+  constexpr gfx::Point kOrigin(100, 100);
+  std::unique_ptr<ShellSurface> shell_surface =
+      test::ShellSurfaceBuilder({100, 100})
+          .SetOrigin(kOrigin)
+          .SetGeometry(gfx::Rect(100, 100))
+          .BuildShellSurface();
+
+  auto* root_surface = shell_surface->root_surface();
+
+  auto child_buffer = std::make_unique<Buffer>(
+      exo_test_helper()->CreateGpuMemoryBuffer(gfx::Size(200, 200)));
+  auto child_surface = std::make_unique<Surface>();
+  child_surface->Attach(child_buffer.get());
+  auto subsurface =
+      std::make_unique<SubSurface>(child_surface.get(), root_surface);
+  subsurface->SetPosition(gfx::PointF(-50, -50));
+
+  child_surface->Commit();
+  root_surface->Commit();
+  EXPECT_EQ(gfx::Rect(-50, -50, 200, 200),
+            shell_surface->host_window()->bounds());
+
+  // Store the current local surface id.
+  const viz::LocalSurfaceId old_id =
+      shell_surface->GetSurfaceId().local_surface_id();
+
+  // If nothing is changed, no need to update local surface id.
+  child_surface->Commit();
+  root_surface->Commit();
+  EXPECT_EQ(shell_surface->GetSurfaceId().local_surface_id(), old_id);
+
+  // If the host window origin is updated, need to update local surface id.
+  subsurface->SetPosition(gfx::PointF(-25, -25));
+  child_surface->Commit();
+  root_surface->Commit();
+  EXPECT_EQ(gfx::Rect(-25, -25, 200, 200),
+            shell_surface->host_window()->bounds());
+  EXPECT_TRUE(
+      shell_surface->GetSurfaceId().local_surface_id().IsNewerThan(old_id));
+
+  EXPECT_EQ(gfx::Vector2dF(),
+            shell_surface->host_window()->layer()->GetSubpixelOffset());
+}
+
+TEST_F(ShellSurfaceTest,
+       LocalSurfaceIdUpdatedOnHostWindowOriginChangedWithScaleFactor) {
+  constexpr gfx::Point kOrigin(100, 100);
+  std::unique_ptr<ShellSurface> shell_surface =
+      test::ShellSurfaceBuilder({100, 100})
+          .SetOrigin(kOrigin)
+          .SetGeometry(gfx::Rect(100, 100))
+          .BuildShellSurface();
+
+  // Set scale.
+  constexpr float kScaleFactor = 2.0;
+  shell_surface->set_client_submits_surfaces_in_pixel_coordinates(true);
+  shell_surface->SetScaleFactor(kScaleFactor);
+
+  auto* root_surface = shell_surface->root_surface();
+
+  auto child_buffer = std::make_unique<Buffer>(
+      exo_test_helper()->CreateGpuMemoryBuffer(gfx::Size(200, 200)));
+  auto child_surface = std::make_unique<Surface>();
+  child_surface->Attach(child_buffer.get());
+  auto subsurface =
+      std::make_unique<SubSurface>(child_surface.get(), root_surface);
+  subsurface->SetPosition(gfx::PointF(-50, -50));
+
+  child_surface->Commit();
+  root_surface->Commit();
+  EXPECT_EQ(gfx::Rect(-25, -25, 100, 100),
+            shell_surface->host_window()->bounds());
+
+  // Store the current local surface id.
+  const viz::LocalSurfaceId old_id =
+      shell_surface->GetSurfaceId().local_surface_id();
+
+  // If nothing is changed, no need to update local surface id.
+  child_surface->Commit();
+  root_surface->Commit();
+  EXPECT_EQ(shell_surface->GetSurfaceId().local_surface_id(), old_id);
+
+  // If the host window origin is updated, need to update local surface id.
+  subsurface->SetPosition(gfx::PointF(-25, -25));
+  child_surface->Commit();
+  root_surface->Commit();
+  EXPECT_EQ(gfx::Rect(-12, -12, 100, 100),
+            shell_surface->host_window()->bounds());
+  EXPECT_TRUE(
+      shell_surface->GetSurfaceId().local_surface_id().IsNewerThan(old_id));
+
+  EXPECT_EQ(gfx::Vector2dF(-0.5, -0.5),
+            shell_surface->host_window()->layer()->GetSubpixelOffset());
+}
+
+TEST_F(ShellSurfaceTest, EventTargetWithNegativeHostWindowOrigin) {
+  constexpr gfx::Point kOrigin(20, 20);
+  std::unique_ptr<ShellSurface> shell_surface =
+      test::ShellSurfaceBuilder({256, 256})
+          .SetOrigin(kOrigin)
+          .SetGeometry(gfx::Rect(0, 0, 256, 256))
+          .SetInputRegion(gfx::Rect(0, 0, 256, 256))
+          .SetFrame(SurfaceFrameType::SHADOW)
+          .BuildShellSurface();
+
+  auto* root_surface = shell_surface->root_surface();
+
+  // Add child buffer at the upper-left corner of the root surface with empty
+  // input region.
+  auto* child_surface1 = test::ShellSurfaceBuilder::AddChildSurface(
+      root_surface, gfx::Rect(-10, -10, 32, 32));
+  child_surface1->SetInputRegion(cc::Region());
+  // Add child buffer at the bottom-right corner of the root surface with empty
+  // input region.
+  auto* child_surface2 = test::ShellSurfaceBuilder::AddChildSurface(
+      root_surface, gfx::Rect(250, 250, 32, 32));
+  child_surface2->SetInputRegion(cc::Region());
+
+  child_surface1->Commit();
+  child_surface2->Commit();
+  root_surface->Commit();
+
+  ASSERT_TRUE(shell_surface->GetWidget());
+  aura::Window* window = shell_surface->GetWidget()->GetNativeWindow();
+  aura::Window* root_window = window->GetRootWindow();
+  ui::EventTargeter* targeter =
+      root_window->GetHost()->dispatcher()->GetDefaultEventTargeter();
+
+  {
+    // Mouse is in the middle of the root surface.
+    ui::MouseEvent event(ui::ET_MOUSE_MOVED, gfx::Point(120, 120),
+                         gfx::Point(120, 120), ui::EventTimeForNow(),
+                         ui::EF_NONE, ui::EF_NONE);
+    EXPECT_EQ(root_surface->window(),
+              targeter->FindTargetForEvent(root_window, &event));
+  }
+
+  {
+    // Mouse is on upper-left of the root surface.
+    ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(21, 21),
+                         gfx::Point(21, 21), ui::EventTimeForNow(), ui::EF_NONE,
+                         ui::EF_NONE);
+    EXPECT_EQ(root_surface->window(),
+              targeter->FindTargetForEvent(root_window, &event));
+  }
+
+  {
+    // Mouse is on bottom-right of the root surface.
+    ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(275, 275),
+                         gfx::Point(275, 275), ui::EventTimeForNow(),
+                         ui::EF_NONE, ui::EF_NONE);
+    EXPECT_EQ(root_surface->window(),
+              targeter->FindTargetForEvent(root_window, &event));
+  }
+
+  {
+    // Mouse is outside of the root surface and host window.
+    ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(300, 300),
+                         gfx::Point(300, 300), ui::EventTimeForNow(),
+                         ui::EF_NONE, ui::EF_NONE);
+    EXPECT_FALSE(window->Contains(static_cast<aura::Window*>(
+        targeter->FindTargetForEvent(root_window, &event))));
+  }
+
+  {
+    // Mouse is on the left side of the root surface but inside host window.
+    ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(19, 100),
+                         gfx::Point(19, 100), ui::EventTimeForNow(),
+                         ui::EF_NONE, ui::EF_NONE);
+    EXPECT_FALSE(window->Contains(static_cast<aura::Window*>(
+        targeter->FindTargetForEvent(root_window, &event))));
+  }
+
+  {
+    // Mouse is on the right side of the root surface but inside host window.
+    ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(277, 100),
+                         gfx::Point(277, 100), ui::EventTimeForNow(),
+                         ui::EF_NONE, ui::EF_NONE);
+    EXPECT_FALSE(window->Contains(static_cast<aura::Window*>(
+        targeter->FindTargetForEvent(root_window, &event))));
+  }
+
+  {
+    // Mouse is above the root surface but inside host window.
+    ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(100, 19),
+                         gfx::Point(100, 19), ui::EventTimeForNow(),
+                         ui::EF_NONE, ui::EF_NONE);
+    EXPECT_FALSE(window->Contains(static_cast<aura::Window*>(
+        targeter->FindTargetForEvent(root_window, &event))));
+  }
+
+  {
+    // Mouse is below the root surface but inside host window.
+    ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(100, 277),
+                         gfx::Point(100, 277), ui::EventTimeForNow(),
+                         ui::EF_NONE, ui::EF_NONE);
+    EXPECT_FALSE(window->Contains(static_cast<aura::Window*>(
+        targeter->FindTargetForEvent(root_window, &event))));
+  }
+
+  {
+    // Mouse is on `child_surface1` but not on the root surface.
+    ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(19, 19),
+                         gfx::Point(19, 19), ui::EventTimeForNow(), ui::EF_NONE,
+                         ui::EF_NONE);
+    EXPECT_FALSE(window->Contains(static_cast<aura::Window*>(
+        targeter->FindTargetForEvent(root_window, &event))));
+  }
+
+  {
+    // Mouse is on `child_surface2` but not on the root surface.
+    ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(277, 277),
+                         gfx::Point(277, 277), ui::EventTimeForNow(),
+                         ui::EF_NONE, ui::EF_NONE);
+    EXPECT_FALSE(window->Contains(static_cast<aura::Window*>(
+        targeter->FindTargetForEvent(root_window, &event))));
+  }
+}
+
+TEST_F(ShellSurfaceTest,
+       EventTargetWithNegativeHostWindowOriginWithScaleFactor) {
+  constexpr gfx::Point kOrigin(20, 20);
+  std::unique_ptr<ShellSurface> shell_surface =
+      test::ShellSurfaceBuilder({256, 256})
+          .SetOrigin(kOrigin)
+          .SetGeometry(gfx::Rect(0, 0, 256, 256))
+          .SetInputRegion(gfx::Rect(0, 0, 256, 256))
+          .SetFrame(SurfaceFrameType::SHADOW)
+          .BuildShellSurface();
+
+  // Set scale.
+  constexpr float kScaleFactor = 2.0;
+  shell_surface->set_client_submits_surfaces_in_pixel_coordinates(true);
+  shell_surface->SetScaleFactor(kScaleFactor);
+
+  auto* root_surface = shell_surface->root_surface();
+
+  // Add child buffer at the upper-left corner of the root surface with empty
+  // input region.
+  auto* child_surface1 = test::ShellSurfaceBuilder::AddChildSurface(
+      root_surface, gfx::Rect(-10, -10, 32, 32));
+  child_surface1->SetInputRegion(cc::Region());
+  // Add child buffer at the bottom-right corner of the root surface with empty
+  // input region.
+  auto* child_surface2 = test::ShellSurfaceBuilder::AddChildSurface(
+      root_surface, gfx::Rect(250, 250, 32, 32));
+  child_surface2->SetInputRegion(cc::Region());
+
+  child_surface1->Commit();
+  child_surface2->Commit();
+  root_surface->Commit();
+
+  ASSERT_TRUE(shell_surface->GetWidget());
+  aura::Window* window = shell_surface->GetWidget()->GetNativeWindow();
+  aura::Window* root_window = window->GetRootWindow();
+  ui::EventTargeter* targeter =
+      root_window->GetHost()->dispatcher()->GetDefaultEventTargeter();
+
+  {
+    // Mouse is in the middle of the root surface.
+    ui::MouseEvent event(ui::ET_MOUSE_MOVED, gfx::Point(80, 80),
+                         gfx::Point(80, 80), ui::EventTimeForNow(), ui::EF_NONE,
+                         ui::EF_NONE);
+    EXPECT_EQ(root_surface->window(),
+              targeter->FindTargetForEvent(root_window, &event));
+  }
+
+  {
+    // Mouse is on upper-left of the root surface.
+    ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(21, 21),
+                         gfx::Point(21, 21), ui::EventTimeForNow(), ui::EF_NONE,
+                         ui::EF_NONE);
+    EXPECT_EQ(root_surface->window(),
+              targeter->FindTargetForEvent(root_window, &event));
+  }
+
+  {
+    // Mouse is on bottom-right of the root surface.
+    ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(147, 147),
+                         gfx::Point(147, 147), ui::EventTimeForNow(),
+                         ui::EF_NONE, ui::EF_NONE);
+    EXPECT_EQ(root_surface->window(),
+              targeter->FindTargetForEvent(root_window, &event));
+  }
+
+  {
+    // Mouse is outside of the root surface and host window.
+    ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(200, 200),
+                         gfx::Point(200, 200), ui::EventTimeForNow(),
+                         ui::EF_NONE, ui::EF_NONE);
+    EXPECT_FALSE(window->Contains(static_cast<aura::Window*>(
+        targeter->FindTargetForEvent(root_window, &event))));
+  }
+
+  {
+    // Mouse is on the left side of the root surface but inside host window.
+    ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(19, 100),
+                         gfx::Point(19, 100), ui::EventTimeForNow(),
+                         ui::EF_NONE, ui::EF_NONE);
+    EXPECT_FALSE(window->Contains(static_cast<aura::Window*>(
+        targeter->FindTargetForEvent(root_window, &event))));
+  }
+
+  {
+    // Mouse is on the right side of the root surface but inside host window.
+    ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(149, 100),
+                         gfx::Point(149, 100), ui::EventTimeForNow(),
+                         ui::EF_NONE, ui::EF_NONE);
+    EXPECT_FALSE(window->Contains(static_cast<aura::Window*>(
+        targeter->FindTargetForEvent(root_window, &event))));
+  }
+
+  {
+    // Mouse is above the root surface but inside host window.
+    ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(100, 19),
+                         gfx::Point(100, 19), ui::EventTimeForNow(),
+                         ui::EF_NONE, ui::EF_NONE);
+    EXPECT_FALSE(window->Contains(static_cast<aura::Window*>(
+        targeter->FindTargetForEvent(root_window, &event))));
+  }
+
+  {
+    // Mouse is below the root surface but inside host window.
+    ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(100, 149),
+                         gfx::Point(100, 149), ui::EventTimeForNow(),
+                         ui::EF_NONE, ui::EF_NONE);
+    EXPECT_FALSE(window->Contains(static_cast<aura::Window*>(
+        targeter->FindTargetForEvent(root_window, &event))));
+  }
+
+  {
+    // Mouse is on `child_surface1` but not on the root surface.
+    ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(19, 19),
+                         gfx::Point(19, 19), ui::EventTimeForNow(), ui::EF_NONE,
+                         ui::EF_NONE);
+    EXPECT_FALSE(window->Contains(static_cast<aura::Window*>(
+        targeter->FindTargetForEvent(root_window, &event))));
+  }
+
+  {
+    // Mouse is on `child_surface2` but not on the root surface.
+    ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(149, 149),
+                         gfx::Point(149, 149), ui::EventTimeForNow(),
+                         ui::EF_NONE, ui::EF_NONE);
+    EXPECT_FALSE(window->Contains(static_cast<aura::Window*>(
+        targeter->FindTargetForEvent(root_window, &event))));
+  }
 }
 
 TEST_F(ShellSurfaceTest, SetFullscreen) {
@@ -540,12 +897,12 @@ TEST_F(ShellSurfaceTest, SetFullscreen) {
       test::ShellSurfaceBuilder({256, 256}).SetNoCommit().BuildShellSurface();
   auto* surface = shell_surface->root_surface();
 
-  shell_surface->SetFullscreen(true);
+  shell_surface->SetFullscreen(true, display::kInvalidDisplayId);
   surface->Commit();
   EXPECT_FALSE(HasBackdrop());
   EXPECT_EQ(GetContext()->bounds().ToString(),
             shell_surface->GetWidget()->GetWindowBoundsInScreen().ToString());
-  shell_surface->SetFullscreen(false);
+  shell_surface->SetFullscreen(false, display::kInvalidDisplayId);
   surface->Commit();
   EXPECT_FALSE(HasBackdrop());
   EXPECT_NE(GetContext()->bounds().ToString(),
@@ -556,7 +913,7 @@ TEST_F(ShellSurfaceTest, PreWidgetUnfullscreen) {
   std::unique_ptr<ShellSurface> shell_surface =
       test::ShellSurfaceBuilder({256, 256}).SetNoCommit().BuildShellSurface();
   shell_surface->Maximize();
-  shell_surface->SetFullscreen(false);
+  shell_surface->SetFullscreen(false, display::kInvalidDisplayId);
   EXPECT_EQ(shell_surface->GetWidget(), nullptr);
   shell_surface->root_surface()->Commit();
   EXPECT_TRUE(shell_surface->GetWidget()->IsMaximized());
@@ -569,7 +926,7 @@ TEST_F(ShellSurfaceTest, PreWidgetMaximizeFromFullscreen) {
           .SetMaximumSize(gfx::Size(10, 10))
           .BuildShellSurface();
   // Fullscreen -> Maximize for non Lacros surfaces should stay fullscreen
-  shell_surface->SetFullscreen(true);
+  shell_surface->SetFullscreen(true, display::kInvalidDisplayId);
   shell_surface->Maximize();
   EXPECT_EQ(shell_surface->GetWidget(), nullptr);
   shell_surface->root_surface()->Commit();
@@ -875,8 +1232,9 @@ TEST_F(ShellSurfaceTest, StartMove) {
 
   ASSERT_TRUE(shell_surface->GetWidget());
 
+  aura::Env::GetInstance()->set_mouse_button_flags(ui::EF_LEFT_MOUSE_BUTTON);
   // The interactive move should end when surface is destroyed.
-  shell_surface->StartMove();
+  ASSERT_TRUE(shell_surface->StartMove());
 
   // Test that destroying the shell surface before move ends is OK.
   shell_surface.reset();
@@ -894,8 +1252,9 @@ TEST_F(ShellSurfaceTest, StartResize) {
   surface->Commit();
   ASSERT_TRUE(shell_surface->GetWidget());
 
+  aura::Env::GetInstance()->set_mouse_button_flags(ui::EF_LEFT_MOUSE_BUTTON);
   // The interactive resize should end when surface is destroyed.
-  shell_surface->StartResize(HTBOTTOMRIGHT);
+  ASSERT_TRUE(shell_surface->StartResize(HTBOTTOMRIGHT));
 
   // Test that destroying the surface before resize ends is OK.
   surface.reset();
@@ -920,8 +1279,9 @@ TEST_F(ShellSurfaceTest, StartResizeAndDestroyShell) {
   surface->Commit();
   ASSERT_TRUE(shell_surface->GetWidget());
 
+  aura::Env::GetInstance()->set_mouse_button_flags(ui::EF_LEFT_MOUSE_BUTTON);
   // The interactive resize should end when surface is destroyed.
-  shell_surface->StartResize(HTBOTTOMRIGHT);
+  ASSERT_TRUE(shell_surface->StartResize(HTBOTTOMRIGHT));
 
   // Go through configure/commit stage to update the resize component.
   shell_surface->AcknowledgeConfigure(serial);
@@ -1147,11 +1507,11 @@ TEST_F(ShellSurfaceTest, ConfigureCallback) {
   // It should be restored to the original geometry size.
   EXPECT_EQ(geometry.size(), shell_surface->CalculatePreferredSize());
 
-  shell_surface->SetFullscreen(true);
+  shell_surface->SetFullscreen(true, display::kInvalidDisplayId);
   shell_surface->AcknowledgeConfigure(0);
   EXPECT_EQ(GetContext()->bounds().size(), config_data.suggested_bounds.size());
   EXPECT_EQ(chromeos::WindowStateType::kFullscreen, config_data.state_type);
-  shell_surface->SetFullscreen(false);
+  shell_surface->SetFullscreen(false, display::kInvalidDisplayId);
   shell_surface->AcknowledgeConfigure(0);
   EXPECT_EQ(geometry.size(), shell_surface->CalculatePreferredSize());
 
@@ -1163,7 +1523,9 @@ TEST_F(ShellSurfaceTest, ConfigureCallback) {
   EXPECT_FALSE(config_data.is_active);
 
   EXPECT_FALSE(config_data.is_resizing);
-  shell_surface->StartResize(HTBOTTOMRIGHT);
+
+  aura::Env::GetInstance()->set_mouse_button_flags(ui::EF_LEFT_MOUSE_BUTTON);
+  ASSERT_TRUE(shell_surface->StartResize(HTBOTTOMRIGHT));
   shell_surface->AcknowledgeConfigure(0);
   EXPECT_TRUE(config_data.is_resizing);
 }
@@ -1968,6 +2330,43 @@ TEST_F(ShellSurfaceTest, PopupWithInputRegion) {
   }
 }
 
+// Test that popup does not close when trying to take a screenshot.
+TEST_F(ShellSurfaceTest, PopupWithCaptureMode) {
+  // Setup popup_shell_surface.
+  constexpr gfx::Size kBufferSize(256, 256);
+  auto shell_surface =
+      test::ShellSurfaceBuilder(kBufferSize).BuildShellSurface();
+  auto popup_buffer = std::make_unique<Buffer>(
+      exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize));
+  auto popup_surface = std::make_unique<Surface>();
+  popup_surface->Attach(popup_buffer.get());
+  std::unique_ptr<ShellSurface> popup_shell_surface(CreatePopupShellSurface(
+      popup_surface.get(), shell_surface.get(), gfx::Point(50, 50)));
+  popup_shell_surface->Grab();
+  popup_surface->Commit();
+
+  bool closed = false;
+  auto callback =
+      base::BindRepeating([](bool* closed) { *closed = true; }, &closed);
+  popup_shell_surface->set_close_callback(callback);
+
+  // This simulates enabling (screenshot) capture mode.
+  ash::GetTestDelegate()->OnSessionStateChanged(true);
+  popup_shell_surface->OnCaptureChanged(
+      popup_shell_surface->GetWidget()->GetNativeWindow(), nullptr);
+  // With (screenshot) capture mode on, losing capture should not close the
+  // shell surface.
+  EXPECT_FALSE(closed);
+
+  // This simulates ending (screenshot) capture mode.
+  ash::GetTestDelegate()->OnSessionStateChanged(false);
+  popup_shell_surface->OnCaptureChanged(
+      popup_shell_surface->GetWidget()->GetNativeWindow(), nullptr);
+  // With (screenshot) capture mode off, losing capture should close the shell
+  // surface.
+  EXPECT_TRUE(closed);
+}
+
 TEST_F(ShellSurfaceTest, PopupWithInvisibleParent) {
   // Invisible main window.
   std::unique_ptr<ShellSurface> root_shell_surface =
@@ -2315,7 +2714,7 @@ TEST_F(ShellSurfaceTest, UpdateBoundsWhenDraggedToAnotherDisplay) {
       base::BindLambdaForTesting(origin_change));
   event_generator->MoveMouseTo(1, 1);
   event_generator->PressLeftButton();
-  shell_surface->StartMove();
+  ASSERT_TRUE(shell_surface->StartMove());
   event_generator->MoveMouseTo(801, 1);
   event_generator->ReleaseLeftButton();
   EXPECT_EQ(last_origin, gfx::Point(800, 0));
@@ -2338,7 +2737,8 @@ TEST_F(ShellSurfaceTest, CommitShouldNotMoveDisplay) {
                     shell_surface->GetWidget()->GetNativeWindow())
                 .id());
 
-  shell_surface->StartMove();
+  aura::Env::GetInstance()->set_mouse_button_flags(ui::EF_LEFT_MOUSE_BUTTON);
+  ASSERT_TRUE(shell_surface->StartMove());
 
   constexpr gfx::Size kBufferSize(256, 256);
   auto new_buffer = std::make_unique<Buffer>(
@@ -2352,7 +2752,9 @@ TEST_F(ShellSurfaceTest, CommitShouldNotMoveDisplay) {
                     shell_surface->GetWidget()->GetNativeWindow())
                 .id());
 
-  shell_surface->EndDrag();
+  GetEventGenerator()->ReleaseLeftButton();
+
+  // shell_surface->EndDrag();
 
   // Ending drag will not move the window unless the mouse cursor enters
   // another display.
@@ -2452,6 +2854,51 @@ TEST_F(ShellSurfaceTest, ShadowBoundsWithScaleFactor) {
   EXPECT_EQ(gfx::Rect(0, 0, 256, 256), shadow->content_bounds());
 }
 
+TEST_F(ShellSurfaceTest, ShadowRoundedCornersForRoundedWindows) {
+  constexpr gfx::Point kOrigin(20, 20);
+  constexpr int kWindowCornerRadius = 12;
+
+  base::test::ScopedFeatureList scoped_feature_list(
+      chromeos::features::kRoundedWindows);
+
+  std::unique_ptr<ShellSurface> shell_surface =
+      test::ShellSurfaceBuilder({256, 256})
+          .SetOrigin(kOrigin)
+          .SetWindowState(chromeos::WindowStateType::kNormal)
+          .SetFrame(SurfaceFrameType::NORMAL)
+          .BuildShellSurface();
+
+  Surface* root_surface = shell_surface->root_surface();
+
+  root_surface->Commit();
+  views::Widget* widget = shell_surface->GetWidget();
+  ASSERT_TRUE(widget);
+
+  aura::Window* window = widget->GetNativeWindow();
+  ui::Shadow* shadow = wm::ShadowController::GetShadowForWindow(window);
+  ASSERT_TRUE(shadow);
+
+  // Window shadow radius needs to match the window radius.
+  EXPECT_EQ(shadow->rounded_corner_radius_for_testing(), 0);
+
+  // Have a window with radius of 12dp.
+  shell_surface->SetWindowCornerRadii(
+      gfx::RoundedCornersF(kWindowCornerRadius));
+  root_surface->Commit();
+
+  shadow = wm::ShadowController::GetShadowForWindow(window);
+  ASSERT_TRUE(shadow);
+  EXPECT_EQ(shadow->rounded_corner_radius_for_testing(), kWindowCornerRadius);
+
+  // Have a window with radius of 0dp.
+  shell_surface->SetWindowCornerRadii(gfx::RoundedCornersF());
+  root_surface->Commit();
+
+  shadow = wm::ShadowController::GetShadowForWindow(window);
+  ASSERT_TRUE(shadow);
+  EXPECT_EQ(shadow->rounded_corner_radius_for_testing(), 0);
+}
+
 // Make sure that resize shadow does not update until commit when the window
 // property |aura::client::kUseWindowBoundsForShadow| is false.
 TEST_F(ShellSurfaceTest, ResizeShadowIndependentBounds) {
@@ -2506,7 +2953,8 @@ TEST_F(ShellSurfaceTest, ResizeShadowIndependentBounds) {
   shell_surface->set_configure_callback(configure_callback);
 
   // Resize the widget and set geometry.
-  shell_surface->StartResize(HTBOTTOMRIGHT);
+  aura::Env::GetInstance()->set_mouse_button_flags(ui::EF_LEFT_MOUSE_BUTTON);
+  ASSERT_TRUE(shell_surface->StartResize(HTBOTTOMRIGHT));
   shell_surface->SetWidgetBounds(kNewBounds, /*adjusted by server=*/false);
   shell_surface->SetGeometry(gfx::Rect(kNewBounds.size()));
 
@@ -2562,8 +3010,9 @@ TEST_F(ShellSurfaceTest, ResizeShadowIndependentBounds) {
   EXPECT_EQ(expected_shadow_on_secondary,
             resize_shadow->GetLayerForTest()->bounds());
 
+  aura::Env::GetInstance()->set_mouse_button_flags(ui::EF_LEFT_MOUSE_BUTTON);
   constexpr gfx::Rect kResizedBoundsOn2nd{950, 50, 150, 150};
-  shell_surface->StartResize(HTTOPLEFT);
+  ASSERT_TRUE(shell_surface->StartResize(HTTOPLEFT));
   shell_surface->GetWidget()->SetBounds(kResizedBoundsOn2nd);
   shell_surface->SetGeometry(gfx::Rect(kResizedBoundsOn2nd.size()));
   shell_surface->AcknowledgeConfigure(serial);
@@ -2625,9 +3074,9 @@ TEST_F(ShellSurfaceTest, ResizeShadowDependentBounds) {
 
   gfx::Size new_size(100, 100);
   gfx::Rect new_bounds(new_size);
-
+  aura::Env::GetInstance()->set_mouse_button_flags(ui::EF_LEFT_MOUSE_BUTTON);
   // Resize the widget and set geometry.
-  shell_surface->StartResize(HTBOTTOMRIGHT);
+  ASSERT_TRUE(shell_surface->StartResize(HTBOTTOMRIGHT));
   shell_surface->SetWidgetBounds(new_bounds, /*adjusted_by_server=*/false);
   shell_surface->SetGeometry(new_bounds);
   // Shadow bounds are updated as soon as the widget bounds change.
@@ -3609,6 +4058,98 @@ TEST_F(ShellSurfaceTest, NoGeometryWidgetBoundsUpdate) {
 
   EXPECT_EQ(kSmallerSize,
             shell_surface->GetWidget()->GetWindowBoundsInScreen().size());
+}
+
+TEST_F(ShellSurfaceTest, SubpixelPositionOffset) {
+  UpdateDisplay("1200x800*1.6");
+  std::unique_ptr<ShellSurface> shell_surface =
+      test::ShellSurfaceBuilder({256, 256})
+          .SetOrigin({20, 20})
+          .BuildShellSurface();
+  auto* surface = shell_surface->root_surface();
+  // Enabling a normal frame makes `GetClientViewBounds().origin()` return
+  // (0, 32), which makes the host window not align with any pixel boundary.
+  surface->SetFrame(SurfaceFrameType::NORMAL);
+  shell_surface->root_surface()->SetSurfaceHierarchyContentBoundsForTest(
+      gfx::Rect(-20, -20, 256, 256));
+  EXPECT_TRUE(shell_surface->OnPreWidgetCommit());
+  shell_surface->CommitWidget();
+  EXPECT_EQ(gfx::Point(20, 20), shell_surface->root_surface_origin_pixel());
+  EXPECT_EQ(gfx::Rect(-12, 20, 256, 256),
+            shell_surface->host_window()->bounds());
+  // Verify that 'root_surface_origin()' is exactly preservered in pixels with
+  // subpixel offset.
+  // (0, -0.125) is caused by the frame like above, and (-0.5, -0.5) is for
+  // 'root_surface_origin()'.
+  EXPECT_EQ(gfx::Vector2dF(-0.5, -0.625),
+            shell_surface->host_window()->layer()->GetSubpixelOffset());
+}
+
+// Make sure the shell surface with capture can be safely deleted
+// even if the widget is not visible.
+TEST_F(ShellSurfaceTest, DeleteWithGrab) {
+  auto shell_surface =
+      test::ShellSurfaceBuilder({200, 200}).BuildShellSurface();
+  auto popup_shell_surface = test::ShellSurfaceBuilder({100, 100})
+                                 .SetAsPopup()
+                                 .SetParent(shell_surface.get())
+                                 .SetGrab()
+                                 .BuildShellSurface();
+  popup_shell_surface->GetWidget()->GetNativeWindow()->layer()->SetVisible(
+      false);
+  popup_shell_surface.reset();
+
+  // Close with grab.
+  popup_shell_surface = test::ShellSurfaceBuilder({100, 100})
+                            .SetAsPopup()
+                            .SetParent(shell_surface.get())
+                            .SetGrab()
+                            .BuildShellSurface();
+  popup_shell_surface->GetWidget()->Close();
+  // Close is async.
+  base::RunLoop().RunUntilIdle();
+  popup_shell_surface.reset();
+
+  // CloseNow with grab.
+  popup_shell_surface = test::ShellSurfaceBuilder({100, 100})
+                            .SetAsPopup()
+                            .SetParent(shell_surface.get())
+                            .SetGrab()
+                            .BuildShellSurface();
+  popup_shell_surface->GetWidget()->CloseNow();
+  popup_shell_surface.reset();
+}
+
+TEST_F(ShellSurfaceTest, WindowPropertyChangedNotificationWithoutRootSurface) {
+  // Test OnWindowPropertyChanged() notification on a ShellSurface, whose root
+  // surface has gone.
+
+  auto* overview_controller = ash::Shell::Get()->overview_controller();
+
+  std::unique_ptr<ShellSurface> shell_surface =
+      test::ShellSurfaceBuilder({256, 256})
+          .SetAppType(ash::AppType::LACROS)
+          .BuildShellSurface();
+
+  std::unique_ptr<ShellSurface> shell_surface1 =
+      test::ShellSurfaceBuilder({256, 256})
+          .SetAppType(ash::AppType::LACROS)
+          .BuildShellSurface();
+
+  overview_controller->StartOverview(ash::OverviewStartAction::kTests);
+  ash::WaitForOverviewEnterAnimation();
+
+  test::ShellSurfaceBuilder::DestroyRootSurface(shell_surface1.get());
+
+  // Destroying `shell_surface` will close its aura window, causing update of
+  // frame throttling in the overview mode for the remaining Lacros window(s).
+  // In this case, the remaining window is associated with `shell_surface1`. It
+  // receives OnWindowPropertyChanged() notification with
+  // ash::kFrameRateThrottleKey key. The root surface of `shell_surface1` has
+  // gone at this point. Verify that it doesn't cause crash.
+  shell_surface.reset();
+
+  overview_controller->EndOverview(ash::OverviewEndAction::kTests);
 }
 
 }  // namespace exo

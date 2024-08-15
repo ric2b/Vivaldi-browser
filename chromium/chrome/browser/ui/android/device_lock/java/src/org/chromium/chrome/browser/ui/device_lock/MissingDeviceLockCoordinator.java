@@ -4,17 +4,27 @@
 
 package org.chromium.chrome.browser.ui.device_lock;
 
+import static org.chromium.components.browser_ui.device_lock.DeviceLockBridge.DEVICE_LOCK_PAGE_HAS_BEEN_PASSED;
+
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.view.LayoutInflater;
 
+import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
+import org.chromium.base.ContextUtils;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
+
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 /**
  * The coordinator handles the creation, update, and interaction of the missing device lock UI.
@@ -28,6 +38,21 @@ public class MissingDeviceLockCoordinator {
     private final MissingDeviceLockMediator mMediator;
     private final MissingDeviceLockView mView;
     private final PropertyModelChangeProcessor mPropertyModelChangeProcessor;
+
+    // Values of the histogram recording events related to the removal of the device lock.
+    @IntDef({
+        MissingDeviceLockDialogEvent.DIALOG_SHOWN,
+        MissingDeviceLockDialogEvent.CONTINUE_WITHOUT_DEVICE_LOCK,
+        MissingDeviceLockDialogEvent.DEVICE_LOCK_RESTORED,
+        MissingDeviceLockDialogEvent.COUNT
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface MissingDeviceLockDialogEvent {
+        int DIALOG_SHOWN = 0;
+        int CONTINUE_WITHOUT_DEVICE_LOCK = 1;
+        int DEVICE_LOCK_RESTORED = 2;
+        int COUNT = 3;
+    }
 
     /**
      * The modal dialog controller to detect events on the dialog but it's not needed in our
@@ -52,10 +77,10 @@ public class MissingDeviceLockCoordinator {
             Context context, ModalDialogManager modalDialogManager) {
         mView = MissingDeviceLockView.create(LayoutInflater.from(context));
 
-        mMediator = new MissingDeviceLockMediator((wipeAllData) -> {
-            onContinueWithoutDeviceLock.onResult(wipeAllData);
-            hideDialog(DialogDismissalCause.POSITIVE_BUTTON_CLICKED);
-        }, context);
+        mMediator = new MissingDeviceLockMediator(
+                (wipeAllData)
+                        -> continueWithoutDeviceLock(wipeAllData, onContinueWithoutDeviceLock),
+                context);
 
         mPropertyModelChangeProcessor = PropertyModelChangeProcessor.create(
                 mMediator.getModel(), mView, MissingDeviceLockViewBinder::bind);
@@ -69,6 +94,18 @@ public class MissingDeviceLockCoordinator {
                         .with(ModalDialogProperties.DIALOG_STYLES,
                                 ModalDialogProperties.DialogStyles.NORMAL)
                         .build();
+    }
+
+    @VisibleForTesting
+    void continueWithoutDeviceLock(
+            Boolean wipeAllData, Callback<Boolean> onContinueWithoutDeviceLock) {
+        onContinueWithoutDeviceLock.onResult(wipeAllData);
+        SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
+        prefs.edit().remove(DEVICE_LOCK_PAGE_HAS_BEEN_PASSED).apply();
+        RecordHistogram.recordEnumeratedHistogram(
+                "Android.Automotive.DeviceLockRemovalDialogEvent",
+                MissingDeviceLockDialogEvent.CONTINUE_WITHOUT_DEVICE_LOCK,
+                MissingDeviceLockDialogEvent.COUNT);
     }
 
     /**
@@ -99,6 +136,10 @@ public class MissingDeviceLockCoordinator {
         mModalDialogManager.showDialog(mModalDialogPropertyModel,
                 ModalDialogManager.ModalDialogType.APP,
                 ModalDialogManager.ModalDialogPriority.VERY_HIGH);
+        RecordHistogram.recordEnumeratedHistogram(
+                "Android.Automotive.DeviceLockRemovalDialogEvent",
+                MissingDeviceLockDialogEvent.DIALOG_SHOWN,
+                MissingDeviceLockDialogEvent.COUNT);
     }
 
     /**

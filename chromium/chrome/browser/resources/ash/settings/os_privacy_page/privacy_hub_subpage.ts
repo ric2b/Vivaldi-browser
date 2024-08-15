@@ -18,7 +18,7 @@ import {SettingsToggleButtonElement} from '/shared/settings/controls/settings_to
 import {PrefsMixin} from 'chrome://resources/cr_components/settings_prefs/prefs_mixin.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
-import {assert} from 'chrome://resources/js/assert_ts.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -57,13 +57,13 @@ export class SettingsPrivacyHubSubpage extends SettingsPrivacyHubSubpageBase {
   static get properties() {
     return {
       /**
-       * Whether the part of privacy hub for dogfooding should be displayed.
+       * Whether the location access control should be displayed in Privacy Hub.
        */
-      showPrivacyHubMVPPage_: {
+      showPrivacyHubLocationControl_: {
         type: Boolean,
         readOnly: true,
         value: function() {
-          return loadTimeData.getBoolean('showPrivacyHubMVPPage');
+          return loadTimeData.getBoolean('showPrivacyHubLocationControl');
         },
       },
 
@@ -118,6 +118,20 @@ export class SettingsPrivacyHubSubpage extends SettingsPrivacyHubSubpageBase {
       },
 
       /**
+       * Tracks if the Chrome code wants the camera switch to be disabled.
+       */
+      cameraSwitchForceDisabled_: {
+        type: Boolean,
+        value: false,
+      },
+
+      shouldDisableCameraToggle_: {
+        type: Boolean,
+        computed: 'computeShouldDisableCameraToggle_(isCameraListEmpty_, ' +
+            'cameraSwitchForceDisabled_)',
+      },
+
+      /**
        * Whether the features related to app permissions should be displayed in
        * privacy hub.
        */
@@ -165,8 +179,10 @@ export class SettingsPrivacyHubSubpage extends SettingsPrivacyHubSubpageBase {
   private microphonesConnected_: string[];
   private microphoneHardwareToggleActive_: boolean;
   private shouldDisableMicrophoneToggle_: boolean;
+  private cameraSwitchForceDisabled_: boolean;
+  private shouldDisableCameraToggle_: boolean;
   private showAppPermissions_: boolean;
-  private showPrivacyHubMVPPage_: boolean;
+  private showPrivacyHubLocationControl_: boolean;
   private showSpeakOnMuteDetectionPage_: boolean;
 
   constructor() {
@@ -186,6 +202,14 @@ export class SettingsPrivacyHubSubpage extends SettingsPrivacyHubSubpageBase {
     this.browserProxy_.getInitialMicrophoneHardwareToggleState().then(
         (enabled) => {
           this.setMicrophoneHardwareToggleState_(enabled);
+        });
+    this.addWebUiListener(
+        'force-disable-camera-switch', (disabled: boolean) => {
+          this.cameraSwitchForceDisabled_ = disabled;
+        });
+    this.browserProxy_.getInitialCameraSwitchForceDisabledState().then(
+        (disabled) => {
+          this.cameraSwitchForceDisabled_ = disabled;
         });
 
     this.browserProxy_.getCameraLedFallbackState().then((enabled) => {
@@ -247,6 +271,13 @@ export class SettingsPrivacyHubSubpage extends SettingsPrivacyHubSubpageBase {
     return this.microphoneHardwareToggleActive_ || this.isMicListEmpty_;
   }
 
+  /**
+   * @return Whether privacy hub camera toggle should be disabled.
+   */
+  private computeShouldDisableCameraToggle_(): boolean {
+    return this.cameraSwitchForceDisabled_ || this.isCameraListEmpty_;
+  }
+
   private updateMediaDeviceLists_(): void {
     MediaDevicesProxy.getMediaDevices().enumerateDevices().then((devices) => {
       const connectedCameras: string[] = [];
@@ -287,6 +318,10 @@ export class SettingsPrivacyHubSubpage extends SettingsPrivacyHubSubpageBase {
   private onMicrophoneSubpageArrowClick_(e: Event): void {
     this.navigateToMicrophoneSubpage_();
     e.stopPropagation();
+  }
+
+  private onGeolocationAreaClick_(): void {
+    Router.getInstance().navigateTo(routes.PRIVACY_HUB_GEOLOCATION);
   }
 }
 

@@ -212,7 +212,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram base="true" name="CustomTabs.DetachedResourceRequest.Duration"
-    units="ms" expires_after="2021-10-17">
+    units="ms" expires_after="2024-03-17">
   <owner>lizeb@chromium.org</owner>
   <owner>cct-team@google.com</owner>
   <summary>
@@ -223,7 +223,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.DetachedResourceRequest.FinalStatus"
-    enum="NetErrorCodes" expires_after="2024-01-14">
+    enum="NetErrorCodes" expires_after="2024-03-17">
   <owner>lizeb@chromium.org</owner>
   <owner>cct-team@google.com</owner>
   <summary>
@@ -235,7 +235,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram base="true" name="CustomTabs.DetachedResourceRequest.RedirectsCount"
-    units="redirects" expires_after="M92">
+    units="redirects" expires_after="2024-03-17">
   <owner>lizeb@chromium.org</owner>
   <owner>cct-team@google.com</owner>
   <summary>
@@ -245,8 +245,22 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="CustomTabs.DeviceSpec" enum="PcctDeviceSpec"
+    expires_after="2024-11-09">
+  <owner>jinsukkim@chromium.org</owner>
+  <owner>chrome-connective-tissue@google.com</owner>
+  <summary>
+    Reports some chosen specs of the device on which PCCT runs. We are
+    interested in understanding how many devices running PCCT will be able to
+    migrate to Activity Embedding later, which requires that the device not be a
+    low-end one and support picture-in-picture feature. Low-endness is defined
+    as the return value of API ActivityManager#isLowRamDevice. This is recorded
+    only once per Chrome session, when PCCT is launched.
+  </summary>
+</histogram>
+
 <histogram name="CustomTabs.FeatureUsage" enum="CustomTabsFeatureUsed"
-    expires_after="2024-01-14">
+    expires_after="2024-03-17">
   <owner>donnd@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -287,7 +301,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.HadInteractionOnClose.FormStillActive"
-    enum="Boolean" expires_after="2024-01-21">
+    enum="Boolean" expires_after="2024-03-24">
   <owner>katzz@google.com</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -308,6 +322,18 @@ chromium-metrics-reviews@google.com.
     forward and false if there have not been web contents interactions or the
     tab cannot go back / forward at the time of closing the CCT. If the tab is
     restored the previous form interactions will be reset.
+  </summary>
+</histogram>
+
+<histogram name="CustomTabs.HasNonSpoofablePackageName" enum="Boolean"
+    expires_after="2024-05-01">
+  <owner>katzz@google.com</owner>
+  <owner>chrome-connective-tissue@google.com</owner>
+  <summary>
+    Android only. Boolean histogram denoting whether the package name can be
+    retrieved in a non-spoofable way for Custom Tabs. When the histogram returns
+    true, it means we can confirm the package name was passed by the defined
+    host app. Emitted when the Custom Tab is launched.
   </summary>
 </histogram>
 
@@ -380,7 +406,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.MayLaunchUrlType" enum="MayLaunchUrlType"
-    expires_after="2024-01-21">
+    expires_after="2024-03-24">
   <owner>lizeb@chromium.org</owner>
   <summary>
     Android only. Which flavors of mayLaunchUrl() were used before a tab launch.
@@ -391,6 +417,41 @@ chromium-metrics-reviews@google.com.
 
     Before M118, unlike CustomTabs.WarmupStateOnLaunch, this metric was only
     recorded with a valid session.
+  </summary>
+</histogram>
+
+<histogram name="CustomTabs.MinimizedEvents" enum="CustomTabsMinimizedEvents"
+    expires_after="2024-04-01">
+  <owner>katzz@google.com</owner>
+  <owner>chrome-connective-tissue@google.com</owner>
+  <summary>
+    Android only. Enum histogram to track the different events related to
+    Minimized Custom Tabs. This includes: minimizing(enter PiP), maximizing
+    (restore from PiP), destroy (PiP closed + CT session ends). Emitted on each
+    event.
+  </summary>
+</histogram>
+
+<histogram name="CustomTabs.MinimizedFeatureAvailability"
+    enum="CustomTabsMinimizedFeatureAvailability" expires_after="2024-04-01">
+  <owner>sinansahin@google.com</owner>
+  <owner>chrome-connective-tissue@google.com</owner>
+  <summary>
+    Minimized Custom Tab feature availability. Recorded during startup in
+    #onFinishNativeInitialization() when the availability is first checked to
+    initialize the feature. Android only.
+  </summary>
+</histogram>
+
+<histogram name="CustomTabs.PageInsights.Event" enum="PageInsightsEvent"
+    expires_after="2024-04-01">
+  <owner>jinsukkim@chromium.org</owner>
+  <owner>chrome-connective-tissue@google.com</owner>
+  <summary>
+    Recorded only on Android. Holds the interaction that the user has with Page
+    Insights BottomSheet, such as invoking PIH manually or by being auto
+    triggered, the bottom sheet's states and when it is dismissed, and
+    interactions with xSurface views.
   </summary>
 </histogram>
 
@@ -552,7 +613,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.SessionDisconnectStatus"
-    enum="CustomTabsSessionDisconnectStatus" expires_after="2024-01-21">
+    enum="CustomTabsSessionDisconnectStatus" expires_after="2024-03-24">
   <owner>kgrosu@google.com</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -606,33 +667,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="CustomTabs.SpeculationStatusOnStart"
-    enum="CustomTabsSpeculationStatusOnStart" expires_after="2021-02-14">
-  <owner>lizeb@chromium.org</owner>
-  <summary>
-    Recorded only for Android. How a speculation was started or why it was
-    disallowed. This is recorded when a speculation of any kind is requested,
-    with either a &quot;Speculation allowed&quot; value, or a reason why it was
-    not allowed. If the speculation is allowed and is attempted to be started,
-    the status on start will be counted in addition: one of
-    &quot;Prefetch&quot;, &quot;Prerender&quot;, &quot;Background Tab&quot; or
-    &quot;Prerender not started&quot;. The last case is when a prerender is
-    abandoned during start. Starting with M84 this is is also recorded for
-    webapps/WebAPKs. Filter the platform for just CCT/TWA data.
-  </summary>
-</histogram>
-
-<histogram name="CustomTabs.SpeculationStatusOnSwap"
-    enum="CustomTabsSpeculationStatusOnSwap" expires_after="2020-07-26">
-  <owner>lizeb@chromium.org</owner>
-  <summary>
-    Recorded only for Android. Recorded when a speculation is requesting to swap
-    into a visible tab. Starting with M84 this is is also recorded for
-    webapps/WebAPKs. Filter the platform for just CCT/TWA data.
-  </summary>
-</histogram>
-
-<histogram name="CustomTabs.Startup.TimeToFirstCommitNavigation.{suffix}"
+<histogram name="CustomTabs.Startup.TimeToFirstCommitNavigation2.{suffix}"
     units="ms" expires_after="2024-08-25">
   <owner>mthiesse@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
@@ -640,6 +675,9 @@ chromium-metrics-reviews@google.com.
     Startup time for a Custom Tab from the earliest point in startup to the
     first navigation commit. Split by varying degrees of warmness, from cold to
     fully pre-loaded through mayLaunchUrl.
+
+    It is recommended to limit analysis of data to Android P+ because on prior
+    versions the cold start detection is less robust.
 
     {suffix}.
   </summary>
@@ -658,7 +696,7 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
-<histogram name="CustomTabs.Startup.TimeToLargestContentfulPaint.{suffix}"
+<histogram name="CustomTabs.Startup.TimeToLargestContentfulPaint2.{suffix}"
     units="ms" expires_after="2024-08-25">
   <owner>mthiesse@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
@@ -666,6 +704,9 @@ chromium-metrics-reviews@google.com.
     Startup time for a Custom Tab from the earliest point in startup to the
     Largest Contentful Paint on the first navigation. Split by varying degrees
     of warmness, from cold to fully pre-loaded through mayLaunchUrl.
+
+    It is recommended to limit analysis of data to Android P+ because on prior
+    versions the cold start detection is less robust.
 
     {suffix}.
   </summary>
@@ -710,8 +751,31 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="CustomTabs.TimeElapsedSinceMinimized.Destroyed" units="s"
+    expires_after="2024-04-01">
+  <owner>katzz@google.com</owner>
+  <owner>chrome-connective-tissue@google.com</owner>
+  <summary>
+    Android only. Starts tracking system time when minimization begins and
+    records the difference if the PiP window is removed through any event EXCEPT
+    maximizing (un-PiP). This means the Custom Tab activity would also be
+    destroyed. Emitted when CCT PiP windows are destroyed.
+  </summary>
+</histogram>
+
+<histogram name="CustomTabs.TimeElapsedSinceMinimized.Maximized" units="s"
+    expires_after="2024-04-01">
+  <owner>katzz@google.com</owner>
+  <owner>chrome-connective-tissue@google.com</owner>
+  <summary>
+    Android only. Starts tracking system time when minimization begins and
+    records the difference if the PiP window is maximized (the tab goes back to
+    its original state). Emitted when tab is maximized.
+  </summary>
+</histogram>
+
 <histogram name="CustomTabs.TimeScrollUpdateReceivedAfterScrollEnd" units="ms"
-    expires_after="2024-01-21">
+    expires_after="2024-03-24">
   <owner>sinansahin@google.com</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -752,7 +816,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.WebContentsStateOnLaunch" enum="WebContentsState"
-    expires_after="2024-01-21">
+    expires_after="2024-03-24">
   <owner>lizeb@chromium.org</owner>
   <summary>
     Android: When a CustomTabActivity creates its Tab, whether we use a
@@ -761,7 +825,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="TrustedWebActivity.ClearDataDialogOnClearAppDataAccepted"
-    enum="Boolean" expires_after="M114">
+    enum="Boolean" expires_after="M126">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -771,7 +835,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="TrustedWebActivity.ClearDataDialogOnUninstallAccepted"
-    enum="Boolean" expires_after="M114">
+    enum="Boolean" expires_after="M126">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -782,7 +846,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="TrustedWebActivity.DelegatedNotificationSmallIconFallback"
     enum="TrustedWebActivityDelegatedNotificationSmallIconFallback"
-    expires_after="M114">
+    expires_after="M126">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -809,7 +873,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="TrustedWebActivity.LocationDelegationEnrolled" enum="Boolean"
-    expires_after="2024-01-14">
+    expires_after="2024-03-24">
   <owner>eirage@chromium.org</owner>
   <owner>peconn@chromium.org</owner>
   <summary>
@@ -839,21 +903,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="TrustedWebActivity.LocationUpdateErrorCode"
-    enum="TrustedWebActivityLocationErrorCode" expires_after="2022-10-23">
-  <obsolete>
-    Deprecated 2022-09. no longer needed.
-  </obsolete>
-  <owner>eirage@chromium.org</owner>
-  <owner>peconn@chromium.org</owner>
-  <summary>
-    Records an error code when we get a new location update or location error
-    from the Trusted Web Activity client app. Record
-    &quot;LocationUpdateError.NONE&quot; (value = 0) if there is no error and
-    the geoposition is valid.
-  </summary>
-</histogram>
-
 <histogram name="TrustedWebActivity.Notification.PermissionRequestResult"
     enum="ContentSetting" expires_after="2023-11-01">
   <owner>mvanouwerkerk@chromium.org</owner>
@@ -870,7 +919,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="TrustedWebActivity.ShareTargetRequest"
-    enum="WebShareTargetMethod" expires_after="M114">
+    enum="WebShareTargetMethod" expires_after="M126">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>Recorded when data is shared via a Trusted Web Activity.</summary>
@@ -887,7 +936,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="TrustedWebActivity.TimeInVerifiedOrigin.V2" units="ms"
-    expires_after="M120">
+    expires_after="M126">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -897,7 +946,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="TrustedWebActivity.TimeOutOfVerifiedOrigin.V2" units="ms"
-    expires_after="M120">
+    expires_after="M126">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>

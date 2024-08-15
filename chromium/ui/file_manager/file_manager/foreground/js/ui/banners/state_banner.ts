@@ -10,11 +10,11 @@
 
 import {assertInstanceof} from 'chrome://resources/ash/common/assert.js';
 
-import {util} from '../../../../common/js/util.js';
+import {visitURL} from '../../../../common/js/util.js';
 import {Command} from '../command.js';
 
 import {getTemplate} from './state_banner.html.js';
-import {AllowedVolumeOrType, Banner} from './types.js';
+import {type AllowedVolumeOrType, Banner} from './types.js';
 
 /**
  * State banner is a type of banner that indicates the Files app has reached a
@@ -101,7 +101,7 @@ export class StateBanner extends Banner {
           e.preventDefault();
           return;
         }
-        util.visitURL(extraButton.getAttribute('href')!);
+        visitURL(extraButton.getAttribute('href')!);
         e.preventDefault();
       });
     }

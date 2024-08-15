@@ -29,6 +29,7 @@
 #include "build/build_config.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
+#include "components/search_engines/search_engine_choice_utils.h"
 #include "components/search_engines/search_engine_type.h"
 #include "components/search_engines/search_engines_pref_names.h"
 #include "components/search_engines/search_terms_data.h"
@@ -37,7 +38,6 @@
 #include "components/search_engines/template_url_service_observer.h"
 #include "components/search_engines/template_url_starter_pack_data.h"
 #include "components/search_engines/util.h"
-#include "components/signin/public/base/signin_switches.h"
 #include "components/sync/model/sync_change.h"
 #include "components/sync/model/sync_change_processor.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
@@ -393,7 +393,8 @@ void TemplateURLService::RegisterProfilePrefs(
   registry->RegisterBooleanPref(
       prefs::kDefaultSearchProviderContextMenuAccessAllowed, true);
 
-  if (base::FeatureList::IsEnabled(switches::kSearchEngineChoice)) {
+  if (search_engines::IsChoiceScreenFlagEnabled(
+          search_engines::ChoicePromo::kAny)) {
     registry->RegisterInt64Pref(
         prefs::kDefaultSearchProviderChoiceScreenCompletionTimestamp, 0);
   }
@@ -750,11 +751,18 @@ TemplateURLService::TemplateURLVector TemplateURLService::GetTemplateURLs() {
 
 TemplateURLService::OwnedTemplateURLVector
 TemplateURLService::GetTemplateURLsForChoiceScreen() {
-  // TODO (b/282656014): Update the returned list of search engines to comply
-  // with choice screen requirements.
   OwnedTemplateURLVector result;
+
+  // We call `GetPrepopulatedEngines` instead of
+  // `GetSearchProvidersUsingLoadedEngines` because the latter will return the
+  // list of search engines that might have been modified by the user (by
+  // changing the engine's keyword in settings for example).
+  // Changing this will cause issues in the icon generation behavior that's
+  // handled by `generate_search_engine_icons.py`.
   std::vector<std::unique_ptr<TemplateURLData>> engines =
-      TemplateURLPrepopulateData::GetPrepopulatedEnginesForChoiceScreen(prefs_);
+      TemplateURLPrepopulateData::GetPrepopulatedEngines(
+          prefs_, /*default_search_provider_index=*/nullptr, TemplateURLPrepopulateData::SearchType::kMain,
+          /*include_current_default=*/true, /*template_url_service=*/this);
   for (const auto& engine : engines) {
     result.push_back(std::make_unique<TemplateURL>(*engine));
   }
@@ -1436,10 +1444,11 @@ absl::optional<syncer::ModelError> TemplateURLService::ProcessSyncChanges(
       // has changed the default search provider on a different machine, and we
       // get the search engine update before the preference update.
       //
-      // In this case, ignore the delete, because we never want to reset the
+      // In this case, postpone the delete, because we never want to reset the
       // default search provider as a result of ACTION_DELETE. If the preference
-      // update arrives later, we may be stuck with an extra search engine entry
-      // in this edge case, but it's better than most alternatives.
+      // update arrives later, the engine will be removed. We still may be stuck
+      // with an extra search engine entry in the edge case (due to storing the
+      // deletion in memory), but it's better than most alternatives.
       //
       // In the past, we tried re-creating the deleted TemplateURL, but it was
       // likely a source of duplicate search engine entries. crbug.com/1022775
@@ -1450,6 +1459,8 @@ absl::optional<syncer::ModelError> TemplateURLService::ProcessSyncChanges(
       }
       if (remove_turl) {
         Remove(existing_turl);
+      } else {
+        postponed_deleted_default_engine_guid_ = existing_turl->sync_guid();
       }
       continue;
     }
@@ -1643,6 +1654,11 @@ void TemplateURLService::ProcessTemplateURLChange(
   syncer::SyncChangeList changes = {
       syncer::SyncChange(from_here, type, sync_data)};
   sync_processor_->ProcessSyncChanges(FROM_HERE, changes);
+}
+
+bool TemplateURLService::IsEeaChoiceCountry() {
+  return search_engines::IsEeaChoiceCountry(
+      search_engines::GetSearchEngineChoiceCountryId(prefs_));
 }
 
 std::string TemplateURLService::GetSessionToken() {
@@ -1862,7 +1878,8 @@ void TemplateURLService::Init(const Initializer* initializers,
 
   if (prefs_) {
     pref_change_registrar_.Init(prefs_);
-    if (base::FeatureList::IsEnabled(switches::kSearchEngineChoice)) {
+    if (search_engines::IsChoiceScreenFlagEnabled(
+            search_engines::ChoicePromo::kAny)) {
       for (int i = 0; i < kDefaultSearchTypeCount; i++) {
       pref_change_registrar_.Add(
           VivaldiGetDefaultProviderGuidPrefForType(DefaultSearchType(i)),
@@ -1936,8 +1953,15 @@ void TemplateURLService::RemoveFromMaps(const TemplateURL* template_url) {
   if (template_url->type() == TemplateURL::OMNIBOX_API_EXTENSION)
     return;
 
-  if (!template_url->sync_guid().empty())
+  if (!template_url->sync_guid().empty()) {
     guid_to_turl_.erase(template_url->sync_guid());
+    if (postponed_deleted_default_engine_guid_ == template_url->sync_guid()) {
+      // `template_url` has been updated locally or removed, discard incoming
+      // deletion.
+      postponed_deleted_default_engine_guid_.clear();
+    }
+  }
+
   // |provider_map_| is only initialized after loading has completed.
   if (loaded_) {
     provider_map_->Remove(template_url);
@@ -2337,12 +2361,26 @@ bool TemplateURLService::ApplyDefaultSearchChangeNoMetrics(
     }
   }
 
-  bool changed = default_search_provider_[type] != previous_default_search_engine;
-  if (changed) {
-    model_mutated_notification_pending_ = true;
+  if (default_search_provider_[type] == previous_default_search_engine) {
+    // Default search engine hasn't changed.
+    return false;
   }
 
-  return changed;
+  model_mutated_notification_pending_ = true;
+  if (!postponed_deleted_default_engine_guid_.empty()) {
+    // There was a postponed deletion for the previous default search engine,
+    // remove it now.
+    TemplateURL* existing_turl =
+        GetTemplateURLForGUID(postponed_deleted_default_engine_guid_);
+    if (existing_turl) {
+      // Remove() below CHECKs that the current default search engine is not
+      // deleted.
+      Remove(existing_turl);
+    }
+    postponed_deleted_default_engine_guid_.clear();
+  }
+
+  return true;
 }
 
 TemplateURL* TemplateURLService::Add(std::unique_ptr<TemplateURL> template_url,

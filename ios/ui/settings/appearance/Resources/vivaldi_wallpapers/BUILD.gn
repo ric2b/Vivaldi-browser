@@ -1,0 +1,104 @@
+# Copyright (c) 2023 Vivaldi Technologies AS. All rights reserved
+
+import("//build/config/ios/asset_catalog.gni")
+
+group("imagesets") {
+  deps = [
+    ":ios_background_01",
+    ":ios_background_02",
+    ":ios_background_03",
+    ":ios_background_04",
+    ":ios_background_05",
+    ":ios_background_06",
+    ":ios_background_07",
+    ":ios_background_08",
+    ":ios_background_09",
+    ":ios_background_10",
+    ":ios_background_11",
+    ":ios_background_12"
+  ]
+}
+
+imageset("ios_background_01") {
+  sources = [
+    "ios_background_01.imageset/Contents.json",
+    "ios_background_01.imageset/ios_background_01.jpg"
+  ]
+}
+
+imageset("ios_background_02") {
+  sources = [
+    "ios_background_02.imageset/Contents.json",
+    "ios_background_02.imageset/ios_background_02.jpg"
+  ]
+}
+
+imageset("ios_background_03") {
+  sources = [
+    "ios_background_03.imageset/Contents.json",
+    "ios_background_03.imageset/ios_background_03.jpg"
+  ]
+}
+
+imageset("ios_background_04") {
+  sources = [
+    "ios_background_04.imageset/Contents.json",
+    "ios_background_04.imageset/ios_background_04.jpg"
+  ]
+}
+
+imageset("ios_background_05") {
+  sources = [
+    "ios_background_05.imageset/Contents.json",
+    "ios_background_05.imageset/ios_background_05.jpg"
+  ]
+}
+
+imageset("ios_background_06") {
+  sources = [
+    "ios_background_06.imageset/Contents.json",
+    "ios_background_06.imageset/ios_background_06.jpg"
+  ]
+}
+
+imageset("ios_background_07") {
+  sources = [
+    "ios_background_07.imageset/Contents.json",
+    "ios_background_07.imageset/ios_background_07.jpg"
+  ]
+}
+
+imageset("ios_background_08") {
+  sources = [
+    "ios_background_08.imageset/Contents.json",
+    "ios_background_08.imageset/ios_background_08.jpg"
+  ]
+}
+
+imageset("ios_background_09") {
+  sources = [
+    "ios_background_09.imageset/Contents.json",
+    "ios_background_09.imageset/ios_background_09.jpg"
+  ]
+}
+
+imageset("ios_background_10") {
+  sources = [
+    "ios_background_10.imageset/Contents.json",
+    "ios_background_10.imageset/ios_background_10.jpg"
+  ]
+}
+
+imageset("ios_background_11") {
+  sources = [
+    "ios_background_11.imageset/Contents.json",
+    "ios_background_11.imageset/ios_background_11.jpg"
+  ]
+}
+
+imageset("ios_background_12") {
+  sources = [
+    "ios_background_12.imageset/Contents.json",
+    "ios_background_12.imageset/ios_background_12.jpg"
+  ]
+}

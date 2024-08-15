@@ -60,95 +60,114 @@
         }
       },
       {
-          "id": "ExtensionInfo",
-          "type": "object",
-          "description": "Extension action per tab id.",
-          "properties": {
-            "id": {
-              "type": "string",
-              "description": "The unique extension identifier."
-            },
-            "badgeTooltip": {
-              "type": "string",
-              "optional": true,
-              "description": "Tooltip for the button."
-            },
-            "badgeText": {
-              "type": "string",
-              "optional": true,
-              "description": "Badgetext, typically room for four chars."
-            },
-            "badgeIcon": {
-              "type": "string",
-              "optional": true,
-              "description": "data-url for the current icon."
-            },
-            "badgeTextColor": {
-              "type": "string",
-              "optional": true,
-              "description": "Text color for the badge text, currently unused."
-            },
-            "badgeBackgroundColor": {
-              "type": "string",
-              "optional": true,
-              "description": "Background color for the badge text."
-            },
-            "enabled": {
-              "type": "boolean",
-              "optional": true,
-              "description": "Whether the extension is enabled or not."
-            },
-            "actionType": {
-              "$ref": "ActionType",
-              "optional": true,
-              "description": "The type of the extensionAction, either pageaction or browseraction."
-            },
-            "visible": {
-              "type": "boolean",
-              "optional": true,
-              "description": "Visibility of the action button, defaults to true."
-            },
-            "actionIsHidden": {
-              "type": "boolean",
-              "optional": true,
-              "description": "Set to true if the action is user-set to hidden. Defaults to false."
-            },
-            "allowInIncognito": {
-              "type": "boolean",
-              "optional": true,
-              "description": "Whether the action is available in incognito windows or not."
-            },
-            "extensionType": {
-              "$ref": "ExtensionType",
-              "optional": true,
-              "description": "The type of the extensionAction, either pageaction or browseraction. Defaults to |extensionAction|."
-            },
-            "name": {
-              "type": "string",
-              "description": "Name of extension."
-            },
-            "homepage": {
-              "type": "string",
-              "optional": true,
-              "description": "Homepage of extension."
-            },
-            "optionspage": {
-              "type": "string",
-              "optional": true,
-              "description": "Address of extension options page."
-            },
-            "optionsInNewTab": {
-              "type": "boolean",
-              "optional": true,
-              "description": "false if the options page should be opened embedded, true if it opens in a new tab."
-            },
-            "keyboardShortcut": {
-              "type": "string",
-              "optional": true,
-              "description": "Keyboard shortcut to toggle this extension."
-            }
+        "id": "ExtensionInfo",
+        "type": "object",
+        "description": "Extension action per tab id.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The unique extension identifier."
+          },
+          "badgeTooltip": {
+            "type": "string",
+            "optional": true,
+            "description": "Tooltip for the button."
+          },
+          "badgeText": {
+            "type": "string",
+            "optional": true,
+            "description": "Badgetext, typically room for four chars."
+          },
+          "badgeIcon": {
+            "type": "string",
+            "optional": true,
+            "description": "data-url for the current icon."
+          },
+          "badgeTextColor": {
+            "type": "string",
+            "optional": true,
+            "description": "Text color for the badge text, currently unused."
+          },
+          "badgeBackgroundColor": {
+            "type": "string",
+            "optional": true,
+            "description": "Background color for the badge text."
+          },
+          "enabled": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Whether the extension is enabled or not."
+          },
+          "actionType": {
+            "$ref": "ActionType",
+            "optional": true,
+            "description": "The type of the extensionAction, either pageaction or browseraction."
+          },
+          "visible": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Visibility of the action button, defaults to true."
+          },
+          "actionIsHidden": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Set to true if the action is user-set to hidden. Defaults to false."
+          },
+          "allowInIncognito": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Whether the action is available in incognito windows or not."
+          },
+          "extensionType": {
+            "$ref": "ExtensionType",
+            "optional": true,
+            "description": "The type of the extensionAction, either pageaction or browseraction. Defaults to |extensionAction|."
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of extension."
+          },
+          "homepage": {
+            "type": "string",
+            "optional": true,
+            "description": "Homepage of extension."
+          },
+          "optionspage": {
+            "type": "string",
+            "optional": true,
+            "description": "Address of extension options page."
+          },
+          "optionsInNewTab": {
+            "type": "boolean",
+            "optional": true,
+            "description": "false if the options page should be opened embedded, true if it opens in a new tab."
+          },
+          "keyboardShortcut": {
+            "type": "string",
+            "optional": true,
+            "description": "Keyboard shortcut to toggle this extension."
           }
         }
+      },
+      {
+        "id": "ExtensionInstallError",
+        "type": "object",
+        "description": "Extension error.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The unique extension identifier."
+          },
+          "name": {
+            "type": "string",
+            "description": "Extension name."
+          },
+          "commandId": {
+            "type": "integer",
+            "description": "Int id to lookup an error on action."
+          }
+        }
+      }
     ],
     "functions": [
       {
@@ -171,30 +190,30 @@
         "name": "executeExtensionAction",
         "type": "function",
         "description": "execute browserAction or pageAction for extension",
-          "parameters": [
-            {
-              "name": "extensionId",
-              "type": "string",
-              "description": ""
-            },
-            {
-              "type": "integer",
-              "name": "windowId",
-              "description": "id of the application window."
-            },
-            {
-              "name": "showPopup",
-              "type": "function",
-              "description": "Callback for popup actions.",
-              "parameters": [
-                {
-                  "name": "popupUrl",
-                  "type": "string",
-                  "description": "Relative url for the popup document."
-                }
-              ]
-            }
-          ]
+        "parameters": [
+          {
+            "name": "extensionId",
+            "type": "string",
+            "description": ""
+          },
+          {
+            "type": "integer",
+            "name": "windowId",
+            "description": "id of the application window."
+          },
+          {
+            "name": "showPopup",
+            "type": "function",
+            "description": "Callback for popup actions.",
+            "parameters": [
+              {
+                "name": "popupUrl",
+                "type": "string",
+                "description": "Relative url for the popup document."
+              }
+            ]
+          }
+        ]
       },
       {
         "name": "toggleBrowserActionVisibility",
@@ -269,35 +288,58 @@
         "name": "executeMenuAction",
         "type": "function",
         "description": "Execute menu action for extension.",
-          "parameters": [
-            {
-              "name": "extensionId",
-              "type": "string",
-              "description": ""
-            },
-            {
-              "type": "integer",
-              "name": "windowId",
-              "description": "id of the application window."
-            },
-            {
-              "type": "string",
-              "name": "menuId",
-              "description": "id of the menu item."
-            },
-            {
-              "name": "result",
-              "type": "function",
-              "description": "Callback for action.",
-              "parameters": [
-                {
-                  "name": "success",
-                  "type": "boolean",
-                  "description": "true on success."
-                }
-              ]
-            }
-          ]
+        "parameters": [
+          {
+            "name": "extensionId",
+            "type": "string",
+            "description": ""
+          },
+          {
+            "type": "integer",
+            "name": "windowId",
+            "description": "id of the application window."
+          },
+          {
+            "type": "string",
+            "name": "menuId",
+            "description": "id of the menu item."
+          },
+          {
+            "name": "result",
+            "type": "function",
+            "description": "Callback for action.",
+            "parameters": [
+              {
+                "name": "success",
+                "type": "boolean",
+                "description": "true on success."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "showGlobalError",
+        "type": "function",
+        "description": "Show the dialog for an extension install error.",
+        "parameters": [
+          {
+            "name": "commandId",
+            "type": "integer",
+            "description": "The id for the error."
+          },
+          {
+            "name": "windowId",
+            "type": "integer",
+            "description": "id of the application window. Used to find the Browser object."
+          }
+        ]
+      },
+      {
+        "name": "triggerGlobalErrors",
+        "type": "function",
+        "description": "Loop through any pending global extension errors and fire events for the ui.",
+        "parameters": []
       }
     ],
     "events": [
@@ -377,6 +419,28 @@
           {
             "$ref": "ExtensionInfo",
             "name": "extension"
+          }
+        ]
+      },
+      {
+        "name": "onExtensionDisabledInstallErrorAdded",
+        "type": "function",
+        "description": "Fired when an extensionerror is created. Can be of various kinds of GlobalErrors",
+        "parameters": [
+          {
+            "$ref": "ExtensionInstallError",
+            "name": "error"
+          }
+        ]
+      },
+      {
+        "name": "onExtensionDisabledInstallErrorRemoved",
+        "type": "function",
+        "description": "Fired when an extensionerror is handled or removed. Can be of various kinds of GlobalErrors.",
+        "parameters": [
+          {
+            "$ref": "ExtensionInstallError",
+            "name": "error"
           }
         ]
       }

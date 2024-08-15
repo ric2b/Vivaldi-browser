@@ -13,6 +13,7 @@
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/ranges/algorithm.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
@@ -38,6 +39,7 @@
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/policy_service_impl.h"
+#include "components/policy/core/common/policy_types.h"
 #include "components/policy/core/common/proxy_policy_provider.h"
 #include "components/policy/core/common/schema_registry_tracking_policy_provider.h"
 #include "components/policy/policy_constants.h"
@@ -293,13 +295,12 @@ class LocalTestInfoBarVisibilityManager :
       content::WebContents* web_contents) {
     auto* infobar_manager =
         infobars::ContentInfoBarManager::FromWebContents(web_contents);
-    for (size_t i = 0; i < infobar_manager->infobar_count(); i++) {
-      auto* infobar = infobar_manager->infobar_at(i);
-      if (infobar->delegate()->GetIdentifier() ==
-          infobars::InfoBarDelegate::LOCAL_TEST_POLICIES_APPLIED_INFOBAR) {
-        infobar_manager->RemoveInfoBar(infobar);
-        return;
-      }
+    const auto it = base::ranges::find(
+        infobar_manager->infobars(),
+        infobars::InfoBarDelegate::LOCAL_TEST_POLICIES_APPLIED_INFOBAR,
+        &infobars::InfoBar::GetIdentifier);
+    if (it != infobar_manager->infobars().cend()) {
+      infobar_manager->RemoveInfoBar(*it);
     }
   }
 
@@ -698,7 +699,8 @@ void ProfilePolicyConnector::UseLocalTestPolicyProvider() {
   if (local_test_policy_provider_) {
     local_test_policy_provider_->set_active(true);
   }
-  policy_service()->RefreshPolicies(base::DoNothing());
+  policy_service()->RefreshPolicies(base::DoNothing(),
+                                    PolicyFetchReason::kTest);
   if (!local_test_infobar_visibility_manager_->infobar_active()) {
     local_test_infobar_visibility_manager_
         ->AddInfobarsForActiveLocalTestPoliciesAllTabs();
@@ -713,7 +715,8 @@ void ProfilePolicyConnector::RevertUseLocalTestPolicyProvider() {
   local_test_policy_provider_->set_active(false);
   static_cast<LocalTestPolicyProvider*>(local_test_policy_provider_)
       ->ClearPolicies();
-  policy_service()->RefreshPolicies(base::DoNothing());
+  policy_service()->RefreshPolicies(base::DoNothing(),
+                                    PolicyFetchReason::kTest);
   if (local_test_infobar_visibility_manager_->infobar_active()) {
     local_test_infobar_visibility_manager_
         ->DismissInfobarsForActiveLocalTestPoliciesAllTabs();

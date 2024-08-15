@@ -60,12 +60,12 @@ namespace {
 
 constexpr uint32_t kMaxNoUpdateFrameCount = 100;
 
-const char* GetJankThreadTypeName(FrameInfo::SmoothEffectDrivingThread type) {
+const char* GetThreadTypeName(SmoothEffectDrivingThread type) {
   switch (type) {
-    case FrameInfo::SmoothEffectDrivingThread::kCompositor:
-      return "Compositor";
-    case FrameInfo::SmoothEffectDrivingThread::kMain:
-      return "Main";
+    case SmoothEffectDrivingThread::kCompositor:
+      return "CompositorThread";
+    case SmoothEffectDrivingThread::kMain:
+      return "MainThread";
     default:
       NOTREACHED();
       return "";
@@ -102,6 +102,14 @@ int GetIndexForJankV3Metric(SmoothEffectDrivingThread thread_type,
 std::string GetCheckerboardingV3HistogramName(FrameSequenceTrackerType type) {
   return base::StrCat(
       {"Graphics.Smoothness.Checkerboarding3.",
+       FrameSequenceTracker::GetFrameSequenceTrackerTypeName(type)});
+}
+
+std::string GetCheckerboardingV3ThreadedHistogramName(
+    FrameSequenceTrackerType type,
+    const char* thread_name) {
+  return base::StrCat(
+      {"Graphics.Smoothness.Checkerboarding3.", thread_name, ".",
        FrameSequenceTracker::GetFrameSequenceTrackerTypeName(type)});
 }
 
@@ -280,11 +288,20 @@ void FrameSequenceMetrics::ReportMetrics() {
             main_throughput_.frames_expected,
             main_throughput_.frames_produced,
             jank_reporter_->jank_count(),
+            v3_.frames_expected,
+            v3_.frames_dropped,
+            v3_.jank_count,
         });
 
     main_throughput_ = {};
     impl_throughput_ = {};
     jank_reporter_->Reset();
+
+    v3_.frames_expected = 0u;
+    v3_.frames_dropped = 0u;
+    v3_.frames_missing_content = 0u;
+    v3_.no_update_count = 0u;
+    v3_.jank_count = 0u;
     return;
   }
 
@@ -333,10 +350,7 @@ void FrameSequenceMetrics::ReportMetrics() {
           "Graphics.Smoothness.PercentDroppedFrames3.AllSequences", percent);
     }
 
-    const char* thread_name =
-        thread_type == SmoothEffectDrivingThread::kCompositor
-            ? "CompositorThread"
-            : "MainThread";
+    const char* thread_name = GetThreadTypeName(thread_type);
 
     STATIC_HISTOGRAM_POINTER_GROUP(
         GetThroughputV3HistogramName(type(), thread_name),
@@ -354,13 +368,22 @@ void FrameSequenceMetrics::ReportMetrics() {
             GetCheckerboardingV3HistogramName(type_), 1, 100, 101,
             base::HistogramBase::kUmaTargetedHistogramFlag));
 
-    const char* jank_thread_name = GetJankThreadTypeName(GetEffectiveThread());
+    if (scrolling_thread_ != SmoothEffectDrivingThread::kUnknown) {
+      STATIC_HISTOGRAM_POINTER_GROUP(
+          GetCheckerboardingV3ThreadedHistogramName(type_, thread_name),
+          GetIndexForMetric(thread_type, type_), kMaximumHistogramIndex,
+          Add(percent_missing_content),
+          base::LinearHistogram::FactoryGet(
+              GetCheckerboardingV3ThreadedHistogramName(type_, thread_name), 1,
+              100, 101, base::HistogramBase::kUmaTargetedHistogramFlag));
+    }
+
     STATIC_HISTOGRAM_POINTER_GROUP(
-        GetJankV3HistogramName(type_, jank_thread_name),
-        GetIndexForJankV3Metric(GetEffectiveThread(), type_),
+        GetJankV3HistogramName(type_, thread_name),
+        GetIndexForJankV3Metric(thread_type, type_),
         kMaximumJankV3HistogramIndex, Add(percent_jank),
         base::LinearHistogram::FactoryGet(
-            GetJankV3HistogramName(type_, jank_thread_name), 1, 100, 101,
+            GetJankV3HistogramName(type_, thread_name), 1, 100, 101,
             base::HistogramBase::kUmaTargetedHistogramFlag));
     v3_.frames_expected = 0u;
     v3_.frames_dropped = 0u;
@@ -666,7 +689,7 @@ void FrameSequenceMetrics::TraceJankV3(uint64_t sequence_number,
   dict->SetInteger("frame_sequence_number", sequence_number);
   dict->SetInteger("last_presented_frame_sequence_number",
                    v3_.last_presented_frame.sequence_number);
-  dict->SetString("thread-type", GetJankThreadTypeName(GetEffectiveThread()));
+  dict->SetString("thread-type", GetThreadTypeName(GetEffectiveThread()));
   dict->SetString("tracker-type",
                   FrameSequenceTracker::GetFrameSequenceTrackerTypeName(type_));
   dict->EndDictionary();

@@ -70,7 +70,7 @@ DelegatedFrameHost::~DelegatedFrameHost() {
   DCHECK(!compositor_);
 
   DCHECK(host_frame_sink_manager_);
-  host_frame_sink_manager_->InvalidateFrameSinkId(frame_sink_id_);
+  host_frame_sink_manager_->InvalidateFrameSinkId(frame_sink_id_, this);
 }
 
 void DelegatedFrameHost::AddObserverForTesting(Observer* observer) {
@@ -488,7 +488,8 @@ void DelegatedFrameHost::DidCopyStaleContent(
   auto transfer_resource = viz::TransferableResource::MakeGpu(
       result->GetTextureResult()->mailbox_holders[0].mailbox, GL_TEXTURE_2D,
       result->GetTextureResult()->mailbox_holders[0].sync_token, result->size(),
-      viz::SinglePlaneFormat::kRGBA_8888, false /* is_overlay_candidate */);
+      viz::SinglePlaneFormat::kRGBA_8888, false /* is_overlay_candidate */,
+      viz::TransferableResource::ResourceSource::kStaleContent);
   viz::CopyOutputResult::ReleaseCallbacks release_callbacks =
       result->TakeTextureOwnership();
   DCHECK_EQ(1u, release_callbacks.size());

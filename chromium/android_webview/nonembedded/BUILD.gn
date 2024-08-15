@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/android/rules.gni")
+import("//third_party/jni_zero/jni_zero.gni")
 
 generate_jni("nonembedded_jni_headers") {
   sources = [
@@ -38,7 +39,6 @@ android_library("nonembedded_java") {
     "//android_webview/glue:glue_java",
     "//android_webview/proto:metrics_bridge_records_proto_java",
     "//base:base_java",
-    "//base:jni_java",
     "//build/android:build_java",
     "//components/about_ui/android:aboutui_java",
     "//components/crash/android:java",
@@ -48,8 +48,9 @@ android_library("nonembedded_java") {
     "//third_party/android_deps:com_google_code_findbugs_jsr305_java",
     "//third_party/android_deps:protobuf_lite_runtime_java",
     "//third_party/androidx:androidx_annotation_annotation_java",
+    "//third_party/jni_zero:jni_zero_java",
     "//ui/android:ui_no_recycler_view_java",
-    "//url:gurl_java",
+    "//url:url_java",
   ]
 }
 
@@ -134,7 +135,6 @@ android_library("services_java") {
     "//android_webview:common_variations_java",
     "//android_webview/proto:metrics_bridge_records_proto_java",
     "//base:base_java",
-    "//base:jni_java",
     "//components/background_task_scheduler:background_task_scheduler_task_ids_java",
     "//components/component_updater/android:component_provider_service_aidl_java",
     "//components/minidump_uploader:minidump_uploader_java",
@@ -143,6 +143,7 @@ android_library("services_java") {
     "//third_party/android_deps:com_google_code_findbugs_jsr305_java",
     "//third_party/android_deps:protobuf_lite_runtime_java",
     "//third_party/androidx:androidx_annotation_annotation_java",
+    "//third_party/jni_zero:jni_zero_java",
   ]
   resources_package = "org.chromium.android_webview.devui"
 }
@@ -205,7 +206,6 @@ source_set("nonembedded") {
     "//components/version_info",
     "//components/version_info/android:channel_getter",
     "//url",
-    "//url:gurl_android",
 
     # Called via JNI by LicenseContentProvider in :nonembedded_java.
     "//components/about_ui:about_ui_android",

@@ -36,13 +36,13 @@
 #include "chrome/browser/commerce/shopping_service_factory.h"
 #include "chrome/browser/feature_guide/notifications/feature_notification_guide_service.h"
 #include "chrome/browser/flags/android/chrome_feature_list.h"
-#include "chrome/browser/segmentation_platform/default_model/chrome_start_model_android.h"
 #include "chrome/browser/segmentation_platform/default_model/chrome_start_model_android_v2.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/commerce/core/shopping_service.h"
 #include "components/segmentation_platform/embedder/default_model/contextual_page_actions_model.h"
 #include "components/segmentation_platform/embedder/default_model/device_tier_segment.h"
 #include "components/segmentation_platform/embedder/default_model/intentional_user_model.h"
+#include "components/segmentation_platform/embedder/default_model/most_visited_tiles_user.h"
 #include "components/segmentation_platform/embedder/default_model/power_user_segment.h"
 #include "components/segmentation_platform/embedder/default_model/query_tiles_model.h"
 #include "components/segmentation_platform/embedder/default_model/tablet_productivity_user_model.h"
@@ -156,7 +156,6 @@ std::vector<std::unique_ptr<Config>> GetSegmentationPlatformConfig(
     configs.emplace_back(GetConfigForContextualPageActions(context));
   }
 
-  configs.emplace_back(ChromeStartModel::GetConfig());
   configs.emplace_back(QueryTilesModel::GetConfig());
   configs.emplace_back(ChromeStartModelV2::GetConfig());
   configs.emplace_back(IntentionalUserModel::GetConfig());
@@ -164,6 +163,7 @@ std::vector<std::unique_ptr<Config>> GetSegmentationPlatformConfig(
   configs.emplace_back(FrequentFeatureUserModel::GetConfig());
   configs.emplace_back(DeviceTierSegment::GetConfig());
   configs.emplace_back(TabletProductivityUserModel::GetConfig());
+  configs.emplace_back(MostVisitedTilesUser::GetConfig());
 #endif
 
   configs.emplace_back(LowUserEngagementModel::GetConfig());
@@ -251,18 +251,6 @@ void FieldTrialRegisterImpl::RegisterSubsegmentFieldTrialIfNeeded(
   // TODO(ssid): Make GetSubsegmentName as a ModelProvider API so that clients
   // can simply implement it instead of adding conditions here, once the
   // subsegment process is more stable.
-  if (segment_id == SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_FEED_USER) {
-    group_name = FeedUserSegment::GetSubsegmentName(subsegment_rank);
-  }
-#if BUILDFLAG(IS_ANDROID)
-  if (segment_id == SegmentId::POWER_USER_SEGMENT) {
-    group_name = PowerUserSegment::GetSubsegmentName(subsegment_rank);
-  }
-#endif
-  if (segment_id == SegmentId::CROSS_DEVICE_USER_SEGMENT) {
-    group_name = CrossDeviceUserSegment::GetSubsegmentName(subsegment_rank);
-  }
-
   if (!group_name) {
     return;
   }

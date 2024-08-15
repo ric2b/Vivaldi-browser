@@ -12,7 +12,6 @@
 #include "base/json/json_file_value_serializer.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "notes/note_load_details.h"
 #include "translate_history/th_codec.h"
 #include "translate_history/th_constants.h"
 

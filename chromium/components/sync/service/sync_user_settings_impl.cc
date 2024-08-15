@@ -82,6 +82,7 @@ bool SyncUserSettingsImpl::IsInitialSyncFeatureSetupComplete() const {
   return prefs_->IsInitialSyncFeatureSetupComplete();
 }
 
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 void SyncUserSettingsImpl::SetInitialSyncFeatureSetupComplete(
     SyncFirstSetupCompleteSource source) {
   if (!IsEncryptEverythingEnabled() && vivaldi::IsVivaldiRunning())
@@ -92,6 +93,7 @@ void SyncUserSettingsImpl::SetInitialSyncFeatureSetupComplete(
   UMA_HISTOGRAM_ENUMERATION("Signin.SyncFirstSetupCompleteSource", source);
   prefs_->SetInitialSyncFeatureSetupComplete();
 }
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 bool SyncUserSettingsImpl::IsSyncEverythingEnabled() const {
   return prefs_->HasKeepEverythingSynced();
@@ -198,6 +200,18 @@ UserSelectableTypeSet SyncUserSettingsImpl::GetRegisteredSelectableTypes()
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+void SyncUserSettingsImpl::SetSyncFeatureDisabledViaDashboard() {
+  prefs_->SetSyncFeatureDisabledViaDashboard();
+}
+
+void SyncUserSettingsImpl::ClearSyncFeatureDisabledViaDashboard() {
+  prefs_->ClearSyncFeatureDisabledViaDashboard();
+}
+
+bool SyncUserSettingsImpl::IsSyncFeatureDisabledViaDashboard() const {
+  return prefs_->IsSyncFeatureDisabledViaDashboard();
+}
+
 bool SyncUserSettingsImpl::IsSyncAllOsTypesEnabled() const {
   return prefs_->IsSyncAllOsTypesEnabled();
 }
@@ -342,7 +356,7 @@ ModelTypeSet SyncUserSettingsImpl::GetPreferredDataTypes() const {
   // though they're technically not registered.
   types.PutAll(ControlTypes());
 
-  static_assert(49 + 1 /* notes */ == GetNumModelTypes(),
+  static_assert(47 + 1 /* notes */ == GetNumModelTypes(),
                 "If adding a new sync data type, update the list below below if"
                 " you want to disable the new data type for local sync.");
   if (prefs_->IsLocalSyncEnabled()) {

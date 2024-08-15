@@ -27,7 +27,7 @@ import {CrSettingsPrefs} from 'chrome://resources/cr_components/settings_prefs/p
 import {CrViewManagerElement} from 'chrome://resources/cr_elements/cr_view_manager/cr_view_manager.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
-import {assert, assertNotReached} from 'chrome://resources/js/assert_ts.js';
+import {assert, assertNotReached} from 'chrome://resources/js/assert.js';
 import {afterNextRender, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {HatsBrowserProxyImpl, TrustSafetyInteraction} from '../../hats_browser_proxy.js';
@@ -664,6 +664,9 @@ export class SettingsPrivacyGuidePageElement extends PrivacyGuideBase {
     if (!this.prefs) {
       // Prefs are not available yet. Show the card until they become available.
       return true;
+    }
+    if (loadTimeData.getBoolean('is3pcdCookieSettingsRedesignEnabled')) {
+      return false;
     }
     const currentCookieSetting =
         this.getPref('generated.cookie_primary_setting').value;

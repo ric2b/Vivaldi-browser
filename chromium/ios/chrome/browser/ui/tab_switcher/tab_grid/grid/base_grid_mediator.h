@@ -14,11 +14,14 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/toolbars/tab_grid_toolbars_buttons_delegate.h"
 
 class Browser;
+@protocol GridConsumer;
+@protocol GridItemProvider;
 @protocol GridMediatorDelegate;
 @protocol GridToolbarsConfigurationProvider;
 @protocol GridToolbarsMutator;
 @protocol TabCollectionConsumer;
 @protocol TabGridToolbarsActionWrangler;
+@protocol TabPresentationDelegate;
 class WebStateList;
 
 // Mediates between model layer and tab grid UI layer.
@@ -44,11 +47,11 @@ class WebStateList;
 // Action handler for the tab grid toolbars. Each method is the result of an
 // action on a toolbar button.
 @property(nonatomic, weak) id<TabGridToolbarsActionWrangler> actionWrangler;
-
-// Initializer with `consumer` as the receiver of model layer updates.
-- (instancetype)initWithConsumer:(id<TabCollectionConsumer>)consumer
-    NS_DESIGNATED_INITIALIZER;
-- (instancetype)init NS_UNAVAILABLE;
+// Grid consumer.
+@property(nonatomic, weak) id<GridConsumer> gridConsumer;
+// Delegate to handle presenting tab UI.
+@property(nonatomic, weak) id<TabPresentationDelegate> tabPresentationDelegate;
+@property(nonatomic, weak) id<GridItemProvider> itemProvider;
 
 @end
 

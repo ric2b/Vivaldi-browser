@@ -19,6 +19,8 @@
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/simple_combobox_model.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/insets.h"
@@ -45,6 +47,7 @@ namespace {
 
 class VectorIconGallery : public View, public TextfieldController {
  public:
+  METADATA_HEADER(VectorIconGallery);
   VectorIconGallery() {
     size_input_ = AddChildView(std::make_unique<Textfield>());
     color_input_ = AddChildView(std::make_unique<Textfield>());
@@ -56,7 +59,7 @@ class VectorIconGallery : public View, public TextfieldController {
     box->SetFlexForView(image_view_container_, 1);
 
     base::FilePath test_dir;
-    base::PathService::Get(base::DIR_SOURCE_ROOT, &test_dir);
+    base::PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, &test_dir);
     std::u16string base_path = test_dir.AsUTF16Unsafe();
     std::vector<std::u16string> icon_dir = {
         base::FilePath(test_dir.AppendASCII("ash")
@@ -288,6 +291,9 @@ class VectorIconGallery : public View, public TextfieldController {
   raw_ptr<Button> file_go_button_;
   std::string contents_;
 };
+
+BEGIN_METADATA(VectorIconGallery, View)
+END_METADATA
 
 }  // namespace
 

@@ -13,6 +13,8 @@
 #include "build/build_config.h"
 #include "chrome/browser/autofill/autofill_uitest_util.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
+#include "chrome/browser/extensions/api/autofill_private/autofill_private_event_router.h"
+#include "chrome/browser/extensions/api/autofill_private/autofill_private_event_router_factory.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "components/autofill/content/browser/test_autofill_client_injector.h"
@@ -45,8 +47,22 @@ class AutofillPrivateApiTest : public ExtensionApiTest {
   void SetUpOnMainThread() override {
     ExtensionApiTest::SetUpOnMainThread();
     content::RunAllPendingInMessageLoop();
+    // Rebinding the `autofill_client()` test PDM on the
+    // `AutofillPrivateEventRouter`. This sets the correct test PDM instance on
+    // the observers under the `AutofillPrivateEventRouter`.
+    AutofillPrivateEventRouterFactory::GetForProfile(browser_context())
+        ->RebindPersonalDataManagerForTesting(
+            autofill_client()->GetPersonalDataManager());
     autofill_client()->GetPersonalDataManager()->SetPrefService(
         autofill_client()->GetPrefs());
+  }
+
+  void TearDownOnMainThread() override {
+    // Unbinding the `autofill_client()` test PDM on the
+    // `AutofillPrivateEventRouter`. This removes the test PDM instance added to
+    // the observers in `SetUpOnMainThread()` for `AutofillPrivateEventRouter`.
+    AutofillPrivateEventRouterFactory::GetForProfile(browser_context())
+        ->UnbindPersonalDataManagerForTesting();
   }
 
  protected:
@@ -65,6 +81,13 @@ class AutofillPrivateApiTest : public ExtensionApiTest {
   }
 
  private:
+  content::BrowserContext* browser_context() {
+    return browser()
+        ->tab_strip_model()
+        ->GetActiveWebContents()
+        ->GetBrowserContext();
+  }
+
   autofill::TestAutofillClientInjector<autofill::TestContentAutofillClient>
       test_autofill_client_injector_;
 };
@@ -171,8 +194,14 @@ IN_PROC_BROWSER_TEST_F(AutofillPrivateApiTest,
                    "PaymentsUserAuthSuccessfulForMandatoryAuthToggle"));
 }
 
+// TODO(1495229): Flaking on Mac, Linux and ChromeOS bots
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#define MAYBE_showEditCardDialogForLocalCard_ReauthOn DISABLED_showEditCardDialogForLocalCard_ReauthOn
+#else
+#define MAYBE_showEditCardDialogForLocalCard_ReauthOn showEditCardDialogForLocalCard_ReauthOn
+#endif
 IN_PROC_BROWSER_TEST_F(AutofillPrivateApiTest,
-                       authenticateUserToEditLocalCard) {
+                       MAYBE_showEditCardDialogForLocalCard_ReauthOn) {
   base::UserActionTester user_action_tester;
 
   autofill_client()
@@ -193,13 +222,39 @@ IN_PROC_BROWSER_TEST_F(AutofillPrivateApiTest,
                   mock_mandatory_reauth_manager),
               AuthenticateWithMessage)
       .Times(1);
-  EXPECT_TRUE(RunAutofillSubtest("authenticateUserToEditLocalCard"))
-      << message_;
+  EXPECT_TRUE(RunAutofillSubtest("getLocalCard")) << message_;
   EXPECT_EQ(1, user_action_tester.GetActionCount(
                    "PaymentsUserAuthTriggeredToShowEditLocalCardDialog"));
   EXPECT_EQ(1, user_action_tester.GetActionCount(
                    "PaymentsUserAuthSuccessfulToShowEditLocalCardDialog"));
 }
 #endif
+
+// TODO(1495229): Flaking on Mac, Linux and ChromeOS bots
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#define MAYBE_showEditCardDialogForLocalCard_ReauthOff DISABLED_showEditCardDialogForLocalCard_ReauthOff
+#else
+#define MAYBE_showEditCardDialogForLocalCard_ReauthOff showEditCardDialogForLocalCard_ReauthOff
+#endif
+IN_PROC_BROWSER_TEST_F(AutofillPrivateApiTest,
+                       MAYBE_showEditCardDialogForLocalCard_ReauthOff) {
+  base::UserActionTester user_action_tester;
+
+  autofill_client()
+      ->GetPersonalDataManager()
+      ->SetPaymentMethodsMandatoryReauthEnabled(false);
+  auto* mock_mandatory_reauth_manager =
+      autofill_client()->GetOrCreatePaymentsMandatoryReauthManager();
+
+  EXPECT_CALL(*static_cast<autofill::payments::MockMandatoryReauthManager*>(
+                  mock_mandatory_reauth_manager),
+              AuthenticateWithMessage)
+      .Times(0);
+  EXPECT_TRUE(RunAutofillSubtest("getLocalCard")) << message_;
+  EXPECT_EQ(0, user_action_tester.GetActionCount(
+                   "PaymentsUserAuthTriggeredToShowEditLocalCardDialog"));
+  EXPECT_EQ(0, user_action_tester.GetActionCount(
+                   "PaymentsUserAuthSuccessfulToShowEditLocalCardDialog"));
+}
 
 }  // namespace extensions

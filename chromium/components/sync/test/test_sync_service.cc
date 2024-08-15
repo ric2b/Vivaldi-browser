@@ -31,10 +31,20 @@ SyncCycleSnapshot MakeDefaultCycleSnapshot() {
       /*has_remaining_local_changes=*/false);
 }
 
+CoreAccountInfo GetDefaultAccountInfo() {
+  CoreAccountInfo account;
+  account.email = "foo@bar.com";
+  account.gaia = "foo-gaia-id";
+  account.account_id = CoreAccountId::FromGaiaId(account.gaia);
+  return account;
+}
+
 }  // namespace
 
 TestSyncService::TestSyncService()
-    : user_settings_(this), last_cycle_snapshot_(MakeDefaultCycleSnapshot()) {}
+    : user_settings_(this),
+      account_info_(GetDefaultAccountInfo()),
+      last_cycle_snapshot_(MakeDefaultCycleSnapshot()) {}
 
 TestSyncService::~TestSyncService() = default;
 
@@ -66,13 +76,6 @@ void TestSyncService::SetSetupInProgress(bool in_progress) {
 void TestSyncService::SetHasSyncConsent(bool has_sync_consent) {
   has_sync_consent_ = has_sync_consent;
 }
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-void TestSyncService::SetSyncFeatureDisabledViaDashboard(
-    bool disabled_via_dashboard) {
-  sync_feature_disabled_via_dashboard_ = disabled_via_dashboard;
-}
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 void TestSyncService::SetPersistentAuthError() {
   transport_state_ = TransportState::PAUSED;
@@ -175,7 +178,7 @@ base::android::ScopedJavaLocalRef<jobject> TestSyncService::GetJavaObject() {
 
 void TestSyncService::SetSyncFeatureRequested() {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  sync_feature_disabled_via_dashboard_ = false;
+  user_settings_.SetSyncFeatureDisabledViaDashboard(false);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
@@ -231,12 +234,6 @@ bool TestSyncService::RequiresClientUpgrade() const {
          syncer::UPGRADE_CLIENT;
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-bool TestSyncService::IsSyncFeatureDisabledViaDashboard() const {
-  return sync_feature_disabled_via_dashboard_;
-}
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
 std::unique_ptr<SyncSetupInProgressHandle>
 TestSyncService::GetSetupInProgressHandle() {
   return nullptr;
@@ -255,7 +252,7 @@ ModelTypeSet TestSyncService::GetActiveDataTypes() const {
     return ModelTypeSet();
   }
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (sync_feature_disabled_via_dashboard_) {
+  if (user_settings_.IsSyncFeatureDisabledViaDashboard()) {
     return ModelTypeSet();
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -349,6 +346,10 @@ SyncService::ModelTypeDownloadStatus TestSyncService::GetDownloadStatusFor(
   }
   return ModelTypeDownloadStatus::kUpToDate;
 }
+
+void TestSyncService::RecordReasonIfWaitingForUpdates(
+    ModelType type,
+    const std::string& histogram_name) const {}
 
 void TestSyncService::SetInvalidationsForSessionsEnabled(bool enabled) {}
 

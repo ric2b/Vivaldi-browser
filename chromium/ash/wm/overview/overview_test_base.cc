@@ -7,19 +7,17 @@
 #include <tuple>
 
 #include "ash/public/cpp/test/test_saved_desk_delegate.h"
-#include "ash/session/session_controller_impl.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/style/close_button.h"
 #include "ash/style/system_shadow.h"
-#include "ash/test_shell_delegate.h"
 #include "ash/wm/overview/overview_controller.h"
+#include "ash/wm/overview/overview_drop_target.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_item.h"
 #include "ash/wm/overview/overview_item_base.h"
 #include "ash/wm/overview/overview_item_view.h"
 #include "ash/wm/overview/overview_utils.h"
-#include "ash/wm/overview/overview_wallpaper_controller.h"
 #include "ash/wm/overview/scoped_overview_transform_window.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
 #include "ash/wm/window_mini_view_header_view.h"
@@ -48,24 +46,6 @@ void OverviewTestBase::EnterTabletMode() {
 
 bool OverviewTestBase::InOverviewSession() {
   return GetOverviewController()->InOverviewSession();
-}
-
-void OverviewTestBase::DispatchLongPress(OverviewItemBase* item) {
-  const gfx::Point point =
-      gfx::ToRoundedPoint(item->target_bounds().CenterPoint());
-  ui::GestureEvent long_press(
-      point.x(), point.y(), 0, base::TimeTicks::Now(),
-      ui::GestureEventDetails(ui::ET_GESTURE_LONG_PRESS));
-  GetEventGenerator()->Dispatch(&long_press);
-}
-
-std::vector<std::unique_ptr<aura::Window>> OverviewTestBase::CreateAppWindows(
-    int n) {
-  std::vector<std::unique_ptr<aura::Window>> windows(n);
-  for (int i = n - 1; i >= 0; --i) {
-    windows[i] = CreateAppWindow();
-  }
-  return windows;
 }
 
 bool OverviewTestBase::WindowsOverlapping(aura::Window* window1,
@@ -130,7 +110,7 @@ gfx::Rect OverviewTestBase::GetTransformedBoundsInRootWindow(
 }
 
 OverviewItemBase* OverviewTestBase::GetDropTarget(int grid_index) {
-  return GetOverviewSession()->grid_list_[grid_index]->GetDropTarget();
+  return GetOverviewSession()->grid_list_[grid_index]->drop_target();
 }
 
 CloseButton* OverviewTestBase::GetCloseButton(OverviewItemBase* item) {
@@ -209,13 +189,11 @@ void OverviewTestBase::SetUp() {
   shelf_view_test_api_->SetAnimationDuration(base::Milliseconds(1));
   ScopedOverviewTransformWindow::SetImmediateCloseForTests(
       /*immediate=*/true);
-  OverviewWallpaperController::SetDisableChangeWallpaperForTest(true);
   ui::PresentationTimeRecorder::SetReportPresentationTimeImmediatelyForTest(
       true);
 }
 
 void OverviewTestBase::TearDown() {
-  OverviewWallpaperController::SetDisableChangeWallpaperForTest(false);
   ui::PresentationTimeRecorder::SetReportPresentationTimeImmediatelyForTest(
       false);
   trace_names_.clear();

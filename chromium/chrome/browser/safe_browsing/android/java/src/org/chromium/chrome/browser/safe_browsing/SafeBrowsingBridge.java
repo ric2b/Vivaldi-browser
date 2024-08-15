@@ -6,12 +6,13 @@ package org.chromium.chrome.browser.safe_browsing;
 
 import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.annotations.JNINamespace;
-import org.chromium.base.annotations.NativeMethods;
+import org.jni_zero.JNINamespace;
+import org.jni_zero.NativeMethods;
 
 /**
  * Bridge providing access to native-side Safe Browsing data.
  */
+// TODO(crbug.com/1410601): Pass in the profile and remove GetActiveUserProfile in C++.
 @JNINamespace("safe_browsing")
 public final class SafeBrowsingBridge {
     /**

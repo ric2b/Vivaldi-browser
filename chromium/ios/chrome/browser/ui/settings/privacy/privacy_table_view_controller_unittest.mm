@@ -31,10 +31,11 @@
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_controller_test.h"
-#import "ios/chrome/browser/sync/mock_sync_service_utils.h"
-#import "ios/chrome/browser/sync/sync_service_factory.h"
+#import "ios/chrome/browser/sync/model/mock_sync_service_utils.h"
+#import "ios/chrome/browser/sync/model/sync_service_factory.h"
+#import "ios/chrome/browser/ui/settings/privacy/privacy_guide/features.h"
 #import "ios/chrome/browser/web/features.h"
-#import "ios/chrome/grit/ios_chromium_strings.h"
+#import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/components/security_interstitials/https_only_mode/feature.h"
@@ -88,8 +89,7 @@ class PrivacyTableViewControllerTest
         std::make_unique<base::Value>(
             static_cast<int>(GetParam().incognitoModeAvailability)));
 
-    // TODO(crbug.com/1443624): Remove when feature is enabled by default.
-    feature_list_.InitAndEnableFeature(web::kBrowserLockdownModeAvailable);
+    feature_list_.InitAndEnableFeature(kPrivacyGuideIos);
   }
 
   void TearDown() override {
@@ -146,13 +146,9 @@ TEST_P(PrivacyTableViewControllerTest, TestModel) {
   CreateController();
   CheckController();
 
-  int expectedNumberOfSections = 4;
+  int expectedNumberOfSections = 6;
   if (base::FeatureList::IsEnabled(
           security_interstitials::features::kHttpsOnlyMode)) {
-    expectedNumberOfSections++;
-  }
-
-  if (base::FeatureList::IsEnabled(web::kBrowserLockdownModeAvailable)) {
     expectedNumberOfSections++;
   }
 
@@ -166,6 +162,13 @@ TEST_P(PrivacyTableViewControllerTest, TestModel) {
   CheckTextCellTextAndDetailText(
       l10n_util::GetNSString(IDS_IOS_CLEAR_BROWSING_DATA_TITLE), nil,
       currentSection, 0);
+
+  // PrivacyGuide section.
+  currentSection++;
+  EXPECT_EQ(1, NumberOfItemsInSection(currentSection));
+  CheckTextCellTextAndDetailText(
+      l10n_util::GetNSString(IDS_IOS_PRIVACY_GUIDE_TITLE), nil, currentSection,
+      0);
 
   // SafeBrowsing section.
   currentSection++;
@@ -224,13 +227,11 @@ TEST_P(PrivacyTableViewControllerTest, TestModel) {
   }
 
   // Lockdown Mode section.
-  if (base::FeatureList::IsEnabled(web::kBrowserLockdownModeAvailable)) {
-    currentSection++;
-    EXPECT_EQ(1, NumberOfItemsInSection(currentSection));
-    CheckTextCellTextAndDetailText(
-        l10n_util::GetNSString(IDS_IOS_LOCKDOWN_MODE_TITLE),
-        l10n_util::GetNSString(IDS_IOS_SETTING_OFF), currentSection, 0);
-  }
+  currentSection++;
+  EXPECT_EQ(1, NumberOfItemsInSection(currentSection));
+  CheckTextCellTextAndDetailText(
+      l10n_util::GetNSString(IDS_IOS_LOCKDOWN_MODE_TITLE),
+      l10n_util::GetNSString(IDS_IOS_SETTING_OFF), currentSection, 0);
 
   // Testing section index and text of the privacy footer.
   CheckSectionFooter(
@@ -248,13 +249,9 @@ TEST_P(PrivacyTableViewControllerTest, TestModelFooterWithSyncDisabled) {
   CreateController();
   CheckController();
 
-  int expectedNumberOfSections = 4;
+  int expectedNumberOfSections = 6;
   if (base::FeatureList::IsEnabled(
           security_interstitials::features::kHttpsOnlyMode)) {
-    expectedNumberOfSections++;
-  }
-
-  if (base::FeatureList::IsEnabled(web::kBrowserLockdownModeAvailable)) {
     expectedNumberOfSections++;
   }
 
@@ -279,13 +276,9 @@ TEST_P(PrivacyTableViewControllerTest, TestModelFooterWithSyncEnabled) {
   CreateController();
   CheckController();
 
-  int expectedNumberOfSections = 4;
+  int expectedNumberOfSections = 6;
   if (base::FeatureList::IsEnabled(
           security_interstitials::features::kHttpsOnlyMode)) {
-    expectedNumberOfSections++;
-  }
-
-  if (base::FeatureList::IsEnabled(web::kBrowserLockdownModeAvailable)) {
     expectedNumberOfSections++;
   }
 

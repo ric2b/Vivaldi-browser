@@ -561,12 +561,16 @@ TEST_F(CompositorFrameReporterTest,
       {"EventLatency.InertialGestureScrollUpdate.Touchscreen.TotalLatency2", 1},
       {"EventLatency.GestureScrollBegin.TotalLatency", 2},
       {"EventLatency.GestureScrollBegin.TotalLatency2", 2},
+      {"EventLatency.GestureScrollBegin.GenerationToBrowserMain", 2},
       {"EventLatency.FirstGestureScrollUpdate.TotalLatency", 2},
       {"EventLatency.FirstGestureScrollUpdate.TotalLatency2", 2},
+      {"EventLatency.FirstGestureScrollUpdate.GenerationToBrowserMain", 2},
       {"EventLatency.GestureScrollUpdate.TotalLatency", 2},
       {"EventLatency.GestureScrollUpdate.TotalLatency2", 2},
+      {"EventLatency.GestureScrollUpdate.GenerationToBrowserMain", 2},
       {"EventLatency.InertialGestureScrollUpdate.TotalLatency", 2},
       {"EventLatency.InertialGestureScrollUpdate.TotalLatency2", 2},
+      {"EventLatency.InertialGestureScrollUpdate.GenerationToBrowserMain", 2},
       {"EventLatency.TotalLatency", 8},
   };
   for (const auto& expected_count : expected_counts) {
@@ -853,15 +857,14 @@ TEST_F(CompositorFrameReporterTest, PartialUpdateDependentQueues) {
       pipeline_reporter_->owned_partial_update_dependents_size_for_testing());
 
   // Enqueue another new dependent reporter. This should pop `deps[2]` from the
-  // front of the owned dependents queue and destroy it. Since another reporter
-  // is in front of the non-owned dependents queue it won't be popped out of
-  // that queue. The queues will look like this:
+  // front of the owned dependents queue and destroy it. It should be removed
+  // from the non-owned dependents queue as well.
   //   Partial Update Dependents:       [2, 3, 4, ..., n+1]
-  //   Owned Partial Update Dependents: [2, nullptr, 3, 4, ..., n+1]
+  //   Owned Partial Update Dependents: [2, 3, 4, ..., n+1]
   new_dep = CreatePipelineReporter();
   new_dep->SetPartialUpdateDecider(pipeline_reporter_.get());
   pipeline_reporter_->AdoptReporter(std::move(new_dep));
-  DCHECK_EQ(kMaxOwnedPartialUpdateDependents + 1,
+  DCHECK_EQ(kMaxOwnedPartialUpdateDependents,
             pipeline_reporter_->partial_update_dependents_size_for_testing());
   DCHECK_EQ(
       kMaxOwnedPartialUpdateDependents,
@@ -1559,6 +1562,7 @@ TEST_F(CompositorFrameReporterTest, StageLatencyMultiplePrediction) {
 // Tests that when a frame is presented to the user, event latency predictions
 // are reported properly.
 TEST_F(CompositorFrameReporterTest, EventLatencyDispatchPredictions) {
+  base::HistogramTester histogram_tester;
   std::vector<int> dispatch_times = {
       /*[kGenerated, kArrivedInBrowserMain]=*/300,
       /*[kArrivedInBrowserMain, kArrivedInRendererCompositor]=*/300,
@@ -1587,6 +1591,8 @@ TEST_F(CompositorFrameReporterTest, EventLatencyDispatchPredictions) {
       Now());
 
   pipeline_reporter_->AddEventsMetrics(std::move(events_metrics));
+  pipeline_reporter_->TerminateFrame(
+      CompositorFrameReporter::FrameTerminationStatus::kPresentedFrame, Now());
 
   // Test with no previous stage predictions.
   std::vector<base::TimeDelta> expected_predictions1(kNumDispatchStages,
@@ -1656,12 +1662,15 @@ TEST_F(CompositorFrameReporterTest, EventLatencyDispatchPredictions) {
   EXPECT_EQ(expected_total3, actual_predictions3.total_duration);
 
   pipeline_reporter_ = nullptr;
+  histogram_tester.ExpectTotalCount(
+      "EventLatency.GestureScrollUpdate.GenerationToBrowserMain", 1);
 }
 
 // Tests that when a new frame with missing dispatch stages is presented to
 // the user, event latency predictions are reported properly.
 TEST_F(CompositorFrameReporterTest,
        EventLatencyDispatchPredictionsWithMissingStages) {
+  base::HistogramTester histogram_tester;
   // Invalid EventLatency stage durations will cause program to crash, validity
   // checked in event_latency_tracing_recorder.cc.
   std::vector<int> dispatch_times = {
@@ -1692,6 +1701,8 @@ TEST_F(CompositorFrameReporterTest,
       Now());
 
   pipeline_reporter_->AddEventsMetrics(std::move(events_metrics));
+  pipeline_reporter_->TerminateFrame(
+      CompositorFrameReporter::FrameTerminationStatus::kPresentedFrame, Now());
 
   // Test with no previous stage predictions.
   std::vector<base::TimeDelta> expected_predictions1(kNumDispatchStages,
@@ -1754,11 +1765,14 @@ TEST_F(CompositorFrameReporterTest,
   EXPECT_EQ(expected_total3, actual_predictions3.total_duration);
 
   pipeline_reporter_ = nullptr;
+  histogram_tester.ExpectTotalCount(
+      "EventLatency.GestureScrollUpdate.GenerationToBrowserMain", 1);
 }
 
 // Tests that when a frame is presented to the user, event latency predictions
 // are reported properly.
 TEST_F(CompositorFrameReporterTest, EventLatencyCompositorPredictions) {
+  base::HistogramTester histogram_tester;
   std::vector<int> dispatch_times = {
       /*[kGenerated, kArrivedInBrowserMain]=*/300,
       /*[kArrivedInBrowserMain, kArrivedInRendererCompositor]=*/300,
@@ -1891,11 +1905,14 @@ TEST_F(CompositorFrameReporterTest, EventLatencyCompositorPredictions) {
   EXPECT_EQ(expected_total3, actual_predictions3.total_duration);
 
   pipeline_reporter_ = nullptr;
+  histogram_tester.ExpectTotalCount(
+      "EventLatency.GestureScrollUpdate.GenerationToBrowserMain", 1);
 }
 
 // Tests that when a frame is presented to the user, event latency predictions
 // are reported properly for filtered EventTypes.
 TEST_F(CompositorFrameReporterTest, EventLatencyMultipleEventTypePredictions) {
+  base::HistogramTester histogram_tester;
   std::vector<int> dispatch_times = {
       /*[kGenerated, kArrivedInBrowserMain]=*/300,
       /*[kArrivedInBrowserMain, kArrivedInRendererCompositor]=*/300,
@@ -2011,11 +2028,14 @@ TEST_F(CompositorFrameReporterTest, EventLatencyMultipleEventTypePredictions) {
   EXPECT_EQ(expected_total2, actual_predictions2.total_duration);
 
   pipeline_reporter_ = nullptr;
+  histogram_tester.ExpectTotalCount(
+      "EventLatency.GestureScrollUpdate.GenerationToBrowserMain", 1);
 }
 
 // Tests that when a frame is presented to the user, high latency attribution
 // for EventLatency is reported properly for filtered EventTypes.
 TEST_F(CompositorFrameReporterTest, EventLatencyAttributionPredictions) {
+  base::HistogramTester histogram_tester;
   std::vector<int> dispatch_times = {
       /*[kGenerated, kArrivedInBrowserMain]=*/300,
       /*[kArrivedInBrowserMain, kArrivedInRendererCompositor]=*/300,
@@ -2170,11 +2190,14 @@ TEST_F(CompositorFrameReporterTest, EventLatencyAttributionPredictions) {
             actual_predictions3.total_duration);
 
   pipeline_reporter_ = nullptr;
+  histogram_tester.ExpectTotalCount(
+      "EventLatency.GestureScrollUpdate.GenerationToBrowserMain", 1);
 }
 
 // Tests that when a frame is presented to the user, high latency attribution
 // for EventLatency is reported properly for filtered EventTypes.
 TEST_F(CompositorFrameReporterTest, EventLatencyAttributionChangePredictions) {
+  base::HistogramTester histogram_tester;
   std::vector<int> dispatch_times = {
       /*[kGenerated, kArrivedInBrowserMain]=*/40000,
       /*[kArrivedInBrowserMain, kArrivedInRendererCompositor]=*/150,
@@ -2303,6 +2326,8 @@ TEST_F(CompositorFrameReporterTest, EventLatencyAttributionChangePredictions) {
             actual_predictions2.total_duration);
 
   pipeline_reporter_ = nullptr;
+  histogram_tester.ExpectTotalCount(
+      "EventLatency.GestureScrollUpdate.GenerationToBrowserMain", 1);
 }
 
 }  // namespace

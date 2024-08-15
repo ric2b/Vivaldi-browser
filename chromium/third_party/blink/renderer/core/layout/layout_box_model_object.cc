@@ -34,15 +34,15 @@
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/html_body_element.h"
 #include "third_party/blink/renderer/core/layout/geometry/transform_state.h"
+#include "third_party/blink/renderer/core/layout/inline/inline_cursor.h"
 #include "third_party/blink/renderer/core/layout/layout_block.h"
 #include "third_party/blink/renderer/core/layout/layout_inline.h"
 #include "third_party/blink/renderer/core/layout/layout_object_inlines.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
 #include "third_party/blink/renderer/core/layout/ng/legacy_layout_tree_walking.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_result.h"
-#include "third_party/blink/renderer/core/layout/ng/table/layout_ng_table_section.h"
+#include "third_party/blink/renderer/core/layout/table/layout_table_section.h"
 #include "third_party/blink/renderer/core/page/scrolling/sticky_position_scrolling_constraints.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_inline_paint_context.h"
 #include "third_party/blink/renderer/core/paint/object_paint_invalidator.h"
@@ -91,16 +91,6 @@ bool NeedsAnchorPositionScrollData(Element& element,
 
 LayoutBoxModelObject::LayoutBoxModelObject(ContainerNode* node)
     : LayoutObject(node) {}
-
-bool LayoutBoxModelObject::UsesCompositedScrolling() const {
-  NOT_DESTROYED();
-
-  // TODO(crbug.com/1414885): We may need to redefine this function for
-  // CompositeScrollAfterPaint.
-  const auto* properties = FirstFragment().PaintProperties();
-  return properties && properties->ScrollTranslation() &&
-         properties->ScrollTranslation()->HasDirectCompositingReasons();
-}
 
 LayoutBoxModelObject::~LayoutBoxModelObject() = default;
 
@@ -325,8 +315,9 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
 void LayoutBoxModelObject::CreateLayerAfterStyleChange() {
   NOT_DESTROYED();
   DCHECK(!HasLayer() && !Layer());
-  GetMutableForPainting().FirstFragment().SetLayer(
-      MakeGarbageCollected<PaintLayer>(this));
+  FragmentData& first_fragment = GetMutableForPainting().FirstFragment();
+  first_fragment.EnsureId();
+  first_fragment.SetLayer(MakeGarbageCollected<PaintLayer>(this));
   SetHasLayer(true);
   Layer()->InsertOnlyThisLayerAfterStyleChange();
   // Creating a layer may affect existence of the LocalBorderBoxProperties, so
@@ -342,7 +333,6 @@ void LayoutBoxModelObject::DestroyLayer() {
   // Removing a layer may affect existence of the LocalBorderBoxProperties, so
   // we need to ensure that we update paint properties.
   SetNeedsPaintPropertyUpdate();
-  SetBackgroundPaintLocation(kBackgroundPaintInBorderBoxSpace);
 }
 
 bool LayoutBoxModelObject::HasSelfPaintingLayer() const {
@@ -420,10 +410,10 @@ void LayoutBoxModelObject::AddOutlineRectsForDescendant(
 void LayoutBoxModelObject::RecalcVisualOverflow() {
   // |PaintLayer| calls this function when |HasSelfPaintingLayer|. When |this|
   // is an inline box or an atomic inline, its ink overflow is stored in
-  // |NGFragmentItem| in the inline formatting context.
+  // |FragmentItem| in the inline formatting context.
   if (IsInline() && IsInLayoutNGInlineFormattingContext()) {
     DCHECK(HasSelfPaintingLayer());
-    NGInlineCursor cursor;
+    InlineCursor cursor;
     NGInlinePaintContext inline_context;
     for (cursor.MoveTo(*this); cursor; cursor.MoveToNextForSameLayoutObject()) {
       NGInlinePaintContext::ScopedInlineBoxAncestors scoped_items(
@@ -463,10 +453,9 @@ void LayoutBoxModelObject::UpdateFromStyle() {
       ComputeCanCompositeBackgroundAttachmentFixed());
 }
 
-PhysicalRect LayoutBoxModelObject::PhysicalVisualOverflowRectIncludingFilters()
-    const {
+PhysicalRect LayoutBoxModelObject::VisualOverflowRectIncludingFilters() const {
   NOT_DESTROYED();
-  return ApplyFiltersToRect(PhysicalVisualOverflowRect());
+  return ApplyFiltersToRect(VisualOverflowRect());
 }
 
 PhysicalRect LayoutBoxModelObject::ApplyFiltersToRect(
@@ -589,12 +578,9 @@ bool LayoutBoxModelObject::UpdateStickyPositionConstraints() {
   {
     if (IsLayoutInline()) {
       sticky_box_rect = To<LayoutInline>(this)->PhysicalLinesBoundingBox();
-    } else if (RuntimeEnabledFeatures::LayoutNGNoLocationEnabled()) {
+    } else {
       const LayoutBox& box = To<LayoutBox>(*this);
       sticky_box_rect = PhysicalRect(box.PhysicalLocation(), box.Size());
-    } else {
-      sticky_box_rect = sticky_container->FlipForWritingMode(
-          To<LayoutBox>(this)->FrameRect());
     }
 
     PhysicalRect scroll_container_relative_sticky_box_rect =
@@ -726,9 +712,9 @@ PhysicalOffset LayoutBoxModelObject::AdjustedPositionRelativeTo(
         reference_point +=
             To<LayoutBox>(offset_parent_object)->PhysicalLocation();
       }
-    } else if (UNLIKELY(
-                   IsBox() &&
-                   To<LayoutBox>(this)->HasAnchorPositionScrollTranslation())) {
+    } else if (UNLIKELY(IsBox() &&
+                        To<LayoutBox>(this)
+                            ->NeedsAnchorPositionScrollAdjustment())) {
       reference_point +=
           To<LayoutBox>(this)->AnchorPositionScrollTranslationOffset();
     }
@@ -775,7 +761,7 @@ LayoutUnit LayoutBoxModelObject::ContainingBlockLogicalWidthForContent() const {
   return ContainingBlock()->AvailableLogicalWidth();
 }
 
-LayoutRect LayoutBoxModelObject::LocalCaretRectForEmptyElement(
+DeprecatedLayoutRect LayoutBoxModelObject::LocalCaretRectForEmptyElement(
     LayoutUnit width,
     LayoutUnit text_indent_offset) const {
   NOT_DESTROYED();
@@ -816,6 +802,14 @@ LayoutRect LayoutBoxModelObject::LocalCaretRectForEmptyElement(
 
   LayoutUnit x = BorderLeft() + PaddingLeft();
   LayoutUnit max_x = width - BorderRight() - PaddingRight();
+  BoxStrut border_padding;
+  if (RuntimeEnabledFeatures::EmptyCaretInVerticalEnabled()) {
+    border_padding = (BorderOutsets() + PaddingOutsets())
+                         .ConvertToLogical({current_style.GetWritingMode(),
+                                            TextDirection::kLtr});
+    x = border_padding.inline_start;
+    max_x = width - border_padding.inline_end;
+  }
   LayoutUnit caret_width = GetFrameView()->CaretWidth();
 
   switch (alignment) {
@@ -846,10 +840,15 @@ LayoutRect LayoutBoxModelObject::LocalCaretRectForEmptyElement(
   if (font_data)
     height = LayoutUnit(font_data->GetFontMetrics().Height());
   LayoutUnit vertical_space = FirstLineHeight() - height;
+  if (RuntimeEnabledFeatures::EmptyCaretInVerticalEnabled()) {
+    LayoutUnit block_start = border_padding.block_start + (vertical_space / 2);
+    // Returns a logical box.
+    return DeprecatedLayoutRect(x, block_start, caret_width, height);
+  }
   LayoutUnit y = PaddingTop() + BorderTop() + (vertical_space / 2);
   return current_style.IsHorizontalWritingMode()
-             ? LayoutRect(x, y, caret_width, height)
-             : LayoutRect(y, x, height, caret_width);
+             ? DeprecatedLayoutRect(x, y, caret_width, height)
+             : DeprecatedLayoutRect(y, x, height, caret_width);
 }
 
 void LayoutBoxModelObject::MoveChildTo(

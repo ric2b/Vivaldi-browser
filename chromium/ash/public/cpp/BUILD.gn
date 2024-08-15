@@ -31,8 +31,6 @@ component("cpp") {
     "ambient/ambient_backend_controller.h",
     "ambient/ambient_client.cc",
     "ambient/ambient_client.h",
-    "ambient/ambient_managed_photo_source.cc",
-    "ambient/ambient_managed_photo_source.h",
     "ambient/ambient_mode_photo_source.h",
     "ambient/ambient_prefs.cc",
     "ambient/ambient_prefs.h",
@@ -66,6 +64,8 @@ component("cpp") {
     "app_types_util.h",
     "arc_app_id_provider.cc",
     "arc_app_id_provider.h",
+    "arc_compat_mode_util.cc",
+    "arc_compat_mode_util.h",
     "arc_game_controls_flag.h",
     "arc_resize_lock_type.h",
     "ash_constants.h",
@@ -200,6 +200,10 @@ component("cpp") {
     "locale_update_controller.h",
     "lock_screen_widget_factory.cc",
     "lock_screen_widget_factory.h",
+    "login/local_authentication_request_controller.cc",
+    "login/local_authentication_request_controller.h",
+    "login/login_utils.cc",
+    "login/login_utils.h",
     "login_accelerators.cc",
     "login_accelerators.h",
     "login_screen.cc",
@@ -249,8 +253,6 @@ component("cpp") {
     "pagination/pagination_model.h",
     "pagination/pagination_model_observer.h",
     "personalization_app/enterprise_policy_delegate.h",
-    "personalization_app/time_of_day_paths.cc",
-    "personalization_app/time_of_day_paths.h",
     "personalization_app/user_display_info.cc",
     "personalization_app/user_display_info.h",
     "power_utils.cc",
@@ -462,6 +464,7 @@ component("cpp") {
   public_deps = [
     "//ash/components/arc/mojom:notifications",
     "//ash/public/mojom",
+    "//ash/webui/personalization_app/mojom:mojom_shared_cpp_sources",
     "//ash/webui/personalization_app/proto",
     "//base",
     "//chromeos/ash/components/audio/public/mojom",
@@ -480,6 +483,8 @@ component("cpp") {
     "//components/version_info:channel",
     "//ui/base/ime/ash",
     "//ui/base/ime/ash:ime_types",
+    "//ui/chromeos/resources:resources",
+    "//ui/chromeos/resources:resources_grit",
     "//ui/gfx",
   ]
 
@@ -489,6 +494,7 @@ component("cpp") {
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "accelerator_actions_unittest.cc",
     "accelerator_keycode_lookup_cache_unittest.cc",
     "accelerators_util_unittest.cc",
     "ambient/ambient_prefs_unittest.cc",

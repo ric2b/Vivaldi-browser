@@ -79,6 +79,12 @@ scoped_refptr<base::RefCountedMemory> ReadFileOnBlockingThread(
     const base::FilePath& file_path,
     bool log_not_found = true);
 
+// Same as above, but passing the results by the vector reference.
+// Returns true on success.
+bool ReadFileToVectorOnBlockingThread(
+    const base::FilePath& file_path,
+    std::vector<unsigned char> &buffer,
+    bool log_not_found = true);
 }  // namespace vivaldi_data_url_utils
 
 #endif  // COMPONENTS_DATASOURCE_VIVALDI_DATA_URL_UTILS_H_

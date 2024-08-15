@@ -27,15 +27,12 @@ BASE_DECLARE_FEATURE(kAllowWindowDragUsingSystemDragDrop);
 
 BASE_DECLARE_FEATURE(kAllowEyeDropperWGCScreenCapture);
 
-BASE_DECLARE_FEATURE(kBrowserMetricsAPI);
-
 BASE_DECLARE_FEATURE(kChromeLabs);
 extern const char kChromeLabsActivationParameterName[];
 extern const base::FeatureParam<int> kChromeLabsActivationPercentage;
 
-BASE_DECLARE_FEATURE(kChromeWhatsNewUI);
-
 BASE_DECLARE_FEATURE(kExtensionsMenuInAppMenu);
+bool IsExtensionMenuInRootAppMenu();
 
 #if !defined(ANDROID)
 BASE_DECLARE_FEATURE(kAccessCodeCastUI);
@@ -61,8 +58,6 @@ BASE_DECLARE_FEATURE(kHaTSWebUI);
 BASE_DECLARE_FEATURE(kLightweightExtensionOverrideConfirmations);
 #endif
 
-BASE_DECLARE_FEATURE(kPowerBookmarksSidePanel);
-
 BASE_DECLARE_FEATURE(kQuickCommands);
 
 BASE_DECLARE_FEATURE(kResponsiveToolbar);
@@ -85,6 +80,8 @@ BASE_DECLARE_FEATURE(kSidePanelWebView);
 
 #if !defined(ANDROID)
 BASE_DECLARE_FEATURE(kSidePanelCompanionDefaultPinned);
+
+BASE_DECLARE_FEATURE(kSidePanelPinning);
 #endif
 
 BASE_DECLARE_FEATURE(kSidePanelJourneysQueryless);

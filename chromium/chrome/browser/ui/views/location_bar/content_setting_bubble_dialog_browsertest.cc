@@ -30,6 +30,7 @@
 #include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/content_settings/core/common/features.h"
 #include "components/content_settings/core/test/content_settings_mock_provider.h"
 #include "components/content_settings/core/test/content_settings_test_utils.h"
 #include "components/permissions/features.h"
@@ -115,7 +116,8 @@ class ContentSettingBubbleDialogTest
     scoped_feature_list_.InitWithFeatures(
         {features::kQuietNotificationPrompts,
          permissions::features::kPermissionStorageAccessAPI},
-        {permissions::features::kPermissionQuietChip});
+        // Cookies icon intentionally does not show when 3PC are blocked.
+        {content_settings::features::kTrackingProtection3pcd});
   }
 
   ContentSettingBubbleDialogTest(const ContentSettingBubbleDialogTest&) =
@@ -409,31 +411,6 @@ IN_PROC_BROWSER_TEST_P(ContentSettingBubbleDialogTest, InvokeUi_midi_sysex) {
 }
 
 IN_PROC_BROWSER_TEST_P(ContentSettingBubbleDialogTest, InvokeUi_ads) {
-  ShowAndVerifyUi();
-}
-
-IN_PROC_BROWSER_TEST_P(ContentSettingBubbleDialogTest,
-                       InvokeUi_notifications_quiet) {
-  ShowAndVerifyUi();
-}
-
-IN_PROC_BROWSER_TEST_P(ContentSettingBubbleDialogTest,
-                       InvokeUi_notifications_quiet_crowd_deny) {
-  ShowAndVerifyUi();
-}
-
-IN_PROC_BROWSER_TEST_P(ContentSettingBubbleDialogTest,
-                       InvokeUi_notifications_quiet_abusive) {
-  ShowAndVerifyUi();
-}
-
-IN_PROC_BROWSER_TEST_P(ContentSettingBubbleDialogTest,
-                       InvokeUi_notifications_quiet_abusive_content) {
-  ShowAndVerifyUi();
-}
-
-IN_PROC_BROWSER_TEST_P(ContentSettingBubbleDialogTest,
-                       InvokeUi_notifications_quiet_predicted_very_unlikely) {
   ShowAndVerifyUi();
 }
 

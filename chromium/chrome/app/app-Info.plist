@@ -432,5 +432,10 @@
 	<string>banner</string>
 	<key>GPUEjectPolicy</key>
 	<string>wait</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 </dict>
 </plist>

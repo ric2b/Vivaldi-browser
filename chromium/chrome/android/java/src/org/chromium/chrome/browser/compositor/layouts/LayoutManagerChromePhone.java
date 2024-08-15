@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.compositor.layouts;
 import android.content.Context;
 import android.view.ViewGroup;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
@@ -20,10 +21,15 @@ import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.features.start_surface.StartSurface;
+import org.chromium.ui.dragdrop.DragAndDropDelegate;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
+import java.util.concurrent.Callable;
+
 // Vivaldi
+import android.content.SharedPreferences;
 import android.view.View;
+import android.view.ViewStub;
 
 import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
@@ -31,7 +37,6 @@ import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperMa
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiInstanceManager;
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 import java.util.ArrayList;
@@ -47,7 +52,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
 
     // Vivaldi
     private final List<StripLayoutHelperManager> mTabStrips = new ArrayList<>();
-    private SharedPreferencesManager.Observer mPreferenceObserver;
+    private SharedPreferences.OnSharedPreferenceChangeListener mPrefsListener;
     private boolean mTabStripAdded;
     /** A {@link TitleCache} instance that stores all title/favicon bitmaps as CC resources. */
     protected LayerTitleCache mLayerTitleCache;
@@ -66,19 +71,24 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
      *         controls.
      * @param tabContentManagerSupplier Supplier of the {@link TabContentManager} instance.
      * @param topUiThemeColorProvider {@link ThemeColorProvider} for top UI.
+     * @param delayedTabSwitcherCallable Callable to create GTS view if Start Surface refactor and
+     *         DeferCreateTabSwitcherLayout are enabled.
      */
     public LayoutManagerChromePhone(LayoutManagerHost host, ViewGroup contentContainer,
             Supplier<StartSurface> startSurfaceSupplier, Supplier<TabSwitcher> tabSwitcherSupplier,
             BrowserControlsStateProvider browserControlsStateProvider,
             ObservableSupplier<TabContentManager> tabContentManagerSupplier,
             Supplier<TopUiThemeColorProvider> topUiThemeColorProvider,
-            ObservableSupplier<StripLayoutHelperManager.TabModelStartupInfo>
-                    tabModelStartupInfoSupplier,
-            ActivityLifecycleDispatcher lifecycleDispatcher,
-            MultiInstanceManager multiInstanceManager, View toolbarContainerView) {
+            Callable<ViewGroup> delayedTabSwitcherCallable,
+            ObservableSupplier<StripLayoutHelperManager.TabModelStartupInfo>  // Vivaldi
+                    tabModelStartupInfoSupplier,  // Vivaldi
+            ActivityLifecycleDispatcher lifecycleDispatcher, // Vivaldi
+            MultiInstanceManager multiInstanceManager,
+            DragAndDropDelegate dragAndDropDelegate, View toolbarContainerView, // Vivaldi
+            ViewStub tabHoverCardViewStub) { //vivaldi
         super(host, contentContainer, startSurfaceSupplier, tabSwitcherSupplier,
                 browserControlsStateProvider, tabContentManagerSupplier, topUiThemeColorProvider,
-                null, null);
+                null, null, delayedTabSwitcherCallable);
 
         // Note(david@vivaldi.com): We create two tab strips here. The first one is the main strip.
         // The second one is the stack strip.
@@ -88,19 +98,21 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
                     ()
                             -> mLayerTitleCache,
                     tabModelStartupInfoSupplier, lifecycleDispatcher, multiInstanceManager,
-                    toolbarContainerView));
+                    dragAndDropDelegate, toolbarContainerView, tabHoverCardViewStub,
+                    tabContentManagerSupplier));
             mTabStrips.get(i).setIsStackStrip(i != 0);
             addObserver(mTabStrips.get(i).getTabSwitcherObserver());
         }
 
         mTabStripAdded = false;
-        mPreferenceObserver = key -> {
+        mPrefsListener = (sharedPrefs, key) -> {
             if (VivaldiPreferences.SHOW_TAB_STRIP.equals(key)
                     || VivaldiPreferences.ADDRESS_BAR_TO_BOTTOM.equals(key)) {
                 updateGlobalSceneOverlay();
             }
         };
-        SharedPreferencesManager.getInstance().addObserver(mPreferenceObserver);
+        ContextUtils.getAppSharedPreferences()
+                .registerOnSharedPreferenceChangeListener(mPrefsListener);
         updateGlobalSceneOverlay();
         // End Vivaldi
     }
@@ -120,7 +132,8 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
         // Initialize Layouts
         TabContentManager tabContentManager = mTabContentManagerSupplier.get();
         assert tabContentManager != null;
-        mSimpleAnimationLayout.setTabModelSelector(selector, tabContentManager);
+        mSimpleAnimationLayout.setTabModelSelector(selector);
+        mSimpleAnimationLayout.setTabContentManager(tabContentManager);
 
         // Vivaldi
         for (int i = 0; i < 2; i++) mTabStrips.get(i).setTabModelSelector(selector, creator);
@@ -145,8 +158,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
         // Vivaldi
         if (!BuildConfig.IS_VIVALDI)
         if (getActiveLayout() == mStaticLayout && !incognito) {
-            startShowing(mTabSwitcherLayout != null ? mTabSwitcherLayout : mOverviewLayout,
-                    /* animate= */ false);
+            showLayout(LayoutType.TAB_SWITCHER, /* animate= */ false);
         }
         super.onTabsAllClosing(incognito);
     }
@@ -233,8 +245,6 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
         // Vivaldi
         for (int i = 0; i < 2; i++) mTabStrips.get(i).destroy();
         mTabStrips.clear();
-
-        SharedPreferencesManager.getInstance().removeObserver(mPreferenceObserver);
     }
 
     // Vivaldi

@@ -32,11 +32,12 @@
 
 #include "base/allocator/partition_alloc_features.h"
 #include "base/allocator/partition_alloc_support.h"
-#include "base/allocator/partition_allocator/oom.h"
-#include "base/allocator/partition_allocator/page_allocator.h"
-#include "base/allocator/partition_allocator/partition_alloc.h"
-#include "base/allocator/partition_allocator/partition_alloc_buildflags.h"
-#include "base/allocator/partition_allocator/partition_root.h"
+#include "base/allocator/partition_allocator/src/partition_alloc/oom.h"
+#include "base/allocator/partition_allocator/src/partition_alloc/page_allocator.h"
+#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc.h"
+#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_buildflags.h"
+#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_constants.h"
+#include "base/allocator/partition_allocator/src/partition_alloc/partition_root.h"
 #include "base/debug/alias.h"
 #include "base/feature_list.h"
 #include "base/no_destructor.h"
@@ -129,9 +130,21 @@ bool Partitions::InitializeOnce() {
   partition_alloc::PartitionAllocGlobalInit(&Partitions::HandleOutOfMemory);
 
   auto options = PartitionOptionsFromFeatures();
+
+  const auto actual_brp_setting = options.backup_ref_ptr;
+  if (base::FeatureList::IsEnabled(
+          base::features::kPartitionAllocDisableBRPInBufferPartition)) {
+    options.backup_ref_ptr = PartitionOptions::kDisabled;
+  }
+
   static base::NoDestructor<partition_alloc::PartitionAllocator>
       buffer_allocator(options);
   buffer_root_ = buffer_allocator->root();
+
+  if (base::FeatureList::IsEnabled(
+          base::features::kPartitionAllocDisableBRPInBufferPartition)) {
+    options.backup_ref_ptr = actual_brp_setting;
+  }
 
   scan_is_enabled_ =
       (options.backup_ref_ptr == PartitionOptions::kDisabled) &&
@@ -362,7 +375,8 @@ void* Partitions::BufferMalloc(size_t n, const char* type_name) {
 
 // static
 void* Partitions::BufferTryRealloc(void* p, size_t n, const char* type_name) {
-  return BufferPartition()->TryRealloc(p, n, type_name);
+  return BufferPartition()->Realloc<partition_alloc::AllocFlags::kReturnNull>(
+      p, n, type_name);
 }
 
 // static

@@ -133,11 +133,11 @@
             "$ref": "AdBlockMetadata"
           },
           "last_update": {
-            "description": "The last time the source was successfully fetched and the corresponding rules updated.",
+            "description": "The last time the source was successfully fetched and the corresponding rules updated. Represented in milliseconds since the epoch.",
             "type": "number"
           },
           "next_fetch": {
-            "description": "The next time a fetching and updating from the rule source will be attempted.",
+            "description": "The next time a fetching and updating from the rule source will be attempted. Represented in milliseconds since the epoch.",
             "type": "number"
           },
           "is_fetching": {

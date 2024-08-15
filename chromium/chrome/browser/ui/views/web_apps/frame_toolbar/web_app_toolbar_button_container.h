@@ -88,7 +88,7 @@ class WebAppToolbarButtonContainer : public views::View,
 
   AvatarToolbarButton* avatar_button() { return avatar_button_; }
 
-  static void DisableAnimationForTesting();
+  static void DisableAnimationForTesting(bool disable);
 
  private:
   friend class ImmersiveModeControllerChromeosWebAppBrowserTest;
@@ -121,7 +121,7 @@ class WebAppToolbarButtonContainer : public views::View,
   SkColor GetIconLabelBubbleBackgroundColor() const override;
 
   // ContentSettingImageView::Delegate:
-  bool ShouldHideContentSettingImage(ImageType type) override;
+  bool ShouldHideContentSettingImage() override;
   content::WebContents* GetContentSettingWebContents() override;
   ContentSettingBubbleModelDelegate* GetContentSettingBubbleModelDelegate()
       override;

@@ -28,7 +28,7 @@ import {CrLinkRowElement} from 'chrome://resources/cr_elements/cr_link_row/cr_li
 import {CrToggleElement} from 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {CrTooltipIconElement} from 'chrome://resources/cr_elements/policy/cr_tooltip_icon.js';
-import {assert} from 'chrome://resources/js/assert_ts.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {afterNextRender, DomRepeatEvent, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -415,7 +415,12 @@ export class ExtensionsDetailViewElement extends
     if (!loadTimeData.getBoolean('safetyCheckShowReviewPanel')) {
       return false;
     }
-
+    const ExtensionType = chrome.developerPrivate.ExtensionType;
+    // Check to make sure this is an extension and not a Chrome app.
+    if (!(this.data.type === ExtensionType.EXTENSION ||
+          this.data.type === ExtensionType.SHARED_MODULE)) {
+      return false;
+    }
     return !!(
         this.data.safetyCheckText && this.data.safetyCheckText.detailString &&
         this.data.acknowledgeSafetyCheckWarning !== true);

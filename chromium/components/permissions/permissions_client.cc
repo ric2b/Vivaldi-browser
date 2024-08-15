@@ -188,4 +188,18 @@ std::unique_ptr<PermissionPrompt> PermissionsClient::CreatePrompt(
 }
 #endif
 
+bool PermissionsClient::HasDevicePermission(ContentSettingsType type) const {
+  return true;
+}
+
+bool PermissionsClient::CanRequestDevicePermission(
+    ContentSettingsType type) const {
+  return false;
+}
+
+favicon::FaviconService* PermissionsClient::GetFaviconService(
+    content::BrowserContext* browser_context) {
+  return nullptr;
+}
+
 }  // namespace permissions

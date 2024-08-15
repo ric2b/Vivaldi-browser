@@ -6,7 +6,6 @@
 
 #include "ash/constants/app_types.h"
 #include "base/check.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/ui/base/chromeos_ui_constants.h"
 #include "chromeos/ui/base/window_properties.h"
 #include "chromeos/ui/frame/caption_buttons/frame_caption_button_container_view.h"
@@ -61,8 +60,13 @@ bool ShouldApplyDynamicColor(aura::Window* window) {
       static_cast<int>(ash::AppType::SYSTEM_APP)) {
     return false;
   }
-#endif
   return true;
+#else
+  // Default frame is used for non-browser frames in Lacros. In Lacros, we
+  // never need dynamic colors as we don't display SWAs. This will need to be
+  // redesigned if SWAs run in Lacros.
+  return false;
+#endif
 }
 
 }  // namespace
@@ -79,6 +83,7 @@ DefaultFrameHeader::DefaultFrameHeader(
     : FrameHeader(target_widget, header_view) {
   DCHECK(caption_button_container);
   SetCaptionButtonContainer(caption_button_container);
+  InitializeFrameColorMetricsHelper();
 }
 
 DefaultFrameHeader::~DefaultFrameHeader() = default;
@@ -92,6 +97,13 @@ void DefaultFrameHeader::SetWidthInPixels(int width_in_pixels) {
 
 void DefaultFrameHeader::UpdateFrameColors() {
   aura::Window* target_window = GetTargetWindow();
+  if (!target_window) {
+    // b/302708285: This codepath is run during Widget teardown. In that
+    // situation, `target_window` might be null and we won't display the
+    // updated colors anyway.
+    return;
+  }
+
   const SkColor active_frame_color =
       target_window->GetProperty(kFrameActiveColorKey);
   const SkColor inactive_frame_color =
@@ -110,6 +122,9 @@ void DefaultFrameHeader::UpdateFrameColors() {
 
   if (updated) {
     StartTransitionAnimation(kDefaultFrameColorChangeAnimationDuration);
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    frame_color_metrics_helper_->UpdateFrameColorChangesCount();
+#endif
   }
 
   if (::features::IsChromeRefresh2023() &&
@@ -128,8 +143,7 @@ void DefaultFrameHeader::UpdateFrameColors() {
 void DefaultFrameHeader::DoPaintHeader(gfx::Canvas* canvas) {
   cc::PaintFlags flags;
 
-  if (features::IsJellyrollEnabled() &&
-      ShouldApplyDynamicColor(GetTargetWindow())) {
+  if (ShouldApplyDynamicColor(GetTargetWindow())) {
     flags.setColor(target_widget()->GetColorProvider()->GetColor(
         GetColorIdForCurrentMode()));
   } else {
@@ -186,6 +200,15 @@ SkColor DefaultFrameHeader::GetCurrentFrameColor() const {
 
 SkColor DefaultFrameHeader::GetActiveFrameColorForPaintForTest() {
   return active_frame_color_;
+}
+
+void DefaultFrameHeader::InitializeFrameColorMetricsHelper() {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  aura::Window* window = GetTargetWindow();
+  CHECK(window);
+  frame_color_metrics_helper_ = std::make_unique<FrameColorMetricsHelper>(
+      static_cast<ash::AppType>(window->GetProperty(aura::client::kAppType)));
+#endif
 }
 
 }  // namespace chromeos

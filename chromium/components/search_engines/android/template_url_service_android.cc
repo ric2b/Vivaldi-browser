@@ -510,6 +510,10 @@ TemplateUrlServiceAndroid::GetImageUrlAndPostContent(
   return base::android::ToJavaArrayOfStrings(env, output);
 }
 
+jboolean TemplateUrlServiceAndroid::IsEeaChoiceCountry(JNIEnv* env) {
+  return template_url_service_->IsEeaChoiceCountry();
+}
+
 void TemplateUrlServiceAndroid::VivaldiSetDefaultOverride(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj,
@@ -525,4 +529,17 @@ void TemplateUrlServiceAndroid::VivaldiResetDefaultOverride(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj) {
   template_url_service_->VivaldiResetDefaultOverride();
+}
+
+base::android::ScopedJavaLocalRef<jobject>
+TemplateUrlServiceAndroid::VivaldiGetDefaultSearchEngine(
+  JNIEnv* env,
+  const JavaParamRef<jobject>& obj,
+    jint type) {
+    const TemplateURL* default_search_provider =
+      template_url_service_->GetDefaultSearchProvider(TemplateURLService::DefaultSearchType(type));
+  if (default_search_provider == nullptr) {
+    return base::android::ScopedJavaLocalRef<jobject>(env, nullptr);
+  }
+  return CreateTemplateUrlAndroid(env, default_search_provider);
 }

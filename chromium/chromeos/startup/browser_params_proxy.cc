@@ -21,8 +21,8 @@ void BrowserParamsProxy::WaitForLogin() {
   BrowserPostLoginParams::WaitForLogin();
 }
 
-bool BrowserParamsProxy::DisableCrosapiForTesting() const {
-  return BrowserInitParams::disable_crosapi_for_testing();
+bool BrowserParamsProxy::IsCrosapiDisabledForTesting() const {
+  return BrowserInitParams::is_crosapi_disabled_for_testing();
 }
 
 uint32_t BrowserParamsProxy::CrosapiVersion() const {
@@ -160,6 +160,11 @@ const crosapi::mojom::DeviceSettingsPtr& BrowserParamsProxy::DeviceSettings()
 const absl::optional<std::string>& BrowserParamsProxy::MetricsServiceClientId()
     const {
   return BrowserInitParams::Get()->metrics_service_client_id;
+}
+
+const crosapi::mojom::EntropySourcePtr& BrowserParamsProxy::EntropySource()
+    const {
+  return BrowserInitParams::Get()->entropy_source;
 }
 
 uint64_t BrowserParamsProxy::UkmClientId() const {
@@ -319,16 +324,16 @@ bool BrowserParamsProxy::EnableClipboardHistoryRefresh() const {
   return BrowserInitParams::Get()->enable_clipboard_history_refresh;
 }
 
-bool BrowserParamsProxy::IsVariableRefreshRateEnabled() const {
-  return BrowserInitParams::Get()->is_variable_refresh_rate_enabled;
+bool BrowserParamsProxy::IsVariableRefreshRateAlwaysOn() const {
+  return BrowserInitParams::Get()->is_variable_refresh_rate_always_on;
 }
 
 bool BrowserParamsProxy::IsPdfOcrEnabled() const {
   return BrowserInitParams::Get()->is_pdf_ocr_enabled;
 }
 
-bool BrowserParamsProxy::IsDriveFsBulkPinningEnabled() const {
-  return BrowserInitParams::Get()->is_drivefs_bulk_pinning_enabled;
+bool BrowserParamsProxy::IsDriveFsBulkPinningAvailable() const {
+  return BrowserInitParams::Get()->is_drivefs_bulk_pinning_available;
 }
 
 bool BrowserParamsProxy::IsSysUiDownloadsIntegrationV2Enabled() const {
@@ -337,6 +342,18 @@ bool BrowserParamsProxy::IsSysUiDownloadsIntegrationV2Enabled() const {
 
 bool BrowserParamsProxy::IsCrosBatterySaverAvailable() const {
   return BrowserInitParams::Get()->is_cros_battery_saver_available;
+}
+
+bool BrowserParamsProxy::IsAppInstallServiceUriEnabled() const {
+  return BrowserInitParams::Get()->is_app_install_service_uri_enabled;
+}
+
+bool BrowserParamsProxy::IsDeskProfilesEnabled() const {
+  return BrowserInitParams::Get()->is_desk_profiles_enabled;
+}
+
+bool BrowserParamsProxy::IsCrosWebAppShortcutUiUpdateEnabled() const {
+  return BrowserInitParams::Get()->is_cros_web_app_shortcut_ui_update_enabled;
 }
 
 }  // namespace chromeos

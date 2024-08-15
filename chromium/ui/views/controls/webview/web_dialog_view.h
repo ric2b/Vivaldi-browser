@@ -50,6 +50,8 @@ class ObservableWebView : public WebView {
   void ResetDelegate();
 
  private:
+  // TODO(https://crbug.com/1484794): Resolve the lifetime issues around this
+  // member, then mark this as triaged.
   raw_ptr<ui::WebDialogDelegate, DanglingUntriaged> delegate_;
 };
 
@@ -116,7 +118,7 @@ class WEBVIEW_EXPORT WebDialogView : public ClientView,
   std::u16string GetDialogTitle() const override;
   GURL GetDialogContentURL() const override;
   void GetWebUIMessageHandlers(
-      std::vector<content::WebUIMessageHandler*>* handlers) const override;
+      std::vector<content::WebUIMessageHandler*>* handlers) override;
   void GetDialogSize(gfx::Size* size) const override;
   void GetMinimumDialogSize(gfx::Size* size) const override;
   std::string GetDialogArgs() const override;

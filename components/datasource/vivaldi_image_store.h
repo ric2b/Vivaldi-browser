@@ -29,6 +29,64 @@ class ThumbnailCaptureContents;
 }
 class VivaldiImageStoreHolder;
 
+class VivaldiImageStore;
+
+namespace vivaldi_image_store {
+// preserve order!
+enum class ImageFormat {
+  kBMP  = 1,
+  kGIF  = 2,
+  kJPEG = 3,
+  kPNG  = 4,
+  kWEBP = 5,
+  kSVG  = 6,
+  kTIFF = 7
+};
+
+enum class BatchItemState {
+  kPending,
+  kOk,
+  kError,
+};
+
+struct BatchItem {
+  using State = vivaldi_image_store::BatchItemState;
+
+  explicit BatchItem(std::string url);
+  BatchItem();
+  ~BatchItem();
+  BatchItem(BatchItem &&);
+
+  BatchItem(const BatchItem &) = delete;
+  BatchItem & operator=(const BatchItem&) = delete;
+
+  State state;
+  ImageFormat format;
+  std::string url;
+  std::vector<unsigned char> data;
+};
+
+using Batch = std::vector<BatchItem>;
+
+class ImageStoreDataProvider {
+public:
+  virtual scoped_refptr<base::RefCountedMemory> GetData() = 0;
+  virtual ImageFormat GetImageType() = 0;
+  virtual BatchItemState GetState() = 0;
+};
+
+// Prevents thumbnails GC from running twice at the same time
+class GCGuard {
+  public:
+    ~GCGuard();
+    static std::unique_ptr<GCGuard> Create(VivaldiImageStore *api);
+  private:
+    explicit GCGuard(scoped_refptr<VivaldiImageStore> api);
+    scoped_refptr<VivaldiImageStore> api_;
+};
+
+} // namespace vivaldi_image_store
+
 // This is used to setup and control the mapping between local images and the
 // images exposed to the UI using the chrome://vivaldi-data/ protocol.
 class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
@@ -45,15 +103,12 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
 
   static constexpr int kUrlKindCount = kImageUrl + 1;
 
-  enum class ImageFormat {
-    kBMP,
-    kGIF,
-    kJPEG,
-    kPNG,
-    kWEBP,
-    kSVG,
-    kTIFF
-  };
+  using ImageFormat = vivaldi_image_store::ImageFormat;
+  using BatchItem = vivaldi_image_store::BatchItem;
+  using Batch = vivaldi_image_store::Batch;
+
+  friend class vivaldi_image_store::GCGuard;
+
 
   // Location where to store or update the image.
   class ImagePlace {
@@ -130,9 +185,11 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
   static VivaldiImageStore* FromBrowserContext(
       content::BrowserContext* browser_context);
 
+  // If the number of images stored since the last GC run < limit, do
+  // nothing.
   static void ScheduleRemovalOfUnusedUrlData(
       content::BrowserContext* browser_context,
-      base::TimeDelta when);
+      int leeway);
 
   void ScheduleThumbnalSanitizer();
 
@@ -143,6 +200,8 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
   // Callback to inform about the url of a successful image store operation.
   // Empty string means operation failed.
   using StoreImageCallback = base::OnceCallback<void(std::string data_url)>;
+
+  using StoreImageBatchReadCallback = base::OnceCallback<void(Batch)>;
 
   // The following methods taking the BrowserContext* argument are static to
   // spare the caller from calling FromBrowserContext and checking the result.
@@ -165,20 +224,25 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
 
   // Capture the url and store the resulting image as a thumbnail for the given
   // bookmark.
-  static ::vivaldi::ThumbnailCaptureContents* CaptureBookmarkThumbnail(content::BrowserContext* browser_context,
-                                       int64_t bookmark_id,
-                                       const GURL& url,
-                                       StoreImageCallback ui_thread_callback);
+  static ::vivaldi::ThumbnailCaptureContents* CaptureBookmarkThumbnail(
+      content::BrowserContext* browser_context,
+      int64_t bookmark_id,
+      const GURL& url,
+      StoreImageCallback ui_thread_callback);
 
   static void GetDataForId(content::BrowserContext* browser_context,
                            UrlKind url_kind,
                            std::string id,
                            content::URLDataSource::GotDataCallback callback);
 
+
+  static void BatchRead(content::BrowserContext* browser_context,
+      const std::vector<std::string> &ids, StoreImageBatchReadCallback);
   // Read data for the given UrlKind. This can be called from any thread.
   void GetDataForId(UrlKind url_kind,
                     std::string id,
                     content::URLDataSource::GotDataCallback callback);
+
 
   void Start();
 
@@ -196,6 +260,9 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
   void ForgetNewbornUrl(std::string data_url);
 
  private:
+
+  void BatchRead(const std::vector<std::string> &ids, StoreImageBatchReadCallback);
+
   friend class base::RefCountedThreadSafe<VivaldiImageStore>;
   friend class VivaldiImageStoreHolder;
 
@@ -213,7 +280,10 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
                                  StoreImageCallback callback);
 
   void FindUsedUrlsOnUIThread();
+
   void FindUsedUrlsOnUIThreadWithLoadedBookmarks(
+      std::vector<base::FilePath> ids,
+      std::unique_ptr<vivaldi_image_store::GCGuard> guard,
       bookmarks::BookmarkModel* bookmark_model);
 
   void SanitizeUrlsOnUIThreadWithLoadedBookmarks(
@@ -221,7 +291,9 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
 
   // Use std::array, not plain C array to get proper move semantics.
   using UsedIds = std::array<std::vector<std::string>, kUrlKindCount>;
-  void RemoveUnusedUrlDataOnFileThread(UsedIds used_ids);
+  void RemoveUnusedUrlDataOnFileThread(UsedIds used_ids,
+      std::unique_ptr<vivaldi_image_store::GCGuard> guard,
+      std::vector<base::FilePath> ids);
 
   // Custom bookmark thumbnails have to be moved to the synced file store,
   // so that they can be synced.
@@ -235,6 +307,13 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
   scoped_refptr<base::RefCountedMemory> GetDataForIdOnFileThread(
       UrlKind url_kind,
       std::string id);
+
+  bool GetDataForIdToVectorOnFileThread(
+      UrlKind url_kind,
+      std::string id,
+      std::vector<unsigned char> &buffer);
+
+  void ReadBatchOnFileThread(Batch &batch);
 
   void StoreImageUIThread(ImagePlace place,
                           StoreImageCallback ui_thread_callback,
@@ -281,6 +360,12 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
   // prevents their removal in RemoveUnusedUrlData. This must be accessed only
   // from sequence_task_runner_.
   std::vector<std::string> file_thread_newborn_urls_;
+
+  // Protect GC from running twice at the same time
+  std::atomic_flag gc_in_progress_ = ATOMIC_FLAG_INIT;
+
+  // Number of images created sinc the last GC run.
+  std::atomic<int> images_stored_since_last_gc_ = 0;
 };
 
 #endif  // COMPONENTS_DATASOURCE_VIVALDI_IMAGE_STORE_H_

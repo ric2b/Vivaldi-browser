@@ -93,7 +93,7 @@ class AutofillKeyboardAccessoryAdapter : public AutofillPopupView,
   // AutofillPopupController:
   // Hidden: void OnSuggestionsChanged() override;
   void AcceptSuggestion(int index, base::TimeTicks event_time) override;
-  void AcceptSuggestionWithoutThreshold(int index) override;
+  void PerformButtonActionForSuggestion(int index) override;
   int GetLineCount() const override;
   const autofill::Suggestion& GetSuggestionAt(int row) const override;
   std::u16string GetSuggestionMainTextAt(int row) const override;
@@ -111,7 +111,8 @@ class AutofillKeyboardAccessoryAdapter : public AutofillPopupView,
   bool ShouldIgnoreMouseObservedOutsideItemBoundsCheck() const override;
   base::WeakPtr<AutofillPopupController> OpenSubPopup(
       const gfx::RectF& anchor_bounds,
-      std::vector<Suggestion> suggestions) override;
+      std::vector<Suggestion> suggestions,
+      AutoselectFirstSuggestion autoselect_first_suggestion) override;
   void HideSubPopup() override;
   void Hide(PopupHidingReason reason) override;
   void ViewDestroyed() override;
@@ -120,6 +121,8 @@ class AutofillKeyboardAccessoryAdapter : public AutofillPopupView,
   const gfx::RectF& element_bounds() const override;
   base::i18n::TextDirection GetElementTextDirection() const override;
   std::vector<Suggestion> GetSuggestions() const override;
+  std::optional<AutofillClient::PopupScreenLocation> GetPopupScreenLocation()
+      const override;
 
   void OnDeletionConfirmed(int index);
 

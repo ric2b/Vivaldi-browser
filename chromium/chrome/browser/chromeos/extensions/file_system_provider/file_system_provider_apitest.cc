@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <utility>
+#include "build/build_config.h"
 
 #include "base/files/file.h"
 #include "base/functional/bind.h"
@@ -327,7 +328,9 @@ IN_PROC_BROWSER_TEST_F(FileSystemProviderApiTest, ExecuteAction) {
       << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(FileSystemProviderApiTest, Unresponsive_Extension) {
+// TODO(b/255698656): Flaky test.
+IN_PROC_BROWSER_TEST_F(FileSystemProviderApiTest,
+                       DISABLED_Unresponsive_Extension) {
   AbortOnUnresponsivePerformer performer(browser()->profile());
   ASSERT_TRUE(RunExtensionTest("file_system_provider/unresponsive_extension",
                                {}, {.load_as_component = true}))
@@ -495,8 +498,13 @@ IN_PROC_BROWSER_TEST_F(FileSystemProviderServiceWorkerApiTest, Unmount) {
       << message_;
 }
 
+#if BUILDFLAG(IS_CHROMEOS)
+#define MAYBE_Unresponsive_Extension DISABLED_Unresponsive_Extension
+#else
+#define MAYBE_Unresponsive_Extension Unresponsive_Extension
+#endif
 IN_PROC_BROWSER_TEST_F(FileSystemProviderServiceWorkerApiTest,
-                       Unresponsive_Extension) {
+                       MAYBE_Unresponsive_Extension) {
   AbortOnUnresponsivePerformer performer(browser()->profile());
   ASSERT_TRUE(LoadExtension(test_data_dir_.AppendASCII(
       "file_system_provider/service_worker/unresponsive_extension/provider")));

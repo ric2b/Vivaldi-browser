@@ -60,6 +60,12 @@ struct IOSurfaceBackingEGLState : base::RefCounted<IOSurfaceBackingEGLState> {
   void EndAccess(bool readonly);
   void WillRelease(bool have_context);
 
+  // Returns true if we need to (re)bind IOSurface to GLTexture before next
+  // access.
+  bool is_bind_pending() const { return is_bind_pending_; }
+  void set_bind_pending() { is_bind_pending_ = true; }
+  void clear_bind_pending() { is_bind_pending_ = false; }
+
  private:
   friend class base::RefCounted<IOSurfaceBackingEGLState>;
 
@@ -85,6 +91,8 @@ struct IOSurfaceBackingEGLState : base::RefCounted<IOSurfaceBackingEGLState> {
 
   // Set to true if the context is known to be lost.
   bool context_lost_ = false;
+
+  bool is_bind_pending_ = false;
 
   ~IOSurfaceBackingEGLState();
 };
@@ -324,6 +332,7 @@ class GPU_GLES2_EXPORT IOSurfaceImageBacking
   const uint32_t io_surface_plane_;
   const gfx::Size io_surface_size_;
   const uint32_t io_surface_format_;
+  const size_t io_surface_num_planes_;
   const gfx::GenericSharedMemoryId io_surface_id_;
 
   const GLenum gl_target_;

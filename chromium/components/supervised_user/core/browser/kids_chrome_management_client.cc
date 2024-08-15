@@ -55,6 +55,11 @@ constexpr char kClassifyUrlDataContentType[] =
 
 constexpr char kClassifyUrlAuthErrorMetric[] =
     "FamilyLinkUser.ClassifyUrlRequest.AuthError";
+constexpr char kClassifyUrlHttpStatusOrNetErrorMetric[] =
+    "FamilyLinkUser.ClassifyUrlRequest.HttpStatusOrNetError";
+// This duplicates the metric above, which was renamed. To allow A/B comparison
+// with proto_fetcher.cc, both will be recorded until the feature is released
+// and this unit removed.
 constexpr char kClassifyUrlNetOrHttpStatusMetric[] =
     "FamilyLinkUser.ClassifyUrlRequest.NetOrHttpStatus";
 constexpr char kClassifyUrlParsingResultMetric[] =
@@ -178,7 +183,7 @@ struct KidsChromeManagementClient::KidsChromeManagementRequest {
 
   KidsChromeManagementRequest(KidsChromeManagementRequest&&) = default;
 
-  ~KidsChromeManagementRequest() { DCHECK(!callback); }
+  ~KidsChromeManagementRequest() = default;
 
   std::unique_ptr<google::protobuf::MessageLite> request_proto;
   KidsChromeManagementCallback callback;
@@ -333,13 +338,6 @@ void KidsChromeManagementClient::OnAccessTokenFetchComplete(
   // KidsChromeManagementClient class owns `simple_url_loader`, and deleting the
   // the simple_url_loader during the request will cause the callback not to be
   // called.
-  // TODO(https://crbug.com/1444748): Write a test making sure that this cannot
-  // cause a UAF. The test needs to:
-  // - Start a ClassifyURL request.
-  // - Start a loader and pause it before completion.
-  // - Kill the KidsChromeManagementClient. Note that this will not work unless
-  //   DCHECKs are turned off, because we otherwise check that callback_ has
-  //   been run.
   simple_url_loader->DownloadToString(
       url_loader_factory_.get(),
       base::BindOnce(&KidsChromeManagementClient::OnSimpleLoaderComplete,
@@ -387,6 +385,8 @@ void KidsChromeManagementClient::OnSimpleLoaderComplete(
   if (net_error != net::OK) {
     DLOG(WARNING) << "Network error " << net_error;
     base::UmaHistogramSparse(kClassifyUrlNetOrHttpStatusMetric, net_error);
+    base::UmaHistogramSparse(kClassifyUrlHttpStatusOrNetErrorMetric, net_error);
+
     DispatchResult(
         it, std::move(response_proto),
         KidsChromeManagementClient::ErrorCode::kNetworkError,
@@ -397,6 +397,9 @@ void KidsChromeManagementClient::OnSimpleLoaderComplete(
   if (response_code != net::HTTP_OK) {
     DLOG(WARNING) << "Response: " << response_body.get();
     base::UmaHistogramSparse(kClassifyUrlNetOrHttpStatusMetric, response_code);
+    base::UmaHistogramSparse(kClassifyUrlHttpStatusOrNetErrorMetric,
+                             response_code);
+
     DispatchResult(
         it, std::move(response_proto),
         KidsChromeManagementClient::ErrorCode::kHttpError,

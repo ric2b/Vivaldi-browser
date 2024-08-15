@@ -52,7 +52,7 @@ source_set("extraparts") {
     "//vivaldi/contact",
     "//vivaldi/components:adverse_adblocking",
     "//vivaldi/prefs",
-    "//vivaldi/notes:browser",
+    "//vivaldi/components/notes:browser",
     "//vivaldi/ui",
   ]
   if (!is_android) {

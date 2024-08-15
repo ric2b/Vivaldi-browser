@@ -16,11 +16,15 @@ class Browser;
 @protocol BrowsingDataCommands;
 enum class DefaultBrowserPromoSource;
 @protocol ImportDataControllerDelegate;
+@protocol SettingsRootViewControlling;
 @protocol SnackbarCommands;
 @class UserFeedbackData;
+
 namespace password_manager {
 struct CredentialUIEntry;
+enum class PasswordCheckReferrer;
 }  // namespace password_manager
+
 namespace autofill {
 class CreditCard;
 }  // namespace autofill
@@ -38,19 +42,6 @@ extern NSString* const kSettingsDoneButtonId;
 // (e.g. it was swiped down). This means that closeSettings wasn't called and we
 // need to perform some clean up tasks.
 - (void)settingsWasDismissed;
-
-// Asks the delegate for a handler that can be passed into child view
-// controllers when they are created.
-- (id<ApplicationCommands, BrowserCommands, BrowsingDataCommands>)
-    handlerForSettings;
-
-// Asks the delegate for an ApplicationCommands handler that can be passed into
-// child view controllers when they are created.
-- (id<ApplicationCommands>)handlerForApplicationCommands;
-
-// Asks the delegate for a SnackbarCommands handler that can be passed into
-// child view controllers when they are created.
-- (id<SnackbarCommands>)handlerForSnackbarCommands;
 
 @end
 
@@ -142,8 +133,7 @@ extern NSString* const kSettingsDoneButtonId;
     userFeedbackControllerForBrowser:(Browser*)browser
                             delegate:(id<SettingsNavigationControllerDelegate>)
                                          delegate
-                    userFeedbackData:(UserFeedbackData*)userFeedbackData
-                             handler:(id<ApplicationCommands>)handler;
+                    userFeedbackData:(UserFeedbackData*)userFeedbackData;
 
 // Creates and displays a new ImportDataTableViewController. `browserState`
 // should not be nil.
@@ -216,12 +206,15 @@ extern NSString* const kSettingsDoneButtonId;
 // around it. `browser` is the browser where settings are being displayed and
 // should not be nil. `delegate` may be nil. `displayAsHalfSheet` determines
 // whether the Safety Check will be displayed as a half-sheet, or full-page
-// modal.
+// modal. `referrer` represents where in the
+// app the Safety Check is being requested from.
 + (instancetype)
     safetyCheckControllerForBrowser:(Browser*)browser
                            delegate:(id<SettingsNavigationControllerDelegate>)
                                         delegate
-                 displayAsHalfSheet:(BOOL)displayAsHalfSheet;
+                 displayAsHalfSheet:(BOOL)displayAsHalfSheet
+                           referrer:(password_manager::PasswordCheckReferrer)
+                                        referrer;
 
 // Creates a new PrivacySafeBrowsingViewController and the chrome
 // around it. `browser` is the browser where settings are being displayed and

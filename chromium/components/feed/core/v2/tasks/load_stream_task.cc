@@ -33,6 +33,7 @@
 #include "components/feed/core/v2/types.h"
 #include "components/feed/core/v2/view_demotion.h"
 #include "components/feed/feed_feature_list.h"
+#include "components/supervised_user/core/browser/proto/get_discover_feed_request.pb.h"
 #include "net/base/net_errors.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -329,7 +330,14 @@ void LoadStreamTask::SendFeedQueryRequest() {
 
   FeedNetwork& network = stream_->GetNetwork();
   const bool force_feed_query = GetFeedConfig().use_feed_query_requests;
-  if (!force_feed_query && options_.stream_type.IsWebFeed()) {
+  if (options_.stream_type.IsForSupervisedUser()) {
+    // TODO(b/295472540): Update parameters required for request.
+    supervised_user::GetDiscoverFeedRequest kid_friendly_request;
+    network.SendKidFriendlyApiRequest(
+        kid_friendly_request, account_info,
+        base::BindOnce(&LoadStreamTask::KidFriendlyRequestComplete,
+                       GetWeakPtr()));
+  } else if (!force_feed_query && options_.stream_type.IsWebFeed()) {
     // Special case: web feed that is not using Feed Query requests go to
     // WebFeedListContentsDiscoverApi.
     network.SendApiRequest<WebFeedListContentsDiscoverApi>(
@@ -371,6 +379,14 @@ void LoadStreamTask::SendFeedQueryRequest() {
         NetworkRequestType::kFeedQuery, request, account_info,
         base::BindOnce(&LoadStreamTask::QueryRequestComplete, GetWeakPtr()));
   }
+}
+
+void LoadStreamTask::KidFriendlyRequestComplete(
+    FeedNetwork::KidFriendlyQueryRequestResult result) {
+  // TODO(b/300455747): Add wire translator to extract relevant feed data from
+  // kid-friendly request.
+  ProcessNetworkResponse(std::make_unique<feedwire::Response>(),
+                         std::move(result.response_info));
 }
 
 void LoadStreamTask::QueryRequestComplete(

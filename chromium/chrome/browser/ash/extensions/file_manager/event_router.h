@@ -16,7 +16,6 @@
 #include "ash/public/cpp/tablet_mode_observer.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
-#include "base/time/time.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
 #include "chrome/browser/ash/drive/file_system_util.h"
 #include "chrome/browser/ash/extensions/file_manager/device_event_router.h"
@@ -32,7 +31,6 @@
 #include "chrome/browser/ash/guest_os/public/guest_os_mount_provider.h"
 #include "chrome/browser/ash/guest_os/public/guest_os_mount_provider_registry.h"
 #include "chrome/common/extensions/api/file_manager_private.h"
-#include "chromeos/ash/components/disks/disk_mount_manager.h"
 #include "chromeos/ash/components/drivefs/sync_status_tracker.h"
 #include "chromeos/ash/components/settings/timezone_settings.h"
 #include "chromeos/dbus/dlp/dlp_client.h"
@@ -65,18 +63,18 @@ namespace file_manager {
 // affecting File Manager. Dispatches appropriate File Browser events.
 class EventRouter
     : public KeyedService,
-      public extensions::ExtensionRegistryObserver,
-      public ash::system::TimezoneSettings::Observer,
-      public VolumeManagerObserver,
-      public arc::ArcIntentHelperObserver,
-      public drive::DriveIntegrationServiceObserver,
-      public guest_os::GuestOsSharePath::Observer,
-      public ash::TabletModeObserver,
-      public file_manager::io_task::IOTaskController::Observer,
-      public guest_os::GuestOsMountProviderRegistry::Observer,
-      public chromeos::DlpClient::Observer,
-      public apps::AppRegistryCache::Observer,
-      public network::NetworkConnectionTracker::NetworkConnectionObserver {
+      extensions::ExtensionRegistryObserver,
+      ash::system::TimezoneSettings::Observer,
+      VolumeManagerObserver,
+      arc::ArcIntentHelperObserver,
+      drive::DriveIntegrationService::Observer,
+      guest_os::GuestOsSharePath::Observer,
+      ash::TabletModeObserver,
+      file_manager::io_task::IOTaskController::Observer,
+      guest_os::GuestOsMountProviderRegistry::Observer,
+      chromeos::DlpClient::Observer,
+      apps::AppRegistryCache::Observer,
+      network::NetworkConnectionTracker::NetworkConnectionObserver {
  public:
   using DispatchDirectoryChangeEventImplCallback =
       base::RepeatingCallback<void(const base::FilePath& virtual_path,
@@ -166,12 +164,12 @@ class EventRouter
   void SetDispatchDirectoryChangeEventImplForTesting(
       const DispatchDirectoryChangeEventImplCallback& callback);
 
-  // DriveIntegrationServiceObserver override.
+  // DriveIntegrationService::Observer implementation.
   void OnFileSystemMountFailed() override;
   void OnDriveConnectionStatusChanged(
       drive::util::ConnectionStatus status) override;
 
-  // guest_os::GuestOsSharePath::Observer overrides.
+  // GuestOsSharePath::Observer implementation.
   void OnPersistedPathRegistered(const std::string& vm_name,
                                  const base::FilePath& path) override;
   void OnUnshare(const std::string& vm_name,
@@ -278,10 +276,6 @@ class EventRouter
 
   void NotifyDriveConnectionStatusChanged();
 
-  void DisplayDriveConfirmDialog(
-      const drivefs::mojom::DialogReason& reason,
-      base::OnceCallback<void(drivefs::mojom::DialogResult)> callback);
-
   // Used by `file_manager::ScopedSuppressDriveNotificationsForPath` to prevent
   // Drive notifications for a given file identified by its relative Drive path.
   void SuppressDriveNotificationsForFilePath(
@@ -333,7 +327,7 @@ class EventRouter
 
   std::unique_ptr<SystemNotificationManager> notification_manager_;
   std::unique_ptr<DeviceEventRouter> device_event_router_;
-  std::unique_ptr<DriveFsEventRouter> drivefs_event_router_;
+  const std::unique_ptr<DriveFsEventRouter> drivefs_event_router_;
 
   DispatchDirectoryChangeEventImplCallback
       dispatch_directory_change_event_impl_;

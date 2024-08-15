@@ -17,13 +17,13 @@ namespace ash {
 class ArcWindowWatcher;
 class NetworkPortalNotificationController;
 class NewWindowDelegateProvider;
-class NightLightClient;
+class RefreshRateController;
 class VideoConferenceTrayController;
 }  // namespace ash
 
-namespace chromeos::editor_menu {
-class EditorMenuController;
-}  // namespace chromeos::editor_menu
+namespace chromeos {
+class ReadWriteCardsManager;
+}  // namespace chromeos
 
 namespace enterprise_connectors {
 class AshAttestationCleanupManager;
@@ -52,10 +52,8 @@ class LoginScreenClientImpl;
 class MediaClientImpl;
 class MobileDataNotifications;
 class NetworkConnectDelegate;
-class NightLightClient;
 class ProjectorAppClientImpl;
 class ProjectorClientImpl;
-class QuickAnswersController;
 class ScreenOrientationDelegateChromeos;
 class SessionControllerClientImpl;
 class SystemTrayClientImpl;
@@ -73,7 +71,7 @@ class ChromeShelfControllerInitializer;
 }
 
 // Browser initialization for Ash UI. Only use this for Ash specific
-// intitialization (e.g. initialization of chrome/browser/ui/ash classes).
+// initialization (e.g. initialization of chrome/browser/ui/ash classes).
 class ChromeBrowserMainExtraPartsAsh : public ChromeBrowserMainExtraParts {
  public:
   // Returns the single instance. Returns null early in startup and late in
@@ -136,7 +134,6 @@ class ChromeBrowserMainExtraPartsAsh : public ChromeBrowserMainExtraParts {
   std::unique_ptr<WallpaperControllerClientImpl> wallpaper_controller_client_;
   std::unique_ptr<ProjectorClientImpl> projector_client_;
   std::unique_ptr<ProjectorAppClientImpl> projector_app_client_;
-  std::unique_ptr<QuickAnswersController> quick_answers_controller_;
   std::unique_ptr<game_mode::GameModeController> game_mode_controller_;
   std::unique_ptr<ash::NetworkPortalNotificationController>
       network_portal_notification_controller_;
@@ -148,6 +145,7 @@ class ChromeBrowserMainExtraPartsAsh : public ChromeBrowserMainExtraParts {
   std::unique_ptr<internal::ChromeShelfControllerInitializer>
       chrome_shelf_controller_initializer_;
   std::unique_ptr<DesksClient> desks_client_;
+  std::unique_ptr<ash::RefreshRateController> refresh_rate_controller_;
 
 #if BUILDFLAG(ENABLE_WAYLAND_SERVER)
   std::unique_ptr<ExoParts> exo_parts_;
@@ -159,12 +157,10 @@ class ChromeBrowserMainExtraPartsAsh : public ChromeBrowserMainExtraParts {
   std::unique_ptr<AppAccessNotifier> app_access_notifier_;
   std::unique_ptr<policy::DisplaySettingsHandler> display_settings_handler_;
   std::unique_ptr<AshWebViewFactoryImpl> ash_web_view_factory_;
-  std::unique_ptr<chromeos::editor_menu::EditorMenuController>
-      editor_menu_controller_;
+  std::unique_ptr<chromeos::ReadWriteCardsManager> read_write_cards_manager_;
 
   // Initialized in PostBrowserStart in all configs:
   std::unique_ptr<MobileDataNotifications> mobile_data_notifications_;
-  std::unique_ptr<ash::NightLightClient> night_light_client_;
   std::unique_ptr<AmbientClientImpl> ambient_client_;
 
   // Boolean that is set to true after PostBrowserStart() executes.

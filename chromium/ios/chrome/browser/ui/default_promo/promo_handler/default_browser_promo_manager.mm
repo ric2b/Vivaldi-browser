@@ -7,8 +7,9 @@
 #import "base/notreached.h"
 #import "components/feature_engagement/public/feature_constants.h"
 #import "components/feature_engagement/public/tracker.h"
+#import "components/policy/core/common/cloud/user_cloud_policy_manager.h"
 #import "components/prefs/pref_service.h"
-#import "ios/chrome/browser/feature_engagement/tracker_factory.h"
+#import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
@@ -20,6 +21,15 @@
 #import "ios/chrome/browser/ui/default_promo/video_default_browser_promo_coordinator.h"
 #import "ios/chrome/browser/ui/policy/user_policy_util.h"
 #import "ios/chrome/browser/ui/promos_manager/promos_manager_ui_handler.h"
+
+namespace {
+
+enum class DisplayedVideoPromo {
+  VideoPromo,
+  VideoPromoReminder,
+};
+
+}  // namespace
 
 @interface DefaultBrowserPromoManager () <DefaultBrowserPromoCommands>
 
@@ -38,8 +48,10 @@
 // Coordinator that manages the tailored promo modals.
 @property(nonatomic, strong) TailoredPromoCoordinator* tailoredPromoCoordinator;
 
-// Tracks whether or not the Video promo FET should be dismissed.
-@property(nonatomic, assign) BOOL shouldDismissVideoPromoFET;
+// Tracks whether or not the Video promo Feature Engagement Tracker should be
+// dismissed.
+@property(nonatomic, assign) absl::optional<DisplayedVideoPromo>
+    displayedVideoPromoForFET;
 
 // Feature engagement tracker reference.
 @property(nonatomic, assign) feature_engagement::Tracker* tracker;
@@ -57,8 +69,11 @@
       AuthenticationServiceFactory::GetForBrowserState(browserState);
   self.tracker = feature_engagement::TrackerFactory::GetForBrowserState(
       self.browser->GetBrowserState());
+  policy::UserCloudPolicyManager* user_policy_manager =
+      browserState->GetUserCloudPolicyManager();
 
-  if (IsUserPolicyNotificationNeeded(authService, prefService)) {
+  if (IsUserPolicyNotificationNeeded(authService, prefService,
+                                     user_policy_manager)) {
     // Showing the User Policy notification has priority over showing the
     // default browser promo. Both dialogs are competing for the same time slot
     // which is after the browser startup and the browser UI is initialized.
@@ -94,6 +109,14 @@
   BOOL isDBVideoPromoEnabled =
       IsDBVideoPromoHalfscreenEnabled() || IsDBVideoPromoFullscreenEnabled();
   if (isDBVideoPromoEnabled && [self maybeTriggerVideoPromoWithFET]) {
+    return;
+  }
+
+  if (self.promoWasFromRemindMeLater) {
+    // Remind Me Later only shows up on the Video Promo UI, so if this is a
+    // reminder, use the video UI again.
+    self.displayedVideoPromoForFET = DisplayedVideoPromo::VideoPromoReminder;
+    [self showPromo:DefaultPromoTypeVideo];
     return;
   }
 
@@ -143,9 +166,17 @@
 
 - (void)stop {
   [self.videoDefaultPromoCoordinator stop];
-  if (self.shouldDismissVideoPromoFET && self.tracker) {
-    self.tracker->Dismissed(
-        feature_engagement::kIPHiOSDefaultBrowserVideoPromoTriggerFeature);
+  if (self.displayedVideoPromoForFET && self.tracker) {
+    switch (self.displayedVideoPromoForFET.value()) {
+      case DisplayedVideoPromo::VideoPromo:
+        self.tracker->Dismissed(
+            feature_engagement::kIPHiOSDefaultBrowserVideoPromoTriggerFeature);
+        break;
+      case DisplayedVideoPromo::VideoPromoReminder:
+        self.tracker->Dismissed(
+            feature_engagement::kIPHiOSPromoDefaultBrowserReminderFeature);
+        break;
+    }
   }
   self.videoDefaultPromoCoordinator = nil;
 
@@ -217,6 +248,11 @@
   self.videoDefaultPromoCoordinator.isHalfScreen =
       IsDBVideoPromoHalfscreenEnabled() ||
       IsDBVideoPromoWithGenericHalfscreenEnabled();
+  BOOL showRemindMeLater =
+      base::FeatureList::IsEnabled(
+          feature_engagement::kIPHiOSPromoDefaultBrowserReminderFeature) &&
+      !self.promoWasFromRemindMeLater;
+  self.videoDefaultPromoCoordinator.showRemindMeLater = showRemindMeLater;
   [self.videoDefaultPromoCoordinator start];
 }
 
@@ -243,7 +279,7 @@
     if (self.tracker->ShouldTriggerHelpUI(
             feature_engagement::
                 kIPHiOSDefaultBrowserVideoPromoTriggerFeature)) {
-      self.shouldDismissVideoPromoFET = true;
+      self.displayedVideoPromoForFET = DisplayedVideoPromo::VideoPromo;
       [self showPromo:DefaultPromoTypeVideo];
       return true;
     }

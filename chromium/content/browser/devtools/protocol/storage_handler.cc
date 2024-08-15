@@ -26,6 +26,8 @@
 #include "components/attribution_reporting/source_registration.h"
 #include "components/attribution_reporting/source_type.h"
 #include "components/attribution_reporting/suitable_origin.h"
+#include "components/attribution_reporting/trigger_config.h"
+#include "components/attribution_reporting/trigger_data_matching.mojom.h"
 #include "components/services/storage/privileged/mojom/indexed_db_control.mojom.h"
 #include "components/services/storage/public/cpp/buckets/bucket_locator.h"
 #include "components/services/storage/public/mojom/cache_storage_control.mojom.h"
@@ -166,7 +168,7 @@ std::unique_ptr<protocol::Storage::StorageBucketInfo> BuildBucketInfo(
   return protocol::Storage::StorageBucketInfo::Create()
       .SetBucket(std::move(storage_bucket))
       .SetId(base::NumberToString(bucket.id.value()))
-      .SetExpiration(bucket.expiration.ToDoubleT())
+      .SetExpiration(bucket.expiration.InSecondsFSinceUnixEpoch())
       .SetQuota(bucket.quota)
       .SetPersistent(bucket.persistent)
       .SetDurability(durability_enum)
@@ -1030,12 +1032,21 @@ void StorageHandler::OnInterestGroupAccessed(
     case AccessType::kBid:
       type_enum = Storage::InterestGroupAccessTypeEnum::Bid;
       break;
+    case AccessType::kAdditionalBid:
+      type_enum = Storage::InterestGroupAccessTypeEnum::AdditionalBid;
+      break;
     case AccessType::kWin:
       type_enum = Storage::InterestGroupAccessTypeEnum::Win;
       break;
+    case AccessType::kAdditionalBidWin:
+      type_enum = Storage::InterestGroupAccessTypeEnum::AdditionalBidWin;
+      break;
+    case AccessType::kClear:
+      type_enum = Storage::InterestGroupAccessTypeEnum::Clear;
+      break;
   };
-  frontend_->InterestGroupAccessed(access_time.ToDoubleT(), type_enum,
-                                   owner_origin.Serialize(), name);
+  frontend_->InterestGroupAccessed(access_time.InSecondsFSinceUnixEpoch(),
+                                   type_enum, owner_origin.Serialize(), name);
 }
 
 namespace {
@@ -1060,7 +1071,7 @@ void SendGetInterestGroup(
   if (group.ads) {
     for (const auto& ad : *group.ads) {
       auto protocol_ad = protocol::Storage::InterestGroupAd::Create()
-                             .SetRenderUrl(ad.render_url.spec())
+                             .SetRenderURL(ad.render_url.spec())
                              .Build();
       if (ad.metadata) {
         protocol_ad->SetMetadata(*ad.metadata);
@@ -1073,7 +1084,7 @@ void SendGetInterestGroup(
   if (group.ad_components) {
     for (const auto& ad : *group.ad_components) {
       auto protocol_ad = protocol::Storage::InterestGroupAd::Create()
-                             .SetRenderUrl(ad.render_url.spec())
+                             .SetRenderURL(ad.render_url.spec())
                              .Build();
       if (ad.metadata) {
         protocol_ad->SetMetadata(*ad.metadata);
@@ -1085,24 +1096,24 @@ void SendGetInterestGroup(
       protocol::Storage::InterestGroupDetails::Create()
           .SetOwnerOrigin(group.owner.Serialize())
           .SetName(group.name)
-          .SetExpirationTime(group.expiry.ToDoubleT())
+          .SetExpirationTime(group.expiry.InSecondsFSinceUnixEpoch())
           .SetJoiningOrigin(storage_group->joining_origin.Serialize())
           .SetTrustedBiddingSignalsKeys(std::move(trusted_bidding_signals_keys))
           .SetAds(std::move(ads))
           .SetAdComponents(std::move(ad_components))
           .Build();
   if (group.bidding_url) {
-    protocol_group->SetBiddingUrl(group.bidding_url->spec());
+    protocol_group->SetBiddingLogicURL(group.bidding_url->spec());
   }
   if (group.bidding_wasm_helper_url) {
-    protocol_group->SetBiddingWasmHelperUrl(
+    protocol_group->SetBiddingWasmHelperURL(
         group.bidding_wasm_helper_url->spec());
   }
   if (group.update_url) {
-    protocol_group->SetUpdateUrl(group.update_url->spec());
+    protocol_group->SetUpdateURL(group.update_url->spec());
   }
   if (group.trusted_bidding_signals_url) {
-    protocol_group->SetTrustedBiddingSignalsUrl(
+    protocol_group->SetTrustedBiddingSignalsURL(
         group.trusted_bidding_signals_url->spec());
   }
   if (group.user_bidding_signals) {
@@ -1204,7 +1215,7 @@ void SendSharedStorageMetadata(
   auto protocol_metadata =
       protocol::Storage::SharedStorageMetadata::Create()
           .SetLength(metadata.length)
-          .SetCreationTime(metadata.creation_time.ToDoubleT())
+          .SetCreationTime(metadata.creation_time.InSecondsFSinceUnixEpoch())
           .SetRemainingBudget(metadata.remaining_budget)
           .Build();
 
@@ -1566,8 +1577,8 @@ void StorageHandler::NotifySharedStorageAccessed(
     protocol_params->SetUrlsWithMetadata(std::move(protocol_urls));
   }
 
-  frontend_->SharedStorageAccessed(access_time.ToDoubleT(), type_enum,
-                                   main_frame_id, owner_origin,
+  frontend_->SharedStorageAccessed(access_time.InSecondsFSinceUnixEpoch(),
+                                   type_enum, main_frame_id, owner_origin,
                                    std::move(protocol_params));
 }
 
@@ -1668,9 +1679,6 @@ ToSourceRegistrationResult(StoreSourceResult result) {
   switch (result) {
     case StoreSourceResult::kSuccess:
       return Storage::AttributionReportingSourceRegistrationResultEnum::Success;
-    // This is temporarily being shown as an internal error, will be surfaced
-    // as the source-registration-parsing level after refactoring.
-    case StoreSourceResult::kEventReportWindowsInvalidStartTime:
     case StoreSourceResult::kInternalError:
       return Storage::AttributionReportingSourceRegistrationResultEnum::
           InternalError;
@@ -1738,21 +1746,25 @@ ToAggregationKeysEntries(const attribution_reporting::AggregationKeys& keys) {
   return out;
 }
 
-void SetEventReportWindowOrWindows(
-    const attribution_reporting::EventReportWindows& windows,
-    std::unique_ptr<Storage::AttributionReportingSourceRegistration>& out) {
-  if (windows.OnlySingularWindow()) {
-    out->SetEventReportWindow(windows.window_time().InSeconds());
-  } else {
-    auto end_times = std::make_unique<Array<int>>();
-    for (base::TimeDelta end_time : windows.end_times()) {
-      end_times->emplace_back(end_time.InSeconds());
-    }
-    out->SetEventReportWindows(
-        Storage::AttributionReportingEventReportWindows::Create()
-            .SetStart(windows.start_time().InSeconds())
-            .SetEnds(std::move(end_times))
-            .Build());
+std::unique_ptr<Storage::AttributionReportingEventReportWindows>
+ToEventReportWindows(const attribution_reporting::EventReportWindows& windows) {
+  auto end_times = std::make_unique<Array<int>>();
+  for (base::TimeDelta end_time : windows.end_times()) {
+    end_times->emplace_back(end_time.InSeconds());
+  }
+  return Storage::AttributionReportingEventReportWindows::Create()
+      .SetStart(windows.start_time().InSeconds())
+      .SetEnds(std::move(end_times))
+      .Build();
+}
+
+Storage::AttributionReportingTriggerDataMatching ToTriggerDataMatching(
+    attribution_reporting::mojom::TriggerDataMatching value) {
+  switch (value) {
+    case attribution_reporting::mojom::TriggerDataMatching::kExact:
+      return Storage::AttributionReportingTriggerDataMatchingEnum::Exact;
+    case attribution_reporting::mojom::TriggerDataMatching::kModulus:
+      return Storage::AttributionReportingTriggerDataMatchingEnum::Modulus;
   }
 }
 
@@ -1775,7 +1787,7 @@ void StorageHandler::OnSourceHandled(
   const auto& common_info = source.common_info();
   auto out_source =
       Storage::AttributionReportingSourceRegistration::Create()
-          .SetTime(source_time.ToDoubleT())
+          .SetTime(source_time.InSecondsFSinceUnixEpoch())
           .SetType(
               attribution_reporting::SourceTypeName(common_info.source_type()))
           .SetSourceOrigin(common_info.source_origin()->Serialize())
@@ -1786,21 +1798,14 @@ void StorageHandler::OnSourceHandled(
           .SetFilterData(ToFilterDataEntries(registration.filter_data))
           .SetAggregationKeys(
               ToAggregationKeysEntries(registration.aggregation_keys))
+          .SetExpiry(registration.expiry.InSeconds())
+          .SetEventReportWindows(
+              ToEventReportWindows(registration.event_report_windows))
+          .SetAggregatableReportWindow(
+              registration.aggregatable_report_window.InSeconds())
+          .SetTriggerDataMatching(ToTriggerDataMatching(
+              registration.trigger_config.trigger_data_matching()))
           .Build();
-
-  if (absl::optional<base::TimeDelta> delta = registration.expiry) {
-    out_source->SetExpiry(delta->InSeconds());
-  }
-
-  if (registration.event_report_windows.has_value()) {
-    SetEventReportWindowOrWindows(*registration.event_report_windows,
-                                  out_source);
-  }
-
-  if (absl::optional<base::TimeDelta> delta =
-          registration.aggregatable_report_window) {
-    out_source->SetAggregatableReportWindow(delta->InSeconds());
-  }
 
   if (registration.debug_key.has_value()) {
     out_source->SetDebugKey(base::NumberToString(*registration.debug_key));

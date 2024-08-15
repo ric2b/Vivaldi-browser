@@ -6,7 +6,7 @@
 
 #import "base/check.h"
 #import "base/notreached.h"
-#import "notes/notes_model.h"
+#import "components/notes/notes_model.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."

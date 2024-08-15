@@ -466,6 +466,13 @@ class TemplateURLService : public WebDataServiceConsumer,
                                 const TemplateURL* turl,
                                 syncer::SyncChange::SyncChangeType type);
 
+  // Returns whether the device is from an EEA country. This is consistent with
+  // countries which are eligible for the EEA default search engine choice
+  // prompt. "Default country" or "country at install" are used for
+  // SearchEngineChoiceCountry. It might be different than what LocaleUtils
+  // returns.
+  bool IsEeaChoiceCountry();
+
   // Returns a SearchTermsData which can be used to call TemplateURL methods.
   const SearchTermsData& search_terms_data() const {
     return *search_terms_data_;
@@ -917,6 +924,11 @@ class TemplateURLService : public WebDataServiceConsumer,
   // Session token management.
   std::string current_token_;
   base::TimeTicks token_expiration_time_;
+
+  // Latest deletion of default search engine, contains sync GUID of the update
+  // with deletion. Used to postpone the deletion in case the default search
+  // engine changes later. See ProcessSyncChanges() for details.
+  std::string postponed_deleted_default_engine_guid_;
 
 #if BUILDFLAG(IS_ANDROID)
   // Manage and fetch the java object that wraps this TemplateURLService on

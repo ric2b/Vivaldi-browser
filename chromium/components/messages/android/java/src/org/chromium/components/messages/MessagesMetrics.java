@@ -255,6 +255,12 @@ public class MessagesMetrics {
                 return "DesktopSiteGlobalOptIn";
             case MessageIdentifier.DOWNLOAD_INCOGNITO_WARNING:
                 return "DownloadIncognitoWarning";
+            case MessageIdentifier.CVC_SAVE:
+                return "CvcSave";
+            case MessageIdentifier.TRACKING_PROTECTION_NOTICE:
+                return "TrackingProtectionNotice";
+            case MessageIdentifier.DESKTOP_SITE_WINDOW_SETTING:
+                return "DesktopSiteWindowSetting";
             default:
                 return "Unknown";
         }

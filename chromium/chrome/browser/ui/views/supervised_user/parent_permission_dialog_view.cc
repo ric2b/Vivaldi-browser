@@ -59,6 +59,7 @@
 #include "ui/views/layout/box_layout_view.h"
 #include "ui/views/layout/table_layout_view.h"
 #include "ui/views/metadata/view_factory.h"
+#include "ui/views/view_class_properties.h"
 
 namespace {
 constexpr int kPermissionSectionPaddingTop = 20;
@@ -95,6 +96,9 @@ END_METADATA
 TestParentPermissionDialogViewObserver* test_view_observer = nullptr;
 
 }  // namespace
+
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(ParentPermissionDialogView,
+                                      kDialogViewIdForTesting);
 
 // Create the parent permission input section of the dialog and
 // listens for updates to its controls.
@@ -285,6 +289,7 @@ ParentPermissionDialogView::ParentPermissionDialogView(
   SetShowCloseButton(false);
   set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
       views::DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH));
+  SetProperty(views::kElementIdentifierKey, kDialogViewIdForTesting);
 
   identity_manager_ = IdentityManagerFactory::GetForProfile(params_->profile);
 }
@@ -628,7 +633,7 @@ void ParentPermissionDialogView::StartReauthAccessTokenFetch(
   scopes.insert(GaiaConstants::kAccountsReauthOAuth2Scope);
   oauth2_access_token_fetcher_ =
       identity_manager_->CreateAccessTokenFetcherForAccount(
-          identity_manager_->GetPrimaryAccountId(signin::ConsentLevel::kSync),
+          identity_manager_->GetPrimaryAccountId(signin::ConsentLevel::kSignin),
           "chrome_webstore_private_api", scopes,
           base::BindOnce(
               &ParentPermissionDialogView::OnAccessTokenFetchComplete,

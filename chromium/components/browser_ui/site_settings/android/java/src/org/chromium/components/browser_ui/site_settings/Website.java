@@ -40,6 +40,12 @@ public final class Website implements WebsiteEntry {
      */
     private Map<Integer, PermissionInfo> mPermissionInfos = new HashMap<>();
 
+    /**
+     * Indexed by ContentSettingsType. For Permissions like the StorageAccess API that are keyed by
+     * requesting and embedding site.
+     */
+    private Map<Integer, List<ContentSettingException>> mEmbeddedPermissionInfos = new HashMap<>();
+
     private LocalStorageInfo mLocalStorageInfo;
     private FPSCookieInfo mFPSCookieInfo;
     private CookiesInfo mCookiesInfo;
@@ -64,6 +70,12 @@ public final class Website implements WebsiteEntry {
     public static String omitProtocolIfPresent(String url) {
         if (url.indexOf(SCHEME_SUFFIX) == -1) return url;
         return UrlFormatter.formatUrlForDisplayOmitScheme(url);
+    }
+
+    // Returns whether exceptions for this type are retrieved through
+    // getEmbeddedPermissions().
+    public static boolean isEmbeddedPermission(@ContentSettingsType int type) {
+        return type == ContentSettingsType.STORAGE_ACCESS;
     }
 
     public Website(WebsiteAddress origin, WebsiteAddress embedder) {
@@ -160,6 +172,17 @@ public final class Website implements WebsiteEntry {
         mPermissionInfos.put(info.getContentSettingsType(), info);
     }
 
+    public Map<Integer, List<ContentSettingException>> getEmbeddedPermissions() {
+        return mEmbeddedPermissionInfos;
+    }
+
+    public void addEmbeddedPermission(ContentSettingException info) {
+        assert !info.getSecondaryPattern().equals("*");
+        var list = mEmbeddedPermissionInfos.computeIfAbsent(
+                info.getContentSettingType(), k -> new ArrayList<>());
+        list.add(info);
+    }
+
     public Collection<ContentSettingException> getContentSettingExceptions() {
         return mContentSettingExceptions.values();
     }
@@ -185,7 +208,14 @@ public final class Website implements WebsiteEntry {
      */
     public @ContentSettingValues @Nullable Integer getContentSetting(
             BrowserContextHandle browserContextHandle, @ContentSettingsType int type) {
-        if (getPermissionInfo(type) != null) {
+        if (isEmbeddedPermission(type)) {
+            var exceptions = getEmbeddedPermissions().get(type);
+            if (exceptions == null) return null;
+            // This function may not be used when multiple embedded permissions have been merged
+            // into one website like for SingleWebsiteSettings.
+            assert exceptions.size() == 1;
+            return exceptions.get(0).getContentSetting();
+        } else if (getPermissionInfo(type) != null) {
             return getPermissionInfo(type).getContentSetting(browserContextHandle);
         } else if (getContentSettingException(type) != null) {
             return getContentSettingException(type).getContentSetting();
@@ -244,6 +274,12 @@ public final class Website implements WebsiteEntry {
                 RecordUserAction.record("SoundContentSetting.MuteBy.SiteSettings");
             } else {
                 RecordUserAction.record("SoundContentSetting.UnmuteBy.SiteSettings");
+            }
+        } else if (isEmbeddedPermission(type)) {
+            var exceptions = getEmbeddedPermissions().get(type);
+            if (exceptions != null) {
+                assert exceptions.size() == 1;
+                exception = exceptions.get(0);
             }
         } else if (type == ContentSettingsType.AUTOPLAY) { // Vivaldi
             // It is possible to set the permission without having an existing exception,

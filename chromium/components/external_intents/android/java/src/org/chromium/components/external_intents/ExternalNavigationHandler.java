@@ -83,7 +83,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 // Vivaldi
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.vivaldi.browser.common.VivaldiUrlConstants;
 
 /**
@@ -1722,7 +1722,7 @@ public class ExternalNavigationHandler {
         // Vivaldi - Don't open external app if 'Stay in browser' option is enabled.
         if (BuildConfig.IS_VIVALDI) {
             boolean stayInBrowser =
-                    SharedPreferencesManager.getInstance().readBoolean("stay_in_browser",
+                    ChromeSharedPreferences.getInstance().readBoolean("stay_in_browser",
                             BuildConfig.IS_OEM_MERCEDES_BUILD); // Ref. VAB-7848.
             if (stayInBrowser && !isExternalProtocol) {
                 return OverrideUrlLoadingResult.forNoOverride();

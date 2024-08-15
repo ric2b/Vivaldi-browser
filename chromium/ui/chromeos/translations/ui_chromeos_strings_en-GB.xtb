@@ -8,6 +8,7 @@
 <translation id="1056898198331236512">Warning</translation>
 <translation id="1060368002126861100">To open files with <ph name="APP_NAME" />, first move them to the Windows files folder.</translation>
 <translation id="1062407476771304334">Replace</translation>
+<translation id="1119383441774809183">Show text messages</translation>
 <translation id="1119447706177454957">Internal error</translation>
 <translation id="1120073797882051782">Hangul Romaja</translation>
 <translation id="112387589102719461">English (US) with Programmer Dvorak keyboard</translation>
@@ -328,6 +329,7 @@
 <translation id="3619115746895587757">Cappuccino</translation>
 <translation id="3619593063686672873">No recent videos</translation>
 <translation id="3634507049637220048">Network <ph name="NETWORK_INDEX" /> of <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, managed by your administrator, details</translation>
+<translation id="36451918667380448">Mobile network provider is locked. Contact your provider for support.</translation>
 <translation id="3645233063072417428"><ph name="NUMBER_OF_ITEMS" /> items moved.</translation>
 <translation id="3658269352872031728"><ph name="SELECTED_FILE_COUNT" /> files selected</translation>
 <translation id="3685122418104378273">Google Drive sync is disabled by default, when using mobile data.</translation>
@@ -556,7 +558,6 @@
 <translation id="5283101102242354279">Turn on an extension in Incognito:</translation>
 <translation id="5286194356314741248">Scanning</translation>
 <translation id="5288441970121584418">Burger</translation>
-<translation id="5288481194217812690"><ph name="FILENAME" /></translation>
 <translation id="5293615890992542006">Moving this file is blocked by administrator policy</translation>
 <translation id="5305688511332277257">None installed</translation>
 <translation id="5317780077021120954">Save</translation>
@@ -1014,6 +1015,7 @@
 <translation id="8698877009525468705">This file is confidential and subject to restrictions by administrator policy.</translation>
 <translation id="8712637175834984815">Got it</translation>
 <translation id="8713112442029511308">Maltese</translation>
+<translation id="8714138378966541668">Locked by provider</translation>
 <translation id="8714406895390098252">Bicycle</translation>
 <translation id="8719721339511222681">Selected <ph name="ENTRY_NAME" />.</translation>
 <translation id="872537912056138402">Croatian</translation>

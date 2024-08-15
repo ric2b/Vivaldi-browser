@@ -49,7 +49,7 @@ void TuckWindow(aura::Window* window) {
 }
 
 void CreateSystemWebApp(Profile* profile, ash::SystemWebAppType app_type) {
-  web_app::AppId app_id = *ash::GetAppIdForSystemWebApp(profile, app_type);
+  webapps::AppId app_id = *ash::GetAppIdForSystemWebApp(profile, app_type);
   apps::AppLaunchParams params(
       app_id, apps::LaunchContainer::kLaunchContainerWindow,
       WindowOpenDisposition::NEW_WINDOW, apps::LaunchSource::kFromTest);
@@ -64,18 +64,7 @@ void CreateSystemWebApp(Profile* profile, ash::SystemWebAppType app_type) {
 
 }  // namespace
 
-class FloatControllerBrowserTest : public InProcessBrowserTest {
- public:
-  FloatControllerBrowserTest() = default;
-  FloatControllerBrowserTest(const FloatControllerBrowserTest&) = delete;
-  FloatControllerBrowserTest& operator=(const FloatControllerBrowserTest&) =
-      delete;
-  ~FloatControllerBrowserTest() override = default;
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_{
-      chromeos::wm::features::kWindowLayoutMenu};
-};
+using FloatControllerBrowserTest = InProcessBrowserTest;
 
 // Tests that repeated tucking of a floated window in tablet mode does not cause
 // the window to freeze. Regression test for b/278917878.

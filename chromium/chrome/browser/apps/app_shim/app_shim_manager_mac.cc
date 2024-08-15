@@ -24,6 +24,7 @@
 #include "base/hash/sha1.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
@@ -34,7 +35,6 @@
 #include "chrome/browser/apps/app_shim/app_shim_termination_manager.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/avatar_menu.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
@@ -59,9 +59,7 @@
 #include "components/crash/core/common/crash_key.h"
 #include "components/crx_file/id_util.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
-#include "content/public/browser/notification_source.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/base/filename_util.h"
@@ -212,7 +210,10 @@ CreateAppShimRequirement() {
 // tailored for the app shim based on the framework bundle's requirement.
 // - False otherwise (|app_shim_pid| does not satisfy the constructed designated
 // requirement).
-bool IsAcceptablyCodeSignedInternal(pid_t app_shim_pid) {
+//
+// This is used prior to macOS 11.7 where it is not possible to ad-hoc code sign
+// the app shim at runtime.
+bool IsAcceptablyCodeSignedLegacy(pid_t app_shim_pid) {
   static base::NoDestructor<
       absl::optional<base::apple::ScopedCFTypeRef<SecRequirementRef>>>
       app_shim_requirement(CreateAppShimRequirement());
@@ -255,6 +256,72 @@ bool IsAcceptablyCodeSignedInternal(pid_t app_shim_pid) {
     return false;
   }
   return true;
+}
+
+// Returns whether |app_shim_code|'s code directory hash matches the value
+// that was saved when the app was signed.
+bool VerifyCodeDirectoryHash(
+    base::apple::ScopedCFTypeRef<SecCodeRef> app_shim_code) {
+  base::apple::ScopedCFTypeRef<CFDictionaryRef> app_shim_info;
+  OSStatus status = SecCodeCopySigningInformation(
+      app_shim_code, kSecCSSigningInformation, app_shim_info.InitializeInto());
+  if (status != errSecSuccess) {
+    DumpOSStatusError(status, "SecCodeCopySigningInformation");
+    return false;
+  }
+
+  CFDataRef cd_hash =
+      GetValueFromDictionary<CFDataRef>(app_shim_info, kSecCodeInfoUnique);
+
+  CFDictionaryRef info_plist =
+      base::apple::GetValueFromDictionary<CFDictionaryRef>(app_shim_info,
+                                                           kSecCodeInfoPList);
+  if (!info_plist) {
+    return false;
+  }
+
+  CFStringRef app_id = base::apple::GetValueFromDictionary<CFStringRef>(
+      info_plist, CFSTR("CrAppModeShortcutID"));
+  if (!app_id) {
+    return false;
+  }
+
+  return AppShimRegistry::Get()->VerifyCdHashForApp(
+      base::SysCFStringRefToUTF8(app_id),
+      base::make_span(CFDataGetBytePtr(cd_hash),
+                      base::checked_cast<size_t>(CFDataGetLength(cd_hash))));
+}
+
+// Returns whether |app_shim_pid|'s code signature is trusted. Since an ad-hoc
+// code signature is used on macOS 11.7 and above, the verification consists of:
+//  - verifying the signature is valid.
+//  - verifying the code directory hash in the signature matches the value
+//    stored for this app at signing time.
+bool IsAcceptablyAdHocCodeSigned(pid_t app_shim_pid) {
+  base::apple::ScopedCFTypeRef<CFNumberRef> app_shim_pid_cf(
+      CFNumberCreate(nullptr, kCFNumberIntType, &app_shim_pid));
+  const void* app_shim_attribute_keys[] = {kSecGuestAttributePid};
+  const void* app_shim_attribute_values[] = {app_shim_pid_cf};
+  base::apple::ScopedCFTypeRef<CFDictionaryRef> app_shim_attributes(
+      CFDictionaryCreate(
+          nullptr, app_shim_attribute_keys, app_shim_attribute_values,
+          std::size(app_shim_attribute_keys), &kCFTypeDictionaryKeyCallBacks,
+          &kCFTypeDictionaryValueCallBacks));
+  base::apple::ScopedCFTypeRef<SecCodeRef> app_shim_code;
+  OSStatus status = SecCodeCopyGuestWithAttributes(
+      nullptr, app_shim_attributes, kSecCSDefaultFlags,
+      app_shim_code.InitializeInto());
+  if (status != errSecSuccess) {
+    DumpOSStatusError(status, "SecCodeCopyGuestWithAttributes");
+    return false;
+  }
+  status = SecCodeCheckValidity(app_shim_code, kSecCSDefaultFlags, nullptr);
+  if (status != errSecSuccess) {
+    DumpOSStatusError(status, "SecCodeCheckValidity");
+    return false;
+  }
+
+  return VerifyCodeDirectoryHash(app_shim_code);
 }
 
 bool ProfileMenuItemComparator(const chrome::mojom::ProfileMenuItemPtr& a,
@@ -315,7 +382,7 @@ struct AppShimManager::ProfileState {
 // The state for an individual app. This includes the state for all
 // profiles that are using the app.
 struct AppShimManager::AppState {
-  AppState(const web_app::AppId& app_id,
+  AppState(const webapps::AppId& app_id,
            std::unique_ptr<AppShimHost> multi_profile_host)
       : app_id(app_id), multi_profile_host(std::move(multi_profile_host)) {}
   AppState(const AppState&) = delete;
@@ -432,7 +499,7 @@ void AppShimManager::OnProfileManagerDestroying() {
 }
 
 AppShimHost* AppShimManager::FindHost(Profile* profile,
-                                      const web_app::AppId& app_id) {
+                                      const webapps::AppId& app_id) {
   auto found_app = apps_.find(app_id);
   if (found_app == apps_.end())
     return nullptr;
@@ -450,7 +517,7 @@ bool AppShimManager::HasNonBookmarkAppWindowsOpen() {
 
 void AppShimManager::UpdateAppBadge(
     Profile* profile,
-    const web_app::AppId& app_id,
+    const webapps::AppId& app_id,
     const absl::optional<badging::BadgeManager::BadgeValue>& badge) {
   // TODO(https://crbug.com/1199624): Support updating the app badge for apps
   // that aren't currently running.
@@ -472,7 +539,7 @@ void AppShimManager::UpdateAppBadge(
 }
 
 mojo::Remote<mac_notifications::mojom::MacNotificationProvider>
-AppShimManager::LaunchNotificationProvider(const web_app::AppId& app_id) {
+AppShimManager::LaunchNotificationProvider(const webapps::AppId& app_id) {
   CHECK(
       base::FeatureList::IsEnabled(features::kAppShimNotificationAttribution));
 
@@ -512,7 +579,7 @@ AppShimManager::LaunchNotificationProvider(const web_app::AppId& app_id) {
 }
 
 Profile* AppShimManager::ProfileForBackgroundShimLaunch(
-    const web_app::AppId& app_id) {
+    const webapps::AppId& app_id) {
   if (profile_manager_) {
     for (Profile* p : profile_manager_->GetLoadedProfiles()) {
       if (!p->IsRegularProfile()) {
@@ -527,7 +594,7 @@ Profile* AppShimManager::ProfileForBackgroundShimLaunch(
 }
 
 void AppShimManager::LaunchShimInBackgroundMode(
-    const web_app::AppId& app_id,
+    const webapps::AppId& app_id,
     base::OnceCallback<void(AppShimHost*)> callback) {
   // A shim can only be launched through an active profile, so find a profile
   // through which to do the launch. This method should only be called for
@@ -675,7 +742,7 @@ void AppShimManager::OnShimProcessConnected(
 
 void AppShimManager::OnShimProcessConnectedForRegisterOnly(
     std::unique_ptr<AppShimHostBootstrap> bootstrap) {
-  const web_app::AppId& app_id = bootstrap->GetAppId();
+  const webapps::AppId& app_id = bootstrap->GetAppId();
   DCHECK_EQ(bootstrap->GetLaunchType(),
             chrome::mojom::AppShimLaunchType::kRegisterOnly);
 
@@ -1051,7 +1118,7 @@ AppShimManager* AppShimManager::Get() {
 }
 
 void AppShimManager::LoadProfileAndApp(const base::FilePath& profile_path,
-                                       const web_app::AppId& app_id,
+                                       const webapps::AppId& app_id,
                                        LoadProfileAndAppCallback callback) {
   // Run |profile_loaded_callback| when the profile is loaded (be that now, or
   // after having to asynchronously load the profile).
@@ -1066,7 +1133,7 @@ void AppShimManager::LoadProfileAndApp(const base::FilePath& profile_path,
 
 void AppShimManager::LoadProfileAndApp_OnProfileLoaded(
     const base::FilePath& profile_path,
-    const web_app::AppId& app_id,
+    const webapps::AppId& app_id,
     LoadProfileAndAppCallback callback,
     Profile* profile) {
   // It may be that the profile fails to load.
@@ -1088,7 +1155,7 @@ void AppShimManager::LoadProfileAndApp_OnProfileLoaded(
 
 void AppShimManager::LoadProfileAndApp_OnProfileAppRegistryReady(
     const base::FilePath& profile_path,
-    const web_app::AppId& app_id,
+    const webapps::AppId& app_id,
     LoadProfileAndAppCallback callback) {
   // It may be that the profile was destroyed while waiting for the callback to
   // be issued.
@@ -1112,13 +1179,57 @@ void AppShimManager::LoadProfileAndApp_OnProfileAppRegistryReady(
 
 void AppShimManager::LoadProfileAndApp_OnAppEnabled(
     const base::FilePath& profile_path,
-    const web_app::AppId& app_id,
+    const webapps::AppId& app_id,
     LoadProfileAndAppCallback callback) {
   std::move(callback).Run(ProfileForPath(profile_path));
 }
 
+// UMA metric name for result of validating app shim signature.
+constexpr const char* kAppShimSignatureValidationResult =
+    "Apps.AppShimSignatureValidationResult";
+
+// Result of validating app shim signature.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class SignatureValidationResult {
+  kInvalidSignature = 0,
+  kSuccessAdHoc = 1,
+  kSuccessLegacy = 2,
+  kExpectedAdHocGotLegacy = 3,
+  kMaxValue = kExpectedAdHocGotLegacy,
+};
+
+// Records the result of validating the app shim code signature to UMA.
+void RecordSignatureValidationResult(SignatureValidationResult result) {
+  base::UmaHistogramEnumeration(kAppShimSignatureValidationResult, result);
+}
+
 bool AppShimManager::IsAcceptablyCodeSigned(pid_t pid) const {
-  return IsAcceptablyCodeSignedInternal(pid);
+  static const bool requires_adhoc_signature =
+      web_app::UseAdHocSigningForWebAppShims();
+
+  if (requires_adhoc_signature && IsAcceptablyAdHocCodeSigned(pid)) {
+    RecordSignatureValidationResult(SignatureValidationResult::kSuccessAdHoc);
+    return true;
+  }
+
+  if (IsAcceptablyCodeSignedLegacy(pid)) {
+    if (requires_adhoc_signature) {
+      RecordSignatureValidationResult(
+          SignatureValidationResult::kExpectedAdHocGotLegacy);
+
+      // Returning false to indicate that the signature is invalid will trigger
+      // the recreation of the app shim app bundle. This will result in it
+      // being re-signed with an ad-hoc signature as expected.
+      return false;
+    }
+
+    RecordSignatureValidationResult(SignatureValidationResult::kSuccessLegacy);
+    return true;
+  }
+
+  RecordSignatureValidationResult(SignatureValidationResult::kInvalidSignature);
+  return false;
 }
 
 Profile* AppShimManager::ProfileForPath(const base::FilePath& full_path) {
@@ -1155,7 +1266,7 @@ bool AppShimManager::IsProfileLockedForPath(const base::FilePath& full_path) {
 std::unique_ptr<AppShimHost> AppShimManager::CreateHost(
     AppShimHost::Client* client,
     const base::FilePath& profile_path,
-    const web_app::AppId& app_id,
+    const webapps::AppId& app_id,
     bool use_remote_cocoa) {
   return std::make_unique<AppShimHost>(client, app_id, profile_path,
                                        use_remote_cocoa);
@@ -1300,7 +1411,7 @@ void AppShimManager::OnShimOpenedAppSettings(AppShimHost* host) {
   LoadProfileAsync(
       *last_active_profile_paths.begin(),
       base::BindOnce(
-          [](const web_app::AppId& app_id, Profile* profile) {
+          [](const webapps::AppId& app_id, Profile* profile) {
             if (profile) {
               chrome::ShowWebAppSettings(
                   profile, app_id,
@@ -1615,7 +1726,7 @@ void AppShimManager::UpdateApplicationDockMenu(Profile* profile,
 
 AppShimManager::ProfileState* AppShimManager::GetOrCreateProfileState(
     Profile* profile,
-    const web_app::AppId& app_id) {
+    const webapps::AppId& app_id) {
   if (web_app::AppShimCreationAndLaunchDisabledForTest()) {
     return nullptr;
   }

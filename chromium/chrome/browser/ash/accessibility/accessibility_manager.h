@@ -50,6 +50,10 @@ class Rect;
 
 namespace ash {
 
+namespace language_packs {
+struct PackResult;
+}  // namespace language_packs
+
 class AccessibilityExtensionLoader;
 class Dictation;
 class PumpkinInstaller;
@@ -184,7 +188,8 @@ class AccessibilityManager
 
   // Requests the Autoclick extension find the bounds of the nearest scrollable
   // ancestor to the point in the screen, as given in screen coordinates.
-  void RequestAutoclickScrollableBoundsForPoint(gfx::Point& point_in_screen);
+  void RequestAutoclickScrollableBoundsForPoint(
+      const gfx::Point& point_in_screen);
 
   // Dispatches magnifier bounds update to Magnifier (through Accessibility
   // Common extension).
@@ -373,6 +378,9 @@ class AccessibilityManager
   // Sets the bluetooth braille display device address for the current user.
   void UpdateBluetoothBrailleDisplayAddress(const std::string& address);
 
+  // Opens a specified subpage in the ChromeOS Settings app.
+  void OpenSettingsSubpage(const std::string& subpage);
+
   // Create a focus ring ID from the `at_type` and the name of the ring.
   const std::string GetFocusRingId(ax::mojom::AssistiveTechnologyType at_type,
                                    const std::string& focus_ring_name);
@@ -403,6 +411,9 @@ class AccessibilityManager
   void SetProfileForTest(Profile* profile);
   static void SetBrailleControllerForTest(
       extensions::api::braille_display_private::BrailleController* controller);
+  void SetScreenDarkenObserverForTest(base::RepeatingCallback<void()> observer);
+  void SetOpenSettingsSubpageObserverForTest(
+      base::RepeatingCallback<void()> observer);
   void SetFocusRingObserverForTest(base::RepeatingCallback<void()> observer);
   // Runs when highlights are set or updated, but not when they are removed.
   void SetHighlightsObserverForTest(base::RepeatingCallback<void()> observer);
@@ -431,6 +442,10 @@ class AccessibilityManager
   // Reads the contents of a DLC file and runs `callback` with the results.
   void GetDlcContents(::extensions::api::accessibility_private::DlcType dlc,
                       GetDlcContentsCallback callback);
+  // A helper for GetDlcContents, which is called after retrieving the state
+  // of the target DLC.
+  void GetDlcContentsOnPackState(GetDlcContentsCallback callback,
+                                 const language_packs::PackResult& pack_result);
   void SetDlcPathForTest(base::FilePath path);
 
  protected:
@@ -642,6 +657,8 @@ class AccessibilityManager
   bool dictation_triggered_by_user_ = false;
   bool ignore_dictation_locale_pref_change_ = false;
 
+  base::RepeatingCallback<void()> screen_darken_observer_for_test_;
+  base::RepeatingCallback<void()> open_settings_subpage_observer_for_test_;
   base::RepeatingCallback<void()> highlights_observer_for_test_;
   base::RepeatingCallback<void()> select_to_speak_state_observer_for_test_;
   base::RepeatingCallback<void(const gfx::Rect&)>
@@ -666,13 +683,14 @@ class AccessibilityManager
 
   base::WeakPtrFactory<AccessibilityManager> weak_ptr_factory_{this};
 
+  friend class AccessibilityManagerDictationDialogTest;
+  friend class AccessibilityManagerDictationKeyboardImprovementsTest;
+  friend class AccessibilityManagerDlcTest;
+  friend class AccessibilityManagerNoOnDeviceSpeechRecognitionTest;
+  friend class AccessibilityManagerTest;
+  friend class AccessibilityServiceClientTest;
   friend class DictationTest;
   friend class SwitchAccessTest;
-  friend class AccessibilityManagerTest;
-  friend class AccessibilityManagerDlcTest;
-  friend class AccessibilityManagerDictationDialogTest;
-  friend class AccessibilityManagerNoOnDeviceSpeechRecognitionTest;
-  friend class AccessibilityManagerDictationKeyboardImprovementsTest;
 };
 
 }  // namespace ash

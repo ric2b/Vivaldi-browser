@@ -7,6 +7,13 @@
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/ntp/vivaldi_ntp_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 @implementation ToolbarConfiguration
 
 @synthesize style = _style;
@@ -24,7 +31,18 @@
 }
 
 - (UIColor*)backgroundColor {
+
+  if (IsVivaldiRunning()) {
+    switch (self.style) {
+     case ToolbarStyle::kNormal:
+       return [UIColor colorNamed:kBackgroundColor];
+     case ToolbarStyle::kIncognito:
+       return [UIColor colorNamed:vPrivateNTPBackgroundColor];
+    }
+  } else {
   return [UIColor colorNamed:kBackgroundColor];
+  } // End Vivaldi
+
 }
 
 - (UIColor*)focusedBackgroundColor {

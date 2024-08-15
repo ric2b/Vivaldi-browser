@@ -62,7 +62,9 @@ by a child template that "extends" this file.
     {% endif %}
 
     {% if is_oem_automotive_build == 'true' %}
-    <uses-permission android:name="android.car.permission.CAR_POWERTRAIN" />
+        {% if is_oem_mercedes_build == 'false' %}
+            <uses-permission android:name="android.car.permission.CAR_POWERTRAIN" />
+        {% endif %}
     {% endif %}
 
     <!-- Vivaldi/Automotive -->
@@ -119,6 +121,7 @@ by a child template that "extends" this file.
     <!-- TODO(https://crbug.com/1421346): Remove this tools:ignore attribute once it's no longer necessary. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" tools:ignore="SystemPermissionTypo" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" tools:ignore="SystemPermissionTypo" />
+    <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
 
     <!-- Not used by Vivaldi
     <uses-permission android:name="android.permission.GET_ACCOUNTS"/>
@@ -849,11 +852,26 @@ by a child template that "extends" this file.
         android:exported="false"
         android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
+        <activity android:name="org.vivaldi.browser.preferences.VivaldiSearchEnginesPreferences"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
+            android:exported="false">
+        </activity>
+        <activity android:name="org.vivaldi.browser.preferences.search_engines.VivaldiStandardSearchEnginePreference"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
+            android:exported="false">
+        </activity>
+        <activity android:name="org.vivaldi.browser.preferences.search_engines.VivaldiPrivateSearchEnginePreference"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
+            android:exported="false">
+        </activity>
+        <activity android:name="org.vivaldi.browser.preferences.VivaldiSearchEngineSettings"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
+            android:exported="false">
+        </activity>
         {% if is_oem_lynkco_build == 'true' %}
         <activity
             android:name="com.lynkco.connected.incar.commonframework.ui.activity.onboarding.OnboardingActivity"
             android:theme="@style/Theme.MaterialComponents"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:exported="false"
             android:launchMode="singleInstance"
             android:noHistory="true">
@@ -861,7 +879,6 @@ by a child template that "extends" this file.
         <activity
             android:name="com.lynkco.connected.incar.commonframework.ui.activity.driverdistraction.DriverDistractedActivity"
             android:theme="@style/Theme.MaterialComponents"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:exported="false"
             android:launchMode="singleInstance"
             android:noHistory="true">
@@ -1332,9 +1349,6 @@ by a child template that "extends" this file.
             </intent-filter>
         </service>
 
-        <service android:name="org.chromium.chrome.browser.prerender.ChromePrerenderService"
-            android:exported="true"
-            tools:ignore="ExportedService" />
         <service android:name="org.chromium.chrome.browser.customtabs.CustomTabsConnectionService"
             android:exported="true"
             tools:ignore="ExportedService">
@@ -1578,6 +1592,9 @@ by a child template that "extends" this file.
       {% if enable_arcore == 'true' %}
       <!-- This tag indicates that this application optionally uses ARCore. -->
       <meta-data android:name="com.google.ar.core" android:value="optional" />
+      <meta-data
+          android:name="com.google.ar.core.load_32bit_so_from_split_module"
+          android:value="optional" />
 
       <!-- ARCore APK integration -->
       {% block base_application_extra_arcore_definitions %}

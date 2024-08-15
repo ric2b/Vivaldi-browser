@@ -54,7 +54,6 @@
 #include "net/spdy/spdy_session.h"
 #include "net/ssl/ssl_connection_status_flags.h"
 #include "net/ssl/ssl_info.h"
-#include "net/third_party/quiche/src/quiche/quic/core/http/spdy_server_push_utils.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_stream_priority.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_utils.h"
 #include "net/third_party/quiche/src/quiche/quic/platform/api/quic_flags.h"
@@ -67,6 +66,11 @@
 namespace net {
 
 namespace {
+
+base::OnceClosure& MidMigrationCallbackForTesting() {
+  static base::NoDestructor<base::OnceClosure> callback;
+  return *callback;
+}
 
 // IPv6 packets have an additional 20 bytes of overhead than IPv4 packets.
 const size_t kAdditionalOverheadForIPv6 = 20;
@@ -214,36 +218,31 @@ void RecordConnectionCloseErrorCode(const quic::QuicConnectionCloseFrame& frame,
 base::Value::Dict NetLogQuicMigrationFailureParams(
     quic::QuicConnectionId connection_id,
     base::StringPiece reason) {
-  base::Value::Dict dict;
-  dict.Set("connection_id", connection_id.ToString());
-  dict.Set("reason", reason);
-  return dict;
+  return base::Value::Dict()
+      .Set("connection_id", connection_id.ToString())
+      .Set("reason", reason);
 }
 
 base::Value::Dict NetLogQuicMigrationSuccessParams(
     quic::QuicConnectionId connection_id) {
-  base::Value::Dict dict;
-  dict.Set("connection_id", connection_id.ToString());
-  return dict;
+  return base::Value::Dict().Set("connection_id", connection_id.ToString());
 }
 
 base::Value::Dict NetLogProbingResultParams(
     handles::NetworkHandle network,
     const quic::QuicSocketAddress* peer_address,
     bool is_success) {
-  base::Value::Dict dict;
-  dict.Set("network", base::NumberToString(network));
-  dict.Set("peer address", peer_address->ToString());
-  dict.Set("is_success", is_success);
-  return dict;
+  return base::Value::Dict()
+      .Set("network", base::NumberToString(network))
+      .Set("peer address", peer_address->ToString())
+      .Set("is_success", is_success);
 }
 
 base::Value::Dict NetLogAcceptChFrameReceivedParams(
     spdy::AcceptChOriginValuePair entry) {
-  base::Value::Dict dict;
-  dict.Set("origin", entry.origin);
-  dict.Set("accept_ch", entry.value);
-  return dict;
+  return base::Value::Dict()
+      .Set("origin", entry.origin)
+      .Set("accept_ch", entry.value);
 }
 
 // Histogram for recording the different reasons that a QUIC session is unable
@@ -320,20 +319,21 @@ base::Value::Dict NetLogQuicClientSessionParams(
     int cert_verify_flags,
     bool require_confirmation,
     base::span<const uint8_t> ech_config_list) {
-  base::Value::Dict dict;
-  dict.Set("host", session_key->server_id().host());
-  dict.Set("port", session_key->server_id().port());
-  dict.Set("privacy_mode",
-           PrivacyModeToDebugString(session_key->privacy_mode()));
-  dict.Set("network_anonymization_key",
-           session_key->network_anonymization_key().ToDebugString());
-  dict.Set("require_confirmation", require_confirmation);
-  dict.Set("cert_verify_flags", cert_verify_flags);
-  dict.Set("connection_id", connection_id.ToString());
+  auto dict =
+      base::Value::Dict()
+          .Set("host", session_key->server_id().host())
+          .Set("port", session_key->server_id().port())
+          .Set("privacy_mode",
+               PrivacyModeToDebugString(session_key->privacy_mode()))
+          .Set("network_anonymization_key",
+               session_key->network_anonymization_key().ToDebugString())
+          .Set("require_confirmation", require_confirmation)
+          .Set("cert_verify_flags", cert_verify_flags)
+          .Set("connection_id", connection_id.ToString())
+          .Set("versions", ParsedQuicVersionVectorToString(supported_versions));
   if (!client_connection_id.IsEmpty()) {
     dict.Set("client_connection_id", client_connection_id.ToString());
   }
-  dict.Set("versions", ParsedQuicVersionVectorToString(supported_versions));
   if (!ech_config_list.empty()) {
     dict.Set("ech_config_list", NetLogBinaryValue(ech_config_list));
   }
@@ -352,6 +352,12 @@ void LogProbeResultToHistogram(MigrationCause cause, bool success) {
 }
 
 }  // namespace
+
+// static
+void QuicChromiumClientSession::SetMidMigrationCallbackForTesting(
+    base::OnceClosure callback) {
+  MidMigrationCallbackForTesting() = std::move(callback);  // IN-TEST
+}
 
 QuicChromiumClientSession::Handle::Handle(
     const base::WeakPtr<QuicChromiumClientSession>& session,
@@ -879,7 +885,6 @@ QuicChromiumClientSession::QuicChromiumClientSession(
     std::unique_ptr<QuicCryptoClientConfigHandle> crypto_config,
     base::TimeTicks dns_resolution_start_time,
     base::TimeTicks dns_resolution_end_time,
-    std::unique_ptr<quic::QuicClientPushPromiseIndex> push_promise_index,
     const base::TickClock* tick_clock,
     base::SequencedTaskRunner* task_runner,
     std::unique_ptr<SocketPerformanceWatcher> socket_performance_watcher,
@@ -887,7 +892,6 @@ QuicChromiumClientSession::QuicChromiumClientSession(
     NetLog* net_log)
     : quic::QuicSpdyClientSessionBase(connection,
                                       /*visitor=*/nullptr,
-                                      push_promise_index.get(),
                                       config,
                                       connection->supported_versions()),
       session_key_(session_key),
@@ -923,7 +927,6 @@ QuicChromiumClientSession::QuicChromiumClientSession(
           std::move(socket_performance_watcher),
           net_log_)),
       http3_logger_(std::make_unique<QuicHttp3Logger>(net_log_)),
-      push_promise_index_(std::move(push_promise_index)),
       path_validation_writer_delegate_(this, task_runner_),
       ech_config_list_(endpoint_result.metadata.ech_config_list) {
   default_network_ = default_network;
@@ -960,15 +963,6 @@ QuicChromiumClientSession::QuicChromiumClientSession(
 }
 
 QuicChromiumClientSession::~QuicChromiumClientSession() {
-  // This is referenced by the parent class's destructor, so have to delete it
-  // asynchronously, unfortunately. Don't use DeleteSoon, since that leaks if
-  // the task is not run, which is often the case in tests.
-  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE,
-      base::BindOnce([](std::unique_ptr<quic::QuicClientPushPromiseIndex>
-                            push_promise_index) {},
-                     std::move(push_promise_index_)));
-
   DCHECK(callback_.is_null());
 
   for (auto& observer : connectivity_observer_list_)
@@ -1675,7 +1669,7 @@ void QuicChromiumClientSession::OnCryptoHandshakeMessageReceived(
     UMA_HISTOGRAM_CUSTOM_COUNTS("Net.QuicSession.RejectLength",
                                 message.GetSerialized().length(), 1000, 10000,
                                 50);
-    absl::string_view proof;
+    std::string_view proof;
     UMA_HISTOGRAM_BOOLEAN("Net.QuicSession.RejectHasProof",
                           message.GetStringPiece(quic::kPROF, &proof));
   }
@@ -1696,9 +1690,11 @@ void QuicChromiumClientSession::OnConnectionClosed(
 
   UMA_HISTOGRAM_COUNTS_1000("Net.QuicSession.NumDefaultPathDegrading",
                             connection()->GetStats().num_path_degrading);
-  UMA_HISTOGRAM_COUNTS_1000(
-      "Net.QuicSession.NumForwardProgressMadeAfterPathDegrading",
-      connection()->GetStats().num_forward_progress_after_path_degrading);
+  if (connection()->GetStats().num_path_degrading > 0) {
+    UMA_HISTOGRAM_COUNTS_1000(
+        "Net.QuicSession.NumForwardProgressMadeAfterPathDegrading",
+        connection()->GetStats().num_forward_progress_after_path_degrading);
+  }
   if (const quic::QuicConnection::MultiPortStats* multi_port_stats =
           connection()->multi_port_stats()) {
     UMA_HISTOGRAM_COUNTS_1000(
@@ -3611,6 +3607,11 @@ void QuicChromiumClientSession::Migrate(handles::NetworkHandle network,
       &QuicChromiumClientSession::FinishMigrate, weak_factory_.GetWeakPtr(),
       std::move(socket), peer_address, close_session_on_error,
       std::move(migration_callback));
+
+  if (!MidMigrationCallbackForTesting().is_null()) {
+    std::move(MidMigrationCallbackForTesting()).Run();  // IN-TEST
+  }
+
   stream_factory_->ConnectAndConfigureSocket(std::move(connect_callback),
                                              socket_ptr, peer_address, network,
                                              session_key_.socket_tag());
@@ -3745,10 +3746,6 @@ handles::NetworkHandle QuicChromiumClientSession::GetCurrentNetwork() const {
   return migrate_session_on_network_change_v2_
              ? GetDefaultSocket()->GetBoundNetwork()
              : default_network_;
-}
-
-bool QuicChromiumClientSession::IsAuthorized(const std::string& hostname) {
-  return CanPool(hostname, session_key_);
 }
 
 void QuicChromiumClientSession::OnServerPreferredAddressAvailable(

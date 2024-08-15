@@ -49,6 +49,8 @@ std::unique_ptr<views::StyledLabel> CreateTitle(
 
 std::unique_ptr<views::Label> CreateSubtitle(
     const media_router::UIMediaSink& sink) {
+  // TODO(crbug.com/1486989): Error messages in Harmony dialog are not
+  // dismissible.
   auto subtitle = std::make_unique<views::Label>(sink.GetStatusTextForDisplay(),
                                                  views::style::CONTEXT_BUTTON,
                                                  views::style::STYLE_SECONDARY);
@@ -71,12 +73,9 @@ CastDialogSinkView::CastDialogSinkView(
   SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
 
-  // If the sink is connected, and one of the features that allow new UI is
-  // enabled, then add labels and buttons. Else, default to a
+  // If the sink is connected, then add labels and buttons. Else, default to a
   // CastDialogSinkButton.
-  if (sink.state == UIMediaSinkState::CONNECTED &&
-      (IsAccessCodeCastFreezeUiEnabled(profile_) ||
-       base::FeatureList::IsEnabled(kCastDialogStopButton))) {
+  if (sink.state == UIMediaSinkState::CONNECTED) {
     // When sink is connected, the sink view looks like this:
     //
     // *----------------------------------*
@@ -133,7 +132,7 @@ std::unique_ptr<views::View> CastDialogSinkView::CreateLabelView(
                                views::MaximumFlexSizeRule::kUnbounded));
   label_wrapper->SetProperty(views::kMarginsKey,
                              gfx::Insets::VH(vertical_spacing, 0));
-  label_wrapper->SetCanProcessEventsWithinSubtree(false);
+
   label_container->AddChildView(std::move(label_wrapper));
 
   return label_container;

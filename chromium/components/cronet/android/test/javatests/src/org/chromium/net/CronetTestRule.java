@@ -5,6 +5,7 @@
 package org.chromium.net;
 
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.Truth.assertWithMessage;
 
 import static org.junit.Assume.assumeTrue;
 
@@ -27,6 +28,8 @@ import org.chromium.base.Log;
 import org.chromium.base.PathUtils;
 import org.chromium.net.httpflags.Flags;
 import org.chromium.net.httpflags.HttpFlagsInterceptor;
+import org.chromium.net.impl.CronetUrlRequestContext;
+import org.chromium.net.impl.JavaCronetEngine;
 import org.chromium.net.impl.JavaCronetProvider;
 import org.chromium.net.impl.NativeCronetProvider;
 import org.chromium.net.impl.UserAgent;
@@ -37,6 +40,9 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.Set;
 
 /**
  * Custom TestRule for Cronet instrumentation tests.
@@ -116,27 +122,46 @@ public class CronetTestRule implements TestRule {
     private void runBase(Statement base, Description desc) throws Throwable {
         setImplementationUnderTest(CronetImplementation.STATICALLY_LINKED);
         String packageName = desc.getTestClass().getPackage().getName();
+        String testName = desc.getTestClass().getName() + "#" + desc.getMethodName();
 
-        boolean onlyRunTestForNative = desc.getAnnotation(OnlyRunNativeCronet.class) != null
-                || desc.getTestClass().getAnnotation(OnlyRunNativeCronet.class) != null;
-        boolean onlyRunTestForJava = desc.getAnnotation(OnlyRunJavaCronet.class) != null;
-        if (onlyRunTestForNative && onlyRunTestForJava) {
-            throw new IllegalArgumentException(desc.getMethodName()
-                    + " skipped because it specified both "
-                    + "OnlyRunNativeCronet and OnlyRunJavaCronet annotations");
+        EnumSet<CronetImplementation> excludedImplementations =
+                EnumSet.noneOf(CronetImplementation.class);
+        IgnoreFor ignoreDueToClassAnnotation = getTestClassAnnotation(desc, IgnoreFor.class);
+        if (ignoreDueToClassAnnotation != null) {
+            excludedImplementations.addAll(
+                    Arrays.asList(ignoreDueToClassAnnotation.implementations()));
         }
-        boolean doRunTestForNative = onlyRunTestForNative || !onlyRunTestForJava;
-        boolean doRunTestForJava = onlyRunTestForJava || !onlyRunTestForNative;
+        IgnoreFor ignoreDueToMethodAnnotation = getTestMethodAnnotation(desc, IgnoreFor.class);
+        if (ignoreDueToMethodAnnotation != null) {
+            excludedImplementations.addAll(
+                    Arrays.asList(ignoreDueToMethodAnnotation.implementations()));
+        }
+        Log.i(TAG, "Excluded implementations: %s", excludedImplementations);
+
+        Set<CronetImplementation> implementationsUnderTest =
+                EnumSet.complementOf(excludedImplementations);
+        assertWithMessage(
+                        "Test should not be skipped via IgnoreFor annotation. "
+                                + "Use DisabledTest instead")
+                .that(implementationsUnderTest)
+                .isNotEmpty();
 
         // Find the API version required by the test.
         int requiredApiVersion = getMaximumAvailableApiLevel();
         int requiredAndroidApiVersion = Build.VERSION_CODES.LOLLIPOP;
+        boolean netLogEnabled = true;
         for (Annotation a : desc.getTestClass().getAnnotations()) {
             if (a instanceof RequiresMinApi) {
                 requiredApiVersion = ((RequiresMinApi) a).value();
             }
             if (a instanceof RequiresMinAndroidApi) {
                 requiredAndroidApiVersion = ((RequiresMinAndroidApi) a).value();
+            }
+            if (a instanceof DisableAutomaticNetLog) {
+                netLogEnabled = false;
+                Log.i(TAG,
+                        "Disabling automatic NetLog collection due to: "
+                                + ((DisableAutomaticNetLog) a).reason());
             }
         }
         for (Annotation a : desc.getAnnotations()) {
@@ -148,7 +173,14 @@ public class CronetTestRule implements TestRule {
             if (a instanceof RequiresMinAndroidApi) {
                 requiredAndroidApiVersion = ((RequiresMinAndroidApi) a).value();
             }
+            if (a instanceof DisableAutomaticNetLog) {
+                netLogEnabled = false;
+                Log.i(TAG,
+                        "Disabling automatic NetLog collection due to: "
+                                + ((DisableAutomaticNetLog) a).reason());
+            }
         }
+
         assumeTrue(desc.getMethodName() + " skipped because it requires API " + requiredApiVersion
                         + " but only API " + getMaximumAvailableApiLevel() + " is present.",
                 getMaximumAvailableApiLevel() >= requiredApiVersion);
@@ -158,35 +190,32 @@ public class CronetTestRule implements TestRule {
                 Build.VERSION.SDK_INT >= requiredAndroidApiVersion);
 
         if (packageName.startsWith("org.chromium.net")) {
-            try {
-                if (doRunTestForNative) {
-                    Log.i(TAG, "Running test against Native implementation.");
-                    evaluateWithFramework(base);
+            for (CronetImplementation implementation : implementationsUnderTest) {
+                if (implementation.equals(CronetImplementation.AOSP_PLATFORM)) {
+                    // TODO(crbug/1451394): Remove this and fix tests.
+                    Log.i(TAG, "Skipping the Platform implementation");
+                    continue;
                 }
-                if (doRunTestForJava) {
-                    Log.i(TAG, "Running test against Java implementation.");
-                    setImplementationUnderTest(CronetImplementation.FALLBACK);
-                    evaluateWithFramework(base);
-                }
-            } catch (Throwable e) {
-                Log.e(TAG, "CronetTestBase#runTest failed for %s implementation.", mImplementation);
-                throw e;
+                Log.i(TAG, "Running test against " + implementation + " implementation.");
+                setImplementationUnderTest(implementation);
+                evaluateWithFramework(base, testName, netLogEnabled);
             }
         } else {
-            evaluateWithFramework(base);
+            evaluateWithFramework(base, testName, netLogEnabled);
         }
     }
 
-    private void evaluateWithFramework(Statement statement) throws Throwable {
-        try (CronetTestFramework framework = createCronetTestFramework()) {
+    private void evaluateWithFramework(Statement statement, String testName, boolean netLogEnabled)
+            throws Throwable {
+        try (CronetTestFramework framework = createCronetTestFramework(testName, netLogEnabled)) {
             statement.evaluate();
         } finally {
             mCronetTestFramework = null;
         }
     }
 
-    private CronetTestFramework createCronetTestFramework() {
-        mCronetTestFramework = new CronetTestFramework(mImplementation);
+    private CronetTestFramework createCronetTestFramework(String testName, boolean netLogEnabled) {
+        mCronetTestFramework = new CronetTestFramework(mImplementation, testName, netLogEnabled);
         if (mEngineStartupMode.equals(EngineStartupMode.AUTOMATIC)) {
             mCronetTestFramework.startEngine();
         }
@@ -203,22 +232,18 @@ public class CronetTestRule implements TestRule {
     }
 
     /**
-     * Annotation for test classes or methods in org.chromium.net package that disables rerunning
-     * the test against the Java-only implementation. When this annotation is present the test is
-     * only run against the native implementation.
+     * Annotation allowing classes or individual tests to be skipped based on the implementation
+     * being currently tested. When this annotation is present the test is only run against the
+     * {@link CronetImplementation} cases not specified in the annotation. If the annotation is
+     * specified both at the class and method levels, the union of IgnoreFor#implementations() will
+     * be skipped.
      */
     @Target({ElementType.TYPE, ElementType.METHOD})
     @Retention(RetentionPolicy.RUNTIME)
-    public @interface OnlyRunNativeCronet {}
-
-    /**
-     * Annotation for test methods in org.chromium.net package that disables rerunning the test
-     * against the Native/Chromium implementation. When this annotation is present the test is only
-     * run against the Java implementation.
-     */
-    @Target(ElementType.METHOD)
-    @Retention(RetentionPolicy.RUNTIME)
-    public @interface OnlyRunJavaCronet {}
+    public @interface IgnoreFor {
+        CronetImplementation[] implementations();
+        String reason();
+    }
 
     /**
      * Annotation allowing classes or individual tests to be skipped based on the version of the
@@ -244,6 +269,15 @@ public class CronetTestRule implements TestRule {
     @Retention(RetentionPolicy.RUNTIME)
     public @interface RequiresMinAndroidApi {
         int value();
+    }
+
+    /**
+     * Annotation allowing classes or individual tests to disable automatic NetLog collection.
+     */
+    @Target({ElementType.TYPE, ElementType.METHOD})
+    @Retention(RetentionPolicy.RUNTIME)
+    public @interface DisableAutomaticNetLog {
+        String reason();
     }
 
     /**
@@ -333,21 +367,26 @@ public class CronetTestRule implements TestRule {
         private final MutableContextWrapper mContextWrapperWithoutFlags;
         private final MutableContextWrapper mContextWrapper;
         private final StrictMode.VmPolicy mOldVmPolicy;
+        private final String mTestName;
+        private final boolean mNetLogEnabled;
 
         private HttpFlagsInterceptor mHttpFlagsInterceptor;
         private ExperimentalCronetEngine mCronetEngine;
         private boolean mClosed;
 
-        private CronetTestFramework(CronetImplementation implementation) {
-            this.mContextWrapperWithoutFlags =
+        private CronetTestFramework(
+                CronetImplementation implementation, String testName, boolean netLogEnabled) {
+            mContextWrapperWithoutFlags =
                     new MutableContextWrapper(ApplicationProvider.getApplicationContext());
-            this.mContextWrapper = new MutableContextWrapper(mContextWrapperWithoutFlags);
+            mContextWrapper = new MutableContextWrapper(mContextWrapperWithoutFlags);
             assert sContextWrapper.getBaseContext() == ApplicationProvider.getApplicationContext();
             sContextWrapper.setBaseContext(mContextWrapper);
-            this.mBuilder = implementation.createBuilder(sContextWrapper)
-                                    .setUserAgent(UserAgent.from(sContextWrapper))
-                                    .enableQuic(true);
-            this.mImplementation = implementation;
+            mBuilder = implementation.createBuilder(sContextWrapper)
+                               .setUserAgent(UserAgent.from(sContextWrapper))
+                               .enableQuic(true);
+            mImplementation = implementation;
+            mTestName = testName;
+            mNetLogEnabled = netLogEnabled;
 
             System.loadLibrary("cronet_tests");
             ContextUtils.initApplicationContext(sContextWrapper);
@@ -449,6 +488,17 @@ public class CronetTestRule implements TestRule {
             // Start collecting metrics.
             mCronetEngine.getGlobalMetricsDeltas();
 
+            if (mNetLogEnabled) {
+                File dataDir = new File(PathUtils.getDataDirectory());
+                File netLogDir = new File(dataDir, "NetLog");
+                netLogDir.mkdir();
+                String netLogFileName =
+                        mTestName + "-" + String.valueOf(System.currentTimeMillis());
+                File netLogFile = new File(netLogDir, netLogFileName + ".json");
+                Log.i(TAG, "Enabling netlog to: " + netLogFile.getPath());
+                mCronetEngine.startNetLogToFile(netLogFile.getPath(), /*logAll=*/true);
+            }
+
             return mCronetEngine;
         }
 
@@ -524,6 +574,7 @@ public class CronetTestRule implements TestRule {
                 return;
             }
             try {
+                mCronetEngine.stopNetLog();
                 mCronetEngine.shutdown();
             } catch (IllegalStateException e) {
                 if (e.getMessage().contains("Engine is shut down")) {
@@ -590,7 +641,40 @@ public class CronetTestRule implements TestRule {
         }
 
         private void verifyCronetEngineInstance(CronetEngine engine) {
-            // TODO(danstahr): Add assertions for expected class
+            switch (this) {
+                case STATICALLY_LINKED:
+                    checkImplClass(engine, CronetUrlRequestContext.class);
+                    break;
+                case FALLBACK:
+                    checkImplClass(engine, JavaCronetEngine.class);
+                    break;
+                case AOSP_PLATFORM:
+                    // TODO(crbug/1451404): Add once platform provider CL lands.
+                    break;
+            }
         }
+
+        private void checkImplClass(CronetEngine engine, Class expectedClass) {
+            assertThat(engine).isInstanceOf(expectedClass);
+        }
+    }
+
+    @Nullable
+    private static <T extends Annotation> T getTestMethodAnnotation(
+            Description description, Class<T> clazz) {
+        return description.getAnnotation(clazz);
+    }
+
+    @Nullable
+    private static <T extends Annotation> T getTestClassAnnotation(
+            Description description, Class<T> clazz) {
+        return description.getTestClass().getAnnotation(clazz);
+    }
+
+    private static String safeGetIgnoreReason(IgnoreFor ignoreAnnotation) {
+        if (ignoreAnnotation == null) {
+            return "";
+        }
+        return ignoreAnnotation.reason();
     }
 }

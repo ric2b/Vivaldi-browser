@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/feature_list.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
@@ -38,7 +39,9 @@ using ::testing::AllOf;
 using ::testing::ElementsAre;
 using ::testing::Eq;
 using ::testing::Field;
+using ::testing::IsNull;
 using ::testing::NiceMock;
+using ::testing::Optional;
 using ::testing::SizeIs;
 
 namespace autofill {
@@ -172,20 +175,18 @@ class AutofillAgentTest : public content::RenderViewTest {
         base::BindRepeating(&MockAutofillDriver::BindPendingReceiver,
                             base::Unretained(&autofill_driver_)));
 
-    password_autofill_agent_ = std::make_unique<TestPasswordAutofillAgent>(
+    auto password_autofill_agent = std::make_unique<TestPasswordAutofillAgent>(
         GetMainRenderFrame(), &associated_interfaces_);
-    password_generation_ = std::make_unique<PasswordGenerationAgent>(
-        GetMainRenderFrame(), password_autofill_agent_.get(),
+    auto password_generation = std::make_unique<PasswordGenerationAgent>(
+        GetMainRenderFrame(), password_autofill_agent.get(),
         &associated_interfaces_);
     autofill_agent_ = std::make_unique<AutofillAgent>(
-        GetMainRenderFrame(), password_autofill_agent_.get(),
-        password_generation_.get(), &associated_interfaces_);
+        GetMainRenderFrame(), std::move(password_autofill_agent),
+        std::move(password_generation), &associated_interfaces_);
   }
 
   void TearDown() override {
     autofill_agent_.reset();
-    password_generation_.reset();
-    password_autofill_agent_.reset();
     RenderViewTest::TearDown();
   }
 
@@ -202,15 +203,17 @@ class AutofillAgentTest : public content::RenderViewTest {
 
  private:
   blink::AssociatedInterfaceRegistry associated_interfaces_;
-  std::unique_ptr<PasswordAutofillAgent> password_autofill_agent_;
-  std::unique_ptr<PasswordGenerationAgent> password_generation_;
 };
 
 class AutofillAgentTestWithFeatures : public AutofillAgentTest {
  public:
   AutofillAgentTestWithFeatures() {
     scoped_features_.InitWithFeatures(
-        {blink::features::kAutofillDetectRemovedFormControls}, {});
+        /*enabled_features=*/
+        {blink::features::kAutofillUseDomNodeIdForRendererId,
+         blink::features::kAutofillDetectRemovedFormControls,
+         features::kAutofillContentEditables},
+        /*disabled_features=*/{});
   }
 
  private:
@@ -239,37 +242,37 @@ TEST_F(AutofillAgentTestWithFeatures, FormsSeen_NewFormUnowned) {
 }
 
 TEST_F(AutofillAgentTestWithFeatures, FormsSeen_NewForm) {
-  EXPECT_CALL(autofill_driver_,
-              FormsSeen(HasSingleElementWhich(HasFormId(1), HasNumFields(1),
-                                              HasNumChildFrames(0)),
-                        SizeIs(0)));
+  EXPECT_CALL(
+      autofill_driver_,
+      FormsSeen(HasSingleElementWhich(HasNumFields(1), HasNumChildFrames(0)),
+                SizeIs(0)));
   LoadHTML(R"(<body> <form><input></form> </body>)");
   WaitForFormsSeen();
 }
 
 TEST_F(AutofillAgentTestWithFeatures, FormsSeen_NewIframe) {
-  EXPECT_CALL(autofill_driver_,
-              FormsSeen(HasSingleElementWhich(HasFormId(1), HasNumFields(0),
-                                              HasNumChildFrames(1)),
-                        SizeIs(0)));
+  EXPECT_CALL(
+      autofill_driver_,
+      FormsSeen(HasSingleElementWhich(HasNumFields(0), HasNumChildFrames(1)),
+                SizeIs(0)));
   LoadHTML(R"(<body> <form><iframe></iframe></form> </body>)");
   WaitForFormsSeen();
 }
 
 TEST_F(AutofillAgentTestWithFeatures, FormsSeen_UpdatedForm) {
   {
-    EXPECT_CALL(autofill_driver_,
-                FormsSeen(HasSingleElementWhich(HasFormId(1), HasNumFields(1),
-                                                HasNumChildFrames(0)),
-                          SizeIs(0)));
+    EXPECT_CALL(
+        autofill_driver_,
+        FormsSeen(HasSingleElementWhich(HasNumFields(1), HasNumChildFrames(0)),
+                  SizeIs(0)));
     LoadHTML(R"(<body> <form><input></form> </body>)");
     WaitForFormsSeen();
   }
   {
-    EXPECT_CALL(autofill_driver_,
-                FormsSeen(HasSingleElementWhich(HasFormId(1), HasNumFields(2),
-                                                HasNumChildFrames(0)),
-                          SizeIs(0)));
+    EXPECT_CALL(
+        autofill_driver_,
+        FormsSeen(HasSingleElementWhich(HasNumFields(2), HasNumChildFrames(0)),
+                  SizeIs(0)));
     ExecuteJavaScriptForTests(
         R"(document.forms[0].appendChild(document.createElement('input'));)");
     WaitForFormsSeen();
@@ -283,8 +286,7 @@ TEST_F(AutofillAgentTestWithFeatures, FormsSeen_RemovedInput) {
     WaitForFormsSeen();
   }
   {
-    EXPECT_CALL(autofill_driver_,
-                FormsSeen(SizeIs(0), HasSingleElementWhich(IsFormId(1))));
+    EXPECT_CALL(autofill_driver_, FormsSeen(SizeIs(0), SizeIs(1)));
     ExecuteJavaScriptForTests(R"(document.forms[0].elements[0].remove();)");
     WaitForFormsSeen();
   }
@@ -300,6 +302,123 @@ TEST_F(AutofillAgentTestWithFeatures, TriggerFormExtractionWithResponse) {
   task_environment_.FastForwardBy(kFormsSeenThrottle / 2);
   EXPECT_CALL(mock_callback, Run(true));
   task_environment_.FastForwardBy(kFormsSeenThrottle / 2);
+}
+
+auto HasType(FormControlType type) {
+  return Field(&FormFieldData::form_control_type, type);
+}
+
+TEST_F(AutofillAgentTestWithFeatures,
+       FocusOnContentEditableTriggersAskForValuesToFill) {
+  const auto is_content_editable = HasType(FormControlType::kContentEditable);
+  LoadHTML("<body><div id=ce contenteditable></body>");
+  WaitForFormsSeen();
+  EXPECT_CALL(
+      autofill_driver_,
+      AskForValuesToFill(
+          Field(&FormData::fields, ElementsAre(is_content_editable)),
+          is_content_editable, _,
+          mojom::AutofillSuggestionTriggerSource::kContentEditableClicked))
+#if BUILDFLAG(IS_ANDROID)
+      // TODO(crbug.com/1490581): Android calls HandleFocusChangeComplete()
+      // twice, once from FocusedElementChanged() and once from
+      // DidReceiveLeftMouseDownOrGestureTapInNode().
+      .Times(2)
+#endif
+      ;
+  SimulateElementClick("ce");
+}
+
+TEST_F(AutofillAgentTestWithFeatures, FocusOnContentEditableFormIsIgnored) {
+  LoadHTML("<body><form id=ce contenteditable></form>");
+  WaitForFormsSeen();
+  EXPECT_CALL(autofill_driver_, AskForValuesToFill).Times(0);
+  SimulateElementClick("ce");
+}
+
+TEST_F(AutofillAgentTestWithFeatures,
+       FocusOnContentEditableFormControlIsIgnored) {
+  EXPECT_CALL(autofill_driver_, FormsSeen);
+  LoadHTML("<body><textarea id=ce contenteditable></textarea>");
+  WaitForFormsSeen();
+  EXPECT_CALL(autofill_driver_, AskForValuesToFill)
+#if BUILDFLAG(IS_ANDROID)
+      // TODO(crbug.com/1490581): Android calls HandleFocusChangeComplete()
+      // twice, once from FocusedElementChanged() and once from
+      // DidReceiveLeftMouseDownOrGestureTapInNode().
+      .Times(2)
+#endif
+      ;
+  EXPECT_CALL(
+      autofill_driver_,
+      AskForValuesToFill(
+          _, _, _,
+          mojom::AutofillSuggestionTriggerSource::kContentEditableClicked))
+      .Times(0);
+  SimulateElementClick("ce");
+}
+
+class AutofillAgentTestExtractForms : public AutofillAgentTestWithFeatures {
+ public:
+  using Callback = base::MockCallback<
+      base::OnceCallback<void(const std::optional<FormData>&)>>;
+
+  void LoadHTML(const char* html, bool wait_for_forms_seen = true) {
+    if (wait_for_forms_seen) {
+      EXPECT_CALL(autofill_driver_, FormsSeen);
+    }
+    AutofillAgentTestWithFeatures::LoadHTML(html);
+    WaitForFormsSeen();
+  }
+
+  FormRendererId GetFormRendererIdById(std::string_view id) {
+    return form_util::GetFormRendererId(
+        GetMainFrame()->GetDocument().GetElementById(
+            blink::WebString::FromUTF8(id)));
+  }
+};
+
+TEST_F(AutofillAgentTestExtractForms, CallbackIsCalledIfFormIsNotFound) {
+  LoadHTML("<body>", /*wait_for_forms_seen=*/false);
+  Callback callback;
+  EXPECT_CALL(callback, Run(Eq(std::nullopt)));
+  autofill_agent_->ExtractForm(GetFormRendererIdById("f"), callback.Get());
+}
+
+TEST_F(AutofillAgentTestExtractForms, CallbackIsCalledForForm) {
+  const auto is_text_input = HasType(FormControlType::kInputText);
+  LoadHTML("<body><form id=f><input><input></form>");
+  Callback callback;
+  EXPECT_CALL(
+      callback,
+      Run(Optional(AllOf(
+          Field(&FormData::unique_renderer_id, GetFormRendererIdById("f")),
+          Field(&FormData::name, u"f"),
+          Field(&FormData::fields,
+                ElementsAre(is_text_input, is_text_input))))));
+  autofill_agent_->ExtractForm(GetFormRendererIdById("f"), callback.Get());
+}
+
+TEST_F(AutofillAgentTestExtractForms, CallbackIsCalledForFormlessFields) {
+  const auto is_text_area = HasType(FormControlType::kTextArea);
+  LoadHTML(R"(<body><input><input>)");
+  Callback callback;
+  EXPECT_CALL(callback, Run(Optional(_)));
+  autofill_agent_->ExtractForm(GetFormRendererIdById("f"), callback.Get());
+}
+
+TEST_F(AutofillAgentTestExtractForms, CallbackIsCalledForContentEditable) {
+  const auto is_content_editable = HasType(FormControlType::kContentEditable);
+  LoadHTML("<body><div id=ce contenteditable></div>",
+           /*wait_for_forms_seen=*/false);
+  base::MockCallback<base::OnceCallback<void(const std::optional<FormData>&)>>
+      callback;
+  EXPECT_CALL(
+      callback,
+      Run(Optional(AllOf(
+          Field(&FormData::unique_renderer_id, GetFormRendererIdById("ce")),
+          Field(&FormData::fields, ElementsAre(is_content_editable))))));
+  autofill_agent_->ExtractForm(GetFormRendererIdById("ce"), callback.Get());
 }
 
 TEST_F(AutofillAgentTestWithFeatures,
@@ -322,7 +441,9 @@ TEST_F(AutofillAgentTestWithFeatures, TriggerSuggestions) {
   WaitForFormsSeen();
   EXPECT_CALL(autofill_driver_, AskForValuesToFill);
   autofill_agent_->TriggerSuggestions(
-      FieldRendererId(1),
+      FieldRendererId(1 +
+                      base::FeatureList::IsEnabled(
+                          blink::features::kAutofillUseDomNodeIdForRendererId)),
       AutofillSuggestionTriggerSource::kFormControlElementClicked);
 }
 
@@ -347,10 +468,11 @@ TEST_F(AutofillAgentTest, UndoAutofillSetsLastQueriedElement) {
   FormData form;
   EXPECT_TRUE(form_util::WebFormElementToFormData(
       forms[0], blink::WebFormControlElement(), nullptr,
-      form_util::EXTRACT_VALUE, &form, nullptr));
+      {form_util::ExtractOption::kValue}, &form, nullptr));
 
   ASSERT_TRUE(autofill_agent_->focused_element().IsNull());
-  autofill_agent_->UndoAutofill(form, mojom::AutofillActionPersistence::kFill);
+  autofill_agent_->ApplyFormAction(mojom::ActionType::kUndo,
+                                   mojom::ActionPersistence::kFill, form);
   EXPECT_FALSE(autofill_agent_->focused_element().IsNull());
 }
 

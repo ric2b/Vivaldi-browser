@@ -316,8 +316,9 @@ void WebViewGuest::CleanUp(content::BrowserContext* browser_context,
   }
 
   // Clean up web request event listeners for the WebView.
-  ExtensionWebRequestEventRouter::GetInstance()->RemoveWebViewEventListeners(
-      browser_context, embedder_process_id, view_instance_id);
+  WebRequestEventRouter::Get(browser_context)
+      ->RemoveWebViewEventListeners(browser_context, embedder_process_id,
+                                    view_instance_id);
 
   // Clean up content scripts for the WebView.
   auto* csm = WebViewContentScriptManager::Get(browser_context);
@@ -380,8 +381,7 @@ void WebViewGuest::CreateWebContents(std::unique_ptr<GuestViewBase> owned_this,
                                     std::move(callback));
   }
 
-  RenderFrameHost* owner_render_frame_host =
-      owner_web_contents()->GetPrimaryMainFrame();
+  RenderFrameHost* owner_render_frame_host = owner_rfh();
   RenderProcessHost* owner_render_process_host =
       owner_render_frame_host->GetProcess();
   DCHECK_EQ(browser_context(), owner_render_process_host->GetBrowserContext());
@@ -501,8 +501,6 @@ void WebViewGuest::DidInitialize(const base::Value::Dict& create_params) {
   // suspended resource loads so that the WebRequest API will catch resource
   // requests.
   PushWebViewStateToIOThread(web_contents()->GetPrimaryMainFrame());
-
-  MaybeAddToOpenersTabStrip(create_params);
 
   ApplyAttributes(create_params);
 }
@@ -636,8 +634,7 @@ void WebViewGuest::EmbedderFullscreenToggled(bool entered_fullscreen) {
 bool WebViewGuest::ZoomPropagatesFromEmbedderToGuest() const {
   // If Vivaldi and the webcontents is in a tabstrip we should not sync
   // zoom-level between the embedder and the WebViewGuest.
-  if (IsVivaldiRunning() &&
-    chrome::FindBrowserWithWebContents(web_contents())) {
+  if (IsVivaldiRunning() && chrome::FindBrowserWithTab(web_contents())) {
     return false;
   }
   // We use the embedder's zoom iff we haven't set a zoom ourselves using
@@ -708,7 +705,7 @@ void WebViewGuest::CloseContents(WebContents* source) {
 
   // Call the Browser class as it already has an instance of the
   // active unload controller needed for beforeunload handling.
-  Browser* browser = chrome::FindBrowserWithWebContents(source);
+  Browser* browser = chrome::FindBrowserWithTab(source);
   if (browser) {
     browser->DoCloseContents(source);
   }
@@ -968,10 +965,10 @@ void WebViewGuest::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
   if (navigation_handle->IsErrorPage() || !navigation_handle->HasCommitted()) {
     // Suppress loadabort for "mailto" URLs.
-    // Also during destruction, owner_web_contents() is null so there's no point
+    // Also during destruction, the owner is null so there's no point
     // trying to send the event.
     if (!navigation_handle->GetURL().SchemeIs(url::kMailToScheme) &&
-        owner_web_contents()) {
+        owner_rfh()) {
       // If a load is blocked, either by WebRequest or security checks, the
       // navigation may or may not have committed. So if we don't see an error
       // code, mark it as blocked.
@@ -1572,6 +1569,13 @@ void WebViewGuest::SetAllowScaling(bool allow) {
   allow_scaling_ = allow;
 }
 
+bool WebViewGuest::ShouldResumeRequestsForCreatedWindow() {
+  // Delay so that the embedder page has a chance to call APIs such as
+  // webRequest in time to be applied to the initial navigation in the new guest
+  // contents. We resume during AttachToOuterWebContentsFrame.
+  return false;
+}
+
 void WebViewGuest::AddNewContents(
     WebContents* source,
     std::unique_ptr<WebContents> new_contents,
@@ -1582,7 +1586,7 @@ void WebViewGuest::AddNewContents(
     bool* was_blocked) {
 
     if (disposition == WindowOpenDisposition::NEW_PICTURE_IN_PICTURE) {
-    Browser* browser = chrome::FindBrowserWithWebContents(source);
+    Browser* browser = chrome::FindBrowserWithTab(source);
     if (browser) {
 
       content::WebContentsImpl* webcontensimpl =
@@ -1678,13 +1682,11 @@ WebContents* WebViewGuest::OpenURLFromTab(
     if (window) {
       return window->OpenURLFromTab(source, params);
     }
-  }
 
-  // This is mostly mimicking Browser::OpenURLFromTab. We must navigate in the
-  // specified target content, is needed. Not in the base content as we used.
-  // See VB-71066 for test-case.
-  if (params.disposition == WindowOpenDisposition::CURRENT_TAB) {
-    Browser* browser = chrome::FindBrowserWithWebContents(source);
+    // This is mostly mimicking Browser::OpenURLFromTab. We must navigate in the
+    // specified target content, is needed. Not in the base content as we used.
+    // See VB-71066 for test-case.
+    Browser* browser = chrome::FindBrowserWithTab(source);
     NavigateParams nav_params(browser, params.url, params.transition);
     nav_params.FillNavigateParamsFromOpenURLParams(params);
     nav_params.source_contents = source;
@@ -1698,19 +1700,6 @@ WebContents* WebViewGuest::OpenURLFromTab(
     return nullptr;
   }
 
-  // This comes from a context menu where the owner might be the ui which always
-  // run in non-incognito profile. Patch through to the correct browser.
-  // NOTE(andre@vivaldi.com) : This could take over handling for navigations
-  // into new contents for all cases. Was VB-83603.
-  if (params.source_site_instance &&
-      params.source_site_instance->GetBrowserContext()->IsOffTheRecord()) {
-    Profile *profile =
-        Profile::FromBrowserContext(
-          params.source_site_instance->GetBrowserContext());
-    Browser *browser = chrome::FindTabbedBrowser(profile, false);
-    browser->OpenURL(params);
-    return nullptr;
-  }
   // This code path is taken if Ctrl+Click, middle click or any of the
   // keyboard/mouse combinations are used to open a link in a new tab/window.
   // This code path is also taken on client-side redirects from about:blank.

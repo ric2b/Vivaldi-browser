@@ -290,7 +290,7 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
   // OverviewGridEventHandler). When |sender| is nullptr, |from_touch_gesture|
   // does not matter.
   bool CanProcessEvent() const;
-  bool CanProcessEvent(OverviewItem* sender, bool from_touch_gesture) const;
+  bool CanProcessEvent(OverviewItemBase* sender, bool from_touch_gesture) const;
 
   // Returns true if |window| is not nullptr and equals
   // |active_window_before_overview_|.
@@ -374,12 +374,20 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
   }
 
   size_t num_items() const { return num_items_; }
+  void set_num_items(size_t num_items) { num_items_ = num_items; }
 
   OverviewEnterExitType enter_exit_overview_type() const {
     return enter_exit_overview_type_;
   }
+
   void set_enter_exit_overview_type(OverviewEnterExitType val) {
     enter_exit_overview_type_ = val;
+  }
+
+  OverviewEndAction overview_end_action() const { return overview_end_action_; }
+
+  void set_overview_end_action(OverviewEndAction overview_end_action) {
+    overview_end_action_ = overview_end_action;
   }
 
   OverviewWindowDragController* window_drag_controller() {
@@ -439,12 +447,6 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
 
   void OnItemAdded(aura::Window* window);
 
-  // Called when a window is activated or deactivated and the saved desk feature
-  // is enabled. Returns true if we should keep overview open. Overview should
-  // be kept open if `gained_active` or `lost_active` is a saved desk dialog.
-  bool ShouldKeepOverviewOpenForSavedDeskDialog(aura::Window* gained_active,
-                                                aura::Window* lost_active);
-
   // Weak pointer to the overview delegate which will be called when a selection
   // is made.
   raw_ptr<OverviewDelegate, DanglingUntriaged | ExperimentalAsh> delegate_;
@@ -493,6 +495,9 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
   // information on how these types affect overview mode.
   OverviewEnterExitType enter_exit_overview_type_ =
       OverviewEnterExitType::kNormal;
+
+  // Stores the action that ends the overview mode.
+  OverviewEndAction overview_end_action_ = OverviewEndAction::kMaxValue;
 
   // The selected item when exiting overview mode. nullptr if no window
   // selected.

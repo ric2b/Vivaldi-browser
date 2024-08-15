@@ -14,9 +14,6 @@
 GoogleGroupsUpdaterService*
 GoogleGroupsUpdaterServiceFactory::GetForBrowserState(
     ChromeBrowserState* browser_state) {
-  if (!base::FeatureList::IsEnabled(kVariationsGoogleGroupFiltering)) {
-    return nullptr;
-  }
   return static_cast<GoogleGroupsUpdaterService*>(
       GetInstance()->GetServiceForBrowserState(browser_state, /*create=*/true));
 }
@@ -36,7 +33,6 @@ GoogleGroupsUpdaterServiceFactory::GoogleGroupsUpdaterServiceFactory()
 std::unique_ptr<KeyedService>
 GoogleGroupsUpdaterServiceFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
-  CHECK(base::FeatureList::IsEnabled(kVariationsGoogleGroupFiltering));
   ChromeBrowserState* browser_state =
       ChromeBrowserState::FromBrowserState(context);
   return std::make_unique<GoogleGroupsUpdaterService>(
@@ -47,13 +43,16 @@ GoogleGroupsUpdaterServiceFactory::BuildServiceInstanceFor(
 
 bool GoogleGroupsUpdaterServiceFactory::ServiceIsCreatedWithBrowserState()
     const {
-  return base::FeatureList::IsEnabled(kVariationsGoogleGroupFiltering);
+  return true;
+}
+
+bool GoogleGroupsUpdaterServiceFactory::ServiceIsNULLWhileTesting() const {
+  // Many unit tests don't initialize local state prefs, so disable this service
+  // in unit tests.
+  return true;
 }
 
 void GoogleGroupsUpdaterServiceFactory::RegisterBrowserStatePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
-  if (!base::FeatureList::IsEnabled(kVariationsGoogleGroupFiltering)) {
-    return;
-  }
   GoogleGroupsUpdaterService::RegisterProfilePrefs(registry);
 }

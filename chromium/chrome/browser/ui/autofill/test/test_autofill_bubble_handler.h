@@ -54,9 +54,6 @@ class TestAutofillBubbleHandler : public AutofillBubbleHandler {
       content::WebContents* contents,
       SaveUpdateAddressProfileBubbleController* controller,
       bool is_user_gesture) override;
-  AutofillBubbleBase* ShowEditAddressProfileDialog(
-      content::WebContents* contents,
-      EditAddressProfileDialogController* controller) override;
   AutofillBubbleBase* ShowVirtualCardManualFallbackBubble(
       content::WebContents* web_contents,
       VirtualCardManualFallbackBubbleController* controller,
@@ -70,7 +67,6 @@ class TestAutofillBubbleHandler : public AutofillBubbleHandler {
       MandatoryReauthBubbleController* controller,
       bool is_user_gesture,
       MandatoryReauthBubbleType bubble_type) override;
-  void OnPasswordSaved() override;
 
  private:
   std::unique_ptr<TestAutofillBubble> local_card_migration_bubble_view_;

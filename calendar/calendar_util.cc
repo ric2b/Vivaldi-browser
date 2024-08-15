@@ -154,6 +154,10 @@ calendar::EventRow GetEventRow(
     row.delete_pending = event.delete_pending.value();
   }
 
+  if (event.end_recurring.has_value()) {
+    row.end_recurring = GetTime(event.end_recurring.value());
+  }
+
   return row;
 }
 

@@ -4,7 +4,6 @@
 
 #include <memory>
 #include <string>
-#include <tuple>
 #include <vector>
 
 #include "base/command_line.h"
@@ -20,16 +19,18 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/ash/login/test/logged_in_user_mixin.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_key.h"
 #include "chrome/browser/supervised_user/supervised_user_navigation_observer.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_settings_service_factory.h"
+#include "chrome/browser/supervised_user/supervised_user_test_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/webui_url_constants.h"
+#include "chrome/test/base/mixin_based_in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "chrome/test/supervised_user/supervision_mixin.h"
 #include "components/supervised_user/core/browser/permission_request_creator_mock.h"
 #include "components/supervised_user/core/browser/supervised_user_interstitial.h"
 #include "components/supervised_user/core/browser/supervised_user_service.h"
@@ -68,7 +69,9 @@ static const char* kFamiliesHost = "families.google.com";
 static const char* kIframeHost1 = "www.iframe1.com";
 static const char* kIframeHost2 = "www.iframe2.com";
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 constexpr char kLocalUrlAccessCommand[] = "requestUrlAccessLocal";
+#endif
 constexpr char kRemoteUrlAccessCommand[] = "requestUrlAccessRemote";
 
 // Class to keep track of iframes created and destroyed.
@@ -199,33 +202,48 @@ void NavigationFinishedWaiter::DidFinishNavigation(
   run_loop_.Quit();
 }
 
+enum class LocalWebApprovalSupport {
+  kSupported,
+  kNotSupported
+};
 }  // namespace
 
-class SupervisedUserNavigationThrottleTest
+class SupervisedUserNavigationThrottleTestBase
     : public MixinBasedInProcessBrowserTest {
  protected:
-  SupervisedUserNavigationThrottleTest()
-      : prerender_helper_(base::BindRepeating(
-            &SupervisedUserNavigationThrottleTest::web_contents,
+  explicit SupervisedUserNavigationThrottleTestBase(
+      supervised_user::SupervisionMixin::SignInMode sign_in_mode)
+      : supervision_mixin_(mixin_host_,
+                           this,
+                           embedded_test_server(),
+                           {
+                               .sign_in_mode = sign_in_mode,
+                               .embedded_test_server_options =
+                                   {.resolver_rules_map_host_list =
+                                        "*.example.com, *.example2.com, "
+                                        "*.families.google.com, "
+                                        "*.iframe1.com, *.iframe2.com"},
+                           }),
+        prerender_helper_(base::BindRepeating(
+            &SupervisedUserNavigationThrottleTestBase::web_contents,
             base::Unretained(this))) {}
-  ~SupervisedUserNavigationThrottleTest() override = default;
+  ~SupervisedUserNavigationThrottleTestBase() override = default;
 
   void SetUp() override;
   void SetUpOnMainThread() override;
 
   void BlockHost(const std::string& host) {
-    SetManualFilterForHost(host, /* allowlist */ false);
+    supervised_user_test_util::SetManualFilterForHost(browser()->profile(),
+                                                      host,
+                                                      /* allowlist */ false);
   }
 
   void AllowlistHost(const std::string& host) {
-    SetManualFilterForHost(host, /* allowlist */ true);
+    supervised_user_test_util::SetManualFilterForHost(
+        browser()->profile(), host, /* allowlist */ true);
   }
 
   bool IsInterstitialBeingShownInMainFrame(Browser* browser);
-
-  virtual ash::LoggedInUserMixin::LogInType GetLogInType() {
-    return ash::LoggedInUserMixin::LogInType::kChild;
-  }
 
   content::test::PrerenderTestHelper& prerender_helper() {
     return prerender_helper_;
@@ -236,33 +254,16 @@ class SupervisedUserNavigationThrottleTest
   }
 
  private:
-  void SetManualFilterForHost(const std::string& host, bool allowlist) {
-    Profile* profile = browser()->profile();
-    supervised_user::SupervisedUserSettingsService* settings_service =
-        SupervisedUserSettingsServiceFactory::GetForKey(
-            profile->GetProfileKey());
-
-    const base::Value::Dict& local_settings =
-        settings_service->LocalSettingsForTest();
-    base::Value::Dict dict_to_insert;
-
-    if (const base::Value::Dict* dict_value = local_settings.FindDict(
-            supervised_user::kContentPackManualBehaviorHosts)) {
-      dict_to_insert = dict_value->Clone();
-    }
-
-    dict_to_insert.Set(host, allowlist);
-    settings_service->SetLocalSetting(
-        supervised_user::kContentPackManualBehaviorHosts,
-        std::move(dict_to_insert));
-  }
-
-  std::unique_ptr<ash::LoggedInUserMixin> logged_in_user_mixin_;
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+  base::test::ScopedFeatureList feature_list_{
+      supervised_user::kFilterWebsitesForSupervisedUsersOnDesktopAndIOS};
+#endif
+  supervised_user::SupervisionMixin supervision_mixin_;
   content::test::PrerenderTestHelper prerender_helper_;
 };
 
-bool SupervisedUserNavigationThrottleTest::IsInterstitialBeingShownInMainFrame(
-    Browser* browser) {
+bool SupervisedUserNavigationThrottleTestBase::
+    IsInterstitialBeingShownInMainFrame(Browser* browser) {
   WebContents* tab = browser->tab_strip_model()->GetActiveWebContents();
   std::u16string title;
   ui_test_utils::GetCurrentTabTitle(browser, &title);
@@ -271,21 +272,31 @@ bool SupervisedUserNavigationThrottleTest::IsInterstitialBeingShownInMainFrame(
          title == u"Site blocked";
 }
 
-void SupervisedUserNavigationThrottleTest::SetUp() {
+void SupervisedUserNavigationThrottleTestBase::SetUp() {
   prerender_helper_.RegisterServerRequestMonitor(embedded_test_server());
-  // Polymorphically initiate logged_in_user_mixin_.
-  logged_in_user_mixin_ = std::make_unique<ash::LoggedInUserMixin>(
-      &mixin_host_, GetLogInType(), embedded_test_server(), this);
   MixinBasedInProcessBrowserTest::SetUp();
 }
 
-void SupervisedUserNavigationThrottleTest::SetUpOnMainThread() {
+void SupervisedUserNavigationThrottleTestBase::SetUpOnMainThread() {
   MixinBasedInProcessBrowserTest::SetUpOnMainThread();
 
   ASSERT_TRUE(embedded_test_server()->Started());
-
-  logged_in_user_mixin_->LogInUser();
 }
+
+class SupervisedUserNavigationThrottleTest
+    : public SupervisedUserNavigationThrottleTestBase {
+ protected:
+  SupervisedUserNavigationThrottleTest()
+      : SupervisedUserNavigationThrottleTestBase(
+            supervised_user::SupervisionMixin::SignInMode::kSupervised) {}
+  ~SupervisedUserNavigationThrottleTest() override = default;
+
+  // TODO(crbug.com/1491942): This fails with the field trial testing config.
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    MixinBasedInProcessBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitch("disable-field-trial-config");
+  }
+};
 
 // Tests that prerendering fails in supervised user mode.
 #if BUILDFLAG(IS_CHROMEOS)
@@ -407,9 +418,7 @@ IN_PROC_BROWSER_TEST_F(SupervisedUserNavigationThrottleTest,
 
 class SupervisedUserIframeFilterTest
     : public SupervisedUserNavigationThrottleTest,
-      public testing::WithParamInterface<
-          std::tuple</* local_web_approvals_enabled */ bool,
-                     /* local_web_approvals_preferred */ bool>> {
+      public testing::WithParamInterface<LocalWebApprovalSupport> {
  protected:
   SupervisedUserIframeFilterTest() { InitFeatures(); }
 
@@ -431,7 +440,6 @@ class SupervisedUserIframeFilterTest
   void WaitForNavigationFinished(int frame_id, const GURL& url);
   void InitFeatures();
   bool IsLocalWebApprovalsEnabled() const;
-  bool IsLocalWebApprovalsPreferred() const;
 
   supervised_user::PermissionRequestCreatorMock* permission_creator() {
     return permission_creator_;
@@ -541,7 +549,6 @@ bool SupervisedUserIframeFilterTest::IsLocalApprovalsButtonBeingShown(
 
 void SupervisedUserIframeFilterTest::CheckPreferredApprovalButton(
     int frame_id) {
-  if (supervised_user::IsLocalWebApprovalThePreferredButton()) {
     std::string command =
         "document.getElementById('local-approvals-button').classList.contains("
         "'primary-button') &&"
@@ -552,18 +559,6 @@ void SupervisedUserIframeFilterTest::CheckPreferredApprovalButton(
         " !document.getElementById('remote-approvals-button').classList."
         "contains('primary-button');";
     ASSERT_TRUE(RunCommandAndGetBooleanFromFrame(frame_id, command));
-  } else {
-    std::string command =
-        "document.getElementById('remote-approvals-button').classList."
-        "contains('primary-button') &&"
-        " !document.getElementById('remote-approvals-button').classList."
-        "contains('secondary-button') &&"
-        " document.getElementById('local-approvals-button').classList.contains("
-        "'secondary-button') &&"
-        " !document.getElementById('local-approvals-button').classList."
-        "contains('primary-button');";
-    ASSERT_TRUE(RunCommandAndGetBooleanFromFrame(frame_id, command));
-  }
 }
 
 bool SupervisedUserIframeFilterTest::IsLocalApprovalsInsteadButtonBeingShown(
@@ -617,39 +612,25 @@ bool SupervisedUserIframeFilterTest::RunCommandAndGetBooleanFromFrame(
 }
 
 void SupervisedUserIframeFilterTest::InitFeatures() {
-  std::vector<base::test::FeatureRefAndParams> enabled_features_and_params;
+  std::vector<base::test::FeatureRef> enabled_features;
   std::vector<base::test::FeatureRef> disabled_features;
   if (IsLocalWebApprovalsEnabled()) {
-    base::FieldTrialParams params;
-    params["preferred_button"] =
-        supervised_user::kLocalWebApprovalsPreferredButtonLocal;
-    enabled_features_and_params.emplace_back(
-        supervised_user::kLocalWebApprovals, params);
+    enabled_features.push_back(supervised_user::kLocalWebApprovals);
   } else {
     disabled_features.push_back(supervised_user::kLocalWebApprovals);
   }
-  scoped_feature_list_.InitWithFeaturesAndParameters(
-      enabled_features_and_params, disabled_features);
+  scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
 }
 
 bool SupervisedUserIframeFilterTest::IsLocalWebApprovalsEnabled() const {
-  return std::get<0>(GetParam());
-}
-
-bool SupervisedUserIframeFilterTest::IsLocalWebApprovalsPreferred() const {
-  return std::get<1>(GetParam());
+  return GetParam() == LocalWebApprovalSupport::kSupported;
 }
 
 INSTANTIATE_TEST_SUITE_P(
     LocalWebApprovalsEnabled,
     SupervisedUserIframeFilterTest,
-    testing::Values(
-        std::make_tuple(/* local_web_approvals_enabled */ true,
-                        /* local_web_approvals_preferred */ true),
-        std::make_tuple(/* local_web_approvals_enabled */ true,
-                        /* local_web_approvals_preferred */ false),
-        std::make_tuple(/* local_web_approvals_enabled */ false,
-                        /* local_web_approvals_preferred */ false)));
+    testing::Values(LocalWebApprovalSupport::kSupported,
+                    LocalWebApprovalSupport::kNotSupported));
 
 IN_PROC_BROWSER_TEST_P(SupervisedUserIframeFilterTest, BlockSubFrame) {
   base::HistogramTester histogram_tester;
@@ -918,6 +899,10 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserIframeFilterTest,
   EXPECT_EQ(GetBlockedFrameURL(blocked_frames[0]).host(), "www.c.example2.com");
 }
 
+// The switches::kHostWindowBounds commandline flag doesn't appear to work
+// for tests on other platforms.
+// TODO(b/300426225): enable these tests on Linux/Mac/Windows.
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 class SupervisedUserNarrowWidthIframeFilterTest
     : public SupervisedUserIframeFilterTest {
  protected:
@@ -936,13 +921,8 @@ void SupervisedUserNarrowWidthIframeFilterTest::SetUp() {
 INSTANTIATE_TEST_SUITE_P(
     LocalWebApprovalsEnabledNarrowWidth,
     SupervisedUserNarrowWidthIframeFilterTest,
-    testing::Values(
-        std::make_tuple(/* local_web_approvals_enabled */ true,
-                        /* local_web_approvals_preferred */ true),
-        std::make_tuple(/* local_web_approvals_enabled */ true,
-                        /* local_web_approvals_preferred */ false),
-        std::make_tuple(/* local_web_approvals_enabled */ false,
-                        /* local_web_approvals_preferred */ false)));
+    testing::Values(LocalWebApprovalSupport::kSupported,
+                    LocalWebApprovalSupport::kNotSupported));
 
 IN_PROC_BROWSER_TEST_P(SupervisedUserNarrowWidthIframeFilterTest,
                        NarrowWidthWindow) {
@@ -1013,6 +993,7 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserNarrowWidthIframeFilterTest,
 
   EXPECT_FALSE(IsInterstitialBeingShownInMainFrame(browser()));
 }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 // Tests Chrome OS local web approvals flow.
@@ -1022,11 +1003,7 @@ using ChromeOSLocalWebApprovalsTest = SupervisedUserIframeFilterTest;
 INSTANTIATE_TEST_SUITE_P(
     ,
     ChromeOSLocalWebApprovalsTest,
-    testing::Values(
-        std::make_tuple(/* local_web_approvals_enabled */ true,
-                        /* local_web_approvals_preferred */ true),
-        std::make_tuple(/* local_web_approvals_enabled */ true,
-                        /* local_web_approvals_preferred */ false)));
+    testing::Values(LocalWebApprovalSupport::kSupported));
 
 IN_PROC_BROWSER_TEST_P(ChromeOSLocalWebApprovalsTest,
                        StartLocalWebApprovalsFromMainFrame) {
@@ -1144,18 +1121,15 @@ IN_PROC_BROWSER_TEST_P(ChromeOSLocalWebApprovalsTest,
   EXPECT_FALSE(IsRemoteApprovalsButtonBeingShown(blocked_frame));
   EXPECT_TRUE(IsLocalApprovalsInsteadButtonBeingShown(blocked_frame));
 }
-
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 class SupervisedUserNavigationThrottleNotSupervisedTest
-    : public SupervisedUserNavigationThrottleTest {
+    : public SupervisedUserNavigationThrottleTestBase {
  protected:
-  SupervisedUserNavigationThrottleNotSupervisedTest() = default;
+  SupervisedUserNavigationThrottleNotSupervisedTest()
+      : SupervisedUserNavigationThrottleTestBase(
+            supervised_user::SupervisionMixin::SignInMode::kRegular) {}
   ~SupervisedUserNavigationThrottleNotSupervisedTest() override = default;
-
-  ash::LoggedInUserMixin::LogInType GetLogInType() override {
-    return ash::LoggedInUserMixin::LogInType::kRegular;
-  }
 };
 
 IN_PROC_BROWSER_TEST_F(SupervisedUserNavigationThrottleNotSupervisedTest,

@@ -15,8 +15,8 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
-#include "chrome/browser/autocomplete/document_suggestions_service_factory.h"
 #include "chrome/browser/autocomplete/in_memory_url_index_factory.h"
+#include "chrome/browser/autocomplete/provider_state_service_factory.h"
 #include "chrome/browser/autocomplete/remote_suggestions_service_factory.h"
 #include "chrome/browser/autocomplete/shortcuts_backend_factory.h"
 #include "chrome/browser/autocomplete/zero_suggest_cache_service_factory.h"
@@ -24,7 +24,6 @@
 #include "chrome/browser/bitmap_fetcher/bitmap_fetcher_service_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/history_clusters/history_clusters_service_factory.h"
@@ -64,7 +63,6 @@
 #include "components/translate/core/browser/translate_manager.h"
 #include "components/unified_consent/url_keyed_data_collection_consent_helper.h"
 #include "content/public/browser/navigation_entry.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
@@ -302,8 +300,7 @@ ChromeAutocompleteProviderClient::GetBuiltinsToProvideAsUserTypes() {
   std::vector<std::u16string> builtins_to_provide;
   builtins_to_provide.push_back(
       base::ASCIIToUTF16(chrome::kChromeUIChromeURLsURL));
-  builtins_to_provide.push_back(
-      base::ASCIIToUTF16(chrome::kChromeUIFlagsURL));
+  builtins_to_provide.push_back(base::ASCIIToUTF16(chrome::kChromeUIFlagsURL));
 #if !BUILDFLAG(IS_ANDROID)
   builtins_to_provide.push_back(
       base::ASCIIToUTF16(chrome::kChromeUISettingsURL));
@@ -337,8 +334,7 @@ signin::IdentityManager* ChromeAutocompleteProviderClient::GetIdentityManager()
 AutocompleteScoringModelService*
 ChromeAutocompleteProviderClient::GetAutocompleteScoringModelService() const {
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
-  return AutocompleteScoringModelServiceFactory::GetInstance()->GetForProfile(
-      profile_);
+  return AutocompleteScoringModelServiceFactory::GetForProfile(profile_);
 #else
   return nullptr;
 #endif  // BUILDFLAG(BUILD_WITH_TFLITE_LIB)
@@ -347,11 +343,15 @@ ChromeAutocompleteProviderClient::GetAutocompleteScoringModelService() const {
 OnDeviceTailModelService*
 ChromeAutocompleteProviderClient::GetOnDeviceTailModelService() const {
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
-  return OnDeviceTailModelServiceFactory::GetInstance()->GetForProfile(
-      profile_);
+  return OnDeviceTailModelServiceFactory::GetForProfile(profile_);
 #else
   return nullptr;
 #endif  // BUILDFLAG(BUILD_WITH_TFLITE_LIB)
+}
+
+ProviderStateService*
+ChromeAutocompleteProviderClient::GetProviderStateService() const {
+  return ProviderStateServiceFactory::GetForProfile(profile_);
 }
 
 bool ChromeAutocompleteProviderClient::IsOffTheRecord() const {

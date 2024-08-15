@@ -44,6 +44,14 @@ colorset("vivaldi_ntp_toolbar_text_highlighted_color") {
   sources = [ "vivaldi_ntp_toolbar_text_highlighted_color.colorset/Contents.json" ]
 }
 
+colorset("vivaldi_private_toolbar_background_color") {
+  sources = [ "vivaldi_private_toolbar_background_color.colorset/Contents.json" ]
+}
+
+colorset("vivaldi_private_tabview_selected_background_color") {
+  sources = [ "vivaldi_private_tabview_selected_background_color.colorset/Contents.json" ]
+}
+
 imageset("vivaldi_ntp_search") {
   sources = [
     "vivaldi_ntp_search.imageset/Contents.json",

@@ -19,6 +19,7 @@ import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
 
+import androidx.activity.ComponentActivity;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.test.espresso.UiController;
@@ -37,7 +38,6 @@ import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteController.On
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinator;
 import org.chromium.chrome.browser.omnibox.suggestions.DropdownItemViewInfo;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionsDropdown;
-import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionsDropdownAdapter;
 import org.chromium.chrome.browser.omnibox.suggestions.base.ActionChipsProperties;
 import org.chromium.chrome.browser.omnibox.suggestions.header.HeaderView;
 import org.chromium.chrome.browser.searchwidget.SearchActivity;
@@ -72,13 +72,13 @@ public class OmniboxTestUtils {
      * Invokes a specific ViewAction on an {@link
      * org.chromium.chrome.browser.omnibox.suggestions.action.OmniboxAction} at specific position.
      *
-     * This class can be chained with {@link
+     * <p>This class can be chained with {@link
      * androidx.test.espresso.contrib.RecyclerViewActions.actionOnItemAtPosition}.
      */
-    private static class ActionOnOmniobxActionAtPosition implements ViewAction {
+    private static class ActionOnOmniboxActionAtPosition implements ViewAction {
         private final ViewAction mAction;
 
-        public ActionOnOmniobxActionAtPosition(int position, ViewAction action) {
+        public ActionOnOmniboxActionAtPosition(int position, ViewAction action) {
             mAction = actionOnItemAtPosition(position, action);
         }
 
@@ -106,7 +106,7 @@ public class OmniboxTestUtils {
      * @param action the action to perform.
      */
     public static ViewAction actionOnOmniboxActionAtPosition(int position, ViewAction action) {
-        return new ActionOnOmniobxActionAtPosition(position, action);
+        return new ActionOnOmniboxActionAtPosition(position, action);
     }
 
     /**
@@ -209,19 +209,24 @@ public class OmniboxTestUtils {
         CriteriaHelper.pollUiThread(() -> {
             Criteria.checkThat("Omnibox not shown.", mUrlBar.isShown(), Matchers.is(true));
             Criteria.checkThat("Omnibox not focusable.", mUrlBar.isFocusable(), Matchers.is(true));
+            if (!mUrlBar.hasFocus()) mUrlBar.requestFocus();
+            Criteria.checkThat("Omnibox is focused.", mUrlBar.hasFocus(), Matchers.is(true));
         });
-
-        TestThreadUtils.runOnUiThreadBlockingNoException(() -> mUrlBar.requestFocus());
-        waitAnimationsComplete();
-        checkFocus(true);
     }
 
     /**
-     * Clear the Omnibox focus and wait until keyboard is dismissed.
-     * Expects the Omnibox to be focused before the call.
+     * Clear the Omnibox focus and wait until keyboard is dismissed. Performs no action if the
+     * Omnibox is already unfocused.
      */
     public void clearFocus() {
-        sendKey(KeyEvent.KEYCODE_BACK);
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    if (mUrlBar.hasFocus()) {
+                        ((ComponentActivity) mActivity)
+                                .getOnBackPressedDispatcher()
+                                .onBackPressed();
+                    }
+                });
         checkFocus(false);
     }
 
@@ -359,21 +364,6 @@ public class OmniboxTestUtils {
             }
 
             return null;
-        });
-    }
-
-    /**
-     * Highligh suggestion at a specific index.
-     *
-     * @param index The index of the suggestion to be highlighted.
-     */
-    public void focusSuggestion(int index) {
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            OmniboxSuggestionsDropdownAdapter adapter =
-                    (OmniboxSuggestionsDropdownAdapter) mLocationBar.getAutocompleteCoordinator()
-                            .getSuggestionsDropdownForTest()
-                            .getAdapter();
-            adapter.setSelectedViewIndex(index);
         });
     }
 

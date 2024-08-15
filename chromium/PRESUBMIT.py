@@ -321,7 +321,9 @@ _BANNED_JAVASCRIPT_FUNCTIONS : Sequence [BanRule] = (
           'ash/webui/multidevice_debug/resources/webui.js',
           'ash/webui/projector_app/resources/annotator/trusted/annotator_browser_proxy.js',
           'ash/webui/projector_app/resources/app/trusted/projector_browser_proxy.js',
-          'ash/webui/scanning/resources/scanning_browser_proxy.js',
+          # TODO(b/301634378): Remove violation exception once Scanning App
+          # migrated off usage of `chrome.send`.
+          'ash/webui/scanning/resources/scanning_browser_proxy.ts',
       ),
     ),
 )
@@ -486,6 +488,16 @@ _BANNED_IOS_EGTEST_FUNCTIONS : Sequence[BanRule] = (
 
 _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
     BanRule(
+      '%#0',
+      (
+       'Zero-padded values that use "#" to add prefixes don\'t exhibit ',
+       'consistent behavior, since the prefix is not prepended for zero ',
+       'values. Use "0x%0..." instead.',
+      ),
+      False,
+      [_THIRD_PARTY_EXCEPT_BLINK],  # Don't warn in third_party folders.
+    ),
+    BanRule(
       r'/\busing namespace ',
       (
        'Using directives ("using namespace x") are banned by the Google Style',
@@ -507,7 +519,7 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       False,
       excluded_paths = (
         "base/gtest_prod_util.h",
-        "base/allocator/partition_allocator/partition_alloc_base/gtest_prod_util.h",
+        "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/gtest_prod_util.h",
       ),
     ),
     BanRule(
@@ -634,15 +646,16 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
         'deprecated (http://crbug.com/634507). Please avoid converting away',
         'from the Time types in Chromium code, especially if any math is',
         'being done on time values. For interfacing with platform/library',
-        'APIs, use FromMicroseconds() or InMicroseconds(), or one of the other',
-        'type converter methods instead. For faking TimeXXX values (for unit',
+        'APIs, use base::Time::(From,To)DeltaSinceWindowsEpoch() or',
+        'base::{TimeDelta::In}Microseconds(), or one of the other type',
+        'converter methods instead. For faking TimeXXX values (for unit',
         'testing only), use TimeXXX() + Microseconds(N). For',
         'other use cases, please contact base/time/OWNERS.',
       ),
       False,
       excluded_paths = (
         "base/time/time.h",
-        "base/allocator/partition_allocator/partition_alloc_base/time/time.h",
+        "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/time/time.h",
       ),
     ),
     BanRule(
@@ -845,6 +858,9 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
         'STL random number engines and generators are banned. Use the ',
         'helpers in base/rand_util.h instead, e.g. base::RandBytes() or ',
         'base::RandomBitGenerator.'
+        '',
+        'Please reach out to cxx@chromium.org if the base APIs are ',
+        'insufficient for your needs.',
       ),
       True,
       [
@@ -862,7 +878,7 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
         # the standard library's random number generators, and should be
         # migrated to the //base equivalent.
         r'ash/ambient/model/ambient_topic_queue\.cc',
-        r'base/allocator/partition_allocator/partition_alloc_unittest\.cc',
+        r'base/allocator/partition_allocator/src/partition_alloc/partition_alloc_unittest\.cc',
         r'base/ranges/algorithm_unittest\.cc',
         r'base/test/launcher/test_launcher\.cc',
         r'cc/metrics/video_playback_roughness_reporter_unittest\.cc',
@@ -885,6 +901,11 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
         r'content/browser/webid/federated_auth_request_impl\.cc',
         r'media/cast/test/utility/udp_proxy\.h',
         r'sql/recover_module/module_unittest\.cc',
+        r'components/search_engines/template_url_prepopulate_data.cc',
+        # Do not add new entries to this list. If you have a use case which is
+        # not satisfied by the current APIs (i.e. you need an explicitly-seeded
+        # sequence, or stability of some sort is required), please contact
+        # cxx@chromium.org.
       ],
     ),
     BanRule(
@@ -912,6 +933,19 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       ),
       True,
       [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
+    ),
+    BanRule(
+      r'/\babsl::FixedArray\b',
+      (
+        'absl::FixedArray is banned. Use base::FixedArray instead.',
+      ),
+      True,
+      [
+        # base::FixedArray provides canonical access.
+        r'^base/types/fixed_array.h',
+        # Not an error in third_party folders.
+        _THIRD_PARTY_EXCEPT_BLINK,
+      ],
     ),
     BanRule(
       r'/\babsl::FunctionRef\b',
@@ -966,6 +1000,8 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
         r'third_party/blink/renderer/modules/manifest/manifest_parser\.cc',
         # Needed to use QUICHE API.
         r'chrome/browser/ip_protection/.*',
+        # Needed to use MediaPipe API.
+        r'components/media_effects/.*\.cc',
         # Not an error in third_party folders.
         _THIRD_PARTY_EXCEPT_BLINK
       ],
@@ -1005,21 +1041,8 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       [
         # Needed to use QUICHE API.
         r'chrome/browser/ip_protection/.*',
+        r'services/network/web_transport.*',
         _THIRD_PARTY_EXCEPT_BLINK  # Not an error in third_party folders.
-      ],
-    ),
-    BanRule(
-      r'/\bstd::optional\b',
-      (
-        'std::optional is not allowed yet (https://crbug.com/1373619). Use ',
-        'absl::optional instead.',
-      ),
-      True,
-      [
-          # Clang plugins have different build config.
-          '^tools/clang/plugins/',
-          # Not an error in third_party folders.
-          _THIRD_PARTY_EXCEPT_BLINK,
       ],
     ),
     BanRule(
@@ -1028,7 +1051,13 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
         '<chrono> is banned. Use base/time instead.',
       ),
       True,
-      [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
+      [
+          # Not an error in third_party folders:
+          _THIRD_PARTY_EXCEPT_BLINK,
+          # PartitionAlloc's starscan, doesn't depend on base/. It can't use
+          # base::ConditionalVariable::TimedWait(..).
+          "base/allocator/partition_allocator/src/partition_alloc/starscan/pcscan_internal.cc",
+      ]
     ),
     BanRule(
       r'/#include <exception>',
@@ -1656,6 +1685,17 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       ),
     ),
     BanRule(
+      pattern = r'/raw_ptr<[^;}]*\w{};',
+      explanation = (
+        'Do not use {} for raw_ptr initialization, use = nullptr instead.',
+      ),
+      treat_as_error = True,
+      excluded_paths = (
+        '^base/',
+        '^tools/',
+      ),
+    ),
+    BanRule(
       pattern = r'/#include "base/allocator/.*/raw_'
                 r'(ptr|ptr_cast|ptr_exclusion|ref).h"',
       explanation = (
@@ -1684,9 +1724,36 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       excluded_paths = (
         '^chrome/browser/ui/content_settings/',
         '^components/content_settings/',
-        '^services/network/cookie_settings/',
-        'test.cc',
+        '^services/network/cookie_settings.cc',
+        '.*test.cc',
       ),
+    ),
+    BanRule(
+      pattern = r'\bg_signal_connect',
+      explanation = (
+        'Use ScopedGSignal instead of g_signal_connect*()',
+      ),
+      treat_as_error = True,
+      excluded_paths = (
+        '^ui/base/glib/scoped_gsignal.h',
+      ),
+    ),
+    BanRule(
+      pattern = r'features::kIsolatedWebApps',
+      explanation = (
+        'Do not use `features::kIsolatedWebApps` directly to guard Isolated ',
+        'Web App code. ',
+        'Use `content::IsolatedWebAppsPolicy::AreIsolatedWebAppsEnabled()` in ',
+        'the browser process or check the `kEnableIsolatedWebAppsInRenderer` ',
+        'command line flag in the renderer process.',
+      ),
+      treat_as_error = True,
+      excluded_paths = _TEST_CODE_EXCLUDED_PATHS + (
+        '^chrome/browser/about_flags.cc',
+        '^chrome/browser/chrome_content_browser_client.cc',
+        '^chrome/browser/ui/startup/bad_flags_prompt.cc',
+        '^content/shell/browser/shell_content_browser_client.cc'
+      )
     ),
 )
 
@@ -1863,7 +1930,10 @@ _KNOWN_ROBOTS = set(
           for s in ('swarming-tasks',)
   ) | set('%s@fuchsia-infra.iam.gserviceaccount.com' % s
           for s in ('global-integration-try-builder',
-                    'global-integration-ci-builder'))
+                    'global-integration-ci-builder')
+  ) | set('%s@prod.google.com' % s
+          for s in ('chops-security-borg',
+                    'chops-security-cronjobs-cpesuggest'))
 
 _INVALID_GRD_FILE_LINE = [
         (r'<file lang=.* path=.*', 'Path should come before lang in GRD files.')
@@ -6711,13 +6781,16 @@ def CheckAssertAshOnlyCode(input_api, output_api):
     return errors
 
 
-def _IsRendererOnlyCppFile(input_api, affected_file):
+def _IsMiraclePtrDisallowed(input_api, affected_file):
     path = affected_file.LocalPath()
     if not _IsCPlusPlusFile(input_api, path):
         return False
 
-    # Any code under a "renderer" subdirectory is assumed to be Renderer-only.
-    if "/renderer/" in path:
+    # Renderer code is generally allowed to use MiraclePtr.
+    # These directories, however, are specifically disallowed.
+    if ("third_party/blink/renderer/core/" in path
+            or "third_party/blink/renderer/platform/heap/" in path
+            or "third_party/blink/renderer/platform/wtf/" in path):
         return True
 
     # Blink's public/web API is only used/included by Renderer-only code.  Note
@@ -6738,18 +6811,39 @@ def CheckRawPtrUsage(input_api, output_api):
     # The regex below matches "raw_ptr<" following a word boundary, but not in a
     # C++ comment.
     raw_ptr_matcher = input_api.re.compile(r'^((?!//).)*\braw_ptr<')
-    file_filter = lambda f: _IsRendererOnlyCppFile(input_api, f)
+    file_filter = lambda f: _IsMiraclePtrDisallowed(input_api, f)
     for f, line_num, line in input_api.RightHandSideLines(file_filter):
         if raw_ptr_matcher.search(line):
             errors.append(
                 output_api.PresubmitError(
                     'Problem on {path}:{line} - '\
-                    'raw_ptr<T> should not be used in Renderer-only code '\
+                    'raw_ptr<T> should not be used in this renderer code '\
                     '(as documented in the "Pointers to unprotected memory" '\
                     'section in //base/memory/raw_ptr.md)'.format(
                         path=f.LocalPath(), line=line_num)))
     return errors
 
+def CheckAdvancedMemorySafetyChecksUsage(input_api, output_api):
+    """Checks that ADVANCED_MEMORY_SAFETY_CHECKS() macro is neither added nor
+    removed as it is managed by the memory safety team internally.
+    Do not add / remove it manually."""
+    paths = set([])
+    # The regex below matches "ADVANCED_MEMORY_SAFETY_CHECKS(" following a word
+    # boundary, but not in a C++ comment.
+    macro_matcher = input_api.re.compile(
+        r'^((?!//).)*\bADVANCED_MEMORY_SAFETY_CHECKS\(', input_api.re.MULTILINE)
+    for f in input_api.AffectedFiles():
+        if not _IsCPlusPlusFile(input_api, f.LocalPath()):
+            continue
+        if macro_matcher.search(f.GenerateScmDiff()):
+            paths.add(f.LocalPath())
+    if not paths:
+        return []
+    return [output_api.PresubmitPromptWarning(
+              'ADVANCED_MEMORY_SAFETY_CHECKS() macro is managed by ' \
+              'the memory safety team (chrome-memory-safety@). ' \
+              'Please contact us to add/delete the uses of the macro.',
+              paths)]
 
 def CheckPythonShebang(input_api, output_api):
     """Checks that python scripts use #!/usr/bin/env instead of hardcoding a
@@ -6833,10 +6927,11 @@ def CheckBatchAnnotation(input_api, output_api):
         results.append(
             output_api.PresubmitPromptWarning(
                 """
-Instrumentation tests should use either @Batch or @DoNotBatch. Use
-@Batch(Batch.PER_CLASS) in most cases. Use @Batch(Batch.UNIT_TESTS) when tests
-have no side-effects. If the tests are not safe to run in batch, please use
-@DoNotBatch with reasons.
+A change was made to an on-device test that has neither been annotated with
+@Batch nor @DoNotBatch. If this is a new test, please add the annotation. If
+this is an existing test, please consider adding it if you are sufficiently
+familiar with the test (but do so as a separate change).
+
 See https://source.chromium.org/chromium/chromium/src/+/main:docs/testing/batching_instrumentation_tests.md
 """, missing_annotation_errors))
     if extra_annotation_errors:
@@ -6922,7 +7017,14 @@ def CheckMockAnnotation(input_api, output_api):
                 continue
 
             if mock_annotation.search(line):
-                next_line_is_annotated = True
+                field_type_search = field_type.search(line)
+                if field_type_search:
+                    fully_qualified_class = _DoClassLookup(
+                        field_type_search.group(1), fully_qualified_class_map,
+                        package)
+                    mocked_by_annotation_classes.add(fully_qualified_class)
+                else:
+                    next_line_is_annotated = True
                 continue
 
             m = mock_function_regex.search(line)
@@ -7048,3 +7150,101 @@ def CheckLibcxxRevisionsMatch(input_api, output_api):
     return [output_api.PresubmitError(
         'libcxx_revision not equal across %s' % ', '.join(DEPS_FILES),
         changed_deps_files)]
+
+
+def CheckDanglingUntriaged(input_api, output_api):
+    """Warn developers adding DanglingUntriaged raw_ptr."""
+
+    # Ignore during git presubmit --all.
+    #
+    # This would be too costly, because this would check every lines of every
+    # C++ files. Check from _BANNED_CPP_FUNCTIONS are also reading the whole
+    # source code, but only once to apply every checks. It seems the bots like
+    # `win-presubmit` are particularly sensitive to reading the files. Adding
+    # this check caused the bot to run 2x longer. See https://crbug.com/1486612.
+    if input_api.no_diffs:
+      return []
+
+    def FilterFile(file):
+        return input_api.FilterSourceFile(
+            file,
+            files_to_check=[r".*\.(h|cc|cpp|cxx|m|mm)$"],
+            files_to_skip=[r"^base/allocator.*"],
+        )
+
+    count = 0
+    for f in input_api.AffectedSourceFiles(FilterFile):
+        count -= f.OldContents().count("DanglingUntriaged")
+        count += f.NewContents().count("DanglingUntriaged")
+
+    # Most likely, nothing changed:
+    if count == 0:
+        return []
+
+    # Congrats developers for improving it:
+    if count < 0:
+        message = (
+            f"DanglingUntriaged pointers removed: {-count}",
+            f"Thank you!",
+        )
+        return [output_api.PresubmitNotifyResult(message)]
+
+    # Check for 'DanglingUntriaged-notes' in the description:
+    notes_regex = input_api.re.compile("DanglingUntriaged-notes[:=]")
+    if any(
+            notes_regex.match(line)
+            for line in input_api.change.DescriptionText().splitlines()):
+        return []
+
+    # Check for DanglingUntriaged-notes in the git footer:
+    if input_api.change.GitFootersFromDescription().get(
+            "DanglingUntriaged-notes", []):
+        return []
+
+    message = (
+        "Unexpected new occurrences of `DanglingUntriaged` detected. Please",
+        "avoid adding new ones",
+        "",
+        "See documentation:",
+        "https://chromium.googlesource.com/chromium/src/+/main/docs/dangling_ptr.md",
+        "",
+        "See also the guide to fix dangling pointers:",
+        "https://chromium.googlesource.com/chromium/src/+/main/docs/dangling_ptr_guide.md",
+        "",
+        "To disable this warning, please add in the commit description:",
+        "DanglingUntriaged-notes: <rational for new untriaged dangling "
+        "pointers>",
+    )
+    return [output_api.PresubmitPromptWarning(message)]
+
+def CheckInlineConstexprDefinitionsInHeaders(input_api, output_api):
+    """Checks that non-static constexpr definitions in headers are inline."""
+    # In a properly formatted file, constexpr definitions inside classes or
+    # structs will have additional whitespace at the beginning of the line.
+    # The pattern looks for variables initialized as constexpr kVar = ...; or
+    # constexpr kVar{...};
+    # The pattern does not match expressions that have braces in kVar to avoid
+    # matching constexpr functions.
+    pattern = input_api.re.compile(r'^constexpr (?!inline )[^\(\)]*[={]')
+    attribute_pattern = input_api.re.compile(r'(\[\[[a-zA-Z_:]+\]\]|[A-Z]+[A-Z_]+) ')
+    problems = []
+    for f in input_api.AffectedFiles():
+        if not _IsCPlusPlusHeaderFile(input_api, f.LocalPath()):
+            continue
+
+        for line_number, line in f.ChangedContents():
+            line = attribute_pattern.sub('', line)
+            if pattern.search(line):
+                problems.append(
+                    f"{f.LocalPath()}: {line_number}\n    {line}")
+
+    if problems:
+        return [
+            output_api.PresubmitPromptWarning(
+                'Consider inlining constexpr variable definitions in headers '
+                'outside of classes to avoid unnecessary copies of the '
+                'constant. See https://abseil.io/tips/168 for more details.',
+                problems)
+        ]
+    else:
+        return []

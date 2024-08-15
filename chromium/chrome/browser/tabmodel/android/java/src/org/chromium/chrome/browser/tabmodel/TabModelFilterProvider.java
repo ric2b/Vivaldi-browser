@@ -130,14 +130,4 @@ public class TabModelFilterProvider implements TabModelSelectorObserver {
     public void resetTabModelFilterListForTesting() {
         mTabModelFilterList = Collections.emptyList();
     }
-
-    /** Vivaldi: Wrapper which can specifically receive a |TabGroupModelFilter|. */
-    public TabModelFilter getTabModelFilter(boolean isIncognito, boolean asGroupFilter) {
-        return getTabModelFilter(isIncognito);
-    }
-
-    //** Vivaldi: Wrapper which can specifically receive a |TabGroupModelFilter|. */
-    public TabModelFilter getCurrentTabModelFilter(boolean asGroupFilter) {
-        return getCurrentTabModelFilter();
-    }
 }

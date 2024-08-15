@@ -116,6 +116,8 @@
 
 namespace blink {
 
+using mojom::blink::FormControlType;
+
 namespace {
 
 // Refetch the event target node if it is removed or currently is the shadow
@@ -431,7 +433,7 @@ gfx::Point EventHandler::DragDataTransferLocationForTesting() {
 static bool IsSubmitImage(const Node* node) {
   auto* html_input_element = DynamicTo<HTMLInputElement>(node);
   return html_input_element &&
-         html_input_element->type() == input_type_names::kImage;
+         html_input_element->FormControlType() == FormControlType::kInputImage;
 }
 
 bool EventHandler::UsesHandCursor(const Node* node) {
@@ -838,8 +840,7 @@ WebInputEventResult EventHandler::HandleMousePressEvent(
   }
 
   if (discarded_events_.mouse_down_target != kInvalidDOMNodeId &&
-      discarded_events_.mouse_down_target ==
-          DOMNodeIds::IdForNode(mev.InnerNode()) &&
+      discarded_events_.mouse_down_target == mev.InnerNode()->GetDomNodeId() &&
       mouse_event.TimeStamp() - discarded_events_.mouse_down_time <
           event_handling_util::kDiscardedEventMistakeInterval) {
     mev.InnerNode()->GetDocument().CountUse(
@@ -847,8 +848,7 @@ WebInputEventResult EventHandler::HandleMousePressEvent(
   }
   if (event_handling_util::ShouldDiscardEventTargetingFrame(mev.Event(),
                                                             *frame_)) {
-    discarded_events_.mouse_down_target =
-        DOMNodeIds::IdForNode(mev.InnerNode());
+    discarded_events_.mouse_down_target = mev.InnerNode()->GetDomNodeId();
     discarded_events_.mouse_down_time = mouse_event.TimeStamp();
     return WebInputEventResult::kHandledSuppressed;
   } else {
@@ -1155,7 +1155,7 @@ WebInputEventResult EventHandler::HandleMouseMoveOrLeaveEvent(
 
     // Set Effective pan action before Pointer cursor is updated.
     const WebPointerEvent web_pointer_event(WebInputEvent::Type::kPointerMove,
-                                            mev.Event());
+                                            mev.Event().FlattenTransform());
     pointer_event_manager_->SendEffectivePanActionAtPointer(web_pointer_event,
                                                             mev.InnerNode());
 
@@ -1418,10 +1418,6 @@ void EventHandler::ClearDragState() {
   should_only_fire_drag_over_event_ = false;
 }
 
-void EventHandler::AnimateSnapFling(base::TimeTicks monotonic_time) {
-  scroll_manager_->AnimateSnapFling(monotonic_time);
-}
-
 void EventHandler::RecomputeMouseHoverStateIfNeeded() {
   mouse_event_manager_->RecomputeMouseHoverStateIfNeeded();
 }
@@ -1446,12 +1442,12 @@ Element* EventHandler::CurrentTouchDownElement() {
   return pointer_event_manager_->CurrentTouchDownElement();
 }
 
-void EventHandler::SetDownloadModifierTaskHandle(TaskHandle task_handle) {
-  download_modifier_task_handle_ = std::move(task_handle);
+void EventHandler::SetDelayedNavigationTaskHandle(TaskHandle task_handle) {
+  delayed_navigation_task_handle_ = std::move(task_handle);
 }
 
-TaskHandle& EventHandler::GetDownloadModifierTaskHandle() {
-  return download_modifier_task_handle_;
+TaskHandle& EventHandler::GetDelayedNavigationTaskHandle() {
+  return delayed_navigation_task_handle_;
 }
 
 bool EventHandler::IsPointerIdActiveOnFrame(PointerId pointer_id,
@@ -1478,7 +1474,7 @@ LocalFrame* EventHandler::DetermineActivePointerTrackerFrame(
   // current frame's PEM; otherwise, check if it's a touch-like pointer that
   // have its active states in the local frame root's PEM.
   if (IsPointerIdActiveOnFrame(pointer_id, frame_))
-    return frame_;
+    return frame_.Get();
   if (RootFrameTrackedActivePointerInCurrentFrame(pointer_id))
     return &frame_->LocalFrameRoot();
   return nullptr;
@@ -1580,12 +1576,8 @@ WebInputEventResult EventHandler::HandleGestureEvent(
   DCHECK_EQ(frame_, &frame_->LocalFrameRoot());
   DCHECK_NE(0, gesture_event.FrameScale());
 
-  // Scrolling-related gesture events invoke EventHandler recursively for each
-  // frame down the chain, doing a single-frame hit-test per frame. This matches
-  // handleWheelEvent.
-  // FIXME: Add a test that traverses this path, e.g. for devtools overlay.
-  if (gesture_event.IsScrollEvent())
-    return HandleGestureScrollEvent(gesture_event);
+  // Gesture scroll events are handled on the compositor thread.
+  DCHECK(!gesture_event.IsScrollEvent());
 
   // Hit test across all frames and do touch adjustment as necessary for the
   // event type.
@@ -1635,7 +1627,7 @@ WebInputEventResult EventHandler::HandleGestureEventInFrame(
       targeted_event.Event().GetType() == WebInputEvent::Type::kGestureTap;
   if (is_tap && discarded_events_.tap_target != kInvalidDOMNodeId &&
       discarded_events_.tap_target ==
-          DOMNodeIds::IdForNode(targeted_event.InnerNode()) &&
+          targeted_event.InnerNode()->GetDomNodeId() &&
       targeted_event.Event().TimeStamp() - discarded_events_.tap_time <
           event_handling_util::kDiscardedEventMistakeInterval) {
     targeted_event.InnerNode()->GetDocument().CountUse(
@@ -1644,8 +1636,7 @@ WebInputEventResult EventHandler::HandleGestureEventInFrame(
   if (event_handling_util::ShouldDiscardEventTargetingFrame(
           targeted_event.Event(), *frame_)) {
     if (is_tap) {
-      discarded_events_.tap_target =
-          DOMNodeIds::IdForNode(targeted_event.InnerNode());
+      discarded_events_.tap_target = targeted_event.InnerNode()->GetDomNodeId();
       discarded_events_.tap_time = targeted_event.Event().TimeStamp();
     }
     return WebInputEventResult::kHandledSuppressed;
@@ -1722,7 +1713,7 @@ bool EventHandler::BestNodeForHitTestResult(
     gfx::Point& adjusted_point,
     Node*& adjusted_node) {
   TRACE_EVENT0("input", "EventHandler::BestNodeForHitTestResult");
-  DCHECK(location.IsRectBasedTest());
+  CHECK(location.IsRectBasedTest());
 
   // If the touch is over a scrollbar or a resizer, we don't adjust the touch
   // point.  This is because touch adjustment only takes into account DOM nodes
@@ -1734,14 +1725,17 @@ bool EventHandler::BestNodeForHitTestResult(
   // nodes with relevant contextmenu properties.
   if (candidate_type != TouchAdjustmentCandidateType::kContextMenu &&
       (result.GetScrollbar() || result.IsOverResizer())) {
-    adjusted_node = nullptr;
     return false;
   }
 
   gfx::Point touch_hotspot =
-      frame_->View()->ConvertToRootFrame(ToRoundedPoint(location.Point()));
+      frame_->View()->ConvertToRootFrame(location.RoundedPoint());
   gfx::Rect touch_rect =
       frame_->View()->ConvertToRootFrame(location.ToEnclosingRect());
+
+  if (touch_rect.IsEmpty()) {
+    return false;
+  }
 
   HeapVector<Member<Node>, 11> nodes(result.ListBasedTestResult());
 
@@ -1998,9 +1992,7 @@ GestureEventWithHitTestResults EventHandler::HitTestResultForGestureEvent(
     location = HitTestLocation(PhysicalRect(top_left, hit_rect_size));
     hit_test_result = root_frame.GetEventHandler().HitTestResultAtLocation(
         location, hit_type);
-  }
 
-  if (location.IsRectBasedTest()) {
     // Adjust the location of the gesture to the most likely nearby node, as
     // appropriate for the type of event.
     ApplyTouchAdjustment(&adjusted_event, location, hit_test_result);
@@ -2018,6 +2010,7 @@ GestureEventWithHitTestResults EventHandler::HitTestResultForGestureEvent(
         location,
         (hit_type | HitTestRequest::kReadOnly) & ~HitTestRequest::kListBased);
   }
+
   // If we did a rect-based hit test it must be resolved to the best single node
   // by now to ensure consumers don't accidentally use one of the other
   // candidates.
@@ -2051,13 +2044,11 @@ void EventHandler::ApplyTouchAdjustment(WebGestureEvent* gesture_event,
 
   Node* adjusted_node = nullptr;
   gfx::Point adjusted_point;
-  bool adjusted =
-      BestNodeForHitTestResult(touch_adjustment_candiate_type, location,
-                               hit_test_result, adjusted_point, adjusted_node);
-
-  // Update the hit-test result to be a point-based result instead of a
-  // rect-based result.
-  if (adjusted) {
+  if (BestNodeForHitTestResult(touch_adjustment_candiate_type, location,
+                               hit_test_result, adjusted_point,
+                               adjusted_node)) {
+    // Update the hit-test result to be a point-based result instead of a
+    // rect-based result.
     PhysicalOffset point(frame_->View()->ConvertFromRootFrame(adjusted_point));
     DCHECK(location.ContainsPoint(gfx::PointF(point)));
     DCHECK(location.IsRectBasedTest());

@@ -6,9 +6,11 @@ package org.chromium.chrome.browser.tasks.tab_management;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.os.SystemClock;
+import android.util.Size;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -17,6 +19,7 @@ import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.RecyclerView.ViewHolder;
 
 import org.chromium.base.Callback;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Promise;
 import org.chromium.base.ResettersForTesting;
 import org.chromium.base.ThreadUtils;
@@ -35,16 +38,18 @@ import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.DestroyObserver;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.price_tracking.PriceDropNotificationManager;
 import org.chromium.chrome.browser.price_tracking.PriceDropNotificationManagerFactory;
 import org.chromium.chrome.browser.price_tracking.PriceTrackingFeatures;
 import org.chromium.chrome.browser.price_tracking.PriceTrackingUtilities;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.tasks.ReturnToChromeUtil;
 import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab;
 import org.chromium.chrome.browser.tasks.pseudotab.TabAttributeCache;
 import org.chromium.chrome.browser.tasks.tab_management.PriceMessageService.PriceMessageType;
@@ -127,7 +132,7 @@ public class TabSwitcherCoordinator
     private TabCreatorManager mTabCreatorManager;
     private boolean mIsInitialized;
     private PriceMessageService mPriceMessageService;
-    private SharedPreferencesManager.Observer mPriceAnnotationsPrefObserver;
+    private SharedPreferences.OnSharedPreferenceChangeListener mPriceAnnotationsPrefListener;
     private final ViewGroup mCoordinatorView;
     private final ViewGroup mRootView;
     private TabContentManager mTabContentManager;
@@ -148,8 +153,12 @@ public class TabSwitcherCoordinator
     /** Vivaldi members */
     private ArrayList<TabListCoordinator> mTabGridCoordinators;
     private ArrayList<PropertyModelChangeProcessor> mContainerViewChangeProcessors;
+    private TabSwitcherView mTabSwitcherView;
 
     /** {@see TabManagementDelegate#createCarouselTabSwitcher} */
+    // Suppress to observe SharedPreferences, which is discouraged; use another messaging channel
+    // instead.
+    @SuppressWarnings("UseSharedPreferencesManagerFromChromeCheck")
     public TabSwitcherCoordinator(@NonNull Activity activity,
             @NonNull ActivityLifecycleDispatcher lifecycleDispatcher,
             @NonNull TabModelSelector tabModelSelector,
@@ -272,13 +281,13 @@ public class TabSwitcherCoordinator
                 mContainerViewChangeProcessors = new ArrayList<>();
                 // The TabSwitcherView is the horizontal main recycler view which holds instance of the
                 // different tab grids like normal/private/trashed/synced tabs.
-                TabSwitcherView tabSwitcherView =
+                mTabSwitcherView =
                         new TabSwitcherView(container, tabModelSelector);
                 for (int i = 0; i <= TabSwitcherView.PAGE.PRIVATE; i++) {
                     TabSwitcherView.CurrentTabViewInstance = i;
                     final int isIncognitoView = i;
                     titleProvider =
-                            (context, tab) -> tabSwitcherView.getTabTitle(tab, isIncognitoView != 0);
+                            (context, tab) -> mTabSwitcherView.getTabTitle(tab, isIncognitoView != 0);
                     TabListCoordinator tabListCoordinator =
                             new TabListCoordinator(mode, activity, mBrowserControlsStateProvider,
                                     tabModelSelector, mMultiThumbnailCardProvider, titleProvider,
@@ -288,14 +297,14 @@ public class TabSwitcherCoordinator
                     mContainerViewChangeProcessors.add(PropertyModelChangeProcessor.create(
                             containerViewModel, tabListCoordinator.getContainerView(),
                             TabListContainerViewBinder::bind));
-                    tabSwitcherView.addTabListCoordinatorView(tabListCoordinator.getContainerView());
-                    tabSwitcherView.setupSpanSizeLookup(
+                    mTabSwitcherView.addTabListCoordinatorView(tabListCoordinator.getContainerView());
+                    mTabSwitcherView.setupSpanSizeLookup(
                             tabListCoordinator.getContainerView().getLayoutManager(),
                             tabListCoordinator.getContainerView().getAdapter(),
                             TabProperties.UiType.MESSAGE);
                 }
-                tabSwitcherView.initialize();
-                mMediator.addTabSwitcherViewObserver(tabSwitcherView.getEmptyOverviewModeObserver());
+                mTabSwitcherView.initialize();
+                mMediator.addTabSwitcherViewObserver(mTabSwitcherView.getEmptyOverviewModeObserver());
                 mTabListCoordinator =
                         mTabGridCoordinators.get(TabSwitcherView.PAGE.NORMAL);
             } else {
@@ -352,20 +361,25 @@ public class TabSwitcherCoordinator
             mMenuOrKeyboardActionController = menuOrKeyboardActionController;
 
             if (mode == TabListCoordinator.TabListMode.GRID) {
+                // Note(david@vivaldi.com): Register the |UiType| for all |TabListCoordinator|s.
+                for (TabListCoordinator coordinator : mTabGridCoordinators) {
                 if (shouldRegisterMessageItemType()) {
-                    mTabListCoordinator.registerItemType(TabProperties.UiType.MESSAGE,
+                    coordinator.registerItemType(TabProperties.UiType.MESSAGE, // Vivaldi
                             new LayoutViewBuilder(R.layout.tab_grid_message_card_item),
                             MessageCardViewBinder::bind);
                 }
 
                 if (shouldRegisterLargeMessageItemType()) {
-                    mTabListCoordinator.registerItemType(TabProperties.UiType.LARGE_MESSAGE,
+                    coordinator.registerItemType(TabProperties.UiType.LARGE_MESSAGE, // Vivaldi
                             new LayoutViewBuilder(R.layout.large_message_card_item),
                             LargeMessageCardViewBinder::bind);
                 }
+                } // Vivaldi
 
-                if (PriceTrackingFeatures.isPriceTrackingEnabled()) {
-                    mPriceAnnotationsPrefObserver = key -> {
+                if (ProfileManager.isInitialized()
+                        && PriceTrackingFeatures.isPriceTrackingEnabled(
+                                Profile.getLastUsedRegularProfile())) {
+                    mPriceAnnotationsPrefListener = (sharedPrefs, key) -> {
                         if (PriceTrackingUtilities.TRACK_PRICES_ON_TABS.equals(key)
                                 && !mTabModelSelector.isIncognitoSelected()
                                 && mTabModelSelector.isTabStateInitialized()) {
@@ -374,8 +388,8 @@ public class TabSwitcherCoordinator
                                     false, isShowingTabsInMRUOrder(mMode));
                         }
                     };
-                    SharedPreferencesManager.getInstance().addObserver(
-                            mPriceAnnotationsPrefObserver);
+                    ContextUtils.getAppSharedPreferences().registerOnSharedPreferenceChangeListener(
+                            mPriceAnnotationsPrefListener);
                 }
             }
 
@@ -452,7 +466,12 @@ public class TabSwitcherCoordinator
     public void initWithNative() {
         if (mIsInitialized) return;
         try (TraceEvent e = TraceEvent.scoped("TabSwitcherCoordinator.initWithNative")) {
-            mTabListCoordinator.initWithNative(mDynamicResourceLoaderSupplier.get());
+            final boolean shouldUseDynamicResource = mMode == TabListCoordinator.TabListMode.GRID
+                    && !DeviceFormFactor.isNonMultiDisplayContextOnTablet(mActivity)
+                    && !(ChromeFeatureList.sGridTabSwitcherAndroidAnimations.isEnabled()
+                            && ReturnToChromeUtil.isStartSurfaceRefactorEnabled(mActivity));
+            mTabListCoordinator.initWithNative(
+                    shouldUseDynamicResource ? mDynamicResourceLoaderSupplier.get() : null);
 
             // Note(david@vivaldi.com): Init appropriate coordinators for different tab pages.
             for (int i = 0; i <= TabSwitcherView.PAGE.PRIVATE; i++)
@@ -486,7 +505,7 @@ public class TabSwitcherCoordinator
                     mIncognitoReauthPromoMessageService = new IncognitoReauthPromoMessageService(
                             MessageService.MessageType.INCOGNITO_REAUTH_PROMO_MESSAGE,
                             Profile.getLastUsedRegularProfile(), mActivity,
-                            SharedPreferencesManager.getInstance(), mIncognitoReauthManager,
+                            ChromeSharedPreferences.getInstance(), mIncognitoReauthManager,
                             mSnackbarManager,
                             ()
                                     -> TabUiFeatureUtilities.isTabToGtsAnimationEnabled(mActivity),
@@ -555,7 +574,7 @@ public class TabSwitcherCoordinator
     }
 
     private void setUpPriceTracking(Context context, ModalDialogManager modalDialogManager) {
-        if (PriceTrackingFeatures.isPriceTrackingEnabled()) {
+        if (PriceTrackingFeatures.isPriceTrackingEnabled(Profile.getLastUsedRegularProfile())) {
             PriceDropNotificationManager notificationManager =
                     PriceDropNotificationManagerFactory.create();
             if (mMode == TabListCoordinator.TabListMode.GRID) {
@@ -624,6 +643,11 @@ public class TabSwitcherCoordinator
     }
 
     @Override
+    public Rect getRecyclerViewLocation() {
+        return mTabListCoordinator.getRecyclerViewLocation();
+    }
+
+    @Override
     public int getListModeForTesting() {
         return mMode;
     }
@@ -675,15 +699,15 @@ public class TabSwitcherCoordinator
         return mTabListCoordinator.getThumbnailLocationOfCurrentTab();
     }
 
+    @Override
+    public @NonNull Size getThumbnailSize() {
+        return mTabListCoordinator.getThumbnailSize();
+    }
+
     // TabListDelegate implementation.
     @Override
     public int getResourceId() {
         return mTabListCoordinator.getResourceId();
-    }
-
-    @Override
-    public long getLastDirtyTime() {
-        return mTabListCoordinator.getLastDirtyTime();
     }
 
     @Override
@@ -739,7 +763,8 @@ public class TabSwitcherCoordinator
         }
         if (tabs != null && tabs.size() > 0) {
             if (mPriceMessageService != null
-                    && PriceTrackingUtilities.isPriceAlertsMessageCardEnabled()) {
+                    && PriceTrackingUtilities.isPriceAlertsMessageCardEnabled(
+                            Profile.getLastUsedRegularProfile())) {
                 mPriceMessageService.preparePriceMessage(PriceMessageType.PRICE_ALERTS, null);
             }
             appendMessagesTo(tabs.size());
@@ -795,7 +820,8 @@ public class TabSwitcherCoordinator
     @Override
     public void showPriceWelcomeMessage(PriceMessageService.PriceTabData priceTabData) {
         if (mPriceMessageService == null
-                || !PriceTrackingUtilities.isPriceWelcomeMessageCardEnabled()
+                || !PriceTrackingUtilities.isPriceWelcomeMessageCardEnabled(
+                        Profile.getLastUsedRegularProfile())
                 || mMessageCardProviderCoordinator.isMessageShown(
                         MessageService.MessageType.PRICE_MESSAGE, PriceMessageType.PRICE_WELCOME)) {
             return;
@@ -899,8 +925,12 @@ public class TabSwitcherCoordinator
     }
 
     private boolean shouldRegisterLargeMessageItemType() {
-        return PriceTrackingFeatures.isPriceTrackingEnabled()
-                || IncognitoReauthManager.isIncognitoReauthFeatureAvailable();
+        if (ProfileManager.isInitialized()
+                && PriceTrackingFeatures.isPriceTrackingEnabled(
+                        Profile.getLastUsedRegularProfile())) {
+            return true;
+        }
+        return IncognitoReauthManager.isIncognitoReauthFeatureAvailable();
     }
 
     @Override
@@ -914,6 +944,10 @@ public class TabSwitcherCoordinator
     }
 
     // ResetHandler implementation.
+    //
+    // Suppress to observe SharedPreferences, which is discouraged; use another messaging channel
+    // instead.
+    @SuppressWarnings("UseSharedPreferencesManagerFromChromeCheck")
     @Override
     public void onDestroy() {
         if (mTabSwitcherMenuActionHandler != null) {
@@ -923,6 +957,9 @@ public class TabSwitcherCoordinator
 
         if (ChromeApplicationImpl.isVivaldi()) {
             mTabListCoordinator.onDestroy();
+            mMediator.removeTabSwitcherViewObserver(
+                    mTabSwitcherView.getEmptyOverviewModeObserver());
+            mTabSwitcherView.onDestroy();
             for (int i = 0; i <= TabSwitcherView.PAGE.PRIVATE; i++) {
                 mTabGridCoordinators.get(i).onDestroy();
                 mContainerViewChangeProcessors.get(i).destroy();
@@ -947,8 +984,9 @@ public class TabSwitcherCoordinator
         if (mTabAttributeCache != null) {
             mTabAttributeCache.destroy();
         }
-        if (mPriceAnnotationsPrefObserver != null) {
-            SharedPreferencesManager.getInstance().removeObserver(mPriceAnnotationsPrefObserver);
+        if (mPriceAnnotationsPrefListener != null) {
+            ContextUtils.getAppSharedPreferences().unregisterOnSharedPreferenceChangeListener(
+                    mPriceAnnotationsPrefListener);
         }
     }
 

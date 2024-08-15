@@ -6,14 +6,14 @@
 
 #include <utility>
 
-#include "base/uuid.h"
 #include "base/no_destructor.h"
+#include "base/uuid.h"
+#include "components/notes/note_node.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/engine/commit_and_get_updates_types.h"
 #include "components/sync/protocol/entity_metadata.pb.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
-#include "notes/note_node.h"
-#include "notes/notes_model.h"
+#include "sync/notes/note_model_view.h"
 #include "sync/notes/note_specifics_conversions.h"
 #include "sync/notes/synced_note_tracker.h"
 #include "sync/notes/synced_note_tracker_entity.h"
@@ -89,29 +89,32 @@ class UniquePositionWrapper {
 }  // namespace
 
 NotesModelObserverImpl::NotesModelObserverImpl(
+    NoteModelView* note_model,
     const base::RepeatingClosure& nudge_for_commit_closure,
     base::OnceClosure on_notes_model_being_deleted_closure,
     SyncedNoteTracker* note_tracker)
-    : note_tracker_(note_tracker),
+    : note_model_(note_model),
+      note_tracker_(note_tracker),
       nudge_for_commit_closure_(nudge_for_commit_closure),
       on_notes_model_being_deleted_closure_(
           std::move(on_notes_model_being_deleted_closure)) {
+  CHECK(note_model_);
   DCHECK(note_tracker_);
 }
 
 NotesModelObserverImpl::~NotesModelObserverImpl() = default;
 
-void NotesModelObserverImpl::NotesModelLoaded(vivaldi::NotesModel* model,
+void NotesModelObserverImpl::NotesModelLoaded(vivaldi::NotesModel* /*unused*/,
                                               bool ids_reassigned) {
   // This class isn't responsible for any loading-related logic.
 }
 
 void NotesModelObserverImpl::NotesModelBeingDeleted(
-    vivaldi::NotesModel* model) {
+    vivaldi::NotesModel* /*unused*/) {
   std::move(on_notes_model_being_deleted_closure_).Run();
 }
 
-void NotesModelObserverImpl::NotesNodeMoved(vivaldi::NotesModel* model,
+void NotesModelObserverImpl::NotesNodeMoved(vivaldi::NotesModel* /*unused*/,
                                             const vivaldi::NoteNode* old_parent,
                                             size_t old_index,
                                             const vivaldi::NoteNode* new_parent,
@@ -119,7 +122,12 @@ void NotesModelObserverImpl::NotesNodeMoved(vivaldi::NotesModel* model,
   const vivaldi::NoteNode* node = new_parent->children()[new_index].get();
 
   // We shouldn't see changes to the top-level nodes.
-  DCHECK(!model->is_permanent_node(node));
+  DCHECK(!note_model_->is_permanent_node(node));
+
+  // Ignore changes to non-syncable nodes (e.g. managed nodes).
+  if (!note_model_->IsNodeSyncable(node)) {
+    return;
+  }
 
   const SyncedNoteTrackerEntity* entity =
       note_tracker_->GetEntityForNoteNode(node);
@@ -131,20 +139,25 @@ void NotesModelObserverImpl::NotesNodeMoved(vivaldi::NotesModel* model,
       ComputePosition(*new_parent, new_index, sync_id);
 
   sync_pb::EntitySpecifics specifics =
-      CreateSpecificsFromNoteNode(node, model, unique_position.ToProto());
+      CreateSpecificsFromNoteNode(node, note_model_, unique_position.ToProto());
 
   note_tracker_->Update(entity, entity->metadata().server_version(),
                         modification_time, specifics);
   // Mark the entity that it needs to be committed.
   note_tracker_->IncrementSequenceNumber(entity);
   nudge_for_commit_closure_.Run();
-  note_tracker_->CheckAllNodesTracked(model);
+  note_tracker_->CheckAllNodesTracked(note_model_);
 }
 
-void NotesModelObserverImpl::NotesNodeAdded(vivaldi::NotesModel* model,
+void NotesModelObserverImpl::NotesNodeAdded(vivaldi::NotesModel* /*unused*/,
                                             const vivaldi::NoteNode* parent,
                                             size_t index) {
   const vivaldi::NoteNode* node = parent->children()[index].get();
+
+  // Ignore changes to non-syncable nodes (e.g. managed nodes).
+  if (!note_model_->IsNodeSyncable(node)) {
+    return;
+  }
 
   const SyncedNoteTrackerEntity* parent_entity =
       note_tracker_->GetEntityForNoteNode(parent);
@@ -154,7 +167,7 @@ void NotesModelObserverImpl::NotesNodeAdded(vivaldi::NotesModel* model,
       ComputePosition(*parent, index, node->uuid().AsLowercaseString());
 
   sync_pb::EntitySpecifics specifics =
-      CreateSpecificsFromNoteNode(node, model, unique_position.ToProto());
+      CreateSpecificsFromNoteNode(node, note_model_, unique_position.ToProto());
 
   // It is possible that a created note was restored after deletion and
   // the tombstone was not committed yet. In that case the existing entity
@@ -185,45 +198,58 @@ void NotesModelObserverImpl::NotesNodeAdded(vivaldi::NotesModel* model,
   // children will be added soon.
 }
 
-void NotesModelObserverImpl::OnWillRemoveNotes(vivaldi::NotesModel* model,
+void NotesModelObserverImpl::OnWillRemoveNotes(vivaldi::NotesModel* /*unused*/,
                                                const vivaldi::NoteNode* parent,
                                                size_t old_index,
                                                const vivaldi::NoteNode* node) {
-  note_tracker_->CheckAllNodesTracked(model);
+  // Ignore changes to non-syncable nodes (e.g. managed nodes).
+  if (!note_model_->IsNodeSyncable(node)) {
+    return;
+  }
+  note_tracker_->CheckAllNodesTracked(note_model_);
   ProcessDelete(node);
   nudge_for_commit_closure_.Run();
 }
 
-void NotesModelObserverImpl::NotesNodeRemoved(vivaldi::NotesModel* model,
+void NotesModelObserverImpl::NotesNodeRemoved(vivaldi::NotesModel* /*unused*/,
                                               const vivaldi::NoteNode* parent,
                                               size_t old_index,
                                               const vivaldi::NoteNode* node) {
   // All the work should have already been done in OnWillRemoveNotes.
   DCHECK(note_tracker_->GetEntityForNoteNode(node) == nullptr);
-  note_tracker_->CheckAllNodesTracked(model);
+  note_tracker_->CheckAllNodesTracked(note_model_);
 }
 
-void NotesModelObserverImpl::OnWillRemoveAllNotes(vivaldi::NotesModel* model) {
-  note_tracker_->CheckAllNodesTracked(model);
-  const vivaldi::NoteNode* root_node = model->root_node();
+void NotesModelObserverImpl::OnWillRemoveAllNotes(
+    vivaldi::NotesModel* /*unused*/) {
+  note_tracker_->CheckAllNodesTracked(note_model_);
+  const vivaldi::NoteNode* root_node = note_model_->root_node();
   for (const auto& permanent_node : root_node->children()) {
     for (const auto& child : permanent_node->children()) {
-      ProcessDelete(child.get());
+      if (note_model_->IsNodeSyncable(child.get())) {
+        ProcessDelete(child.get());
+      }
     }
     nudge_for_commit_closure_.Run();
   }
 }
 
-void NotesModelObserverImpl::NotesAllNodesRemoved(vivaldi::NotesModel* model) {
+void NotesModelObserverImpl::NotesAllNodesRemoved(
+    vivaldi::NotesModel* /*unused*/) {
   // All the work should have already been done in
   // OnWillRemoveAllUserNotes.
-  note_tracker_->CheckAllNodesTracked(model);
+  note_tracker_->CheckAllNodesTracked(note_model_);
 }
 
-void NotesModelObserverImpl::NotesNodeChanged(vivaldi::NotesModel* model,
+void NotesModelObserverImpl::NotesNodeChanged(vivaldi::NotesModel* /*unused*/,
                                               const vivaldi::NoteNode* node) {
+  // Ignore changes to non-syncable nodes (e.g. managed nodes).
+  if (!note_model_->IsNodeSyncable(node)) {
+    return;
+  }
+
   // We shouldn't see changes to the top-level nodes.
-  DCHECK(!model->is_permanent_node(node));
+  DCHECK(!note_model_->is_permanent_node(node));
 
   const SyncedNoteTrackerEntity* entity =
       note_tracker_->GetEntityForNoteNode(node);
@@ -245,7 +271,7 @@ void NotesModelObserverImpl::NotesNodeChanged(vivaldi::NotesModel* model,
   }
 
   sync_pb::EntitySpecifics specifics = CreateSpecificsFromNoteNode(
-      node, model, entity->metadata().unique_position());
+      node, note_model_, entity->metadata().unique_position());
 
   // Data should be committed to the server only if there is an actual change,
   // determined here by comparing hashes.
@@ -261,8 +287,13 @@ void NotesModelObserverImpl::NotesNodeChanged(vivaldi::NotesModel* model,
 }
 
 void NotesModelObserverImpl::NotesNodeChildrenReordered(
-    vivaldi::NotesModel* model,
+    vivaldi::NotesModel* /*unused*/,
     const vivaldi::NoteNode* node) {
+  // Ignore changes to non-syncable nodes (e.g. managed nodes).
+  if (!note_model_->IsNodeSyncable(node)) {
+    return;
+  }
+
   if (node->children().size() <= 1) {
     // There is no real change in the order of |node|'s children.
     return;
@@ -336,7 +367,7 @@ void NotesModelObserverImpl::NotesNodeChildrenReordered(
         // |current_index| is always not 0 because |prev| cannot be
         // UniquePositionWrapper::Min() if |next| < |prev|.
         DCHECK_GT(current_index, 0u);
-        UpdateAllUniquePositionsStartingAt(node, model, current_index);
+        UpdateAllUniquePositionsStartingAt(node, current_index);
         break;
       }
       update_current_position = true;
@@ -348,7 +379,7 @@ void NotesModelObserverImpl::NotesNodeChildrenReordered(
     if (update_current_position) {
       cur = UniquePositionWrapper::ForValidUniquePosition(
           UpdateUniquePositionForNode(node->children()[current_index].get(),
-                                      model, prev.GetUniquePosition(),
+                                      prev.GetUniquePosition(),
                                       next.GetUniquePosition()));
     }
 
@@ -455,12 +486,10 @@ syncer::UniquePosition NotesModelObserverImpl::GetUniquePositionForNode(
 
 syncer::UniquePosition NotesModelObserverImpl::UpdateUniquePositionForNode(
     const vivaldi::NoteNode* node,
-    vivaldi::NotesModel* notes_model,
     const syncer::UniquePosition& prev,
     const syncer::UniquePosition& next) {
   DCHECK(note_tracker_);
   DCHECK(node);
-  DCHECK(notes_model);
 
   const SyncedNoteTrackerEntity* entity =
       note_tracker_->GetEntityForNoteNode(node);
@@ -480,7 +509,7 @@ syncer::UniquePosition NotesModelObserverImpl::UpdateUniquePositionForNode(
   }
 
   sync_pb::EntitySpecifics specifics = CreateSpecificsFromNoteNode(
-      node, notes_model, new_unique_position.ToProto());
+      node, note_model_, new_unique_position.ToProto());
   note_tracker_->Update(entity, entity->metadata().server_version(),
                         modification_time, specifics);
 
@@ -491,7 +520,6 @@ syncer::UniquePosition NotesModelObserverImpl::UpdateUniquePositionForNode(
 
 void NotesModelObserverImpl::UpdateAllUniquePositionsStartingAt(
     const vivaldi::NoteNode* parent,
-    vivaldi::NotesModel* notes_model,
     size_t start_index) {
   DCHECK_GT(start_index, 0u);
   DCHECK_LT(start_index, parent->children().size());
@@ -502,7 +530,7 @@ void NotesModelObserverImpl::UpdateAllUniquePositionsStartingAt(
        current_index < parent->children().size(); ++current_index) {
     // Right position is unknown because it will also be updated.
     prev = UpdateUniquePositionForNode(parent->children()[current_index].get(),
-                                       notes_model, prev,
+                                       prev,
                                        /*next=*/syncer::UniquePosition());
   }
 }

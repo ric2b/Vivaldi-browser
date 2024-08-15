@@ -77,6 +77,11 @@ update_target("//chrome/browser/ui:ui") {
       "//vivaldi/ui/vivaldi_browser_window_win.cc",
     ]
   }
+
+  configs += [
+    "//vivaldi/gn/config:release_kind",
+    "//vivaldi/proxy:relayproxy_config",
+  ]
 }
 
 update_target("//ui/base:base") {

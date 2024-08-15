@@ -12,6 +12,8 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
+#include "chrome/browser/browser_process.h"
+#include "chromium/base/run_loop.h"
 #include "base/memory/singleton.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
@@ -45,6 +47,12 @@
 #include "prefs/vivaldi_gen_prefs.h"
 #include "sync/file_sync/file_store.h"
 #include "sync/file_sync/file_store_factory.h"
+
+#if !BUILDFLAG(IS_ANDROID)
+#include "browser/sessions/vivaldi_session_utils.h"
+#endif
+
+using namespace vivaldi_image_store;
 
 namespace {
 
@@ -116,10 +124,6 @@ constexpr int kBookmarkThumbnailHeight = 360;
 // Size of offscreen window for bookmark thumbnail capture.
 constexpr int kOffscreenWindowWidth = 1024;
 constexpr int kOffscreenWindowHeight = 838;
-
-// Delay to check for no longer used data url after initialization when the
-// browser is likely idle.
-constexpr base::TimeDelta kDataUrlGCStartupDelay = base::Seconds(60);
 
 class BookmarkSanitizer {
   public:
@@ -195,6 +199,61 @@ class VivaldiImageStoreFactory : public BrowserContextKeyedServiceFactory {
 };
 
 }  // namespace
+
+BatchItem::BatchItem() = default;
+BatchItem::BatchItem(BatchItem &&) = default;
+BatchItem::~BatchItem() = default;
+BatchItem::BatchItem(std::string url) :
+  state(BatchItemState::kPending), url(url) {}
+
+GCGuard::~GCGuard() {
+  api_->gc_in_progress_.clear();
+  api_->images_stored_since_last_gc_ = 0;
+}
+
+GCGuard::GCGuard(scoped_refptr<VivaldiImageStore> api) : api_(api) {}
+
+void VivaldiImageStore::BatchRead(const std::vector<std::string> &ids,
+    StoreImageBatchReadCallback callback) {
+  std::unique_ptr<Batch> batch = std::make_unique<Batch>();
+  batch->reserve(ids.size());
+
+  for (auto &id: ids) {
+    batch->emplace_back(id);
+  }
+
+  DCHECK(ids.size() == batch->size());
+  sequence_task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce([](scoped_refptr<VivaldiImageStore> api,
+          std::unique_ptr<Batch> batch)
+        -> std::unique_ptr<Batch> {
+        api->ReadBatchOnFileThread(*batch);
+        return batch;
+      }, scoped_refptr<VivaldiImageStore>(this), std::move(batch)),
+      base::BindOnce([](StoreImageBatchReadCallback callback,
+          std::unique_ptr<Batch> batch)
+      {
+        std::move(callback).Run(std::move(*batch));
+      }, std::move(callback)));
+}
+
+void VivaldiImageStore::BatchRead(content::BrowserContext* browser_context,
+    const std::vector<std::string> &ids,
+    StoreImageBatchReadCallback callback)
+{
+  VivaldiImageStore* api = FromBrowserContext(browser_context);
+  DCHECK(api);
+  api->BatchRead(ids, std::move(callback));
+}
+
+/* static */
+std::unique_ptr<GCGuard> GCGuard::Create(VivaldiImageStore *api) {
+  if (api->gc_in_progress_.test_and_set()) {
+    return std::unique_ptr<GCGuard>();
+  }
+  return std::unique_ptr<GCGuard>(new GCGuard(api));
+}
 
 std::vector<base::FilePath::StringType>
 VivaldiImageStore::GetAllowedImageExtensions() {
@@ -298,13 +357,6 @@ void VivaldiImageStore::Start() {
   sequence_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&VivaldiImageStore::LoadMappingsOnFileThread, this));
-
-  // Inline ScheduleRemovalOfUnusedUrlData here as it uses FromBrowserContext()
-  // but that can not be used when the factory initializes the instance.
-  content::GetUIThreadTaskRunner()->PostDelayedTask(
-      FROM_HERE,
-      base::BindOnce(&VivaldiImageStore::FindUsedUrlsOnUIThread, this),
-      kDataUrlGCStartupDelay);
 }
 
 void VivaldiImageStore::LoadMappingsOnFileThread() {
@@ -444,16 +496,23 @@ base::FilePath VivaldiImageStore::GetImagePath(base::StringPiece image_id) {
 // static
 void VivaldiImageStore::ScheduleRemovalOfUnusedUrlData(
     content::BrowserContext* browser_context,
-    base::TimeDelta when) {
+    int leeway) {
   VivaldiImageStore* api = FromBrowserContext(browser_context);
   DCHECK(api);
   if (!api) {
     return;
   }
 
-  content::GetUIThreadTaskRunner()->PostDelayedTask(
+  if (api->images_stored_since_last_gc_ < leeway) {
+    LOG(INFO) << "Images stored since the last GC: "
+              << api->images_stored_since_last_gc_ << ", leeway=" << leeway
+              << "; skip GC";
+    return;
+  }
+
+  content::GetUIThreadTaskRunner()->PostTask(
       FROM_HERE,
-      base::BindOnce(&VivaldiImageStore::FindUsedUrlsOnUIThread, api), when);
+      base::BindOnce(&VivaldiImageStore::FindUsedUrlsOnUIThread, api));
 }
 
 void VivaldiImageStore::ScheduleThumbnalSanitizer() {
@@ -471,7 +530,8 @@ void VivaldiImageStore::SanitizeUrlsOnUIThreadWithLoadedBookmarks(
   ui::TreeNodeIterator<const bookmarks::BookmarkNode> iterator(
       bookmark_model->root_node());
 
-  std::unique_ptr<BookmarkSanitizer> sanitizer = std::make_unique<BookmarkSanitizer>();
+  std::unique_ptr<BookmarkSanitizer> sanitizer =
+    std::make_unique<BookmarkSanitizer>();
 
   bool need_satitize = false;
   while (iterator.has_next()) {
@@ -524,17 +584,64 @@ void VivaldiImageStore::SanitizeUrlsOnUIThreadWithLoadedBookmarks(
 
 void VivaldiImageStore::FindUsedUrlsOnUIThread() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  vivaldi_bookmark_kit::RunAfterModelLoad(
-      GetBookmarkModel(),
-      base::BindOnce(
-          &VivaldiImageStore::FindUsedUrlsOnUIThreadWithLoadedBookmarks, this));
+
+  // This is a thread ping-pong to avoid of a nasty race condition.
+  // 1 - read the file path and collect the existing
+  //     images on the file thread
+  // 2 - find which of them are in use on the UI thread
+  // 3 - delete unused on file thread
+
+  // ensure everything runs at most once
+  std::unique_ptr<GCGuard> guard = GCGuard::Create(this);
+  if (!guard) {
+    return;
+  }
+
+  auto collect_files_on_file_thread = base::BindOnce(
+      [](scoped_refptr<VivaldiImageStore> api) -> std::vector<base::FilePath> {
+        base::FileEnumerator files(api->user_data_dir_.Append(kImageDirectory),
+                                   false, base::FileEnumerator::FILES);
+        std::vector<base::FilePath> paths;
+        for (base::FilePath path = files.Next(); !path.empty();
+             path = files.Next()) {
+          paths.push_back(path);
+        }
+        return paths;
+      },
+      scoped_refptr<VivaldiImageStore>(this));
+
+  auto find_used_files_on_ui_thread = base::BindOnce(
+      [](scoped_refptr<VivaldiImageStore> api, std::unique_ptr<GCGuard> guard,
+         std::vector<base::FilePath> paths) {
+        vivaldi_bookmark_kit::RunAfterModelLoad(
+            api->GetBookmarkModel(),
+            base::BindOnce(
+                &VivaldiImageStore::FindUsedUrlsOnUIThreadWithLoadedBookmarks,
+                api, std::move(paths), std::move(guard)));
+      },
+      scoped_refptr<VivaldiImageStore>(this), std::move(guard));
+
+  sequence_task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE, std::move(collect_files_on_file_thread),
+      std::move(find_used_files_on_ui_thread));
 }
 
 void VivaldiImageStore::FindUsedUrlsOnUIThreadWithLoadedBookmarks(
+    std::vector<base::FilePath> paths,
+    std::unique_ptr<GCGuard> guard,
     bookmarks::BookmarkModel* bookmark_model) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!profile_ || !bookmark_model)
     return;
+
+  if (g_browser_process->IsShuttingDown()) {
+    LOG(INFO) << "VivaldiImageStore GC skip due to exiting.";
+    return;
+  }
+
+  DCHECK(guard);
+
+  LOG(INFO) << "VivaldiImageStore GC started";
 
   UrlKind url_kind;
   std::string id;
@@ -562,6 +669,22 @@ void VivaldiImageStore::FindUsedUrlsOnUIThreadWithLoadedBookmarks(
       }
     }
   }
+
+#if !BUILDFLAG(IS_ANDROID)
+  // Find the tab thumbnails.
+  {
+    // The scope saves some memory.
+    auto tab_thumbnails = sessions::CollectAllThumbnailUrls(profile_);
+    for (const std::string& thumbnail_url : tab_thumbnails) {
+      if (!ParseDataUrl(thumbnail_url, url_kind, id)) {
+        continue;
+      }
+      if (url_kind == VivaldiImageStore::kImageUrl) {
+        used_ids[url_kind].push_back(std::move(id));
+      }
+    }
+  }
+#endif
 
   auto check_url = [](UsedIds* used_ids, base::StringPiece url) {
     UrlKind url_kind;
@@ -591,12 +714,15 @@ void VivaldiImageStore::FindUsedUrlsOnUIThreadWithLoadedBookmarks(
   sequence_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&VivaldiImageStore::RemoveUnusedUrlDataOnFileThread, this,
-                     std::move(used_ids)));
+                     std::move(used_ids), std::move(guard), std::move(paths)));
 }
 
-void VivaldiImageStore::RemoveUnusedUrlDataOnFileThread(UsedIds used_ids) {
+void VivaldiImageStore::RemoveUnusedUrlDataOnFileThread(UsedIds used_ids,
+    std::unique_ptr<GCGuard> guard,
+    std::vector<base::FilePath> paths) {
   static_assert(kUrlKindCount == 2, "The code supports 2 url kinds");
   DCHECK(sequence_task_runner_->RunsTasksInCurrentSequence());
+  DCHECK(guard);
 
   // Add newly allocated ids that have not been stored in bookmarks or
   // preferences yet.
@@ -628,10 +754,8 @@ void VivaldiImageStore::RemoveUnusedUrlDataOnFileThread(UsedIds used_ids) {
   }
 
   base::flat_set<std::string> used_image_set(std::move(used_ids[kImageUrl]));
-  base::FileEnumerator files(user_data_dir_.Append(kImageDirectory), false,
-                             base::FileEnumerator::FILES);
   size_t removed_images = 0;
-  for (base::FilePath path = files.Next(); !path.empty(); path = files.Next()) {
+  for (auto &path: paths) {
     base::FilePath base_name = path.BaseName();
     std::string id = base_name.AsUTF8Unsafe();
     if (!used_image_set.contains(id)) {
@@ -670,7 +794,7 @@ void VivaldiImageStore::FinishCustomBookmarkThumbnailMigrationOnUIThread(
     std::vector<uint8_t> content) {
   auto* bookmarks_model = GetBookmarkModel();
   const bookmarks::BookmarkNode* bookmark =
-      bookmarks::GetBookmarkNodeByUuid(bookmarks_model, bookmark_uuid);
+      bookmarks_model->GetNodeByUuid(bookmark_uuid);
 
   if (!bookmark)
     return;
@@ -820,8 +944,44 @@ void VivaldiImageStore::GetDataForId(
       std::move(callback));
 }
 
+void VivaldiImageStore::ReadBatchOnFileThread(Batch &batch) {
+  for (auto &item: batch) {
+    item.state = BatchItemState::kError;
+    std::string id;
+    UrlKind url_kind;
+
+    if (!ParseDataUrl(item.url, url_kind, id)) {
+      continue;
+    }
+
+    auto image_format = FindFormatForPath(base::FilePath::FromASCII(id));
+    if (!image_format) {
+      continue;
+    }
+
+    item.format = *image_format;
+    if (GetDataForIdToVectorOnFileThread(url_kind, id, item.data)) {
+      item.state = BatchItemState::kOk;
+    }
+  }
+}
+
 scoped_refptr<base::RefCountedMemory>
 VivaldiImageStore::GetDataForIdOnFileThread(UrlKind url_kind, std::string id) {
+  DCHECK(sequence_task_runner_->RunsTasksInCurrentSequence());
+
+  std::vector<unsigned char> buffer;
+  if (!GetDataForIdToVectorOnFileThread(url_kind, id, buffer)) {
+    return nullptr;
+  }
+
+  return base::RefCountedBytes::TakeVector(&buffer);
+}
+
+bool
+VivaldiImageStore::GetDataForIdToVectorOnFileThread(UrlKind url_kind,
+    std::string id,
+    std::vector<unsigned char> &data) {
   DCHECK(sequence_task_runner_->RunsTasksInCurrentSequence());
 
   base::FilePath file_path;
@@ -841,12 +1001,12 @@ VivaldiImageStore::GetDataForIdOnFileThread(UrlKind url_kind, std::string id) {
     }
   }
 
-  scoped_refptr<base::RefCountedMemory> data;
-  if (!file_path.empty()) {
-    data = vivaldi_data_url_utils::ReadFileOnBlockingThread(file_path);
+  if (file_path.empty()) {
+    return false;
   }
 
-  return data;
+  return vivaldi_data_url_utils::ReadFileToVectorOnBlockingThread(file_path,
+      data);
 }
 
 // static
@@ -946,6 +1106,9 @@ std::string VivaldiImageStore::StoreImageDataOnFileThread(
     LOG(ERROR) << "Error writing to file: " << path.value();
     return std::string();
   }
+
+  // Increment the number of the new images since the last GC run.
+  images_stored_since_last_gc_++;
   return data_url;
 }
 

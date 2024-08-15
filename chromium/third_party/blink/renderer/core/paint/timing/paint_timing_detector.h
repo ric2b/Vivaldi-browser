@@ -36,6 +36,7 @@ class PropertyTreeStateOrAlias;
 class MediaTiming;
 class StyleFetchedImage;
 class TextPaintTimingDetector;
+class TextRecord;
 
 // |PaintTimingCallbackManager| is an interface between
 // |ImagePaintTimingDetector|/|TextPaintTimingDetector| and |ChromeClient|.
@@ -220,6 +221,7 @@ class CORE_EXPORT PaintTimingDetector
     return *image_paint_timing_detector_;
   }
   void RestartRecordingLCP();
+  void SoftNavigationDetected(LocalDOMWindow*);
 
   void RestartRecordingLCPToUkm();
 
@@ -227,12 +229,12 @@ class CORE_EXPORT PaintTimingDetector
 
   const PaintTimingDetector::LargestContentfulPaintDetails&
   LargestContentfulPaintDetailsForMetrics() const {
-    return lcp_details_for_ukm_;
+    return lcp_details_for_metrics_;
   }
 
   const PaintTimingDetector::LargestContentfulPaintDetails&
   SoftNavigationLargestContentfulPaintDetailsForMetrics() const {
-    return soft_navigation_lcp_details_for_ukm_;
+    return soft_navigation_lcp_details_for_metrics_;
   }
 
   base::TimeTicks FirstInputOrScrollNotifiedTimestamp() const {
@@ -254,9 +256,11 @@ class CORE_EXPORT PaintTimingDetector
 
   // Method called to stop recording the Largest Contentful Paint.
   void OnInputOrScroll();
-  bool HasLargestImagePaintChanged(base::TimeTicks, uint64_t size) const;
-  bool HasLargestTextPaintChanged(base::TimeTicks, uint64_t size) const;
-  void UpdateLargestContentfulPaintTime();
+  bool HasLargestImagePaintChangedForMetrics(base::TimeTicks,
+                                             uint64_t size) const;
+  bool HasLargestTextPaintChangedForMetrics(base::TimeTicks,
+                                            uint64_t size) const;
+  void UpdateLargestContentfulPaintTimeForMetrics();
   Member<LocalFrameView> frame_view_;
   // This member lives forever because it is also used for Text Element
   // Timing.
@@ -278,14 +282,28 @@ class CORE_EXPORT PaintTimingDetector
 
   absl::optional<PaintTimingVisualizer> visualizer_;
 
-  LargestContentfulPaintDetails lcp_details_;
-  LargestContentfulPaintDetails lcp_details_for_ukm_;
-  LargestContentfulPaintDetails soft_navigation_lcp_details_for_ukm_;
-  bool record_lcp_to_ukm_ = true;
-  // This flag indicates if LCP recording is restarted for performance timeline.
+  // The |latest_lcp_details_| struct is just for internal accounting purposes
+  // and is not reported anywhere (neither to metrics, nor to the web exposed
+  // API).
+  LargestContentfulPaintDetails latest_lcp_details_;
+  // The LCP details reported to metrics (UKM).
+  LargestContentfulPaintDetails lcp_details_for_metrics_;
+  // The soft navigation LCP details reported to metrics (UKM).
+  LargestContentfulPaintDetails soft_navigation_lcp_details_for_metrics_;
+  // Ensures LCP stops being reported as a hard navigation metric once we start
+  // reporting soft navigation ones.
+  bool record_lcp_to_metrics_ = true;
+  // LCP was restarted, due to a potential soft navigation.
   bool lcp_was_restarted_ = false;
+  // The soft navigation was detected, so the LCP entries can be updated.
+  bool soft_navigation_was_detected_ = false;
+  // Records of entries discovered after LCP was restarted but before a soft
+  // navigation was detected.
+  Member<TextRecord> potential_soft_navigation_text_record_;
+  Member<ImageRecord> potential_soft_navigation_image_record_;
+
   // This flag indicates if LCP is being reported to UKM.
-  bool record_soft_navigation_lcp_for_ukm_ = false;
+  bool record_soft_navigation_lcp_for_metrics_ = false;
 };
 
 // Largest Text Paint and Text Element Timing aggregate text nodes by these

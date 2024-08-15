@@ -14,6 +14,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "components/sync/base/features.h"
+#include "components/sync/base/time.h"
 #include "components/sync/protocol/session_specifics.pb.h"
 #include "components/sync/protocol/sync_enums.pb.h"
 #include "components/sync_sessions/sync_sessions_client.h"
@@ -423,7 +424,14 @@ sync_pb::SessionTab LocalSessionEventHandlerImpl::GetTabSpecificsFromDelegate(
   specifics.set_pinned(
       window_delegate ? window_delegate->IsTabPinned(&tab_delegate) : false);
   specifics.set_extension_app_id(tab_delegate.GetExtensionAppId());
+  if (base::FeatureList::IsEnabled(syncer::kSyncSessionOnVisibilityChanged)) {
+    specifics.set_last_active_time_unix_epoch_millis(
+        (tab_delegate.GetLastActiveTime() - base::Time::UnixEpoch())
+            .InMilliseconds());
+  }
+
   specifics.set_viv_ext_data(tab_delegate.GetVivExtData());
+
   const int current_index = tab_delegate.GetCurrentEntryIndex();
   const int min_index = std::max(0, current_index - kMaxSyncNavigationCount);
   const int max_index = std::min(current_index + kMaxSyncNavigationCount,
@@ -465,13 +473,14 @@ sync_pb::SessionTab LocalSessionEventHandlerImpl::GetTabSpecificsFromDelegate(
   if (has_child_account) {
     const std::vector<std::unique_ptr<const SerializedNavigationEntry>>*
         blocked_navigations = tab_delegate.GetBlockedNavigations();
-    DCHECK(blocked_navigations);
-    for (const auto& entry_unique_ptr : *blocked_navigations) {
-      sync_pb::TabNavigation* navigation = specifics.add_navigation();
-      SessionNavigationToSyncData(*entry_unique_ptr).Swap(navigation);
-      navigation->set_blocked_state(
-          sync_pb::TabNavigation_BlockedState_STATE_BLOCKED);
-      // TODO(bauerb): Add categories
+
+    if (blocked_navigations) {
+      for (const auto& entry_unique_ptr : *blocked_navigations) {
+        sync_pb::TabNavigation* navigation = specifics.add_navigation();
+        SessionNavigationToSyncData(*entry_unique_ptr).Swap(navigation);
+        navigation->set_blocked_state(
+            sync_pb::TabNavigation_BlockedState_STATE_BLOCKED);
+      }
     }
   }
 

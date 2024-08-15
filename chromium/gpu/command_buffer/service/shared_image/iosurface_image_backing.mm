@@ -597,7 +597,8 @@ wgpu::Texture DawnIOSurfaceRepresentation::BeginAccess(
   wgpu::DawnTextureInternalUsageDescriptor internalDesc;
   internalDesc.internalUsage =
       wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::TextureBinding;
-  if (wgpu_format_ != wgpu::TextureFormat::R8BG8Biplanar420Unorm) {
+  if (wgpu_format_ != wgpu::TextureFormat::R8BG8Biplanar420Unorm &&
+      wgpu_format_ != wgpu::TextureFormat::R10X6BG10X6Biplanar420Unorm) {
     internalDesc.internalUsage |= wgpu::TextureUsage::RenderAttachment;
   }
 
@@ -736,6 +737,7 @@ IOSurfaceImageBacking::IOSurfaceImageBacking(
       io_surface_size_(IOSurfaceGetWidth(io_surface_),
                        IOSurfaceGetHeight(io_surface_)),
       io_surface_format_(IOSurfaceGetPixelFormat(io_surface_)),
+      io_surface_num_planes_(IOSurfaceGetPlaneCount(io_surface_)),
       io_surface_id_(io_surface_id),
       gl_target_(gl_target),
       framebuffer_attachment_angle_(framebuffer_attachment_angle),
@@ -882,13 +884,15 @@ IOSurfaceImageBacking::RetainGLTexture() {
                                 &gl_texture, nullptr);
     // Set the IOSurface to be initially unbound from the GL texture.
     gl_texture->SetEstimatedSize(GetEstimatedSize());
-    gl_texture->set_bind_pending();
     gl_textures.push_back(std::move(gl_texture));
   }
 
-  return new IOSurfaceBackingEGLState(this, egl_display, context,
-                                      gl::GLSurface::GetCurrent(), gl_target_,
-                                      std::move(gl_textures));
+  scoped_refptr<IOSurfaceBackingEGLState> egl_state =
+      new IOSurfaceBackingEGLState(this, egl_display, context,
+                                   gl::GLSurface::GetCurrent(), gl_target_,
+                                   std::move(gl_textures));
+  egl_state->set_bind_pending();
+  return egl_state;
 }
 
 void IOSurfaceImageBacking::ReleaseGLTexture(
@@ -1029,10 +1033,13 @@ std::unique_ptr<DawnImageRepresentation> IOSurfaceImageBacking::ProduceDawn(
   if (io_surface_format_ == 'BGRA') {
     wgpu_format = wgpu::TextureFormat::BGRA8Unorm;
   }
-  // TODO(crbug.com/1293514): Remove this if condition after using single
+  // TODO(crbug.com/1293514): Remove these if conditions after using single
   // multiplanar mailbox for which wgpu_format should already be correct.
   if (io_surface_format_ == '420v') {
     wgpu_format = wgpu::TextureFormat::R8BG8Biplanar420Unorm;
+  }
+  if (io_surface_format_ == 'x420') {
+    wgpu_format = wgpu::TextureFormat::R10X6BG10X6Biplanar420Unorm;
   }
   if (wgpu_format == wgpu::TextureFormat::Undefined) {
     LOG(ERROR) << "Unsupported format for Dawn: " << format().ToString();
@@ -1110,8 +1117,7 @@ IOSurfaceImageBacking::ProduceSkiaGraphite(
       LOG(ERROR) << "Could not create Dawn Representation";
       return nullptr;
     }
-    const bool is_yuv_plane =
-        format().is_single_plane() && (io_surface_format_ == '420v');
+    const bool is_yuv_plane = io_surface_num_planes_ > 1;
     // Use GPU main recorder since this should only be called for
     // fulfilling Graphite promise images on GPU main thread.
     return SkiaGraphiteDawnImageRepresentation::Create(
@@ -1180,9 +1186,7 @@ void IOSurfaceImageBacking::Update(std::unique_ptr<gfx::GpuFence> in_fence) {
     egl_fence->ServerWait();
   }
   for (auto iter : egl_state_map_) {
-    for (const auto& texture : iter.second->gl_textures_) {
-      texture->set_bind_pending();
-    }
+    iter.second->set_bind_pending();
   }
 }
 
@@ -1258,10 +1262,7 @@ bool IOSurfaceImageBacking::IOSurfaceBackingEGLStateBeginAccess(
 
   // If the GL texture is already bound (the bind is not marked as pending),
   // then early-out.
-  bool is_bind_pending = base::ranges::any_of(
-      egl_state->gl_textures_,
-      [](const auto& texture) { return texture->is_bind_pending(); });
-  if (!is_bind_pending) {
+  if (!egl_state->is_bind_pending()) {
     return true;
   }
 
@@ -1294,6 +1295,15 @@ bool IOSurfaceImageBacking::IOSurfaceBackingEGLStateBeginAccess(
       if (format().is_single_plane()) {
         plane = io_surface_plane_;
         buffer_format = ToBufferFormat(format());
+        // See comments in IOSurfaceImageBackingFactory::CreateSharedImage about
+        // RGBA versus BGRA when using Skia Ganesh GL backend or ANGLE.
+        if (io_surface_format_ == 'BGRA') {
+          if (buffer_format == gfx::BufferFormat::RGBA_8888) {
+            buffer_format = gfx::BufferFormat::BGRA_8888;
+          } else if (buffer_format == gfx::BufferFormat::RGBX_8888) {
+            buffer_format = gfx::BufferFormat::BGRX_8888;
+          }
+        }
       } else {
         // For multiplanar formats (without external sampler) get planar buffer
         // format.
@@ -1337,9 +1347,8 @@ bool IOSurfaceImageBacking::IOSurfaceBackingEGLStateBeginAccess(
       LOG(ERROR) << "Failed to bind ScopedEGLSurfaceIOSurface to target";
       return false;
     }
-
-    egl_state->gl_textures_[plane_index]->clear_bind_pending();
   }
+  egl_state->clear_bind_pending();
 
   return true;
 }
@@ -1411,10 +1420,10 @@ void IOSurfaceImageBacking::IOSurfaceBackingEGLStateEndAccess(
     DCHECK(egl_state->egl_surfaces_.empty() ||
            static_cast<int>(egl_state->egl_surfaces_.size()) ==
                format().NumberOfPlanes());
-    for (int plane_index = 0; plane_index < format().NumberOfPlanes();
-         plane_index++) {
-      if (!egl_state->gl_textures_[plane_index]->is_bind_pending()) {
-        if (!egl_state->egl_surfaces_.empty()) {
+    if (!egl_state->is_bind_pending()) {
+      if (!egl_state->egl_surfaces_.empty()) {
+        for (int plane_index = 0; plane_index < format().NumberOfPlanes();
+             plane_index++) {
           // NOTE: We pass `restore_prev_even_if_invalid=true` to maintain
           // behavior from when this class was using a
           // duplicate-but-not-identical utility.
@@ -1426,8 +1435,8 @@ void IOSurfaceImageBacking::IOSurfaceBackingEGLStateEndAccess(
               egl_state->GetGLServiceId(plane_index));
           egl_state->egl_surfaces_[plane_index]->ReleaseTexImage();
         }
-        egl_state->gl_textures_[plane_index]->set_bind_pending();
       }
+      egl_state->set_bind_pending();
     }
   }
 }

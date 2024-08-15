@@ -73,6 +73,7 @@ void EventRow::Swap(EventRow* other) {
   std::swap(completed, other->completed);
   std::swap(sync_pending, other->sync_pending);
   std::swap(delete_pending, other->delete_pending);
+  std::swap(end_recurring, other->end_recurring);
   std::swap(updateFields, other->updateFields);
 }
 
@@ -115,6 +116,7 @@ EventRow::EventRow(const EventRow&& other) noexcept
       percentage_complete(other.percentage_complete),
       sync_pending(other.sync_pending),
       delete_pending(other.delete_pending),
+      end_recurring(other.end_recurring),
       updateFields(other.updateFields) {}
 
 EventResult::EventResult() {}

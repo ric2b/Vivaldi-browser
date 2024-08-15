@@ -29,13 +29,14 @@
 #include "chrome/browser/ash/printing/history/print_job_info.pb.h"
 #include "chrome/browser/ash/printing/history/print_job_info_proto_conversions.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/printing/cups_wrapper.h"
 #include "chrome/browser/printing/print_job.h"
 #include "chrome/browser/printing/print_job_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/scalable_iph/scalable_iph_factory.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/ash/components/scalable_iph/scalable_iph.h"
 #include "chromeos/printing/printing_constants.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -91,8 +92,14 @@ JobResultForHistogram ResultForHistogram(CupsPrintJob::State state) {
   return UNKNOWN;
 }
 
-void RecordJobResult(JobResultForHistogram result) {
+void RecordJobResult(JobResultForHistogram result,
+                     bool affected_by_ipp_usb_migration) {
   UMA_HISTOGRAM_ENUMERATION("Printing.CUPS.JobResult", result, RESULT_MAX);
+  if (affected_by_ipp_usb_migration) {
+    base::UmaHistogramEnumeration(
+        "Printing.CUPS.JobResultForUsbPrintersWithIppAndPpd", result,
+        RESULT_MAX);
+  }
 }
 
 }  // namespace
@@ -199,6 +206,14 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager {
       return false;
     }
 
+    // Record print job with scalable IPH framework.
+    scalable_iph::ScalableIph* scalable_iph =
+        ScalableIphFactory::GetForBrowserContext(profile);
+    if (scalable_iph) {
+      scalable_iph->RecordEvent(
+          scalable_iph::ScalableIph::Event::kPrintJobCreated);
+    }
+
     // Create a new print job.
     auto cpj = std::make_unique<CupsPrintJob>(*printer, job_id, title,
                                               total_page_number, source,
@@ -301,25 +316,28 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager {
           NotifyJobStateUpdate(print_job->GetWeakPtr());
         }
 
+        const bool affected_by_ipp_usb_migration =
+            print_job->printer().AffectedByIppUsbMigration();
         if (print_job->error_code() ==
             chromeos::PrinterErrorCode::CLIENT_UNAUTHORIZED) {
           // Job needs to be forcibly cancelled, CUPS will keep the job in held
           // and the job cannot be resumed in chromeos.
           FinishPrintJob(print_job);
-          RecordJobResult(CLIENT_UNAUTHORIZED);
+          RecordJobResult(CLIENT_UNAUTHORIZED, affected_by_ipp_usb_migration);
         } else if (print_job->IsExpired()) {
           // Job needs to be forcibly cancelled.
-          RecordJobResult(TIMEOUT_CANCEL);
+          RecordJobResult(TIMEOUT_CANCEL, affected_by_ipp_usb_migration);
           FinishPrintJob(print_job);
           // Beware, print_job was removed from jobs_ and
           // deleted.
         } else if (print_job->PipelineDead()) {
-          RecordJobResult(FILTER_FAILED);
+          RecordJobResult(FILTER_FAILED, affected_by_ipp_usb_migration);
           FinishPrintJob(print_job);
         } else if (print_job->IsJobFinished()) {
           // Cleanup completed jobs.
           VLOG(1) << "Removing Job " << print_job->document_title();
-          RecordJobResult(ResultForHistogram(print_job->state()));
+          RecordJobResult(ResultForHistogram(print_job->state()),
+                          affected_by_ipp_usb_migration);
           jobs_.erase(entry);
           printer_metrics_cache_.erase(key);
         } else {
@@ -346,8 +364,8 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager {
 
     for (const auto& entry : jobs_) {
       // Declare all lost jobs errors.
-      RecordJobResult(LOST);
       CupsPrintJob* job = entry.second.get();
+      RecordJobResult(LOST, job->printer().AffectedByIppUsbMigration());
       job->set_state(CupsPrintJob::State::STATE_FAILED);
       NotifyJobStateUpdate(job->GetWeakPtr());
     }

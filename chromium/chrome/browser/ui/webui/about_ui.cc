@@ -37,8 +37,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/branded_strings.h"
 #include "chrome/grit/browser_resources.h"
-#include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/about_ui/credit_utils.h"
 #include "components/grit/components_resources.h"
@@ -791,7 +791,7 @@ bool AboutUI::OverrideHandleWebUIMessage(const GURL& source_url,
     return false;
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-  lacros_url_handling::NavigateInAsh(GURL(chrome::kOsUIAboutURL));
+  lacros_url_handling::NavigateInAsh(GURL(chrome::kChromeUIAboutURL));
 #else
   // Note: This will only be called by the UI when Lacros is available.
   DCHECK(crosapi::BrowserManager::Get());

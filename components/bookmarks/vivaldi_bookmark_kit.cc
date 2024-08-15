@@ -29,7 +29,6 @@ namespace {
 BookmarkNode* AsMutableNode(const BookmarkNode* node) {
   return const_cast<BookmarkNode*>(node);
 }
-
 }  // namespace
 
 // Helper to access BookmarkModel private members
@@ -317,13 +316,6 @@ bool IsSeparator(const BookmarkNode* node) {
 
 bool IsTrash(const BookmarkNode* node) {
   return node->type() == bookmarks::BookmarkNode::TRASH;
-}
-
-void InitModelNonClonedKeys(BookmarkModel* model) {
-  model->AddNonClonedKey(GetMetaNames().nickname);
-  model->AddNonClonedKey(GetMetaNames().partner);
-  model->AddNonClonedKey(GetMetaNames().speeddial);
-  model->AddNonClonedKey(GetMetaNames().bookmarkbar);
 }
 
 bool DoesNickExists(const BookmarkModel* model,

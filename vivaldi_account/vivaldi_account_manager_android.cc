@@ -163,8 +163,8 @@ void VivaldiAccountManagerAndroid::SendStateUpdate() {
       !account_manager_->password_handler()->password().empty(),
       account_manager_->has_refresh_token(),
       account_manager_->has_encrypted_refresh_token(),
-      account_manager_->GetTokenRequestTime().ToJavaTime(),
-      account_manager_->GetNextTokenRequestTime().ToJavaTime(),
+      account_manager_->GetTokenRequestTime().InMillisecondsSinceUnixEpoch(),
+      account_manager_->GetNextTokenRequestTime().InMillisecondsSinceUnixEpoch(),
       last_token_fetch_error.type,
       base::android::ConvertUTF8ToJavaString(
           env, last_token_fetch_error.server_message),

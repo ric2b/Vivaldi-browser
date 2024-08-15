@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ash/eche_app/eche_app_manager_factory.h"
 
+#include <memory>
 #include <string>
 
 #include "ash/constants/ash_features.h"
@@ -23,6 +24,7 @@
 #include "base/system/sys_info.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/device_sync/device_sync_client_factory.h"
+#include "chrome/browser/ash/eche_app/eche_app_accessibility_provider_proxy.h"
 #include "chrome/browser/ash/eche_app/eche_app_notification_controller.h"
 #include "chrome/browser/ash/multidevice_setup/multidevice_setup_client_factory.h"
 #include "chrome/browser/ash/phonehub/phone_hub_manager_factory.h"
@@ -68,6 +70,15 @@ void StreamGoBack(Profile* profile) {
   eche_app_manager->StreamGoBack();
 }
 
+void BubbleShown(Profile* profile, AshWebView* view) {
+  EcheAppManager* eche_app_manager =
+      EcheAppManagerFactory::GetForProfile(profile);
+  // `eche_app_manager` is null during tests.
+  if (eche_app_manager) {
+    eche_app_manager->BubbleShown(view);
+  }
+}
+
 void LaunchWebApp(const std::string& package_name,
                   const absl::optional<int64_t>& notification_id,
                   const std::u16string& visible_name,
@@ -101,8 +112,7 @@ void LaunchWebApp(const std::string& package_name,
   url.append(visible_name);
   url.append(u"&timestamp=");
 
-  double now_seconds = base::Time::Now().ToDoubleT();
-  int64_t now_ms = static_cast<int64_t>(now_seconds * 1000);
+  int64_t now_ms = base::Time::Now().InMillisecondsSinceUnixEpoch();
   url.append(base::NumberToString16(now_ms));
 
   if (user_id.has_value()) {
@@ -116,7 +126,8 @@ void LaunchWebApp(const std::string& package_name,
       apps_launch_info_provider->GetConnectionStatusFromLastAttempt(),
       apps_launch_info_provider->entry_point(),
       base::BindOnce(&EnsureStreamClose, profile),
-      base::BindRepeating(&StreamGoBack, profile));
+      base::BindRepeating(&StreamGoBack, profile),
+      base::BindRepeating(&BubbleShown, profile));
 }
 
 void RelaunchLast(Profile* profile) {
@@ -281,6 +292,7 @@ KeyedService* EcheAppManagerFactory::BuildServiceInstanceFor(
       profile->GetPrefs(), GetSystemInfo(profile), phone_hub_manager,
       device_sync_client, multidevice_setup_client, secure_channel_client,
       std::move(presence_monitor_client),
+      std::make_unique<EcheAppAccessibilityProviderProxy>(),
       base::BindRepeating(&EcheAppManagerFactory::LaunchEcheApp, profile),
       base::BindRepeating(&EcheAppManagerFactory::ShowNotification,
                           weak_ptr_factory_.GetMutableWeakPtr(), profile),

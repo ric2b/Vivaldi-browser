@@ -55,9 +55,14 @@ RlwePlaintextId ConstructPlainttextId(const std::string& rlz_brand_code,
                                       const std::string& serial_number) {
   RlwePlaintextId rlwe_id;
   // See http://shortn/_tkT6f7xV0F for format specification.
-  std::string rlz_brand_code_hex =
+  const std::string rlz_brand_code_hex =
       base::HexEncode(rlz_brand_code.data(), rlz_brand_code.size());
-  rlwe_id.set_sensitive_id(rlz_brand_code_hex + "/" + serial_number);
+  const std::string id = rlz_brand_code_hex + "/" + serial_number;
+  // The PSM client library, which consumes this proto, will hash non-sensitive
+  // identifier and truncate to a few bits before sending it to the server,
+  // ensuring privacy. Hence, we can use the same identifier for both fields.
+  rlwe_id.set_non_sensitive_id(id);
+  rlwe_id.set_sensitive_id(id);
 
   return rlwe_id;
 }
@@ -249,49 +254,6 @@ class DeviceIdentifiers {
   }
 };
 
-// Class to obtain state keys.
-//
-// This is a step in enrollment state fetch (see Sequence class below).
-class StateKeys {
-  static constexpr int kMaxAttempts = 10;
-
- public:
-  StateKeys() = default;
-  StateKeys(const StateKeys&) = delete;
-  StateKeys& operator=(const StateKeys&) = delete;
-
-  using CompletionCallback =
-      base::OnceCallback<void(absl::optional<std::string>)>;
-
-  // This will try up to `kMaxAttempts` times to obtain the state keys.  If
-  // successful, it will return the current state key by calling the completion
-  // callback.
-  // Otherwise, it will return `absl::nullopt`.
-  void Retrieve(ServerBackedStateKeysBroker* state_key_broker,
-                CompletionCallback completion_callback) {
-    ++attempts_;
-    state_key_broker->RequestStateKeys(base::BindOnce(
-        &StateKeys::OnStateKeysRetrieved, weak_factory_.GetWeakPtr(),
-        state_key_broker, std::move(completion_callback)));
-  }
-
- private:
-  void OnStateKeysRetrieved(ServerBackedStateKeysBroker* state_key_broker,
-                            CompletionCallback completion_callback,
-                            const std::vector<std::string>& state_keys) {
-    if (state_keys.empty() || state_keys[0].empty()) {
-      if (attempts_ >= kMaxAttempts) {
-        return std::move(completion_callback).Run(absl::nullopt);
-      }
-      return Retrieve(state_key_broker, std::move(completion_callback));
-    }
-    return std::move(completion_callback).Run(state_keys[0]);
-  }
-
-  int attempts_ = 0;
-  base::WeakPtrFactory<StateKeys> weak_factory_{this};
-};
-
 // Class to send RLWE OPRF request as part of PSM protocol.
 //
 // This is a step in enrollment state fetch (see Sequence class below).
@@ -308,6 +270,10 @@ class RlweOprf {
   void Request(DeterminationContext& context,
                CompletionCallback completion_callback) {
     DCHECK(completion_callback);
+
+    context.psm_rlwe_client = context.rlwe_client_factory.Run(
+        private_membership::rlwe::CROS_DEVICE_STATE_UNIFIED,
+        ConstructPlainttextId(context.rlz_brand_code, context.serial_number));
     const auto oprf_request = context.psm_rlwe_client->CreateOprfRequest();
     if (!oprf_request.ok()) {
       LOG(ERROR) << "Failed to create PSM RLWE OPRF request: "
@@ -403,6 +369,7 @@ class RlweQuery {
           oprf_response,
       CompletionCallback completion_callback) {
     DCHECK(completion_callback);
+    DCHECK(context.psm_rlwe_client);
     const auto query_request =
         context.psm_rlwe_client->CreateQueryRequest(oprf_response);
 
@@ -509,6 +476,49 @@ class RlweQuery {
  private:
   std::unique_ptr<DeviceManagementService::Job> job_;
   base::WeakPtrFactory<RlweQuery> weak_factory_{this};
+};
+
+// Class to obtain state keys.
+//
+// This is a step in enrollment state fetch (see Sequence class below).
+class StateKeys {
+  static constexpr int kMaxAttempts = 10;
+
+ public:
+  StateKeys() = default;
+  StateKeys(const StateKeys&) = delete;
+  StateKeys& operator=(const StateKeys&) = delete;
+
+  using CompletionCallback =
+      base::OnceCallback<void(absl::optional<std::string>)>;
+
+  // This will try up to `kMaxAttempts` times to obtain the state keys.  If
+  // successful, it will return the current state key by calling the completion
+  // callback.
+  // Otherwise, it will return `absl::nullopt`.
+  void Retrieve(ServerBackedStateKeysBroker* state_key_broker,
+                CompletionCallback completion_callback) {
+    ++attempts_;
+    state_key_broker->RequestStateKeys(base::BindOnce(
+        &StateKeys::OnStateKeysRetrieved, weak_factory_.GetWeakPtr(),
+        state_key_broker, std::move(completion_callback)));
+  }
+
+ private:
+  void OnStateKeysRetrieved(ServerBackedStateKeysBroker* state_key_broker,
+                            CompletionCallback completion_callback,
+                            const std::vector<std::string>& state_keys) {
+    if (state_keys.empty() || state_keys[0].empty()) {
+      if (attempts_ >= kMaxAttempts) {
+        return std::move(completion_callback).Run(absl::nullopt);
+      }
+      return Retrieve(state_key_broker, std::move(completion_callback));
+    }
+    return std::move(completion_callback).Run(state_keys[0]);
+  }
+
+  int attempts_ = 0;
+  base::WeakPtrFactory<StateKeys> weak_factory_{this};
 };
 
 // Class to send state request to DMServer.
@@ -866,6 +876,104 @@ class EnrollmentStateFetcherImpl::Sequence {
   }
 
  private:
+  void OnSystemClockSynced(bool synchronized) {
+    ReportStepDurationAndResetTimer(kUMASuffixSystemClockSync);
+    base::UmaHistogramBoolean(kUMAStateDeterminationSystemClockSynchronized,
+                              synchronized);
+    if (!synchronized) {
+      LOG(ERROR) << "System clock failed to synchronize";
+      return ReportResult(AutoEnrollmentState::kConnectionError);
+    }
+
+    const bool passed = embargo_date_.Passed(context_);
+    base::UmaHistogramBoolean(kUMAStateDeterminationEmbargoDatePassed, passed);
+    if (!passed) {
+      return ReportResult(AutoEnrollmentState::kNoEnrollment);
+    }
+
+    ownership_.Check(context_.device_settings_service,
+                     base::BindOnce(&Sequence::OnOwnershipChecked,
+                                    weak_factory_.GetWeakPtr()));
+  }
+
+  void OnOwnershipChecked(ash::DeviceSettingsService::OwnershipStatus status) {
+    ReportStepDurationAndResetTimer(kUMASuffixOwnershipCheck);
+    base::UmaHistogramEnumeration(kUMAStateDeterminationOwnershipStatus,
+                                  status);
+    if (status ==
+        ash::DeviceSettingsService::OwnershipStatus::kOwnershipUnknown) {
+      LOG(ERROR) << "Device ownership is unknown. Skipping enrollment";
+      return ReportResult(AutoEnrollmentState::kNoEnrollment);
+    }
+
+    if (status ==
+        ash::DeviceSettingsService::OwnershipStatus::kOwnershipTaken) {
+      VLOG(1) << "Device ownership is already taken. Skipping enrollment";
+      return ReportResult(AutoEnrollmentState::kNoEnrollment);
+    }
+
+    oprf_.Request(context_, base::BindOnce(&Sequence::OnOprfRequestDone,
+                                           weak_factory_.GetWeakPtr()));
+  }
+
+  void OnOprfRequestDone(RlweOprf::Result result) {
+    ReportStepDurationAndResetTimer(kUMASuffixOPRFRequest);
+    if (!result.has_value()) {
+      StorePsmError(local_state_);
+      return ReportResult(result.error());
+    }
+    query_.Request(context_, result.value(),
+                   base::BindOnce(&Sequence::OnQueryRequestDone,
+                                  weak_factory_.GetWeakPtr()));
+  }
+
+  void OnQueryRequestDone(RlweQuery::Result result) {
+    ReportStepDurationAndResetTimer(kUMASuffixQueryRequest);
+    if (!result.has_value()) {
+      StorePsmError(local_state_);
+      return ReportResult(result.error());
+    }
+
+    RlwePlaintextId psm_id =
+        ConstructPlainttextId(context_.rlz_brand_code, context_.serial_number);
+    // Use WARNING level to preserve PSM ID in the logs.
+    LOG(WARNING) << "PSM determination successful. Identifier "
+                 << psm_id.sensitive_id() << " is "
+                 << (result.value() ? "" : " not") << " present on the server";
+
+    base::UmaHistogramBoolean(kUMAStateDeterminationPsmReportedAvailableState,
+                              result.value());
+    if (!result.value()) {
+      return ReportResult(AutoEnrollmentState::kNoEnrollment);
+    }
+    query_.StoreResponse(local_state_, result.value());
+    state_keys_.Retrieve(context_.state_key_broker,
+                         base::BindOnce(&Sequence::OnStateKeysRetrieved,
+                                        weak_factory_.GetWeakPtr()));
+  }
+
+  void OnStateKeysRetrieved(absl::optional<std::string> state_key) {
+    ReportStepDurationAndResetTimer(kUMASuffixStateKeyRetrieval);
+    base::UmaHistogramBoolean(kUMAStateDeterminationStateKeysRetrieved,
+                              state_key.has_value());
+    LOG_IF(WARNING, !state_key) << "Failed to obtain state keys";
+    context_.state_key = state_key;
+    state_.Request(context_, base::BindOnce(&Sequence::OnStateRequestDone,
+                                            weak_factory_.GetWeakPtr()));
+  }
+
+  void OnStateRequestDone(EnrollmentState::Result result) {
+    ReportStepDurationAndResetTimer(kUMASuffixStateRequest);
+    base::UmaHistogramBoolean(kUMAStateDeterminationStateReturned,
+                              result.has_value());
+    if (!result.has_value()) {
+      return ReportResult(result.error());
+    }
+    state_.StoreResponse(local_state_, result->dict);
+    return ReportResult(result->state);
+  }
+
+  // Helpers
   void ReportTotalDuration(base::TimeDelta fetch_duration,
                            AutoEnrollmentState state) {
     std::string uma_suffix;
@@ -910,105 +1018,6 @@ class EnrollmentStateFetcherImpl::Sequence {
     DCHECK(state != AutoEnrollmentState::kPending);
     ReportTotalDuration(base::TimeTicks::Now() - fetch_started_, state);
     std::move(report_result_).Run(state);
-  }
-
-  void OnSystemClockSynced(bool synchronized) {
-    ReportStepDurationAndResetTimer(kUMASuffixSystemClockSync);
-    base::UmaHistogramBoolean(kUMAStateDeterminationSystemClockSynchronized,
-                              synchronized);
-    if (!synchronized) {
-      LOG(ERROR) << "System clock failed to synchronize";
-      return ReportResult(AutoEnrollmentState::kConnectionError);
-    }
-
-    const bool passed = embargo_date_.Passed(context_);
-    base::UmaHistogramBoolean(kUMAStateDeterminationEmbargoDatePassed, passed);
-    if (!passed) {
-      return ReportResult(AutoEnrollmentState::kNoEnrollment);
-    }
-
-    ownership_.Check(context_.device_settings_service,
-                     base::BindOnce(&Sequence::OnOwnershipChecked,
-                                    weak_factory_.GetWeakPtr()));
-  }
-
-  void OnOwnershipChecked(ash::DeviceSettingsService::OwnershipStatus status) {
-    ReportStepDurationAndResetTimer(kUMASuffixOwnershipCheck);
-    base::UmaHistogramEnumeration(kUMAStateDeterminationOwnershipStatus,
-                                  status);
-    if (status ==
-        ash::DeviceSettingsService::OwnershipStatus::kOwnershipUnknown) {
-      LOG(ERROR) << "Device ownership is unknown. Skipping enrollment";
-      return ReportResult(AutoEnrollmentState::kNoEnrollment);
-    }
-
-    if (status ==
-        ash::DeviceSettingsService::OwnershipStatus::kOwnershipTaken) {
-      VLOG(1) << "Device ownership is already taken. Skipping enrollment";
-      return ReportResult(AutoEnrollmentState::kNoEnrollment);
-    }
-
-    state_keys_.Retrieve(context_.state_key_broker,
-                         base::BindOnce(&Sequence::OnStateKeysRetrieved,
-                                        weak_factory_.GetWeakPtr()));
-  }
-
-  void OnStateKeysRetrieved(absl::optional<std::string> state_key) {
-    ReportStepDurationAndResetTimer(kUMASuffixStateKeyRetrieval);
-    base::UmaHistogramBoolean(kUMAStateDeterminationStateKeysRetrieved,
-                              state_key.has_value());
-    LOG_IF(WARNING, !state_key) << "Failed to obtain state keys";
-    context_.state_key = state_key;
-    context_.psm_rlwe_client = context_.rlwe_client_factory.Run(
-        ConstructPlainttextId(context_.rlz_brand_code, context_.serial_number));
-    oprf_.Request(context_, base::BindOnce(&Sequence::OnOprfRequestDone,
-                                           weak_factory_.GetWeakPtr()));
-  }
-
-  void OnOprfRequestDone(RlweOprf::Result result) {
-    ReportStepDurationAndResetTimer(kUMASuffixOPRFRequest);
-    if (!result.has_value()) {
-      StorePsmError(local_state_);
-      return ReportResult(result.error());
-    }
-    query_.Request(context_, result.value(),
-                   base::BindOnce(&Sequence::OnQueryRequestDone,
-                                  weak_factory_.GetWeakPtr()));
-  }
-
-  void OnQueryRequestDone(RlweQuery::Result result) {
-    ReportStepDurationAndResetTimer(kUMASuffixQueryRequest);
-    if (!result.has_value()) {
-      StorePsmError(local_state_);
-      return ReportResult(result.error());
-    }
-
-    RlwePlaintextId psm_id =
-        ConstructPlainttextId(context_.rlz_brand_code, context_.serial_number);
-    // Use WARNING level to preserve PSM ID in the logs.
-    LOG(WARNING) << "PSM determination successful. Identifier "
-                 << psm_id.sensitive_id() << " is "
-                 << (result.value() ? "" : " not") << " present on the server";
-
-    base::UmaHistogramBoolean(kUMAStateDeterminationPsmReportedAvailableState,
-                              result.value());
-    if (!result.value()) {
-      return ReportResult(AutoEnrollmentState::kNoEnrollment);
-    }
-    query_.StoreResponse(local_state_, result.value());
-    state_.Request(context_, base::BindOnce(&Sequence::OnStateRequestDone,
-                                            weak_factory_.GetWeakPtr()));
-  }
-
-  void OnStateRequestDone(EnrollmentState::Result result) {
-    ReportStepDurationAndResetTimer(kUMASuffixStateRequest);
-    base::UmaHistogramBoolean(kUMAStateDeterminationStateReturned,
-                              result.has_value());
-    if (!result.has_value()) {
-      return ReportResult(result.error());
-    }
-    state_.StoreResponse(local_state_, result->dict);
-    return ReportResult(result->state);
   }
 
   // Used to report an error or the determined enrollment state. In production

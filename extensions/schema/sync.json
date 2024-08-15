@@ -60,9 +60,10 @@
         "id": "ProtocolErrorType",
         "description": "Possible error types for errors returned as part of sync server responses. This should be kept in sync with syncer::SyncProtocolErrorType (chromium/components/sync/protocol/sync_protocol_error.h)",
         "type": "string",
-        "enum" : [ "success", "not_my_birthday", "throttled", "clear_pending",
+        "enum" : [ "success", "not_my_birthday", "throttled",
           "transient_error", "migration_done", "disabled_by_admin",
           "partial_failure", "client_data_obsolete", "encryption_obsolete",
+          "conflict", "invalid_message",
           "unknown" ]
       },
       {

@@ -38,7 +38,9 @@ class HlsCodecDetectorTest : public testing::Test {
  public:
   HlsCodecDetectorTest()
       : media_log_(std::make_unique<NiceMock<media::MockMediaLog>>()),
-        detector_(std::make_unique<HlsCodecDetector>(media_log_.get())) {}
+        mock_hrh_(std::make_unique<media::MockHlsRenditionHost>()),
+        detector_(std::make_unique<HlsCodecDetectorImpl>(media_log_.get(),
+                                                         mock_hrh_.get())) {}
 
   ~HlsCodecDetectorTest() override { task_environment_.RunUntilIdle(); }
 
@@ -58,13 +60,24 @@ class HlsCodecDetectorTest : public testing::Test {
     }
   }
 
-  void CheckCodecs(HlsDataSourceStream stream) {
+  void CheckCodecs(std::unique_ptr<HlsDataSourceStream> stream) {
+    EXPECT_CALL(*mock_hrh_, ReadStream(_, _))
+        .WillOnce([](std::unique_ptr<HlsDataSourceStream> stream,
+                     HlsDataSourceProvider::ReadCb cb) {
+          std::move(cb).Run(std::move(stream));
+        });
+
     detector_->DetermineContainerAndCodec(
         std::move(stream), base::BindOnce(&HlsCodecDetectorTest::OnDetection,
                                           base::Unretained(this)));
   }
 
-  void CheckContainer(HlsDataSourceStream stream) {
+  void CheckContainer(std::unique_ptr<HlsDataSourceStream> stream) {
+    EXPECT_CALL(*mock_hrh_, ReadStream(_, _))
+        .WillOnce([](std::unique_ptr<HlsDataSourceStream> stream,
+                     HlsDataSourceProvider::ReadCb cb) {
+          std::move(cb).Run(std::move(stream));
+        });
     detector_->DetermineContainerOnly(
         std::move(stream), base::BindOnce(&HlsCodecDetectorTest::OnDetection,
                                           base::Unretained(this)));
@@ -72,30 +85,28 @@ class HlsCodecDetectorTest : public testing::Test {
 
   base::test::TaskEnvironment task_environment_;
   std::unique_ptr<MediaLog> media_log_;
+  std::unique_ptr<MockHlsRenditionHost> mock_hrh_;
   std::unique_ptr<HlsCodecDetector> detector_;
 };
 
 TEST_F(HlsCodecDetectorTest, TestTS) {
-  HlsDataSourceStream stream(
-      std::make_unique<FileHlsDataSource>("bear-1280x720-hls.ts"));
-
+  auto stream =
+      FileHlsDataSourceStreamFactory::CreateStream("bear-1280x720-hls.ts");
   EXPECT_CALL(*this, CodecsOk("avc1.420000, mp4a.40.05"));
   EXPECT_CALL(*this, ContainerOk("video/mp2t"));
   CheckCodecs(std::move(stream));
   task_environment_.RunUntilIdle();
 
-  HlsDataSourceStream stream2(
-      std::make_unique<FileHlsDataSource>("bear-1280x720-hls.ts"));
+  stream = FileHlsDataSourceStreamFactory::CreateStream("bear-1280x720-hls.ts");
   EXPECT_CALL(*this, CodecsOk(""));
   EXPECT_CALL(*this, ContainerOk("video/mp2t"));
-  CheckContainer(std::move(stream2));
+  CheckContainer(std::move(stream));
   task_environment_.RunUntilIdle();
 }
 
 TEST_F(HlsCodecDetectorTest, TestFmp4) {
-  HlsDataSourceStream stream(
-      std::make_unique<FileHlsDataSource>("bear-1280x720-avt_subt_frag.mp4"));
-
+  auto stream = FileHlsDataSourceStreamFactory::CreateStream(
+      "bear-1280x720-avt_subt_frag.mp4");
   EXPECT_CALL(*this, DetectionFailed(_));
   CheckCodecs(std::move(stream));
   task_environment_.RunUntilIdle();

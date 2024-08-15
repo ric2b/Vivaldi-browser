@@ -679,4 +679,48 @@ TEST_F(DevicePolicyDecoderTest, DecodeDeviceAuthenticationURLAllowlist) {
                                base::Value(std::move(allowlist_items)));
 }
 
+TEST_F(DevicePolicyDecoderTest, DeviceSwitchFunctionKeysBehaviorEnabled) {
+  em::ChromeDeviceSettingsProto device_policy;
+
+  DecodeUnsetDevicePolicyTestHelper(
+      device_policy, key::kDeviceSwitchFunctionKeysBehaviorEnabled);
+
+  base::Value device_switch_function_keys_behavior_enabled(true);
+  device_policy.mutable_device_switch_function_keys_behavior_enabled()
+      ->set_enabled(device_switch_function_keys_behavior_enabled.GetBool());
+
+  DecodeDevicePolicyTestHelper(
+      device_policy, key::kDeviceSwitchFunctionKeysBehaviorEnabled,
+      std::move(device_switch_function_keys_behavior_enabled));
+}
+
+TEST_F(DevicePolicyDecoderTest, DeviceEphemeralNetworkPoliciesEnabled) {
+  em::ChromeDeviceSettingsProto device_policy;
+
+  DecodeUnsetDevicePolicyTestHelper(
+      device_policy, key::kDeviceEphemeralNetworkPoliciesEnabled);
+
+  device_policy.mutable_device_ephemeral_network_policies_enabled()->set_value(
+      true);
+
+  DecodeDevicePolicyTestHelper(device_policy,
+                               key::kDeviceEphemeralNetworkPoliciesEnabled,
+                               /*expected_value=*/base::Value(true));
+}
+
+TEST_F(DevicePolicyDecoderTest, DeviceFkeysPolicy) {
+  em::ChromeDeviceSettingsProto device_policy;
+
+  DecodeUnsetDevicePolicyTestHelper(device_policy,
+                                    key::kDeviceExtendedFkeysModifier);
+
+  base::Value device_extended_fkeys_modifier(1);
+  device_policy.mutable_extended_fkeys_modifier()->set_modifier(
+      static_cast<em::ExtendedFkeysModifierProto::ExtendedFkeysModifier>(
+          device_extended_fkeys_modifier.GetInt()));
+
+  DecodeDevicePolicyTestHelper(device_policy, key::kDeviceExtendedFkeysModifier,
+                               std::move(device_extended_fkeys_modifier));
+}
+
 }  // namespace policy

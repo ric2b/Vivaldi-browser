@@ -23,6 +23,7 @@
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_util.h"
+#include "components/sync/base/model_type.h"
 #include "components/sync/model/client_tag_based_model_type_processor.h"
 #include "components/sync/model/mutable_data_batch.h"
 #include "components/sync/model/sync_metadata_store_change_list.h"
@@ -573,7 +574,7 @@ void AutofillWalletMetadataSyncBridge::DeleteOldOrphanMetadata() {
   // on shutdown).
   web_data_backend_->CommitChanges();
 
-  // We do not need to NotifyOfMultipleAutofillChanges() because this change is
+  // We do not need to NotifyOnAutofillChangedBySync() because this change is
   // invisible for PersonalDataManager - it does not change metadata for any
   // existing data.
 }
@@ -693,7 +694,8 @@ AutofillWalletMetadataSyncBridge::MergeRemoteChanges(
   web_data_backend_->CommitChanges();
 
   if (is_any_local_modified) {
-    web_data_backend_->NotifyOfMultipleAutofillChanges();
+    web_data_backend_->NotifyOnAutofillChangedBySync(
+        syncer::AUTOFILL_WALLET_METADATA);
   }
 
   return change_processor()->GetError();
@@ -712,10 +714,7 @@ void AutofillWalletMetadataSyncBridge::LocalMetadataChanged(
       CreateMetadataChangeList();
 
   switch (change.type()) {
-    case AutofillProfileChange::EXPIRE:
-      NOTREACHED() << "EXPIRE change is not allowed for wallet entities";
-      return;
-    case AutofillProfileChange::REMOVE:
+    case AutofillDataModelChange<DataType>::REMOVE:
       if (RemoveServerMetadata(GetAutofillTable(), type, metadata_id)) {
         cache_.erase(storage_key);
         // Send up deletion only if we had this entry in the DB. It is not there
@@ -723,8 +722,8 @@ void AutofillWalletMetadataSyncBridge::LocalMetadataChanged(
         change_processor()->Delete(storage_key, metadata_change_list.get());
       }
       return;
-    case AutofillProfileChange::ADD:
-    case AutofillProfileChange::UPDATE:
+    case AutofillDataModelChange<DataType>::ADD:
+    case AutofillDataModelChange<DataType>::UPDATE:
       AutofillMetadata new_entry = change.data_model().GetMetadata();
       auto it = cache_.find(storage_key);
       absl::optional<AutofillMetadata> existing_entry = absl::nullopt;

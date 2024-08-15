@@ -13,6 +13,7 @@
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "extensions/browser/event_listener_map.h"
@@ -86,7 +87,10 @@ class MockEventDispatcher : public mojom::EventDispatcher {
 
   // mojom::EventDispatcher:
   void DispatchEvent(mojom::DispatchEventParamsPtr params,
-                     base::Value::List event_args) override {}
+                     base::Value::List event_args,
+                     DispatchEventCallback callback) override {
+    std::move(callback).Run();
+  }
 
  private:
   mojo::AssociatedReceiver<mojom::EventDispatcher> receiver_{this};
@@ -579,7 +583,8 @@ TEST_F(EventRouterTest, TestReportEvent) {
 }
 
 // Tests adding and removing events with filters.
-TEST_P(EventRouterFilterTest, Basic) {
+// TODO(crbug.com/1479954): test is flaky across platforms.
+TEST_P(EventRouterFilterTest, DISABLED_Basic) {
   // For the purpose of this test, "." is important in |event_name| as it
   // exercises the code path that uses |event_name| as a key in
   // base::Value::Dict.
@@ -643,7 +648,8 @@ TEST_P(EventRouterFilterTest, Basic) {
   ASSERT_FALSE(ContainsFilter(kExtensionId, kEventName, filters[2]));
 }
 
-TEST_P(EventRouterFilterTest, URLBasedFilteredEventListener) {
+// TODO(crbug.com/1479954): test is flaky across platforms.
+TEST_P(EventRouterFilterTest, DISABLED_URLBasedFilteredEventListener) {
   const std::string kEventName = "windows.onRemoved";
   const GURL kUrl("chrome-untrusted://terminal");
   base::Value::Dict filter;
@@ -750,7 +756,8 @@ TEST_F(EventRouterDispatchTest, TestDispatch) {
   EXPECT_EQ(0u, observer.dispatched_events().size());
 }
 
-TEST_F(EventRouterDispatchTest, TestDispatchCallback) {
+// TODO(crbug.com/1479954): test is flaky across platforms.
+TEST_F(EventRouterDispatchTest, DISABLED_TestDispatchCallback) {
   std::string ext1 = "ext1";
   std::string ext2 = "ext2";
   std::string ext3 = "ext3";
@@ -810,8 +817,11 @@ TEST_F(EventRouterDispatchTest, TestDispatchCallback) {
   const int sw_thread_id = 100;
   MockEventDispatcher sw_event_dispatcher;
   event_router()->AddServiceWorkerEventListener(
-      event_name, process4.get(), ext3,
-      mojom::ServiceWorkerContext::New(GURL(), sw_version_id, sw_thread_id));
+      mojom::EventListener::New(
+          mojom::EventListenerOwner::NewExtensionId(ext3), event_name,
+          mojom::ServiceWorkerContext::New(GURL(), sw_version_id, sw_thread_id),
+          /*event_filter=*/absl::nullopt),
+      process4.get());
   event_router()->BindServiceWorkerEventDispatcher(
       process4->GetID(), sw_thread_id, sw_event_dispatcher.BindAndPassRemote());
 

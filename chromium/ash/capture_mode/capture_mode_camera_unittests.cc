@@ -1375,6 +1375,7 @@ TEST_F(CaptureModeCameraTest,
 // events is or is not on capture label, its opacity is updated accordingly.
 TEST_F(CaptureModeCameraTest,
        CaptureLabelOpacityChangeWhenOverlappingWithCameraPreview) {
+  UpdateDisplay("900x800");
   auto* controller =
       StartCaptureSession(CaptureModeSource::kRegion, CaptureModeType::kVideo);
   auto* capture_session =
@@ -4735,7 +4736,8 @@ class CaptureModePrivacyIndicatorsTest
                      ->privacy_indicators_view();
   }
 
-  bool IsQsRevampEnabled() const { return GetParam(); }
+  // TODO(b/305075031) clean up after the flag is removed.
+  bool IsQsRevampEnabled() const { return true; }
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;

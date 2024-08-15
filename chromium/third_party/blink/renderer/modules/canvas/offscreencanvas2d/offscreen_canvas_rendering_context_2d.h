@@ -19,6 +19,7 @@
 namespace blink {
 
 class CanvasResourceProvider;
+class ExceptionState;
 
 class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
     : public CanvasRenderingContext,
@@ -55,12 +56,10 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
   // CanvasRenderingContext implementation
   ~OffscreenCanvasRenderingContext2D() override;
   bool IsComposited() const override { return false; }
-  bool IsAccelerated() const override;
   NoAllocDirectCallHost* AsNoAllocDirectCallHost() final;
   V8RenderingContext* AsV8RenderingContext() final;
   V8OffscreenRenderingContext* AsV8OffscreenRenderingContext() final;
-  void SetIsInHiddenPage(bool) final { NOTREACHED(); }
-  void SetIsBeingDisplayed(bool) final { NOTREACHED(); }
+  void PageVisibilityChanged() override {}
   void Stop() final { NOTREACHED(); }
   void ClearRect(double x, double y, double width, double height) override {
     BaseRenderingContext2D::clearRect(x, y, width, height);
@@ -68,8 +67,7 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
   SkColorInfo CanvasRenderingContextSkColorInfo() const override {
     return color_params_.GetSkColorInfo();
   }
-  scoped_refptr<StaticBitmapImage> GetImage(
-      CanvasResourceProvider::FlushReason) final;
+  scoped_refptr<StaticBitmapImage> GetImage(FlushReason) final;
   void Reset() override;
   void RestoreCanvasMatrixClipStack(cc::PaintCanvas* c) const override {
     RestoreMatrixClipStack(c);
@@ -119,13 +117,14 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
   }
   void LoseContext(LostContextMode) override;
 
-  ImageBitmap* TransferToImageBitmap(ScriptState*) final;
+  ImageBitmap* TransferToImageBitmap(ScriptState* script_state,
+                                     ExceptionState& exception_state) final;
 
   void Trace(Visitor*) const override;
 
   bool PushFrame() override;
 
-  CanvasRenderingContextHost* GetCanvasRenderingContextHost() override;
+  CanvasRenderingContextHost* GetCanvasRenderingContextHost() const override;
   ExecutionContext* GetTopExecutionContext() const override;
 
   IdentifiableToken IdentifiableTextToken() const override {
@@ -144,7 +143,7 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
     return identifiability_study_helper_.encountered_partially_digested_image();
   }
 
-  void FlushCanvas(CanvasResourceProvider::FlushReason) override;
+  void FlushCanvas(FlushReason) override;
 
  protected:
   OffscreenCanvas* HostAsOffscreenCanvas() const final;
@@ -165,14 +164,13 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
   bool ResolveFont(const String& new_font) override;
 
  private:
-  void FinalizeFrame(CanvasResourceProvider::FlushReason) final;
-  void FlushRecording(CanvasResourceProvider::FlushReason);
+  void FinalizeFrame(FlushReason) final;
+  void FlushRecording(FlushReason);
 
   bool IsPaintable() const final;
   bool IsCanvas2DBufferValid() const override;
 
-  scoped_refptr<CanvasResource> ProduceCanvasResource(
-      CanvasResourceProvider::FlushReason);
+  scoped_refptr<CanvasResource> ProduceCanvasResource(FlushReason);
 
   SkIRect dirty_rect_for_commit_;
 

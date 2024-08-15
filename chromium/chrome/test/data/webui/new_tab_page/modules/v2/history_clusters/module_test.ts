@@ -76,6 +76,7 @@ suite('NewTabPageModulesHistoryClustersV2ModuleTest', () => {
       discounts: Map<Url, Discount[]> = new Map<Url, Discount[]>()):
       Promise<HistoryClustersV2ModuleElement[]> {
     handler.setResultFor('getClusters', Promise.resolve({clusters}));
+    handler.setResultFor('getCartForCluster', Promise.resolve({cart: null}));
     handler.setResultFor(
         'getDiscountsForCluster', Promise.resolve({discounts}));
     const moduleElements = await historyClustersV2Descriptor.initialize(0) as
@@ -126,9 +127,9 @@ suite('NewTabPageModulesHistoryClustersV2ModuleTest', () => {
 
     test('Header element populated with correct data', async () => {
       // Arrange.
-      const sampleClusterLabel = '"Sample Journey"';
+      const clusterLabel = 'Sample Journey';
       const moduleElements = await initializeModule(
-          [createSampleCluster(2, {label: sampleClusterLabel})]);
+          [createSampleCluster(2, {label: `"${clusterLabel}"`})]);
       const moduleElement = moduleElements[0];
 
       // Assert.
@@ -137,8 +138,31 @@ suite('NewTabPageModulesHistoryClustersV2ModuleTest', () => {
       assertTrue(!!headerElement);
       const label = $$(headerElement, '#label');
       assertTrue(!!label);
-      assertModuleHeaderTitle(label as HTMLElement, `${sampleClusterLabel}`);
+      assertModuleHeaderTitle(label as HTMLElement, `${clusterLabel}`);
       assertTrue(!!$$(headerElement, 'ntp-module-header-v2'));
+    });
+
+    test('Header element has expected action menu items', async () => {
+      const moduleElements = await initializeModule(
+          [createSampleCluster(2, {label: '"Sample Journey"'})]);
+      const moduleElement = moduleElements[0];
+      assertTrue(!!moduleElement);
+
+      const headerTileElement = $$(moduleElement, 'history-clusters-header-v2');
+      assertTrue(!!headerTileElement);
+      const moduleHeaderElement = $$(headerTileElement, 'ntp-module-header-v2');
+      assertTrue(!!moduleHeaderElement);
+      const actionMenu = $$(moduleHeaderElement, 'cr-action-menu');
+      assertTrue(!!actionMenu);
+
+      const actionMenuItems =
+          [...actionMenu.querySelectorAll('button.dropdown-item')];
+      assertEquals(6, actionMenuItems.length);
+      ['done', 'dismiss', 'disable', 'show-all', 'info', 'customize-module']
+          .forEach((action, index) => {
+            assertEquals(
+                action, actionMenuItems[index]!.getAttribute('data-action'));
+          });
     });
 
     test('Header info button click opens info dialog', async () => {
@@ -152,6 +176,27 @@ suite('NewTabPageModulesHistoryClustersV2ModuleTest', () => {
       headerElement!.dispatchEvent(new Event('info-button-click'));
 
       assertTrue(!!$$(moduleElement, 'ntp-info-dialog'));
+    });
+
+    test('Header done button dipatches dismiss module event', async () => {
+      const sampleCluster = createSampleCluster(2, {label: '"Sample"'});
+      const moduleElements = await initializeModule([sampleCluster]);
+      const moduleElement = moduleElements[0];
+      assertTrue(!!moduleElement);
+
+      const waitForDismissEvent =
+          eventToPromise('dismiss-module-instance', moduleElement);
+      const doneButton =
+          moduleElement.shadowRoot!.querySelector('history-clusters-header-v2')!
+              .shadowRoot!.querySelector(
+                  'ntp-module-header-v2 cr-icon-button')! as HTMLElement;
+      doneButton.click();
+
+      const dismissEvent: DismissModuleInstanceEvent =
+          await waitForDismissEvent;
+      assertEquals(
+          `${sampleCluster.label!} hidden`, dismissEvent.detail.message);
+      assertUpdateClusterVisitsInteractionStateCall(InteractionState.kDone, 3);
     });
 
     test(

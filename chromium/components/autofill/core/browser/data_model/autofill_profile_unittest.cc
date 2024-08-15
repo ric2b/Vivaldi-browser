@@ -41,7 +41,7 @@ constexpr VerificationStatus kObserved = VerificationStatus::kObserved;
 namespace {
 
 std::u16string GetSuggestionLabel(AutofillProfile* profile) {
-  std::vector<AutofillProfile*> profiles;
+  std::vector<const AutofillProfile*> profiles;
   profiles.push_back(profile);
   std::vector<std::u16string> labels;
   AutofillProfile::CreateDifferentiatingLabels(profiles, "en-US", &labels);
@@ -55,9 +55,9 @@ void SetupTestProfile(AutofillProfile& profile) {
                        "Hollywood", "CA", "91601", "US", "12345678910");
 }
 
-std::vector<AutofillProfile*> ToRawPointerVector(
+std::vector<const AutofillProfile*> ToRawPointerVector(
     const std::vector<std::unique_ptr<AutofillProfile>>& list) {
-  std::vector<AutofillProfile*> result;
+  std::vector<const AutofillProfile*> result;
   for (const auto& item : list)
     result.push_back(item.get());
   return result;
@@ -153,7 +153,7 @@ TEST(AutofillProfileTest, PreviewSummaryString) {
   test::SetProfileInfo(&profile7a, "Marion", "Mitchell", "Morrison",
                        "marion@me.xyz", "Fox", "123 Zoo St.", "unit 5",
                        "Hollywood", "CA", "91601", "US", "16505678910");
-  std::vector<AutofillProfile*> profiles;
+  std::vector<const AutofillProfile*> profiles;
   profiles.push_back(&profile7);
   profiles.push_back(&profile7a);
   std::vector<std::u16string> labels;
@@ -1304,7 +1304,7 @@ TEST(AutofillProfileTest, Compare_StructuredTypes) {
                  << AutofillType(type).ToString());
 
     SCOPED_TRACE(testing::Message()
-                 << "Verify the corrext result for identical values");
+                 << "Verify the correct result for identical values");
     profile1.SetRawInfoWithVerificationStatus(type, value1, status1);
     profile2.SetRawInfoWithVerificationStatus(type, value1, status1);
     EXPECT_EQ(profile1.Compare(profile2), 0);
@@ -1405,45 +1405,6 @@ TEST(AutofillProfileTest, SetInfoTrimsWhitespace) {
   AutofillProfile profile;
   profile.SetInfo(EMAIL_ADDRESS, u"\tuser@example.com    ", "en-US");
   EXPECT_EQ(u"user@example.com", profile.GetRawInfo(EMAIL_ADDRESS));
-}
-
-TEST(AutofillProfileTest, FullAddress) {
-  AutofillProfile profile;
-  test::SetProfileInfo(&profile, "Marion", "Mitchell", "Morrison",
-                       "marion@me.xyz", "Fox", "123 Zoo St.", "unit 5",
-                       "Hollywood", "CA", "91601", "US", "12345678910");
-
-  AutofillType full_address(HtmlFieldType::kFullAddress, HtmlFieldMode::kNone);
-  std::u16string formatted_address(
-      u"Marion Mitchell Morrison\n"
-      u"Fox\n"
-      u"123 Zoo St.\n"
-      u"unit 5\n"
-      u"Hollywood, CA 91601");
-  EXPECT_EQ(formatted_address, profile.GetInfo(full_address, "en-US"));
-  // This should fail and leave the profile unchanged.
-  EXPECT_FALSE(profile.SetInfo(full_address, u"foobar", "en-US"));
-  EXPECT_EQ(formatted_address, profile.GetInfo(full_address, "en-US"));
-
-  // Some things can be missing...
-  profile.SetInfo(ADDRESS_HOME_LINE2, std::u16string(), "en-US");
-  profile.SetInfo(EMAIL_ADDRESS, std::u16string(), "en-US");
-  EXPECT_EQ(
-      u"Marion Mitchell Morrison\n"
-      u"Fox\n"
-      u"123 Zoo St.\n"
-      u"Hollywood, CA 91601",
-      profile.GetInfo(full_address, "en-US"));
-
-  // ...but nothing comes out if a required field is missing.
-  profile.SetInfo(ADDRESS_HOME_STATE, std::u16string(), "en-US");
-  EXPECT_TRUE(profile.GetInfo(full_address, "en-US").empty());
-
-  // Restore the state but remove country. This should also fail.
-  profile.SetInfo(ADDRESS_HOME_STATE, u"CA", "en-US");
-  EXPECT_FALSE(profile.GetInfo(full_address, "en-US").empty());
-  profile.SetInfo(ADDRESS_HOME_COUNTRY, std::u16string(), "en-US");
-  EXPECT_TRUE(profile.GetInfo(full_address, "en-US").empty());
 }
 
 TEST(AutofillProfileTest, SaveAdditionalInfo_Name_AddingNameFull) {
@@ -1590,7 +1551,7 @@ TEST(AutofillProfileTest, LabelsInAssignmentAndComparisonOperator) {
 TEST(AutofillProfileTest, GetMetadata) {
   AutofillProfile local_profile = test::GetFullProfile();
   local_profile.set_use_count(2);
-  local_profile.set_use_date(base::Time::FromDoubleT(25));
+  local_profile.set_use_date(base::Time::FromSecondsSinceUnixEpoch(25));
   local_profile.set_has_converted(false);
   AutofillMetadata local_metadata = local_profile.GetMetadata();
   EXPECT_EQ(local_profile.guid(), local_metadata.id);
@@ -1600,7 +1561,7 @@ TEST(AutofillProfileTest, GetMetadata) {
 
   AutofillProfile server_profile = test::GetServerProfile();
   server_profile.set_use_count(10);
-  server_profile.set_use_date(base::Time::FromDoubleT(100));
+  server_profile.set_use_date(base::Time::FromSecondsSinceUnixEpoch(100));
   server_profile.set_has_converted(true);
   AutofillMetadata server_metadata = server_profile.GetMetadata();
   EXPECT_EQ(server_profile.server_id(), server_metadata.id);
@@ -1614,7 +1575,7 @@ TEST(AutofillProfileTest, SetMetadata_MatchingId) {
   AutofillMetadata local_metadata;
   local_metadata.id = local_profile.guid();
   local_metadata.use_count = 100;
-  local_metadata.use_date = base::Time::FromDoubleT(50);
+  local_metadata.use_date = base::Time::FromSecondsSinceUnixEpoch(50);
   local_metadata.has_converted = true;
   EXPECT_TRUE(local_profile.SetMetadata(local_metadata));
   EXPECT_EQ(local_metadata.id, local_profile.guid());
@@ -1626,7 +1587,7 @@ TEST(AutofillProfileTest, SetMetadata_MatchingId) {
   AutofillMetadata server_metadata;
   server_metadata.id = server_profile.server_id();
   server_metadata.use_count = 100;
-  server_metadata.use_date = base::Time::FromDoubleT(50);
+  server_metadata.use_date = base::Time::FromSecondsSinceUnixEpoch(50);
   server_metadata.has_converted = true;
   EXPECT_TRUE(server_profile.SetMetadata(server_metadata));
   EXPECT_EQ(server_metadata.id, server_profile.server_id());
@@ -1640,7 +1601,7 @@ TEST(AutofillProfileTest, SetMetadata_NotMatchingId) {
   AutofillMetadata local_metadata;
   local_metadata.id = "WrongId";
   local_metadata.use_count = 100;
-  local_metadata.use_date = base::Time::FromDoubleT(50);
+  local_metadata.use_date = base::Time::FromSecondsSinceUnixEpoch(50);
   local_metadata.has_converted = true;
   EXPECT_FALSE(local_profile.SetMetadata(local_metadata));
   EXPECT_NE(local_metadata.id, local_profile.guid());
@@ -1652,7 +1613,7 @@ TEST(AutofillProfileTest, SetMetadata_NotMatchingId) {
   AutofillMetadata server_metadata;
   server_metadata.id = "WrongId";
   server_metadata.use_count = 100;
-  server_metadata.use_date = base::Time::FromDoubleT(50);
+  server_metadata.use_date = base::Time::FromSecondsSinceUnixEpoch(50);
   server_metadata.has_converted = true;
   EXPECT_FALSE(server_profile.SetMetadata(server_metadata));
   EXPECT_NE(server_metadata.id, server_profile.guid());
@@ -1780,10 +1741,8 @@ TEST(AutofillProfileTest, GetNonEmptyRawTypes) {
 
 enum Expectation { GREATER, LESS };
 struct ProfileRankingTestCase {
-  const std::string guid_a;
   const int use_count_a;
   const base::Time use_date_a;
-  const std::string guid_b;
   const int use_count_b;
   const base::Time use_date_b;
   Expectation expectation;
@@ -1804,12 +1763,10 @@ TEST_P(ProfileRankingTest, HasGreaterRankingThan) {
   auto test_case = GetParam();
 
   AutofillProfile profile1 = test::GetFullProfile();
-  profile1.set_guid(test_case.guid_a);
   profile1.set_use_count(test_case.use_count_a);
   profile1.set_use_date(test_case.use_date_a);
 
   AutofillProfile profile2 = test::GetFullProfile();
-  profile2.set_guid(test_case.guid_b);
   profile2.set_use_count(test_case.use_count_b);
   profile2.set_use_date(test_case.use_date_b);
 
@@ -1823,31 +1780,24 @@ INSTANTIATE_TEST_SUITE_P(
     AutofillProfileTest,
     ProfileRankingTest,
     testing::Values(
-        // Same ranking score, profile1 has a smaller GUID (tie breaker).
-        ProfileRankingTestCase{"guid_a", 8, current, "guid_b", 8, current,
-                               LESS},
         // Same days since last use, profile1 has a bigger use count.
-        ProfileRankingTestCase{"guid_a", 10, current, "guid_b", 8, current,
-                               GREATER},
+        ProfileRankingTestCase{10, current, 8, current, GREATER},
         // Same days since last use, profile1 has a smaller use count.
-        ProfileRankingTestCase{"guid_a", 8, current, "guid_b", 10, current,
-                               LESS},
+        ProfileRankingTestCase{8, current, 10, current, LESS},
         // Same days since last use, profile1 has larger use count.
-        ProfileRankingTestCase{"guid_a", 8, current, "guid_b", 8,
-                               current - base::Days(1), GREATER},
+        ProfileRankingTestCase{8, current, 8, current - base::Days(1), GREATER},
         // Same use count, profile1 has smaller days since last use.
-        ProfileRankingTestCase{"guid_a", 8, current - base::Days(1), "guid_b",
-                               8, current, LESS},
+        ProfileRankingTestCase{8, current - base::Days(1), 8, current, LESS},
         // Special case: occasional profiles. A profile with relatively low
         // usage and used recently (profile2) should not rank higher than a more
         // used profile that has been unused for a short amount of time
         // (profile1).
-        ProfileRankingTestCase{"guid_a", 300, current - base::Days(5), "guid_b",
-                               10, current - base::Days(1), GREATER},
+        ProfileRankingTestCase{300, current - base::Days(5), 10,
+                               current - base::Days(1), GREATER},
         // Special case: moving. A new profile used frequently (profile2) should
         // rank higher than a profile with more usage that has not been used for
         // a while (profile1).
-        ProfileRankingTestCase{"guid_a", 90, current - base::Days(20), "guid_b",
-                               10, current - base::Days(5), LESS}));
+        ProfileRankingTestCase{90, current - base::Days(20), 10,
+                               current - base::Days(5), LESS}));
 
 }  // namespace autofill

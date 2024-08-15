@@ -17,8 +17,7 @@
 #include "chrome/browser/shell_integration.h"
 #include "chrome/services/qrcode_generator/public/cpp/qrcode_generator_service.h"
 #include "chrome/services/qrcode_generator/public/mojom/qrcode_generator.mojom.h"
-#include "components/password_manager/core/browser/password_access_authenticator.h"
-#include "components/password_manager/core/browser/reauth_purpose.h"
+//#include "components/password_manager/core/browser/reauth_purpose.h"
 #include "content/public/browser/download_manager.h"
 #include "extensions/browser/api/file_system/file_system_api.h"
 #include "extensions/browser/app_window/app_window.h"
@@ -102,13 +101,6 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
 
   void OnPasswordIconStatusChanged(int window_id, bool show);
 
-  // Trigger the OS authentication dialog, if needed. web_contents must not be
-  // null.
-  static bool AuthenticateUser(
-      content::WebContents* web_contents,
-      password_manager::PasswordAccessAuthenticator::AuthResultCallback
-          callback);
-
   // Is the Razer Chroma API available on this machine
   bool IsRazerChromaAvailable();
 
@@ -153,11 +145,6 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
     base::queue<std::pair<int, MutexAvailableCallback>> wait_list;
   };
 
-  void OsReauthCall(
-      password_manager::ReauthPurpose purpose,
-      password_manager::PasswordAccessAuthenticator::AuthResultCallback
-          callback);
-
   void TimeoutCall();
 
   const raw_ptr<content::BrowserContext> browser_context_;
@@ -174,11 +161,6 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
 
   // List used for the dialog position apis.
   std::vector<std::unique_ptr<DialogPosition>> dialog_to_point_list_;
-
-  // Persistent class used for re-authentication of the user when viewing
-  // saved passwords. It cannot be instanciated per call as it keeps state
-  // of previous authentiations.
-  password_manager::PasswordAccessAuthenticator password_access_authenticator_;
 
   // Used to anchor the auth dialog.
   gfx::NativeWindow native_window_ = nullptr;
@@ -351,6 +333,19 @@ class UtilitiesStoreImageFunction : public ExtensionFunction {
   VivaldiImageStore::ImagePlace place_;
   absl::optional<VivaldiImageStore::ImageFormat> image_format_;
 };
+
+class UtilitiesCleanUnusedImagesFunction : public ExtensionFunction {
+public:
+  DECLARE_EXTENSION_FUNCTION("utilities.cleanUnusedImages",
+      UTILITIES_CLEAN_UNUSED_IMAGES)
+  UtilitiesCleanUnusedImagesFunction();
+
+private:
+  ~UtilitiesCleanUnusedImagesFunction() override;
+  ResponseAction Run() override;
+
+};
+
 
 // This is implemented in VivaldiUtilitiesHookDelegate and only here to satisfy
 // various JS bindings constrains.
@@ -1016,6 +1011,44 @@ class UtilitiesSupportsProxyFunction : public ExtensionFunction {
  private:
   ~UtilitiesSupportsProxyFunction() override = default;
   ResponseAction Run() override;
+};
+
+class UtilitiesGetOtherProxiesFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getOtherProxies",
+                              UTILITIES_PROXY_GET_OTHER_PROXIES)
+  UtilitiesGetOtherProxiesFunction() = default;
+
+ private:
+  ~UtilitiesGetOtherProxiesFunction() override = default;
+  ResponseAction Run() override;
+};
+
+class UtilitiesBrowserWindowReadyFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.browserWindowReady",
+                              UTILITIES_BROWSER_WINDOW_READY)
+  UtilitiesBrowserWindowReadyFunction() = default;
+
+ private:
+  ~UtilitiesBrowserWindowReadyFunction() override = default;
+  ResponseAction Run() override;
+};
+
+class UtilitiesReadImageFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.readImage", UTILITIES_LOAD_IMAGE)
+  UtilitiesReadImageFunction() = default;
+
+ private:
+  ~UtilitiesReadImageFunction() override = default;
+  ResponseAction Run() override;
+
+  void SendResult(std::unique_ptr<std::vector<uint8_t>> data,
+                  std::unique_ptr<std::string> mimeType, bool result);
+  bool ReadFileAndMimeType(base::FilePath file_path,
+                           std::vector<uint8_t>* data,
+                           std::string* mimeType);
 };
 
 }  // namespace extensions

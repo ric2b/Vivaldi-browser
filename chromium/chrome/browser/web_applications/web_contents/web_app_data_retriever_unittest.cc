@@ -310,7 +310,7 @@ TEST_F(WebAppDataRetrieverTest,
   base::RunLoop run_loop;
   WebAppDataRetriever retriever;
   retriever.CheckInstallabilityAndRetrieveManifest(
-      web_contents(), /*bypass_service_worker_check=*/false,
+      web_contents(),
       base::BindLambdaForTesting(
           [&](blink::mojom::ManifestPtr opt_manifest, const GURL& manifest_url,
               bool valid_manifest_for_web_app,
@@ -370,8 +370,19 @@ TEST_F(WebAppDataRetrieverTest, GetWebAppInstallInfo_FrameNavigated) {
   web_contents_tester()->NavigateAndCommit(kFooUrl);
   run_loop.Run();
 
-  EXPECT_EQ(kFooUrl.DeprecatedGetOriginAsURL(), web_app_info()->start_url);
-  EXPECT_EQ(kFooTitle, web_app_info()->title);
+  if (web_contents()
+          ->GetPrimaryMainFrame()
+          ->ShouldChangeRenderFrameHostOnSameSiteNavigation()) {
+    // If the RenderFrameHost changes, the FakeWebPageMetadataAgent mojo
+    // connection will be disconnected, causing the callback to be called with
+    // a null info.
+    EXPECT_EQ(nullptr, web_app_info());
+  } else {
+    // Otherwise, the mojo connection will persist and the callback will get
+    // the info from the previous document.
+    EXPECT_EQ(kFooUrl.DeprecatedGetOriginAsURL(), web_app_info()->start_url);
+    EXPECT_EQ(kFooTitle, web_app_info()->title);
+  }
 }
 
 TEST_F(WebAppDataRetrieverTest, CheckInstallabilityAndRetrieveManifest) {
@@ -404,7 +415,7 @@ TEST_F(WebAppDataRetrieverTest, CheckInstallabilityAndRetrieveManifest) {
   WebAppDataRetriever retriever;
 
   retriever.CheckInstallabilityAndRetrieveManifest(
-      web_contents(), /*bypass_service_worker_check=*/false,
+      web_contents(),
       base::BindLambdaForTesting(
           [&](blink::mojom::ManifestPtr opt_manifest, const GURL& manifest_url,
               bool valid_manifest_for_web_app,
@@ -443,7 +454,7 @@ TEST_F(WebAppDataRetrieverTest, CheckInstallabilityFails) {
   WebAppDataRetriever retriever;
 
   retriever.CheckInstallabilityAndRetrieveManifest(
-      web_contents(), /*bypass_service_worker_check=*/false,
+      web_contents(),
       base::BindLambdaForTesting(
           [&](blink::mojom::ManifestPtr opt_manifest, const GURL& manifest_url,
               bool valid_manifest_for_web_app,

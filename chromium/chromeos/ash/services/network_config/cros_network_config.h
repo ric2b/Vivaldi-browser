@@ -117,9 +117,9 @@ class CrosNetworkConfig
       bool auto_reset,
       chromeos::network_config::mojom::UInt32ValuePtr day,
       SetTrafficCountersAutoResetCallback callback) override;
-  void CreateCustomApn(
-      const std::string& network_guid,
-      chromeos::network_config::mojom::ApnPropertiesPtr apn) override;
+  void CreateCustomApn(const std::string& network_guid,
+                       chromeos::network_config::mojom::ApnPropertiesPtr apn,
+                       CreateCustomApnCallback callback) override;
   void RemoveCustomApn(const std::string& network_guid,
                        const std::string& apn_id) override;
   void ModifyCustomApn(
@@ -236,6 +236,8 @@ class CrosNetworkConfig
       observers_;
   mojo::ReceiverSet<chromeos::network_config::mojom::CrosNetworkConfig>
       receivers_;
+
+  absl::optional<base::StringPiece> serial_number_;
 
   int callback_id_ = 1;
   base::flat_map<int, SetPropertiesCallback> set_properties_callbacks_;

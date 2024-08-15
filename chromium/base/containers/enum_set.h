@@ -48,7 +48,7 @@ template <typename E, E MinEnumValue, E MaxEnumValue>
 class EnumSet {
  private:
   static_assert(
-      std::is_enum<E>::value,
+      std::is_enum_v<E>,
       "First template parameter of EnumSet must be an enumeration type");
   using enum_underlying_type = std::underlying_type_t<E>;
 
@@ -152,7 +152,7 @@ class EnumSet {
       return i;
     }
 
-    const raw_ptr<const EnumBitSet, DanglingUntriaged> enums_;
+    const raw_ptr<const EnumBitSet> enums_;
     size_t i_;
   };
 

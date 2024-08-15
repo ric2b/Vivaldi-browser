@@ -41,7 +41,7 @@ class EventAckData {
                               EventDispatchSource dispatch_source);
   // Clears the record of our knowledge of an in-flight event with |event_id|.
   //
-  // On failure, |failure_callback| is called synchronously or asynchronously.
+  // On failure, |failure_callback| is called synchronously.
   void DecrementInflightEvent(content::ServiceWorkerContext* context,
                               int render_process_id,
                               int64_t version_id,
@@ -82,6 +82,10 @@ class EventAckData {
   // in `unacked_events_`. Meaning that the event was not yet acked by the
   // renderer to the browser.
   void EmitLateAckedEventTask(int event_id);
+
+  // Emit all the time related event dispatch metrics when an event is acked
+  // from the renderer.
+  static void EmitDispatchTimeMetrics(EventInfo& event_info);
 
   // TODO(crbug.com/1441221): Mark events that are not acked within 5 minutes
   // (if the worker is still around) as stale, and emit

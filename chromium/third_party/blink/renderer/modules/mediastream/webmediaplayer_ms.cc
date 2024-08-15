@@ -13,6 +13,7 @@
 
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/sequence_checker.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
@@ -330,7 +331,8 @@ class WebMediaPlayerMS::FrameDeliverer {
   const scoped_refptr<base::SequencedTaskRunner> media_task_runner_;
   const scoped_refptr<base::TaskRunner> worker_task_runner_;
 
-  media::GpuVideoAcceleratorFactories* const gpu_factories_;
+  const raw_ptr<media::GpuVideoAcceleratorFactories, ExperimentalRenderer>
+      gpu_factories_;
 
   // Used for DCHECKs to ensure method calls are executed on the correct thread.
   SEQUENCE_CHECKER(video_sequence_checker_);
@@ -514,8 +516,7 @@ WebMediaPlayer::LoadTiming WebMediaPlayerMS::Load(
   if (internal_frame_->web_frame()) {
     WebURL url = source.GetAsURL();
     // Report UMA metrics.
-    ReportMetrics(load_type, url, *internal_frame_->web_frame(),
-                  media_log_.get());
+    ReportMetrics(load_type, url, media_log_.get());
   }
 
   audio_renderer_ = renderer_factory_->GetAudioRenderer(

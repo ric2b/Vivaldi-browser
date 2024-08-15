@@ -288,7 +288,7 @@ IN_PROC_BROWSER_TEST_F(CrashReportPrivateApiTest, CalledFromWebContentsInTab) {
   )";
   // Run the script in the |web_content| that has loaded |extension_| instead of
   // |ExecuteScriptInBackgroundPage| so
-  // |chrome::FindBrowserWithWebContents(web_contents)| is not |nullptr|.
+  // |chrome::FindBrowserWithTab(web_contents)| is not |nullptr|.
   EXPECT_EQ(true, ExecJs(web_content, kTestScript));
 
   auto report = crash_endpoint_->WaitForReport();
@@ -329,7 +329,7 @@ IN_PROC_BROWSER_TEST_P(CrashReportPrivateCalledFromSwaTest,
   GURL start_url = embedded_test_server()->GetURL("/test_app.html");
   auto web_app_info = std::make_unique<web_app::WebAppInstallInfo>();
   web_app_info->start_url = start_url;
-  web_app::AppId app_id =
+  webapps::AppId app_id =
       web_app::test::InstallWebApp(profile(), std::move(web_app_info));
   Browser* app_browser = web_app::LaunchWebAppBrowserAndWait(profile(), app_id);
 

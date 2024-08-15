@@ -50,6 +50,7 @@ if (is_android) {
   import("//chrome/version.gni")
   import("//content/public/app/mac_helpers.gni")
   import("//media/cdm/library_cdm/cdm_paths.gni")
+  import("//services/on_device_model/on_device_model.gni")
   import("//third_party/icu/config.gni")
 }
 
@@ -333,6 +334,7 @@ if (!is_android && !is_mac) {
         # On Chrome OS builds (for both ash-chrome and lacros-chrome), put
         # a metadata.json file in root directory containing Chrome version.
         if (is_chromeos) {
+          deps += [ "//ui/gfx/linux:gbm" ]
           data_deps += [ "//build:version_metadata" ]
         }
 
@@ -608,11 +610,7 @@ if (is_win) {
     outputs = []
 
     foreach(locale, platform_pak_locales) {
-      if (is_chrome_branded || (defined(is_vivaldi) && is_vivaldi)) {
-        _strings_file = "google_chrome_strings"
-      } else {
-        _strings_file = "chromium_strings"
-      }
+      _strings_file = "google_chrome_strings"
 
       inputs += [ "$root_gen_dir/chrome/${_strings_file}_${locale}.pak" ]
     }
@@ -637,7 +635,7 @@ if (is_win) {
           "main",
         ] + platform_pak_locales
 
-    deps = [ "//chrome/app:chromium_strings" ]
+    deps = [ "//chrome/app:branded_strings" ]
   }
 
   foreach(locale, locales_as_apple_outputs) {
@@ -1045,6 +1043,14 @@ if (is_win) {
     }
   }
 
+  if (enable_ml_internal) {
+    bundle_data("chrome_ml_library") {
+      sources = [ "$root_out_dir/libchrome_ml.dylib" ]
+      outputs = [ "{{bundle_contents_dir}}/Libraries/{{source_file_part}}" ]
+      public_deps = [ "//third_party/ml:chrome_ml_library_copy" ]
+    }
+  }
+
   group("angle_library") {
     if (bundle_egl_libraries) {
       deps = [ ":angle_binaries" ]
@@ -1264,6 +1270,10 @@ if (is_win) {
       ":widevine_cdm_library",
       "//chrome/browser/resources/media/mei_preload:component_bundle",
     ]
+
+    if (enable_ml_internal) {
+      bundle_deps += [ ":chrome_ml_library" ]
+    }
 
     if (is_chrome_branded) {
       bundle_deps += [ ":preinstalled_apps" ]
@@ -1543,11 +1553,6 @@ if (is_win) {
     ]
   }
 
-  process_version_rc_template("nacl64_exe_version") {
-    sources = [ "app/nacl64_exe.ver" ]
-    output = "$target_gen_dir/nacl64_exe_version.rc"
-  }
-
   process_version_rc_template("other_version") {
     sources = [ "app/other.ver" ]
     output = "$target_gen_dir/other_version.rc"
@@ -1660,7 +1665,7 @@ if (!is_android) {
 
 group("strings") {
   public_deps = [
-    "//chrome/app:chromium_strings",
+    "//chrome/app:branded_strings",
     "//chrome/app:generated_resources",
     "//chrome/app/resources:locale_settings",
   ]

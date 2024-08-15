@@ -211,7 +211,7 @@ using bookmarks::ManagedBookmarkService;
     bookmarkList.clear();
     for (const auto& child : node->children()) {
       if (child->is_folder() &&
-          managedBookmarkService->CanBeEditedByUser(child.get())) {
+          !managedBookmarkService->IsNodeManaged(child.get())) {
         bookmarkList.push_back(child.get());
       }
     }

@@ -55,6 +55,12 @@ chromium-metrics-reviews@google.com.
   <variant name="WheelScroll" summary="wheel scrolling"/>
 </variants>
 
+<variants name="SmoothnessThread">
+  <variant name=""/>
+  <variant name="CompositorThread."/>
+  <variant name="MainThread."/>
+</variants>
+
 <histogram name="Compositing.Browser.LayersUpdateTime" units="microseconds"
     expires_after="2024-02-05">
   <owner>pdr@chromium.org</owner>
@@ -420,7 +426,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Compositing.Display.OverlayProcessorUsingStrategy.FramesAttemptingRequiredOverlays"
-    units="boolean" expires_after="2024-01-21">
+    units="boolean" expires_after="2024-03-24">
   <owner>zoraiznaeem@chromium.org</owner>
   <owner>graphics-dev@chromium.org</owner>
   <summary>
@@ -579,7 +585,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Compositing.Renderer.AnimationUpdateOnMissingPropertyNode"
-    units="boolean" expires_after="2023-12-02">
+    units="boolean" expires_after="2024-12-02">
   <owner>awogbemila@chromium.org</owner>
   <owner>input-dev@chromium.org</owner>
   <summary>
@@ -674,7 +680,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Compositing.Renderer.NumActiveLayers" units="layers"
-    expires_after="2024-01-14">
+    expires_after="2024-03-17">
   <owner>pdr@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -684,7 +690,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Compositing.Renderer.NumActivePictureLayers" units="layers"
-    expires_after="2024-01-14">
+    expires_after="2024-03-17">
   <owner>pdr@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -695,7 +701,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Compositing.Renderer.NumRenderSurfaces" units="surfaces"
-    expires_after="2024-01-14">
+    expires_after="2024-03-17">
   <owner>pdr@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -842,7 +848,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Compositing.SurfaceManager.MarkForDestructionToDestroy"
-    units="ms" expires_after="2023-12-01">
+    units="ms" expires_after="2024-10-20">
   <owner>jonross@chromium.org</owner>
   <owner>graphics-dev@chromium.org</owner>
   <summary>
@@ -853,6 +859,26 @@ chromium-metrics-reviews@google.com.
     preventing deletion. This does not include the following time until the
     associated resources are released, and their memory is freed. This is logged
     once per destroyed Surface.
+  </summary>
+</histogram>
+
+<histogram name="Compositing.TileManager.EnoughMemory" units="boolean"
+    expires_after="2024-02-11">
+  <owner>lizeb@chromium.org</owner>
+  <owner>chrome-gpu-memory@google.com</owner>
+  <summary>
+    When memory is assigned to tiles, whether there was enough memory for all
+    required tiles.
+  </summary>
+</histogram>
+
+<histogram name="Compositing.TileManager.LimitWhenNotEnoughMemory" units="MB"
+    expires_after="2024-02-11">
+  <owner>lizeb@chromium.org</owner>
+  <owner>chrome-gpu-memory@google.com</owner>
+  <summary>
+    When memory is assigned to tiles and there is not enough memory, the memory
+    limit that the tile assignment was breaching..
   </summary>
 </histogram>
 
@@ -946,7 +972,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CompositorLatency.Type" enum="FrameReportType"
-    expires_after="2024-01-14">
+    expires_after="2024-03-17">
   <owner>jonross@chromium.org</owner>
   <owner>graphics-dev@chromium.org</owner>
   <summary>
@@ -1048,7 +1074,8 @@ chromium-metrics-reviews@google.com.
     frames is reasonable. Please note that a value is reported for each
     DidNotProduceFrame. If (1) DidNotProduceFrame is issued when there are
     already queued BeginFrame requests; or (2) a new BeginFrame request arrives
-    before the next frame, then the value reported is 0.
+    before the next frame; or (3) BeginFrame requests are paused, then the value
+    reported is 0.
   </summary>
 </histogram>
 
@@ -1083,7 +1110,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Graphics.Smoothness.95pctPercentDroppedFrames_1sWindow"
-    units="%" expires_after="2024-01-14">
+    units="%" expires_after="2024-03-17">
   <owner>jonross@chromium.org</owner>
   <owner>graphics-dev@chromium.org</owner>
   <summary>
@@ -1127,8 +1154,8 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Graphics.Smoothness.Checkerboarding3.{Sequence}" units="%"
-    expires_after="2024-05-08">
+<histogram name="Graphics.Smoothness.Checkerboarding3.{Thread}{Sequence}"
+    units="%" expires_after="2024-05-08">
   <owner>jonross@chromium.org</owner>
   <owner>graphics-dev@chromium.org</owner>
   <summary>
@@ -1146,36 +1173,17 @@ chromium-metrics-reviews@google.com.
     aggregated until an additional sequence completes where there are (&gt;=
     100) frames available in total.
   </summary>
+  <token key="Thread" variants="SmoothnessThread"/>
   <token key="Sequence" variants="SmoothnessSequence"/>
 </histogram>
 
-<histogram name="Graphics.Smoothness.Jank" units="%" expires_after="2023-10-08">
+<histogram name="Graphics.Smoothness.Jank3.All{Type}" units="%"
+    expires_after="2024-06-05">
   <owner>jonross@chromium.org</owner>
   <owner>mjzhang@chromium.org</owner>
   <owner>graphics-dev@chromium.org</owner>
   <summary>
-    Tracks the percent of janks for a particular sequence of frames (e.g. during
-    scroll, animation, etc.). This is reported in various sub-metrics with
-    suffixes describing the type of the sequence (e.g. TouchScroll etc.).
-
-    Jank is measured by tracking the number of abrupt increases in frame
-    presentation interval, divided by the total number of frames expected to be
-    produced and displayed. The lower this number is, the less the smoothness
-    varies over time.
-
-    Note that this metric is reported only when there are sufficient number of
-    frames (&gt;= 100). If there are sequences with fewer frames, then these are
-    aggregated until there are enough frames to produce the metric.
-  </summary>
-</histogram>
-
-<histogram name="Graphics.Smoothness.Jank.All{Type}" units="%"
-    expires_after="2024-06-01">
-  <owner>jonross@chromium.org</owner>
-  <owner>mjzhang@chromium.org</owner>
-  <owner>graphics-dev@chromium.org</owner>
-  <summary>
-    Tracks the percent of janks for a particular frame sequence. {Type}
+    Tracks the percent of janks for a sequence by aggregating all its {Type}
 
     Jank is measured by tracking the number of abrupt increases in frame
     presentation interval, divided by the total number of frames expected to be
@@ -1187,42 +1195,13 @@ chromium-metrics-reviews@google.com.
     aggregated until there are enough frames to produce the metric.
   </summary>
   <token key="Type">
-    <variant name="Animations"
-        summary="This metric aggregates data reported from all types of
-                 animations (e.g. comositor-driven animations, main-thread
-                 driven animations, and raf-driven animations, etc.)."/>
-    <variant name="Interactions"
-        summary="This metric aggregates data reported for all supported
-                 combinations of interaction types (e.g. scrolling, pinching,
-                 etc.) and input device types (e.g. touchscreen, touchpad,
-                 mousewheel, etc.)."/>
     <variant name="Sequences"
-        summary="This metric aggregates data from all animations and all
-                 interactions."/>
+        summary="animations and interactions, where a sequence is a series of
+                 frames produced which contain at least one of the
+                 animations/interactions. Such animations and interactions
+                 encompass: Compositor-thread animations; Main-thread
+                 animations; JS animations; scrolling; and pinch-gestures."/>
   </token>
-</histogram>
-
-<histogram name="Graphics.Smoothness.Jank3.AllSequences" units="%"
-    expires_after="2024-06-05">
-  <owner>jonross@chromium.org</owner>
-  <owner>mjzhang@chromium.org</owner>
-  <owner>graphics-dev@chromium.org</owner>
-  <summary>
-    Tracks the percent of janks for a sequence by aggregating all its animations
-    and interactions, where a sequence is a series of frames produced which
-    contain at least one of the animations/interactions. Such animations and
-    interactions encompass: Compositor-thread animations; Main-thread
-    animations; JS animations; scrolling; and pinch-gestures.
-
-    Jank is measured by tracking the number of abrupt increases in frame
-    presentation interval, divided by the total number of frames expected to be
-    produced and displayed. The lower this number is, the less the smoothness
-    varies over time.
-
-    Note that this metric is reported only when there are sufficient number of
-    frames (&gt;= 100). If there are sequences with fewer frames, then these are
-    aggregated until there are enough frames to produce the metric.
-  </summary>
 </histogram>
 
 <histogram name="Graphics.Smoothness.Jank3.{Thread}{Sequence}" units="%"
@@ -1244,10 +1223,7 @@ chromium-metrics-reviews@google.com.
     frames (&gt;= 100). If there are sequences with fewer frames, then these are
     aggregated until there are enough frames to produce the metric.
   </summary>
-  <token key="Thread">
-    <variant name="CompositorThread."/>
-    <variant name="MainThread."/>
-  </token>
+  <token key="Thread" variants="SmoothnessThread"/>
   <token key="Sequence" variants="SmoothnessSequence"/>
 </histogram>
 
@@ -1266,7 +1242,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Graphics.Smoothness.MaxStale" units="ms"
-    expires_after="2024-01-14">
+    expires_after="2024-03-17">
   <owner>jonross@chromium.org</owner>
   <owner>mjzhang@chromium.org</owner>
   <owner>graphics-dev@chromium.org</owner>
@@ -1344,16 +1320,12 @@ chromium-metrics-reviews@google.com.
     This is a new implementation of the older
     Graphics.Smoothness.PercentDroppedFrames.AllInteractions metric.
   </summary>
-  <token key="Thread">
-    <variant name=""/>
-    <variant name="CompositorThread."/>
-    <variant name="MainThread."/>
-  </token>
+  <token key="Thread" variants="SmoothnessThread"/>
   <token key="Sequence" variants="SmoothnessSequence"/>
 </histogram>
 
 <histogram name="Graphics.Smoothness.Stale" units="ms"
-    expires_after="2024-01-14">
+    expires_after="2024-03-17">
   <owner>jonross@chromium.org</owner>
   <owner>mjzhang@chromium.org</owner>
   <owner>graphics-dev@chromium.org</owner>

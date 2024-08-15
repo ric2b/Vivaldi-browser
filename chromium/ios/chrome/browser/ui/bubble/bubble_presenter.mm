@@ -8,18 +8,21 @@
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
+#import "base/strings/sys_string_conversions.h"
 #import "components/content_settings/core/browser/host_content_settings_map.h"
 #import "components/feature_engagement/public/event_constants.h"
 #import "components/feature_engagement/public/feature_constants.h"
 #import "components/feature_engagement/public/tracker.h"
 #import "components/omnibox/browser/omnibox_event_global_tracker.h"
+#import "components/prefs/pref_service.h"
 #import "components/segmentation_platform/embedder/default_model/device_switcher_result_dispatcher.h"
-#import "ios/chrome/browser/feature_engagement/tracker_factory.h"
-#import "ios/chrome/browser/iph_for_new_chrome_user/utils.h"
+#import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
+#import "ios/chrome/browser/iph_for_new_chrome_user/model/utils.h"
 #import "ios/chrome/browser/segmentation_platform/segmentation_platform_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/url/url_util.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
@@ -28,17 +31,19 @@
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/tab_strip_commands.h"
 #import "ios/chrome/browser/shared/public/commands/toolbar_commands.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
+#import "ios/chrome/browser/ui/bubble/bubble_constants.h"
 #import "ios/chrome/browser/ui/bubble/bubble_presenter_delegate.h"
 #import "ios/chrome/browser/ui/bubble/bubble_util.h"
 #import "ios/chrome/browser/ui/bubble/bubble_view_controller_presenter.h"
-#import "ios/chrome/browser/url_loading/url_loading_notifier_browser_agent.h"
-#import "ios/chrome/browser/url_loading/url_loading_observer_bridge.h"
+#import "ios/chrome/browser/url_loading/model/url_loading_notifier_browser_agent.h"
+#import "ios/chrome/browser/url_loading/model/url_loading_observer_bridge.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
-#import "ios/chrome/grit/ios_chromium_strings.h"
+#import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/web/public/ui/crw_web_view_proxy.h"
 #import "ios/web/public/ui/crw_web_view_scroll_view_proxy.h"
@@ -59,6 +64,8 @@
 @property(nonatomic, strong)
     BubbleViewControllerPresenter* openNewTabIPHBubblePresenter;
 @property(nonatomic, strong)
+    BubbleViewControllerPresenter* sharePageIPHBubblePresenter;
+@property(nonatomic, strong)
     BubbleViewControllerPresenter* tabGridIPHBubblePresenter;
 @property(nonatomic, strong)
     BubbleViewControllerPresenter* discoverFeedHeaderMenuTipBubblePresenter;
@@ -72,6 +79,10 @@
     BubbleViewControllerPresenter* whatsNewBubblePresenter;
 @property(nonatomic, strong) BubbleViewControllerPresenter*
     priceNotificationsWhileBrowsingBubbleTipPresenter;
+@property(nonatomic, strong)
+    BubbleViewControllerPresenter* lensKeyboardPresenter;
+@property(nonatomic, strong)
+    BubbleViewControllerPresenter* parcelTrackingTipBubblePresenter;
 @property(nonatomic, assign) WebStateList* webStateList;
 @property(nonatomic, assign) feature_engagement::Tracker* engagementTracker;
 @property(nonatomic, assign) HostContentSettingsMap* settingsMap;
@@ -87,6 +98,8 @@
   segmentation_platform::DeviceSwitcherResultDispatcher*
       _deviceSwitcherResultDispatcher;
 
+  PrefService* _prefService;
+
   id<TabStripCommands> _tabStripCommandsHandler;
 }
 
@@ -99,6 +112,7 @@
                     hostContentSettingsMap:(HostContentSettingsMap*)settingsMap
                            loadingNotifier:(UrlLoadingNotifierBrowserAgent*)
                                                urlLoadingNotifier
+                               prefService:(PrefService*)prefService
                                 sceneState:(SceneState*)sceneState
                    tabStripCommandsHandler:
                        (id<TabStripCommands>)tabStripCommandsHandler
@@ -107,6 +121,7 @@
                               webStateList:(WebStateList*)webStateList {
   self = [super init];
   if (self) {
+    CHECK(prefService);
     DCHECK(webStateList);
     DCHECK(urlLoadingNotifier);
 
@@ -114,6 +129,7 @@
     _engagementTracker = engagementTracker;
     _settingsMap = settingsMap;
     _deviceSwitcherResultDispatcher = deviceSwitcherResultDispatcher;
+    _prefService = prefService;
     _tabStripCommandsHandler = tabStripCommandsHandler;
     self.started = YES;
 
@@ -145,7 +161,55 @@
   [self.followWhileBrowsingBubbleTipPresenter dismissAnimated:NO];
   [self.priceNotificationsWhileBrowsingBubbleTipPresenter dismissAnimated:NO];
   [self.whatsNewBubblePresenter dismissAnimated:NO];
+  [self.lensKeyboardPresenter dismissAnimated:NO];
   [self.defaultPageModeTipBubblePresenter dismissAnimated:NO];
+  [self.parcelTrackingTipBubblePresenter dismissAnimated:NO];
+}
+
+- (void)presentShareButtonHelpBubbleIfEligible {
+  if (!iph_for_new_chrome_user::IsUserEligible(
+          _deviceSwitcherResultDispatcher)) {
+    return;
+  }
+
+  UIView* shareButtonView =
+      [_layoutGuideCenter referencedViewUnderName:kShareButtonGuide];
+  // Do not present if the share button is not visible.
+  if (!shareButtonView || shareButtonView.hidden) {
+    return;
+  }
+
+  // Do not present if button is disabled.
+  CHECK([shareButtonView isKindOfClass:[UIButton class]]);
+  UIButton* shareButton = (UIButton*)shareButtonView;
+  if (![shareButton isEnabled]) {
+    return;
+  }
+
+  if (![self canPresentBubbleWithCheckTabScrolledToTop:NO]) {
+    return;
+  }
+
+  BOOL isBottomOmnibox = IsBottomOmniboxSteadyStateEnabled() &&
+                         _prefService->GetBoolean(prefs::kBottomOmnibox);
+  BubbleArrowDirection arrowDirection =
+      isBottomOmnibox ? BubbleArrowDirectionDown : BubbleArrowDirectionUp;
+  NSString* text =
+      l10n_util::GetNSStringWithFixup(IDS_IOS_SHARE_THIS_PAGE_IPH_TEXT);
+  CGPoint shareButtonAnchor = [self anchorPointToGuide:kShareButtonGuide
+                                             direction:arrowDirection];
+
+  BubbleViewControllerPresenter* presenter = [self
+      presentBubbleForFeature:feature_engagement::kIPHiOSShareToolbarItemFeature
+                    direction:arrowDirection
+                         text:text
+        voiceOverAnnouncement:nil
+                  anchorPoint:shareButtonAnchor];
+  if (!presenter) {
+    return;
+  }
+
+  self.sharePageIPHBubblePresenter = presenter;
 }
 
 - (void)presentDiscoverFeedHeaderTipBubble {
@@ -297,6 +361,60 @@
   self.priceNotificationsWhileBrowsingBubbleTipPresenter = presenter;
 }
 
+- (void)presentLensKeyboardTipBubble {
+  if (![self canPresentBubbleWithCheckTabScrolledToTop:NO]) {
+    return;
+  }
+
+  BubbleArrowDirection arrowDirection = BubbleArrowDirectionDown;
+  NSString* text = l10n_util::GetNSString(IDS_IOS_LENS_KEYBOARD_IPH_TEXT);
+  CGPoint lensButtonAnchor = [self anchorPointToGuide:kLensKeyboardButtonGuide
+                                            direction:arrowDirection];
+
+  BubbleViewControllerPresenter* presenter = [self
+      presentBubbleForFeature:feature_engagement::kIPHiOSLensKeyboardFeature
+                    direction:arrowDirection
+                    alignment:BubbleAlignmentTopOrLeading
+                         text:text
+        voiceOverAnnouncement:text
+                  anchorPoint:lensButtonAnchor
+                presentAction:nil
+                dismissAction:nil];
+  if (!presenter) {
+    return;
+  }
+
+  self.lensKeyboardPresenter = presenter;
+}
+
+- (void)presentParcelTrackingTipBubble {
+  if (![self canPresentBubble]) {
+    return;
+  }
+
+  BubbleArrowDirection arrowDirection = BubbleArrowDirectionDown;
+  NSString* text = l10n_util::GetNSString(IDS_IOS_PARCEL_TRACKING_IPH);
+
+  CGPoint magicStackAnchor = [self anchorPointToGuide:kMagicStackGuide
+                                            direction:arrowDirection];
+
+  BubbleViewControllerPresenter* presenter = [self
+      presentBubbleForFeature:feature_engagement::kIPHiOSParcelTrackingFeature
+                    direction:arrowDirection
+                    alignment:BubbleAlignmentCenter
+                         text:text
+        voiceOverAnnouncement:text
+                  anchorPoint:magicStackAnchor
+                presentAction:nil
+                dismissAction:nil];
+
+  if (!presenter) {
+    return;
+  }
+
+  self.parcelTrackingTipBubblePresenter = presenter;
+}
+
 #pragma mark - Private
 
 // Convenience method that calls -presentBubbleForFeature with default param
@@ -387,6 +505,10 @@
                                                   : BubbleArrowDirectionUp;
   NSString* text =
       l10n_util::GetNSStringWithFixup(IDS_IOS_OPEN_NEW_TAB_IPH_TEXT);
+  std::u16string newTabButtonA11yLabel = base::SysNSStringToUTF16(
+      l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_NEW_TAB));
+  NSString* announcement = l10n_util::GetNSStringF(
+      IDS_IOS_OPEN_NEW_TAB_IPH_ANNOUNCEMENT, newTabButtonA11yLabel);
   CGPoint newTabButtonAnchor = [self anchorPointToGuide:kNewTabButtonGuide
                                               direction:arrowDirection];
 
@@ -413,7 +535,7 @@
                           direction:arrowDirection
                           alignment:BubbleAlignmentBottomOrTrailing
                                text:text
-              voiceOverAnnouncement:text
+              voiceOverAnnouncement:announcement
                         anchorPoint:newTabButtonAnchor
                       presentAction:presentAction
                       dismissAction:dismissAction];
@@ -456,6 +578,8 @@
                                                   : BubbleArrowDirectionUp;
   NSString* text =
       l10n_util::GetNSStringWithFixup(IDS_IOS_SEE_ALL_OPEN_TABS_IPH_TEXT);
+  NSString* announcement =
+      l10n_util::GetNSString(IDS_IOS_SEE_ALL_OPEN_TABS_IPH_ANNOUNCEMENT);
   CGPoint tabGridButtonAnchor = [self anchorPointToGuide:kTabSwitcherGuide
                                                direction:arrowDirection];
 
@@ -477,7 +601,7 @@
                           direction:arrowDirection
                           alignment:BubbleAlignmentBottomOrTrailing
                                text:text
-              voiceOverAnnouncement:text
+              voiceOverAnnouncement:announcement
                         anchorPoint:tabGridButtonAnchor
                       presentAction:presentAction
                       dismissAction:dismissAction];

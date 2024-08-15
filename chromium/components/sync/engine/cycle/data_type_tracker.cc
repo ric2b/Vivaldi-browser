@@ -6,8 +6,6 @@
 
 #include <algorithm>
 #include <memory>
-#include <string>
-#include <utility>
 
 #include "base/check.h"
 #include "base/metrics/histogram_functions.h"
@@ -84,7 +82,6 @@ base::TimeDelta GetDefaultLocalChangeNudgeDelay(ModelType model_type) {
     case AUTOFILL_WALLET_USAGE:
     case CONTACT_INFO:
     case THEMES:
-    case TYPED_URLS:
     case EXTENSIONS:
     case SEARCH_ENGINES:
     case APPS:
@@ -110,7 +107,6 @@ base::TimeDelta GetDefaultLocalChangeNudgeDelay(ModelType model_type) {
     case OS_PRIORITY_PREFERENCES:
     case WORKSPACE_DESK:
     case NIGORI:
-    case PROXY_TABS:
     case POWER_BOOKMARK:
     case WEBAUTHN_CREDENTIAL:
       return kMediumLocalChangeNudgeDelay;
@@ -147,7 +143,6 @@ bool CanGetCommitsFromExtensions(ModelType model_type) {
     case AUTOFILL_WALLET_OFFER:
     case AUTOFILL_WALLET_USAGE:
     case THEMES:
-    case TYPED_URLS:
     case EXTENSIONS:
     case SEARCH_ENGINES:
     case APPS:
@@ -173,7 +168,6 @@ bool CanGetCommitsFromExtensions(ModelType model_type) {
     case NIGORI:
     case SAVED_TAB_GROUP:
     case POWER_BOOKMARK:
-    case PROXY_TABS:
     case WEBAUTHN_CREDENTIAL:
     case INCOMING_PASSWORD_SHARING_INVITATION:
     case OUTGOING_PASSWORD_SHARING_INVITATION:

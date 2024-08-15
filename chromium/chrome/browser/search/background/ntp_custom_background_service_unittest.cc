@@ -15,6 +15,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "base/time/time.h"
+#include "base/token.h"
 #include "build/build_config.h"
 #include "chrome/browser/search/background/ntp_background_service_factory.h"
 #include "chrome/browser/search/background/ntp_custom_background_service_observer.h"
@@ -43,6 +44,8 @@
 #include "url/gurl.h"
 
 namespace {
+
+using testing::SaveArg;
 
 class MockNtpCustomBackgroundServiceObserver
     : public NtpCustomBackgroundServiceObserver {
@@ -121,19 +124,10 @@ base::Value::Dict GetBackgroundInfoAsDict(const GURL& background_url,
 }
 
 base::Time GetReferenceTime() {
-  base::Time::Exploded exploded_reference_time;
-  exploded_reference_time.year = 2019;
-  exploded_reference_time.month = 1;
-  exploded_reference_time.day_of_month = 1;
-  exploded_reference_time.day_of_week = 1;
-  exploded_reference_time.hour = 0;
-  exploded_reference_time.minute = 0;
-  exploded_reference_time.second = 0;
-  exploded_reference_time.millisecond = 0;
-
+  static constexpr base::Time::Exploded kReferenceTime = {
+      .year = 2019, .month = 1, .day_of_week = 1, .day_of_month = 1};
   base::Time out_time;
-  EXPECT_TRUE(
-      base::Time::FromLocalExploded(exploded_reference_time, &out_time));
+  EXPECT_TRUE(base::Time::FromLocalExploded(kReferenceTime, &out_time));
   return out_time;
 }
 
@@ -773,6 +767,34 @@ TEST_F(NtpCustomBackgroundServiceTest, TestUpdateCustomBackgroundColor) {
       custom_background->custom_background_main_color.value_or(SK_ColorWHITE));
 }
 
+TEST_F(NtpCustomBackgroundServiceTest, TestUpdateCustomLocalBackgroundColor) {
+  sync_preferences::TestingPrefServiceSyncable* pref_service =
+      profile().GetTestingPrefService();
+
+  SkColor color = SK_ColorBLUE;
+  EXPECT_CALL(mock_theme_service(), SetUserColorAndBrowserColorVariant)
+      .Times(1)
+      .WillOnce(SaveArg<0>(&color));
+  SkBitmap bitmap;
+  bitmap.allocN32Pixels(32, 32);
+  bitmap.eraseColor(SK_ColorRED);
+  gfx::Image image = gfx::Image::CreateFrom1xBitmap(bitmap);
+
+  pref_service->SetBoolean(prefs::kNtpCustomBackgroundLocalToDevice, false);
+
+  // Background color will not update if local background is not set.
+  // This is checked by not making another call to ThemeService.
+  custom_background_service_->UpdateCustomLocalBackgroundColorAsync(image);
+  task_environment_.RunUntilIdle();
+
+  pref_service->SetBoolean(prefs::kNtpCustomBackgroundLocalToDevice, true);
+
+  // Background color should update.
+  custom_background_service_->UpdateCustomLocalBackgroundColorAsync(image);
+  task_environment_.RunUntilIdle();
+  EXPECT_EQ(SK_ColorRED, color);
+}
+
 // Most of the color extraction pipeline is tested above. The only thing tested
 // here is that when kChromeWebuiRefresh2023 is enabled, we call
 // SetUserColorAndBrowserColorVariant() instead of
@@ -1028,4 +1050,55 @@ TEST_F(NtpCustomBackgroundServiceTest, LocalImageURLsDoNotGetVerified) {
       pref_service->GetBoolean(prefs::kNtpCustomBackgroundLocalToDevice));
   EXPECT_TRUE(custom_background_service_->IsCustomBackgroundSet());
   EXPECT_EQ(true, custom_background->is_uploaded_image);
+}
+
+class NtpCustomBackgroundServiceWithWallpaperSearchTest
+    : public NtpCustomBackgroundServiceTest {
+ public:
+  void SetUp() override {
+    feature_list_.InitWithFeatures(
+        /*enabled_features=*/{ntp_features::kCustomizeChromeWallpaperSearch},
+        /*disabled_features=*/{});
+    NtpCustomBackgroundServiceTest::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+TEST_F(NtpCustomBackgroundServiceWithWallpaperSearchTest,
+       SetLocalImageWithSkBitmap) {
+  EXPECT_CALL(observer_, OnCustomBackgroundImageUpdated).Times(1);
+  ASSERT_FALSE(custom_background_service_->IsCustomBackgroundSet());
+
+  SkColor color = SK_ColorBLUE;
+  EXPECT_CALL(mock_theme_service(), SetUserColorAndBrowserColorVariant)
+      .WillOnce(SaveArg<0>(&color));
+
+  sync_preferences::TestingPrefServiceSyncable* pref_service =
+      profile().GetTestingPrefService();
+  SkBitmap bitmap;
+  bitmap.allocN32Pixels(32, 32);
+  bitmap.eraseColor(SK_ColorRED);
+
+  base::Token token = base::Token::CreateRandom();
+  custom_background_service_->SelectLocalBackgroundImage(token, bitmap);
+  task_environment_.RunUntilIdle();
+
+  // Check that local background image was set.
+  auto custom_background = custom_background_service_->GetCustomBackground();
+  EXPECT_TRUE(base::StartsWith(
+      custom_background->custom_background_url.spec(),
+      chrome::kChromeUIUntrustedNewTabPageUrl + token.ToString() +
+          chrome::kChromeUIUntrustedNewTabPageBackgroundFilename,
+      base::CompareCase::SENSITIVE));
+  EXPECT_TRUE(
+      pref_service->GetBoolean(prefs::kNtpCustomBackgroundLocalToDevice));
+  EXPECT_EQ(pref_service->GetString(prefs::kNtpCustomBackgroundLocalToDeviceId),
+            token.ToString());
+  EXPECT_TRUE(custom_background_service_->IsCustomBackgroundSet());
+  EXPECT_EQ(true, custom_background->is_uploaded_image);
+
+  // Check that the color is correct.
+  EXPECT_EQ(SK_ColorRED, color);
 }

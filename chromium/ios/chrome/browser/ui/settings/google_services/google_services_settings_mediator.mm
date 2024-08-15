@@ -15,11 +15,15 @@
 #import "components/supervised_user/core/common/supervised_user_utils.h"
 #import "components/sync/service/sync_service.h"
 #import "components/unified_consent/pref_names.h"
+#import "ios/chrome/browser/parcel_tracking/parcel_tracking_util.h"
 #import "ios/chrome/browser/policy/policy_util.h"
-#import "ios/chrome/browser/settings/sync/utils/sync_util.h"
+#import "ios/chrome/browser/settings/model/sync/utils/sync_util.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/utils/observable_boolean.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_detail_icon_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_info_button_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_item.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
@@ -34,11 +38,9 @@
 #import "ios/chrome/browser/ui/settings/google_services/google_services_settings_command_handler.h"
 #import "ios/chrome/browser/ui/settings/google_services/google_services_settings_constants.h"
 #import "ios/chrome/browser/ui/settings/settings_table_view_controller_constants.h"
-#import "ios/chrome/browser/ui/settings/utils/observable_boolean.h"
-#import "ios/chrome/browser/ui/settings/utils/pref_backed_boolean.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/table_view/table_view_cells_constants.h"
-#import "ios/chrome/grit/ios_chromium_strings.h"
+#import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/signin/signin_resources_api.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -63,6 +65,7 @@ NSString* const kTrackPricesOnTabsItemAccessibilityID =
 // List of sections.
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
   NonPersonalizedSectionIdentifier = kSectionIdentifierEnumZero,
+  ParcelTrackingSectionIdentifier
 };
 
 // List of items. For implementation details in
@@ -79,6 +82,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ImproveSearchSuggestionsItemType,
   ImproveSearchSuggestionsManagedItemType,
   TrackPricesOnTabsItemType,
+  ParcelTrackingItemType,
 };
 
 // TODO(crbug.com/1244632): Use the Authentication Service sign-in status API
@@ -282,6 +286,8 @@ bool GetStatusForSigninPolicy() {
         base::apple::ObjCCast<SyncSwitchItem>(item).on =
             self.trackPricesOnTabsPreference.value;
         break;
+      case ParcelTrackingItemType:
+        break;
     }
   }
   if (notifyConsumer) {
@@ -430,11 +436,9 @@ bool GetStatusForSigninPolicy() {
     managedItem.iconTintColor = [UIColor colorNamed:kGrey300Color];
   }
 
-  // This item is not controllable, then set the color opacity to 40%.
-  managedItem.textColor =
-      [[UIColor colorNamed:kTextPrimaryColor] colorWithAlphaComponent:0.4f];
-  managedItem.detailTextColor =
-      [[UIColor colorNamed:kTextSecondaryColor] colorWithAlphaComponent:0.4f];
+  // This item is not controllable; set to lighter colors.
+  managedItem.textColor = [UIColor colorNamed:kTextSecondaryColor];
+  managedItem.detailTextColor = [UIColor colorNamed:kTextTertiaryColor];
   managedItem.accessibilityHint =
       l10n_util::GetNSString(IDS_IOS_TOGGLE_SETTING_MANAGED_ACCESSIBILITY_HINT);
   return managedItem;
@@ -446,6 +450,42 @@ bool GetStatusForSigninPolicy() {
     (GoogleServicesSettingsViewController*)controller {
   DCHECK_EQ(self.consumer, controller);
   [self loadNonPersonalizedSection];
+
+  if (IsIOSParcelTrackingEnabled()) {
+    TableViewModel* model = self.consumer.tableViewModel;
+    [model addSectionWithIdentifier:ParcelTrackingSectionIdentifier];
+
+    TableViewDetailIconItem* parcelTrackingItem =
+        [[TableViewDetailIconItem alloc] initWithType:ParcelTrackingItemType];
+    parcelTrackingItem.text = l10n_util::GetNSString(
+        IDS_IOS_CONTENT_SUGGESTIONS_PARCEL_TRACKING_MODULE_TITLE);
+    parcelTrackingItem.accessoryType =
+        UITableViewCellAccessoryDisclosureIndicator;
+    parcelTrackingItem.accessibilityTraits |= UIAccessibilityTraitButton;
+    [model addItem:parcelTrackingItem
+        toSectionWithIdentifier:ParcelTrackingSectionIdentifier];
+
+    IOSParcelTrackingOptInStatus optInStatus =
+        static_cast<IOSParcelTrackingOptInStatus>(
+            self.userPrefService->GetInteger(
+                prefs::kIosParcelTrackingOptInStatus));
+    NSString* currentOptInStatusString = nil;
+    switch (optInStatus) {
+      case IOSParcelTrackingOptInStatus::kAlwaysTrack:
+        currentOptInStatusString = l10n_util::GetNSString(
+            IDS_IOS_GOOGLE_SERVICES_SETTINGS_AUTO_TRACK_PACKAGES_ALL);
+        break;
+      case IOSParcelTrackingOptInStatus::kAskToTrack:
+        currentOptInStatusString = l10n_util::GetNSString(
+            IDS_IOS_PARCEL_TRACKING_OPT_IN_TERTIARY_ACTION);
+        break;
+      case IOSParcelTrackingOptInStatus::kNeverTrack:
+        currentOptInStatusString = l10n_util::GetNSString(
+            IDS_IOS_GOOGLE_SERVICES_SETTINGS_AUTO_TRACK_PACKAGES_NEVER);
+        break;
+    }
+    parcelTrackingItem.detailText = currentOptInStatusString;
+  }
 }
 
 - (BOOL)isAllowChromeSigninItem:(int)type {
@@ -454,6 +494,14 @@ bool GetStatusForSigninPolicy() {
 
 - (BOOL)isViewControllerSubjectToParentalControls {
   return supervised_user::IsSubjectToParentalControls(self.userPrefService);
+}
+
+- (void)googleServicesSettingsViewControllerDidSelectItemAtIndexPath:
+    (NSIndexPath*)indexPath {
+  if ([self.consumer.tableViewModel itemAtIndexPath:indexPath].type ==
+      ParcelTrackingItemType) {
+    [self.commandHandler showParcelTrackingSettingsPage];
+  }
 }
 
 #pragma mark - GoogleServicesSettingsServiceDelegate
@@ -504,6 +552,8 @@ bool GetStatusForSigninPolicy() {
     case ImproveChromeManagedItemType:
     case ImproveSearchSuggestionsManagedItemType:
       NOTREACHED();
+      break;
+    case ParcelTrackingItemType:
       break;
   }
 }

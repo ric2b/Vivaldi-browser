@@ -19,14 +19,12 @@
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "chromeos/ui/frame/multitask_menu/multitask_button.h"
 #include "chromeos/ui/frame/multitask_menu/multitask_menu_metrics.h"
 #include "chromeos/ui/frame/multitask_menu/multitask_menu_view.h"
 #include "chromeos/ui/frame/multitask_menu/multitask_menu_view_test_api.h"
 #include "chromeos/ui/frame/multitask_menu/split_button_view.h"
-#include "chromeos/ui/wm/features.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
@@ -50,8 +48,7 @@ constexpr int kVerticalPosition = 8;
 
 class TabletModeMultitaskMenuTest : public AshTestBase {
  public:
-  TabletModeMultitaskMenuTest()
-      : scoped_feature_list_(chromeos::wm::features::kWindowLayoutMenu) {}
+  TabletModeMultitaskMenuTest() = default;
   TabletModeMultitaskMenuTest(const TabletModeMultitaskMenuTest&) = delete;
   TabletModeMultitaskMenuTest& operator=(const TabletModeMultitaskMenuTest&) =
       delete;
@@ -142,9 +139,6 @@ class TabletModeMultitaskMenuTest : public AshTestBase {
 
  protected:
   base::HistogramTester histogram_tester_;
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 // Tests that a scroll down gesture from the top center activates the
@@ -782,7 +776,7 @@ TEST_F(TabletModeMultitaskMenuTest, NoCrashWhenExitingTabletMode) {
   TabletModeControllerTestApi().LeaveTabletMode();
 }
 
-// Tests that update drag does not cause a crash. Test for https://b/290102602.
+// Tests that update drag does not cause a crash. Test for http://b/290102602.
 TEST_F(TabletModeMultitaskMenuTest, NoCrashDuringUpdateDrag) {
   ui::ScopedAnimationDurationScaleMode test_duration_mode(
       ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
@@ -874,8 +868,7 @@ TEST_F(TabletModeMultitaskMenuTest, HidesWhenMinimized) {
 TEST_F(TabletModeMultitaskMenuTest, NotShownInKioskMode) {
   // Enter kiosk mode and try swiping down. The multitask menu and cue should
   // not show.
-  LoginState::Get()->SetLoggedInState(LoginState::LOGGED_IN_ACTIVE,
-                                      LoginState::LOGGED_IN_USER_KIOSK);
+  SimulateKioskMode(user_manager::USER_TYPE_KIOSK_APP);
   auto window = CreateAppWindow(gfx::Rect(800, 600));
   EXPECT_FALSE(
       GetMultitaskMenuController()->multitask_cue_controller()->cue_layer());

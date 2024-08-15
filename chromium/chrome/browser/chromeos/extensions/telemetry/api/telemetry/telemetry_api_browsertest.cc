@@ -10,7 +10,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/chromeos/extensions/telemetry/api/common/base_telemetry_extension_browser_test.h"
-#include "chrome/browser/chromeos/extensions/telemetry/api/telemetry/fake_probe_service.h"
+#include "chrome/browser/chromeos/telemetry/fake_probe_service.h"
 #include "chromeos/crosapi/mojom/nullable_primitives.mojom.h"
 #include "chromeos/crosapi/mojom/probe_service.mojom.h"
 #include "chromeos/services/network_config/public/mojom/network_types.mojom.h"
@@ -1274,8 +1274,7 @@ IN_PROC_BROWSER_TEST_F(TelemetryExtensionTelemetryApiBrowserTest,
                 "modelId": 16,
                 "refreshRate": 15,
                 "resolutionHorizontal": 13,
-                "resolutionVertical": 14,
-                "serialNumber": 17
+                "resolutionVertical": 14
               },
               {
                 "inputType": "unknown"
@@ -1295,8 +1294,7 @@ IN_PROC_BROWSER_TEST_F(TelemetryExtensionTelemetryApiBrowserTest,
               "privacyScreenSupported": true,
               "refreshRate": 5,
               "resolutionHorizontal": 3,
-              "resolutionVertical": 4,
-              "serialNumber": 7
+              "resolutionVertical": 4
             }
           }, result);
         chrome.test.succeed();

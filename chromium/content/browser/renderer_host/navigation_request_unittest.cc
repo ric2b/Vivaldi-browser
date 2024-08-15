@@ -32,7 +32,6 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/navigation/navigation_params.h"
-#include "third_party/blink/public/common/origin_trials/origin_trial_feature.h"
 #include "third_party/blink/public/common/origin_trials/scoped_test_origin_trial_policy.h"
 #include "third_party/blink/public/common/runtime_feature_state/runtime_feature_state_context.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
@@ -498,8 +497,8 @@ TEST_F(NavigationRequestTest, SharedStorageWritable) {
   // Verify that the main frame's `NavigationRequest` will not be
   // SharedStorageWritable.
   ASSERT_TRUE(main_navigation->GetNavigationHandle());
-  EXPECT_FALSE(
-      main_navigation->GetNavigationHandle()->shared_storage_writable());
+  EXPECT_FALSE(main_navigation->GetNavigationHandle()
+                   ->shared_storage_writable_eligible());
 
   // Commit the navigation.
   main_navigation->Commit();
@@ -521,8 +520,8 @@ TEST_F(NavigationRequestTest, SharedStorageWritable) {
 
   // Verify that the `NavigationRequest` will be SharedStorageWritable.
   ASSERT_TRUE(child_navigation->GetNavigationHandle());
-  EXPECT_TRUE(
-      child_navigation->GetNavigationHandle()->shared_storage_writable());
+  EXPECT_TRUE(child_navigation->GetNavigationHandle()
+                  ->shared_storage_writable_eligible());
 
   // Commit the navigation.
   child_navigation->Commit();
@@ -560,7 +559,7 @@ TEST_F(NavigationRequestTest, SharedStorageWritable) {
   // Verify that the `NavigationRequest` will be SharedStorageWritable.
   ASSERT_TRUE(child_of_fenced_frame_navigation->GetNavigationHandle());
   EXPECT_TRUE(child_of_fenced_frame_navigation->GetNavigationHandle()
-                  ->shared_storage_writable());
+                  ->shared_storage_writable_eligible());
 
   // Commit the navigation.
   child_of_fenced_frame_navigation->Commit();
@@ -978,6 +977,19 @@ TEST_F(NavigationRequestTest, IsolatedAppPolicyInjection) {
   EXPECT_EQ("'script'", csp->raw_directives[Directive::RequireTrustedTypesFor]);
 }
 
+TEST_F(NavigationRequestTest, UpdatePrivateNetworkRequestPolicy) {
+  std::unique_ptr<NavigationSimulator> navigation =
+      NavigationSimulator::CreateRendererInitiated(GURL("https://example.com/"),
+                                                   main_test_rfh());
+  navigation->SetSocketAddress(net::IPEndPoint());
+
+  navigation->ReadyToCommit();
+  NavigationRequest* request =
+      NavigationRequest::From(navigation->GetNavigationHandle());
+  EXPECT_FALSE(request->GetSocketAddress().address().IsValid());
+  navigation->Commit();
+}
+
 // Test that the required CSP of every frame is computed/inherited correctly and
 // that the Sec-Required-CSP header is set.
 class CSPEmbeddedEnforcementUnitTest : public NavigationRequestTest {
@@ -1213,7 +1225,7 @@ class OriginTrialsControllerDelegateMock
   }
   bool IsFeaturePersistedForOrigin(const url::Origin& origin,
                                    const url::Origin& partition_origin,
-                                   blink::OriginTrialFeature feature,
+                                   blink::mojom::OriginTrialFeature feature,
                                    const base::Time current_time) override {
     DCHECK(false) << "Method not implemented for test.";
     return false;

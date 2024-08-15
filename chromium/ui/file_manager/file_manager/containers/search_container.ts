@@ -5,20 +5,20 @@
 import {CrInputElement} from 'chrome://resources/cr_elements/cr_input/cr_input.js';
 
 import {queryRequiredElement} from '../common/js/dom_utils.js';
-import {metrics} from '../common/js/metrics.js';
-import {str, util} from '../common/js/util.js';
+import {recordUserAction} from '../common/js/metrics.js';
+import {str, strf} from '../common/js/translations.js';
 import {VolumeManagerCommon} from '../common/js/volume_manager_types.js';
 import {CurrentDirectory, PropStatus, SearchData, SearchLocation, SearchOptions, SearchRecency, State} from '../externs/ts/state.js';
 import {VolumeManager} from '../externs/volume_manager.js';
 import {PathComponent} from '../foreground/js/path_component.js';
-import {SearchAutocompleteList} from '../foreground/js/ui/search_autocomplete_list.js';
+import {A11yAnnounce} from '../foreground/js/ui/a11y_announce.js';
 import {changeDirectory} from '../state/ducks/current_directory.js';
-import {clearSearch, getDefaultSearchOptions, updateSearch} from '../state/ducks/search.js';
-import {FileKey} from '../state/file_key.js';
-import {getStore, Store} from '../state/store.js';
-import {BreadcrumbClickedEvent, XfBreadcrumb} from '../widgets/xf_breadcrumb.js';
-import {OptionKind, SEARCH_OPTIONS_CHANGED, SearchOptionsChangedEvent, XfSearchOptionsElement} from '../widgets/xf_search_options.js';
-import {XfOption} from '../widgets/xf_select.js';
+import {clearSearch, getDefaultSearchOptions, isSearchEmpty, updateSearch} from '../state/ducks/search.js';
+import type {FileKey} from '../state/file_key.js';
+import {getStore, type Store} from '../state/store.js';
+import {type BreadcrumbClickedEvent, XfBreadcrumb} from '../widgets/xf_breadcrumb.js';
+import {OptionKind, SEARCH_OPTIONS_CHANGED, type SearchOptionsChangedEvent, XfSearchOptionsElement} from '../widgets/xf_search_options.js';
+import type {XfOption} from '../widgets/xf_select.js';
 
 /**
  * @fileoverview
@@ -34,9 +34,7 @@ import {XfOption} from '../widgets/xf_select.js';
  */
 enum SearchInputState {
   CLOSED = 'closed',
-  OPENING = 'opening',
   OPEN = 'open',
-  CLOSING = 'closing',
 }
 
 /**
@@ -137,6 +135,45 @@ function createRecencyOptions(state: State): XfOption[] {
 }
 
 /**
+ * Creates file category option. Uses the state to find out if we are in the
+ * Recent view. If so, it sets the default based on the Recent view selectors.
+ */
+function createFileCategoryOptions(state: State): XfOption[] {
+  let fileCategory = chrome.fileManagerPrivate.FileCategory.ALL;
+  if (isInRecent(state.currentDirectory)) {
+    fileCategory =
+        state.allEntries[state.currentDirectory!.key].entry.fileCategory;
+  }
+  return [
+    {
+      value: chrome.fileManagerPrivate.FileCategory.ALL,
+      text: str('SEARCH_OPTIONS_TYPES_ALL_TYPES'),
+      default: fileCategory == chrome.fileManagerPrivate.FileCategory.ALL,
+    },
+    {
+      value: chrome.fileManagerPrivate.FileCategory.AUDIO,
+      text: str('SEARCH_OPTIONS_TYPES_AUDIO'),
+      default: fileCategory == chrome.fileManagerPrivate.FileCategory.AUDIO,
+    },
+    {
+      value: chrome.fileManagerPrivate.FileCategory.DOCUMENT,
+      text: str('SEARCH_OPTIONS_TYPES_DOCUMENTS'),
+      default: fileCategory == chrome.fileManagerPrivate.FileCategory.DOCUMENT,
+    },
+    {
+      value: chrome.fileManagerPrivate.FileCategory.IMAGE,
+      text: str('SEARCH_OPTIONS_TYPES_IMAGES'),
+      default: fileCategory == chrome.fileManagerPrivate.FileCategory.IMAGE,
+    },
+    {
+      value: chrome.fileManagerPrivate.FileCategory.VIDEO,
+      text: str('SEARCH_OPTIONS_TYPES_VIDEOS'),
+      default: fileCategory == chrome.fileManagerPrivate.FileCategory.VIDEO,
+    },
+  ];
+}
+
+/**
  * Updates visibility of recency options based on the current directory.
  */
 function updateRecencyOptionsVisibility(
@@ -170,9 +207,6 @@ export class SearchContainer extends EventTarget {
   private searchWrapper_: HTMLElement;
   // The current state of the search widget elements.
   private inputState_: SearchInputState = SearchInputState.CLOSED;
-  // A component that shows potential matches for the text the user typed so
-  // far.
-  private autocompleteList_: SearchAutocompleteList;
   // The current value of search options, initialized to some sensible default.
   private currentOptions_: SearchOptions = getDefaultSearchOptions();
   // The store which updates us about state changes.
@@ -196,6 +230,9 @@ export class SearchContainer extends EventTarget {
   private pathComponents_: FileKey[] = [];
   // Volume manager, used by us to resolve paths of selected entries.
   private volumeManager_: VolumeManager;
+  // The accessibility interface that is used to announce the outcomes of file
+  // searches.
+  private a11y_: A11yAnnounce;
 
 
   /**
@@ -210,7 +247,8 @@ export class SearchContainer extends EventTarget {
    */
   constructor(
       volumeManager: VolumeManager, searchWrapper: HTMLElement,
-      optionsContainer: HTMLElement, pathContainer: HTMLElement) {
+      optionsContainer: HTMLElement, pathContainer: HTMLElement,
+      a11y: A11yAnnounce) {
     super();
     this.volumeManager_ = volumeManager;
     // The "box" around the search button, query input, and clear button.
@@ -235,13 +273,9 @@ export class SearchContainer extends EventTarget {
     // Hide clear button when created.
     this.updateClearButton_('');
 
-    // The list showing possible matches to the current query.
-    this.autocompleteList_ =
-        new SearchAutocompleteList(this.searchBox_.ownerDocument);
-    this.searchWrapper_.parentNode!.appendChild(this.autocompleteList_);
-
     this.optionsContainer_ = optionsContainer;
     this.pathContainer_ = pathContainer;
+    this.a11y_ = a11y;
     this.store_ = getStore();
     this.store_.subscribe(this);
 
@@ -269,15 +303,6 @@ export class SearchContainer extends EventTarget {
     const value = this.inputElement_.value;
     if (value !== '') {
       this.inputElement_.value = '';
-      if (!util.isSearchV2Enabled()) {
-        // Force query change flow only if V2 search is not enabled. This
-        // is due to the fact that in the legacy search we listen to input
-        // events from the text field, which are not posted when the value
-        // is directly assigned a value. In the V2 search we listen to store
-        // change events that cause the code path that handles clearing of
-        // search to be executed.
-        this.onQueryChanged_();
-      }
       requestAnimationFrame(() => {
         this.closeSearch();
       });
@@ -285,59 +310,11 @@ export class SearchContainer extends EventTarget {
   }
 
   /**
-   * Sets the new query. This method does not post events, even if the query
-   * changed as a result.
-   */
-  setQuery(query: string) {
-    this.inputElement_.value = query;
-    this.openSearch();
-  }
-
-  /**
    * Returns the user entered search query. This method trims white spaces from
    * the left side of the query.
    */
   getQuery(): string {
-    return this.inputElement_.value.trimLeft();
-  }
-
-  /**
-   * Clears all suggestion
-   */
-  clearSuggestions() {
-    this.autocompleteList_.suggestions = [];
-  }
-
-  /**
-   * Sets the first suggestion in the autocomplete list. This typically should
-   * be a header item that indicates what is being searched and where.
-   */
-  setHeaderItem(item: SearchItem) {
-    if (!this.autocompleteList_.dataModel ||
-        this.autocompleteList_.dataModel.length == 0) {
-      this.autocompleteList_.suggestions = [item];
-    } else {
-      // Updates only the head item to prevent a flickering on typing.
-      this.autocompleteList_.dataModel.splice(0, 1, item);
-    }
-    this.autocompleteList_.syncWidthAndPositionToInput();
-  }
-
-  /**
-   * Sets the given search items as autocomplete suggestion. This method
-   * overrides all suggestions, so if you need to keep the header item, you
-   * should pass it as the first item in the list.
-   */
-  setSuggestions(items: SearchItem[]) {
-    this.autocompleteList_.suggestions = items;
-    this.autocompleteList_.syncWidthAndPositionToInput();
-  }
-
-  /**
-   * Returns the currently selected search item on the autocomplete list.
-   */
-  getSelectedItem(): SearchItem {
-    return this.autocompleteList_.selectedItem;
+    return this.inputElement_.value.trimStart();
   }
 
   /**
@@ -360,20 +337,32 @@ export class SearchContainer extends EventTarget {
       return;
     }
     // Cache the last received search state for future comparisons.
-    this.searchState_ = search;
-    if (!search) {
+    const lastSearch = this.searchState_;
+    this.searchState_ = state.search;
+
+    if (lastSearch?.query && search && search.query === undefined) {
+      this.a11y_.speakA11yMessage(str('SEARCH_A11Y_CLEAR_SEARCH'));
+    }
+    if (!search || isSearchEmpty(search)) {
       this.closeSearch();
       return;
     }
+
     const query = search.query;
     if (query !== undefined && query !== this.getQuery()) {
-      this.setQuery(query);
+      this.inputElement_.value = query;
+      this.openSearch();
     }
-    if (util.isSearchV2Enabled()) {
-      if (search.status === PropStatus.STARTED && query) {
-        this.showOptionsElement_(state);
-        this.showPathDisplayElement_();
-      }
+    if (search.status === PropStatus.STARTED && query) {
+      this.showOptionsElement_(state);
+      this.showBreadcrumbElement_();
+    }
+    if (search.status === PropStatus.SUCCESS && query) {
+      const content = state.currentDirectory?.content;
+      const count = content ? content.keys.length : 0;
+      const messageId =
+          count === 0 ? 'SEARCH_A11Y_NO_RESULT' : 'SEARCH_A11Y_RESULT';
+      this.a11y_.speakA11yMessage(strf(messageId, query));
     }
   }
 
@@ -387,7 +376,7 @@ export class SearchContainer extends EventTarget {
       return;
     }
     if (!this.breadcrumb_) {
-      this.showPathDisplayElement_();
+      this.showBreadcrumbElement_();
     }
     const parts = this.getPathComponentsOfSelectedEntry_(state);
     const path = parts.map(p => p.name).join('/');
@@ -448,7 +437,7 @@ export class SearchContainer extends EventTarget {
     }
   }
 
-  private showPathDisplayElement_() {
+  private showBreadcrumbElement_() {
     let element = this.getBreadcrumbElement_();
     if (!element) {
       element = this.createBreadcrumbElement_();
@@ -492,7 +481,7 @@ export class SearchContainer extends EventTarget {
 
     this.store_.dispatch(
         changeDirectory({toKey: this.pathComponents_[index] as FileKey}));
-    metrics.recordUserAction('ClickBreadcrumbs');
+    recordUserAction('ClickBreadcrumbs');
   }
 
   /**
@@ -512,28 +501,7 @@ export class SearchContainer extends EventTarget {
     element.id = 'search-options';
     element.getLocationSelector().options = createLocationOptions(state);
     element.getRecencySelector().options = createRecencyOptions(state);
-    element.getFileTypeSelector().options = [
-      {
-        value: chrome.fileManagerPrivate.FileCategory.ALL,
-        text: str('SEARCH_OPTIONS_TYPES_ALL_TYPES'),
-      },
-      {
-        value: chrome.fileManagerPrivate.FileCategory.AUDIO,
-        text: str('SEARCH_OPTIONS_TYPES_AUDIO'),
-      },
-      {
-        value: chrome.fileManagerPrivate.FileCategory.DOCUMENT,
-        text: str('SEARCH_OPTIONS_TYPES_DOCUMENTS'),
-      },
-      {
-        value: chrome.fileManagerPrivate.FileCategory.IMAGE,
-        text: str('SEARCH_OPTIONS_TYPES_IMAGES'),
-      },
-      {
-        value: chrome.fileManagerPrivate.FileCategory.VIDEO,
-        text: str('SEARCH_OPTIONS_TYPES_VIDEOS'),
-      },
-    ];
+    element.getFileTypeSelector().options = createFileCategoryOptions(state);
     this.updateSearchOptions_(state);
     element.addEventListener(
         SEARCH_OPTIONS_CHANGED, this.onOptionsChanged_.bind(this));
@@ -581,15 +549,13 @@ export class SearchContainer extends EventTarget {
    * Updates search options in the store.
    */
   private updateSearchOptions_(state: State) {
-    if (util.isSearchV2Enabled()) {
-      updateRecencyOptionsVisibility(
-          state, this.getSearchOptionsElement_()!, this.currentOptions_);
-      this.store_.dispatch(updateSearch({
-        query: this.getQuery(),
-        status: undefined,  // do not change
-        options: this.currentOptions_,
-      }));
-    }
+    updateRecencyOptionsVisibility(
+        state, this.getSearchOptionsElement_()!, this.currentOptions_);
+    this.store_.dispatch(updateSearch({
+      query: this.getQuery(),
+      status: undefined,  // do not change
+      options: this.currentOptions_,
+    }));
   }
 
   /**
@@ -603,8 +569,6 @@ export class SearchContainer extends EventTarget {
         this.openSearch();
       } else if (this.inputState_ === SearchInputState.OPEN) {
         this.closeSearch();
-      } else {
-        console.warn('Search UI is transitioning', this.inputState_);
       }
     });
     this.inputElement_.addEventListener('input', () => {
@@ -620,12 +584,6 @@ export class SearchContainer extends EventTarget {
           this.closeSearch();
         }
       }
-    });
-    this.inputElement_.addEventListener('focus', () => {
-      this.autocompleteList_.attachToInput(this.inputElement_);
-    });
-    this.inputElement_.addEventListener('blur', () => {
-      this.autocompleteList_.detach();
     });
     this.clearButton_.addEventListener('click', () => {
       this.clear();
@@ -645,10 +603,14 @@ export class SearchContainer extends EventTarget {
         }
       }
     });
-    this.autocompleteList_.handleEnterKeydown =
-        this.postItemChangedEvent.bind(this);
-    this.autocompleteList_.addEventListener(
-        'mousedown', this.postItemChangedEvent.bind(this));
+  }
+
+  /**
+   * Returns whether the search container is open. In the open state the user
+   * may enter a search query, interact with options, etc.
+   */
+  isOpen() {
+    return this.inputState_ === SearchInputState.OPEN;
   }
 
   /**
@@ -660,9 +622,8 @@ export class SearchContainer extends EventTarget {
     // Do not initiate open transition if we are not closed. This would leave us
     // in the OPENING state, without ever getting to OPEN state.
     if (this.inputState_ === SearchInputState.CLOSED) {
-      this.inputState_ = SearchInputState.OPENING;
+      this.inputState_ = SearchInputState.OPEN;
       this.inputElement_.addEventListener('transitionend', () => {
-        this.inputState_ = SearchInputState.OPEN;
         this.searchWrapper_.removeAttribute('collapsed');
       }, {once: true, passive: true, capture: true});
       this.inputElement_.disabled = false;
@@ -684,9 +645,8 @@ export class SearchContainer extends EventTarget {
     // Do not initiate close transition if we are not open. This would leave us
     // in the CLOSING state, without ever getting to CLOSED state.
     if (this.inputState_ === SearchInputState.OPEN) {
-      this.inputState_ = SearchInputState.CLOSING;
+      this.inputState_ = SearchInputState.CLOSED;
       this.inputElement_.addEventListener('transitionend', () => {
-        this.inputState_ = SearchInputState.CLOSED;
         this.searchWrapper_.setAttribute('collapsed', '');
       }, {once: true, passive: true, capture: true});
       this.hideOptionsElement_();
@@ -707,9 +667,7 @@ export class SearchContainer extends EventTarget {
    * Updates the visibility of clear button.
    */
   private updateClearButton_(query: string) {
-    if (util.isSearchV2Enabled()) {
-      this.clearButton_.hidden = (query.length <= 0);
-    }
+    this.clearButton_.hidden = (query.length <= 0);
   }
 
   /**
@@ -719,63 +677,10 @@ export class SearchContainer extends EventTarget {
   private onQueryChanged_() {
     const query = this.inputElement_.value.trimStart();
     this.updateClearButton_(query);
-    this.dispatchEvent(new CustomEvent(SEARCH_QUERY_CHANGED, {
-      bubbles: true,
-      composed: true,
-      detail: {
-        query: query,
-      },
-    }));
     this.store_.dispatch(updateSearch({
       query: query,
-      status: undefined,   // do not change
-      options: undefined,  // do not change
+      status: undefined,  // do not change
+      options: this.currentOptions_,
     }));
-  }
-
-  private postItemChangedEvent() {
-    this.dispatchEvent(new CustomEvent(SEARCH_ITEM_CHANGED, {
-      bubbles: true,
-      composed: true,
-      detail: {
-        item: this.getSelectedItem(),
-      },
-    }));
-  }
-}
-
-/**
- * The name of the event posted when the search query changes.
- */
-export const SEARCH_QUERY_CHANGED = 'search-query-changed';
-
-/**
- * The name of the event posted when a new autocomplete item is selected.
- */
-export const SEARCH_ITEM_CHANGED = 'search-item-changed';
-
-export interface QueryChange {
-  query: string;
-}
-
-export interface ItemChange {
-  item: SearchItem;
-}
-
-/**
- * A custom event that informs listeners that the query has changed.
- */
-export type SearchQueryChangedEvent = CustomEvent<QueryChange>;
-
-/**
- * A custom event that informs the listeners that an item in the autocomplete
- * list has been selected.
- */
-export type SearchItemChangedEvent = CustomEvent<ItemChange>;
-
-declare global {
-  interface HTMLElementEventMap {
-    [SEARCH_QUERY_CHANGED]: SearchQueryChangedEvent;
-    [SEARCH_ITEM_CHANGED]: SearchItemChangedEvent;
   }
 }

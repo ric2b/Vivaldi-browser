@@ -13,7 +13,10 @@ source_set("features") {
     "event_logging_features.h",
   ]
 
-  deps = [ "//base" ]
+  deps = [
+    "//base",
+    "//components/metrics/structured:structured_metrics_features",
+  ]
 }
 
 static_library("test_support") {
@@ -26,6 +29,9 @@ static_library("test_support") {
   ]
   deps = [
     "//chrome/test:test_support",
+    "//components/metrics/structured",
+    "//components/metrics/structured:structured_metrics_features",
     "//components/metrics/structured:test_support",
+    "//components/metrics_services_manager",
   ]
 }

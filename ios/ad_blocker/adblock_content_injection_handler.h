@@ -25,6 +25,7 @@ class ContentInjectionHandler {
       Resources* resources);
   virtual ~ContentInjectionHandler();
 
+  virtual void SetIncognitoBrowserState(web::BrowserState* browser_state) = 0;
   virtual void SetScriptletInjectionRules(
       RuleGroup group,
       base::Value::Dict injection_rules) = 0;

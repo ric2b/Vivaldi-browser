@@ -13,6 +13,7 @@
 #include "net/quic/mock_crypto_client_stream.h"
 #include "net/quic/quic_chromium_client_session.h"
 #include "net/quic/quic_http_utils.h"
+#include "net/spdy/spdy_http_utils.h"
 #include "net/third_party/quiche/src/quiche/quic/core/http/http_constants.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_framer.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_stream.h"
@@ -97,14 +98,16 @@ QuicTestPacketMaker::QuicTestPacketMaker(quic::ParsedQuicVersion version,
                                          const quic::QuicClock* clock,
                                          const std::string& host,
                                          quic::Perspective perspective,
-                                         bool client_priority_uses_incremental)
+                                         bool client_priority_uses_incremental,
+                                         bool use_priority_header)
     : version_(version),
       connection_id_(connection_id),
       clock_(clock),
       host_(host),
       qpack_encoder_(&decoder_stream_error_delegate_),
       perspective_(perspective),
-      client_priority_uses_incremental_(client_priority_uses_incremental) {
+      client_priority_uses_incremental_(client_priority_uses_incremental),
+      use_priority_header_(use_priority_header) {
   DCHECK(!(perspective_ == quic::Perspective::IS_SERVER &&
            client_priority_uses_incremental_));
 
@@ -298,7 +301,7 @@ QuicTestPacketMaker::MakeRstAndDataPacket(
     quic::QuicStreamId rst_stream_id,
     quic::QuicRstStreamErrorCode rst_error_code,
     quic::QuicStreamId data_stream_id,
-    absl::string_view data) {
+    std::string_view data) {
   InitializeHeader(num);
 
   if (version_.HasIetfQuicFrames()) {
@@ -318,7 +321,7 @@ QuicTestPacketMaker::MakeRetransmissionRstAndDataPacket(
     quic::QuicStreamId rst_stream_id,
     quic::QuicRstStreamErrorCode rst_error_code,
     quic::QuicStreamId data_stream_id,
-    absl::string_view data,
+    std::string_view data,
     uint64_t retransmit_frame_count) {
   DCHECK(save_packet_frames_);
   InitializeHeader(num);
@@ -350,7 +353,7 @@ std::unique_ptr<quic::QuicReceivedPacket>
 QuicTestPacketMaker::MakeDataAndRstPacket(
     uint64_t num,
     quic::QuicStreamId data_stream_id,
-    absl::string_view data,
+    std::string_view data,
     quic::QuicStreamId rst_stream_id,
     quic::QuicRstStreamErrorCode rst_error_code) {
   InitializeHeader(num);
@@ -368,7 +371,7 @@ std::unique_ptr<quic::QuicReceivedPacket>
 QuicTestPacketMaker::MakeDataRstAndAckPacket(
     uint64_t num,
     quic::QuicStreamId data_stream_id,
-    absl::string_view data,
+    std::string_view data,
     quic::QuicStreamId rst_stream_id,
     quic::QuicRstStreamErrorCode rst_error_code,
     uint64_t largest_received,
@@ -452,7 +455,7 @@ QuicTestPacketMaker::MakeRstAckAndDataPacket(
     uint64_t smallest_received,
     quic::QuicStreamId data_id,
     bool fin,
-    absl::string_view data) {
+    std::string_view data) {
   InitializeHeader(num);
 
   AddQuicRstStreamFrame(stream_id, error_code);
@@ -470,7 +473,7 @@ QuicTestPacketMaker::MakeAckDataAndRst(uint64_t num,
                                        uint64_t smallest_received,
                                        quic::QuicStreamId data_id,
                                        bool fin,
-                                       absl::string_view data) {
+                                       std::string_view data) {
   InitializeHeader(num);
 
   AddQuicAckFrame(largest_received, smallest_received);
@@ -491,7 +494,7 @@ QuicTestPacketMaker::MakeAckRstAndDataPacket(
     uint64_t smallest_received,
     quic::QuicStreamId data_id,
     bool fin,
-    absl::string_view data) {
+    std::string_view data) {
   InitializeHeader(num);
 
   AddQuicAckFrame(largest_received, smallest_received);
@@ -563,7 +566,7 @@ std::unique_ptr<quic::QuicReceivedPacket>
 QuicTestPacketMaker::MakeDataRstAndConnectionClosePacket(
     uint64_t num,
     quic::QuicStreamId data_stream_id,
-    absl::string_view data,
+    std::string_view data,
     quic::QuicStreamId rst_stream_id,
     quic::QuicRstStreamErrorCode error_code,
     quic::QuicErrorCode quic_error,
@@ -585,7 +588,7 @@ std::unique_ptr<quic::QuicReceivedPacket>
 QuicTestPacketMaker::MakeDataRstAckAndConnectionClosePacket(
     uint64_t num,
     quic::QuicStreamId data_stream_id,
-    absl::string_view data,
+    std::string_view data,
     quic::QuicStreamId rst_stream_id,
     quic::QuicRstStreamErrorCode error_code,
     uint64_t largest_received,
@@ -611,7 +614,7 @@ std::unique_ptr<quic::QuicReceivedPacket>
 QuicTestPacketMaker::MakeDataRstAckAndConnectionClosePacket(
     uint64_t num,
     quic::QuicStreamId data_stream_id,
-    absl::string_view data,
+    std::string_view data,
     quic::QuicStreamId rst_stream_id,
     quic::QuicRstStreamErrorCode error_code,
     uint64_t largest_received,
@@ -700,7 +703,7 @@ std::unique_ptr<quic::QuicReceivedPacket> QuicTestPacketMaker::MakeDataPacket(
     uint64_t packet_number,
     quic::QuicStreamId stream_id,
     bool fin,
-    absl::string_view data) {
+    std::string_view data) {
   InitializeHeader(packet_number);
   AddQuicStreamFrame(stream_id, fin, data);
   return BuildPacket();
@@ -712,7 +715,7 @@ QuicTestPacketMaker::MakeAckAndDataPacket(uint64_t packet_number,
                                           uint64_t largest_received,
                                           uint64_t smallest_received,
                                           bool fin,
-                                          absl::string_view data) {
+                                          std::string_view data) {
   InitializeHeader(packet_number);
 
   AddQuicAckFrame(largest_received, smallest_received);
@@ -729,7 +732,7 @@ QuicTestPacketMaker::MakeAckRetransmissionAndDataPacket(
     uint64_t largest_received,
     uint64_t smallest_received,
     bool fin,
-    absl::string_view data) {
+    std::string_view data) {
   InitializeHeader(packet_number);
 
   AddQuicAckFrame(largest_received, smallest_received);
@@ -764,6 +767,7 @@ QuicTestPacketMaker::MakeRequestHeadersAndMultipleDataFramesPacket(
     AddQuicStreamFrame(2, false, priority_data);
   }
 
+  AddPriorityHeader(spdy_priority, &headers);
   std::string data = QpackEncodeHeaders(stream_id, std::move(headers),
                                         spdy_headers_frame_length);
   for (const auto& data_write : data_writes) {
@@ -795,6 +799,7 @@ QuicTestPacketMaker::MakeRequestHeadersPacket(
     }
   }
 
+  AddPriorityHeader(spdy_priority, &headers);
   std::string data = QpackEncodeHeaders(stream_id, std::move(headers),
                                         spdy_headers_frame_length);
   AddQuicStreamFrame(stream_id, fin, data);
@@ -830,6 +835,7 @@ QuicTestPacketMaker::MakeRetransmissionAndRequestHeadersPacket(
     AddQuicStreamFrame(2, false, priority_data);
   }
 
+  AddPriorityHeader(spdy_priority, &headers);
   std::string data = QpackEncodeHeaders(stream_id, std::move(headers),
                                         spdy_headers_frame_length);
   AddQuicStreamFrame(stream_id, fin, data);
@@ -856,6 +862,7 @@ QuicTestPacketMaker::MakeRequestHeadersAndRstPacket(
     AddQuicStreamFrame(2, false, priority_data);
   }
 
+  AddPriorityHeader(spdy_priority, &headers);
   std::string data = QpackEncodeHeaders(stream_id, std::move(headers),
                                         spdy_headers_frame_length);
   AddQuicStreamFrame(stream_id, fin, data);
@@ -1136,7 +1143,7 @@ void QuicTestPacketMaker::AddQuicStreamsBlockedFrame(
 
 void QuicTestPacketMaker::AddQuicStreamFrame(quic::QuicStreamId stream_id,
                                              bool fin,
-                                             absl::string_view data) {
+                                             std::string_view data) {
   AddQuicStreamFrameWithOffset(stream_id, fin, stream_offsets_[stream_id],
                                data);
   stream_offsets_[stream_id] += data.length();
@@ -1146,10 +1153,10 @@ void QuicTestPacketMaker::AddQuicStreamFrameWithOffset(
     quic::QuicStreamId stream_id,
     bool fin,
     quic::QuicStreamOffset offset,
-    absl::string_view data) {
+    std::string_view data) {
   // Save the stream data so that callers can use temporary objects for data.
   saved_stream_data_.push_back(std::make_unique<std::string>(data));
-  absl::string_view saved_data = *saved_stream_data_.back();
+  std::string_view saved_data = *saved_stream_data_.back();
 
   quic::QuicStreamFrame stream_frame(stream_id, fin, offset, saved_data);
   frames_.push_back(quic::QuicFrame(stream_frame));
@@ -1388,6 +1395,9 @@ std::string QuicTestPacketMaker::GenerateHttp3SettingsData() {
       quic::kDefaultQpackMaxDynamicTableCapacity;
   settings.values[quic::SETTINGS_QPACK_BLOCKED_STREAMS] =
       quic::kDefaultMaximumBlockedStreams;
+  if (FLAGS_quic_reloadable_flag_quic_enable_h3_datagrams) {
+    settings.values[quic::SETTINGS_H3_DATAGRAM] = 1;
+  }
   // Greased setting.
   settings.values[0x40] = 20;
   return quic::HttpEncoder::SerializeSettingsFrame(settings);
@@ -1418,6 +1428,20 @@ std::string QuicTestPacketMaker::GenerateHttp3PriorityData(
   }
 
   return priority_data;
+}
+
+void QuicTestPacketMaker::AddPriorityHeader(spdy::SpdyPriority spdy_priority,
+                                            spdy::Http2HeaderBlock* headers) {
+  if (use_priority_header_ &&
+      base::FeatureList::IsEnabled(net::features::kPriorityHeader)) {
+    quic::HttpStreamPriority priority{
+        spdy_priority, quic::HttpStreamPriority::kDefaultIncremental};
+    if (client_priority_uses_incremental_) {
+      priority.incremental = kDefaultPriorityIncremental;
+    }
+    (*headers)[net::kHttp2PriorityHeader] =
+        quic::SerializePriorityFieldValue(priority);
+  }
 }
 
 std::string QuicTestPacketMaker::GenerateHttp3GreaseData() {
@@ -1471,7 +1495,7 @@ bool QuicTestPacketMaker::MaybeCoalesceStreamFrame(
   std::string data(previous_frame->data_buffer, previous_frame->data_length);
   data += std::string(new_frame->data_buffer, new_frame->data_length);
   saved_stream_data_.push_back(std::make_unique<std::string>(data));
-  absl::string_view saved_data = *saved_stream_data_.back();
+  std::string_view saved_data = *saved_stream_data_.back();
   previous_frame->data_buffer = saved_data.data();
   previous_frame->data_length = saved_data.length();
 

@@ -36,7 +36,12 @@ extern const char kHatsSurveyTriggerPrivacySandbox[];
 extern const char kHatsSurveyTriggerRedWarning[];
 extern const char kHatsSurveyTriggerSettings[];
 extern const char kHatsSurveyTriggerSettingsPrivacy[];
+extern const char kHatsSurveyTriggerTrackingProtectionControlImmediate[];
+extern const char kHatsSurveyTriggerTrackingProtectionTreatmentImmediate[];
+extern const char kHatsSurveyTriggerTrackingProtectionControlDelayed[];
+extern const char kHatsSurveyTriggerTrackingProtectionTreatmentDelayed[];
 extern const char kHatsSurveyTriggerTrustSafetyPrivacySandbox3ConsentAccept[];
+extern const char kHatsSurveyTriggerSettingsSecurity[];
 extern const char kHatsSurveyTriggerTrustSafetyPrivacySandbox3ConsentDecline[];
 extern const char kHatsSurveyTriggerTrustSafetyPrivacySandbox3NoticeDismiss[];
 extern const char kHatsSurveyTriggerTrustSafetyPrivacySandbox3NoticeOk[];
@@ -51,7 +56,9 @@ extern const char kHatsSurveyTriggerTrustSafetyTrustedSurface[];
 extern const char kHatsSurveyTriggerTrustSafetyTransactions[];
 extern const char kHatsSurveyTriggerTrustSafetyV2BrowsingData[];
 extern const char kHatsSurveyTriggerTrustSafetyV2ControlGroup[];
+extern const char kHatsSurveyTriggerTrustSafetyV2DownloadWarningUI[];
 extern const char kHatsSurveyTriggerTrustSafetyV2PasswordCheck[];
+extern const char kHatsSurveyTriggerTrustSafetyV2PasswordProtectionUI[];
 extern const char kHatsSurveyTriggerTrustSafetyV2SafetyCheck[];
 extern const char kHatsSurveyTriggerTrustSafetyV2TrustedSurface[];
 extern const char kHatsSurveyTriggerTrustSafetyV2PrivacyGuide[];
@@ -63,6 +70,8 @@ extern const char
     kHatsSurveyTriggerTrustSafetyV2PrivacySandbox4NoticeSettings[];
 extern const char kHatsSurveyTriggerTrustSafetyV2SafeBrowsingInterstitial[];
 extern const char kHatsSurveyTriggerWhatsNew[];
+#else
+extern const char kHatsSurveyTriggerAndroidStartupSurvey[];
 #endif
 
 extern const char kHatsSurveyTriggerTesting[];

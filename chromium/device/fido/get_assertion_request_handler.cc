@@ -15,6 +15,7 @@
 #include "base/functional/bind.h"
 #include "base/json/json_writer.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/ranges/algorithm.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/timer/elapsed_timer.h"
@@ -370,7 +371,7 @@ bool AllowListOnlyHybridOrInternal(const CtapGetAssertionRequest& request) {
 
 bool AllowListIncludedTransport(const CtapGetAssertionRequest& request,
                                 FidoTransportProtocol transport) {
-  return std::ranges::any_of(
+  return base::ranges::any_of(
       request.allow_list,
       [transport](const PublicKeyCredentialDescriptor& cred) {
         return cred.transports.empty() ||
@@ -441,11 +442,8 @@ void GetAssertionRequestHandler::PreselectAccount(
     PublicKeyCredentialDescriptor credential) {
   DCHECK(!preselected_credential_);
   DCHECK(request_.allow_list.empty() ||
-         std::ranges::any_of(
-             request_.allow_list,
-             [&credential](const PublicKeyCredentialDescriptor& desc) {
-               return desc.id == credential.id;
-             }));
+         base::Contains(request_.allow_list, credential.id,
+                        &PublicKeyCredentialDescriptor::id));
   preselected_credential_ = std::move(credential);
 }
 
@@ -787,9 +785,8 @@ void GetAssertionRequestHandler::HandleResponse(
   CancelActiveAuthenticators(authenticator->GetId());
 
   if (status != CtapDeviceResponseCode::kSuccess) {
-    FIDO_LOG(ERROR) << "Failing assertion request due to status "
-                    << static_cast<int>(status) << " from "
-                    << authenticator->GetDisplayName();
+    FIDO_LOG(ERROR) << "Failing assertion request due to status " << status
+                    << " from " << authenticator->GetDisplayName();
     std::move(completion_callback_)
         .Run(*maybe_result, absl::nullopt, authenticator);
     return;

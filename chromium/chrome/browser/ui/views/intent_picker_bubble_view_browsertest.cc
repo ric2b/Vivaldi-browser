@@ -8,10 +8,10 @@
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
-#include "chrome/browser/apps/intent_helper/intent_picker_features.h"
+#include "chrome/browser/apps/link_capturing/link_capturing_feature_test_support.h"
+#include "chrome/browser/apps/link_capturing/link_capturing_features.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
-#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/intent_picker_tab_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -80,7 +80,7 @@ class IntentPickerBrowserTest
   }
 
   views::Button* GetIntentPickerIcon() {
-    if (apps::features::LinkCapturingUiUpdateEnabled()) {
+    if (apps::features::ShouldShowLinkCapturingUX()) {
       return BrowserView::GetBrowserViewForBrowser(browser())
           ->toolbar_button_provider()
           ->GetIntentChipButton();
@@ -265,8 +265,16 @@ IN_PROC_BROWSER_TEST_P(IntentPickerIconBrowserTest,
 
 // Test that navigating to service pages (chrome://) will hide the intent picker
 // icon.
+// TODO(crbug.com/1478654): Re-enable this test
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_DoNotShowIconAndBubbleOnServicePages \
+  DISABLED_DoNotShowIconAndBubbleOnServicePages
+#else
+#define MAYBE_DoNotShowIconAndBubbleOnServicePages \
+  DoNotShowIconAndBubbleOnServicePages
+#endif
 IN_PROC_BROWSER_TEST_F(IntentPickerIconBrowserTest,
-                       DoNotShowIconAndBubbleOnServicePages) {
+                       MAYBE_DoNotShowIconAndBubbleOnServicePages) {
   InstallTestWebApp();
 
   const GURL in_scope_url =
@@ -295,7 +303,7 @@ IN_PROC_BROWSER_TEST_F(IntentPickerIconBrowserTest,
 // Test that error pages do not show the intent picker icon.
 #if BUILDFLAG(IS_MAC)
 // TODO(https://crbug.com/1478654): Fix the test.
-#define MAYBE_DoNotShowIconOnErrorPages Disabled_DoNotShowIconOnErrorPages
+#define MAYBE_DoNotShowIconOnErrorPages DISABLED_DoNotShowIconOnErrorPages
 #else
 #define MAYBE_DoNotShowIconOnErrorPages DoNotShowIconOnErrorPages
 #endif  // BUILDFLAG(IS_MAC)
@@ -330,7 +338,14 @@ IN_PROC_BROWSER_TEST_F(IntentPickerIconBrowserTest,
 
 // Test that loading a page with pushState() call that changes URL updates the
 // intent picker view.
-IN_PROC_BROWSER_TEST_F(IntentPickerIconBrowserTest, PushStateURLChangeTest) {
+// TODO(crbug.com/1484208): Re-enable this test
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_PushStateURLChangeTest DISABLED_PushStateURLChangeTest
+#else
+#define MAYBE_PushStateURLChangeTest PushStateURLChangeTest
+#endif
+IN_PROC_BROWSER_TEST_F(IntentPickerIconBrowserTest,
+                       MAYBE_PushStateURLChangeTest) {
   // Note: The test page is served from embedded_test_server() as https_server()
   // always returns empty responses.
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -356,11 +371,43 @@ IN_PROC_BROWSER_TEST_F(IntentPickerIconBrowserTest, PushStateURLChangeTest) {
   EXPECT_FALSE(intent_picker_view->GetVisible());
 }
 
-IN_PROC_BROWSER_TEST_F(IntentPickerIconBrowserTest, OpenBubbleOnClick) {
+class IntentPickerIconBrowserBubbleTest : public IntentPickerIconBrowserTest {
+ public:
+  IntentPickerIconBrowserBubbleTest() {
+    apps::EnableLinkCapturingUXForTesting(feature_list_);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+#if BUILDFLAG(IS_CHROMEOS)
+IN_PROC_BROWSER_TEST_F(IntentPickerIconBrowserBubbleTest,
+                       IntentChipOpensBubble) {
   InstallTestWebApp();
+  const GURL in_scope_url =
+      https_server().GetURL(GetAppUrlHost(), GetInScopeUrlPath());
+
+  views::Button* intent_picker_icon = GetIntentPickerIcon();
+
+  OpenNewTab(in_scope_url);
+  EXPECT_TRUE(intent_picker_icon->GetVisible());
+
   views::NamedWidgetShownWaiter waiter(views::test::AnyWidgetTestPasskey{},
                                        IntentPickerBubbleView::kViewClassName);
 
+  views::test::ButtonTestApi test_api(intent_picker_icon);
+  test_api.NotifyClick(ui::MouseEvent(
+      ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(), base::TimeTicks(),
+      ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
+  waiter.WaitIfNeededAndGet();
+  EXPECT_TRUE(intent_picker_bubble());
+  VerifyBubbleWithTestWebApp();
+}
+#else
+IN_PROC_BROWSER_TEST_F(IntentPickerIconBrowserBubbleTest,
+                       IntentChipLaunchesAppDirectly) {
+  InstallTestWebApp();
   const GURL in_scope_url =
       https_server().GetURL(GetAppUrlHost(), GetInScopeUrlPath());
 
@@ -373,11 +420,13 @@ IN_PROC_BROWSER_TEST_F(IntentPickerIconBrowserTest, OpenBubbleOnClick) {
   test_api.NotifyClick(ui::MouseEvent(
       ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(), base::TimeTicks(),
       ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
-  waiter.WaitIfNeededAndGet();
-
-  EXPECT_TRUE(intent_picker_bubble());
-  VerifyBubbleWithTestWebApp();
+  Browser* app_browser = ui_test_utils::WaitForBrowserToOpen();
+  EXPECT_FALSE(intent_picker_bubble());
+  EXPECT_TRUE(app_browser);
+  ASSERT_TRUE(web_app::AppBrowserController::IsForWebApp(app_browser,
+                                                         test_web_app_id()));
 }
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 INSTANTIATE_TEST_SUITE_P(
     All,

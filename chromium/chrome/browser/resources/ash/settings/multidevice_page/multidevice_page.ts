@@ -17,11 +17,12 @@ import './multidevice_feature_toggle.js';
 import './multidevice_notification_access_setup_dialog.js';
 import './multidevice_permissions_setup_dialog.js';
 import './multidevice_subpage.js';
+import './multidevice_forget_device_dialog.js';
 
 import {NearbyShareSettingsMixin} from '/shared/nearby_share_settings_mixin.js';
 import {PrefsMixin} from 'chrome://resources/cr_components/settings_prefs/prefs_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
-import {assert, assertNotReached} from 'chrome://resources/js/assert_ts.js';
+import {assert, assertNotReached} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {beforeNextRender, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -45,7 +46,7 @@ const SettingsMultidevicePageElementBase =
     NearbyShareSettingsMixin(MultiDeviceFeatureMixin(RouteOriginMixin(
         DeepLinkingMixin(PrefsMixin(WebUiListenerMixin(PolymerElement))))));
 
-class SettingsMultidevicePageElement extends
+export class SettingsMultidevicePageElement extends
     SettingsMultidevicePageElementBase {
   static get is() {
     return 'settings-multidevice-page' as const;
@@ -163,6 +164,11 @@ class SettingsMultidevicePageElement extends
           return isRevampWayfindingEnabled();
         },
       },
+
+      shouldShowForgetDeviceDialog_: {
+        type: Boolean,
+        value: false,
+      },
     };
   }
 
@@ -179,6 +185,7 @@ class SettingsMultidevicePageElement extends
   private section_: Section;
   private shouldEnableNearbyShareBackgroundScanningRevamp_: boolean;
   private showPasswordPromptDialog_: boolean;
+  private shouldShowForgetDeviceDialog_: boolean;
   private showPhonePermissionSetupDialog_: boolean;
 
   constructor() {
@@ -694,6 +701,23 @@ class SettingsMultidevicePageElement extends
    */
   private onScreenLockStatusChanged_(enabled: boolean): void {
     this.isPhoneScreenLockEnabled_ = enabled;
+  }
+
+  private getMultideviceSubpageTitle_(): string {
+    if (this.isRevampWayfindingEnabled_) {
+      const deviceName = this.pageContentData.hostDeviceName || '';
+      return this.i18n('multideviceSubpageTitle', deviceName);
+    }
+    return this.pageContentData.hostDeviceName ||
+        this.i18n('multideviceSetupItemHeading');
+  }
+
+  private showForgetDeviceDialog_(): void {
+    this.shouldShowForgetDeviceDialog_ = true;
+  }
+
+  private closeForgetDeviceDialog_(): void {
+    this.shouldShowForgetDeviceDialog_ = false;
   }
 }
 

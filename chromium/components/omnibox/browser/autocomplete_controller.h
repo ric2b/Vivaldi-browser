@@ -93,28 +93,33 @@ class AutocompleteController : public AutocompleteProviderListener,
     // are observing multiple AutocompleteController instances.
     virtual void OnResultChanged(AutocompleteController* controller,
                                  bool default_match_changed) {}
+
+    // Invoked when a ML scoring batch completes, i.e. `OnUrlScoringModelDone()`
+    // completes.
+    virtual void OnMlScored(AutocompleteController* controller,
+                            const AutocompleteResult& result) {}
   };
 
-  // Given a match, returns the appropriate type and zero or more subtypes
-  // corresponding to the SuggestType and SuggestSubtype enums in types.proto.
+  // Given a match, returns zero or more subtypes corresponding to SuggestType
+  // and SuggestSubtype enums in //third_party/omnibox_proto/types.proto.
   // This is needed to update Chrome's native types/subtypes to those expected
   // by the server. For more details, see go/chrome-suggest-logging.
   // Note: `subtypes` may be prepopulated with server-reported subtypes.
-  static void GetMatchTypeAndExtendSubtypes(
+  static void ExtendMatchSubtypes(
       const AutocompleteMatch& match,
-      omnibox::SuggestType* type,
       base::flat_set<omnibox::SuggestSubtype>* subtypes);
 
-  // |provider_types| is a bitmap containing AutocompleteProvider::Type values
+  // `provider_types` is a bitmap containing AutocompleteProvider::Type values
   // that will (potentially, depending on platform, flags, etc.) be
-  // instantiated. |provider_client| is passed to all those providers, and
-  // is used to get access to the template URL service. |observer| is a
-  // proxy for UI elements which need to be notified when the results get
-  // updated.
+  // instantiated. `provider_client` is passed to all those providers, and
+  // is used to get access to the template URL service. `disable_ml` forces ML
+  // scoring off regardless of its feature state; this is useful for
+  // chrome://omnibox/ml.
   AutocompleteController(
       std::unique_ptr<AutocompleteProviderClient> provider_client,
       int provider_types,
-      bool is_cros_launcher = false);
+      bool is_cros_launcher = false,
+      bool disable_ml = false);
   ~AutocompleteController() override;
   AutocompleteController(const AutocompleteController&) = delete;
   AutocompleteController& operator=(const AutocompleteController&) = delete;
@@ -209,9 +214,9 @@ class AutocompleteController : public AutocompleteProviderListener,
   OpenTabProvider* open_tab_provider() const { return open_tab_provider_; }
 
   const AutocompleteInput& input() const { return input_; }
-  const AutocompleteResult& result() const;
-  // Groups result_ by search vs URL.
-  // See also AutocompleteResult::GroupSuggestionsBySearchVsURL()
+  const AutocompleteResult& result() const { return published_result_; }
+  // Groups `published_result_` by search vs URL.
+  // See also `AutocompleteResult::GroupSuggestionsBySearchVsURL()`.
   void GroupSuggestionsBySearchVsURL(size_t begin, size_t end);
   bool done() const { return done_; }
   bool sync_pass_done() const { return sync_pass_done_; }
@@ -263,6 +268,7 @@ class AutocompleteController : public AutocompleteProviderListener,
   FRIEND_TEST_ALL_PREFIXES(OmniboxPopupViewViewsTest, EmitAccessibilityEvents);
   FRIEND_TEST_ALL_PREFIXES(OmniboxPopupViewViewsTest,
                            EmitAccessibilityEventsOnButtonFocusHint);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxPopupViewViewsTest, DeleteSuggestion);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewTest, DoesNotUpdateAutocompleteOnBlur);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsTest, CloseOmniboxPopupOnTextDrag);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsTest, FriendlyAccessibleLabel);
@@ -295,7 +301,7 @@ class AutocompleteController : public AutocompleteProviderListener,
   void InitializeAsyncProviders(int provider_types);
   void InitializeSyncProviders(int provider_types);
 
-  // Updates |result_| to reflect the current provider state and fires
+  // Updates |internal_result_| to reflect the current provider state and fires
   // notifications.  If |regenerate_result| then we clear the result
   // so when we incorporate the current provider state we end up
   // implicitly removing all expired matches.  (Normally we allow
@@ -310,7 +316,8 @@ class AutocompleteController : public AutocompleteProviderListener,
   // character, the edit model needs to repaint (highlighting changed)
   // even if the default match didn't change.
   void UpdateResult(bool regenerate_result,
-                    bool force_notify_default_match_changed);
+                    bool force_notify_default_match_changed,
+                    bool score_urls);
 
   // When the preserve default feature param is enabled, the default match
   // that would have been shown before ML scoring is preserved. In this case,
@@ -422,6 +429,10 @@ class AutocompleteController : public AutocompleteProviderListener,
       TemplateURL* template_url,
       const TemplateURLRef::SearchTermsArgs& args) const;
 
+  // May remove company entity images if omnibox::kCompanyEntityIconAdjustment
+  // feature is enabled.
+  void MaybeRemoveCompanyEntityImages(AutocompleteResult* result);
+
   base::ObserverList<Observer> observers_;
 
   // The client passed to the providers.
@@ -464,14 +475,12 @@ class AutocompleteController : public AutocompleteProviderListener,
   AutocompleteInput input_;
 
   // Data from the autocomplete query.
-  AutocompleteResult result_;
+  AutocompleteResult internal_result_;
 
-  // When debouncing is enabled, `result_` may change without invoking
-  // `NotifyChanged()`. To ensure `result()` is stable between `NotifyChanged()`
-  // calls, `published_result_` snapshots `result_` before invoking
-  // `NotifyChanged()`, and observers only see the stable `published_result_`.
-  // When `kUpdateResultDebounce` is disabled, `published_result_` is always
-  // empty and unused.
+  // A snapshot of `internal_result_` when `NotifyChanged()` is called. Because
+  // it's debounced, `internal_result_` may change without invoking
+  // `NotifyChanged()`. `published_result_` ensures observers get a stable
+  // result.
   AutocompleteResult published_result_;
 
   // Used for logging the changes between updates.
@@ -509,8 +518,7 @@ class AutocompleteController : public AutocompleteProviderListener,
   // quick succession. The last call, i.e. when all providers complete and
   // `done_` is set true; and the 1st call, i.e. the sync update, are immune to
   // this restriction. Calls not succeeding a result update (i.e. a call from
-  // closing the popup) bypass the delay as well. Only applies when the
-  // `kUpdateResultDebounce` is enabled.
+  // closing the popup) bypass the delay as well.
   AutocompleteProviderDebouncer notify_changed_debouncer_;
 
   // Tracks if any delayed `DelayedNotifyChanged()` call since the last
@@ -523,9 +531,9 @@ class AutocompleteController : public AutocompleteProviderListener,
   // done and all providers have provided their async updates.
   bool done_ = true;
 
-  // True, if the synchronous pass is done. Used to avoid updating `result_` and
-  // sending notifications until the the synchronous pass is done on all
-  // providers.
+  // True, if the synchronous pass is done. Used to avoid updating
+  // `internal_result_` and sending notifications until the the synchronous pass
+  // is done on all providers.
   bool sync_pass_done_ = true;
 
   // True if this instance of AutocompleteController is owned by the CrOS
@@ -540,6 +548,9 @@ class AutocompleteController : public AutocompleteProviderListener,
   // service worker context during the current input session. False on
   // controller creation and after |ResetSession| is called.
   bool search_service_worker_signal_sent_;
+
+  // Used for chrome://omnibox/ml to force disable the ML feature state.
+  bool disable_ml_ = true;
 
   raw_ptr<TemplateURLService> template_url_service_;
 

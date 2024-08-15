@@ -69,7 +69,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Histogram.TooManyBuckets.1000" enum="HistogramNameHash"
-    expires_after="2023-11-01">
+    expires_after="2024-11-01">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -90,17 +90,22 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="UMA.AndroidPreNative.ChromeActivityCounter"
-    enum="ChromeActivityCounter" expires_after="2024-04-24">
+<histogram name="UMA.AndroidPreNative.ChromeActivityCounter2"
+    enum="ChromeActivityCounter" expires_after="2024-10-04">
   <owner>gabrielgs@google.com</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
-    Counts of how many times onPreCreate() and onResume() were called (from the
+    Counts of how many times onPostCreate() and onResume() were called (from the
     ChromeActivity class) when a foreground session begins in the native C++
     code. The counters are reset when this histogram is emitted. This histogram
     is a diagnostic tool for understanding Clank short sessions, by capturing
     some information about the cases where Java code starts up, but native C++
     code is never reached.
+
+    This replaces UMA.AndroidPreNative.ChromeActivityCounter, which would
+    increment the counters to P1R0 on first-run-experience, but would not
+    advance to native code. This version circumvents the issue by waiting to be
+    sure that onCreate was not aborted (see AsyncInitializationActivity).
   </summary>
 </histogram>
 
@@ -186,7 +191,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="UMA.ClientIdCleared" enum="Boolean" expires_after="2023-12-24">
+<histogram name="UMA.ClientIdCleared" enum="Boolean" expires_after="2024-03-10">
   <owner>pdyson@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -297,7 +302,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.FileMetricsProvider.InitialAccessResult"
-    enum="FileMetricsProviderAccessResult" expires_after="2023-11-01">
+    enum="FileMetricsProviderAccessResult" expires_after="2024-11-01">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -307,7 +312,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.FileMetricsProvider.{Source}.MergedHistogramsCount"
-    units="histograms" expires_after="2023-11-01">
+    units="histograms" expires_after="2024-11-01">
   <owner>lucnguyen@google.com</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -318,23 +323,6 @@ chromium-metrics-reviews@google.com.
     <variant name="DeferredBrowserMetrics"/>
     <variant name="NotificationHelperMetrics"/>
     <variant name="SetupMetrics"/>
-  </token>
-</histogram>
-
-<histogram name="UMA.IndependentLog.{Provider}.FinalizeTime" units="ms"
-    expires_after="2024-02-20">
-  <owner>lucnguyen@google.com</owner>
-  <owner>src/base/metrics/OWNERS</owner>
-  <summary>
-    The amount of time the main thread spent on finalizing and storing an
-    independent log provided by {Provider}. This is only emitted for logs that
-    are successfully closed.
-  </summary>
-  <token key="Provider">
-    <variant name="AwBackgroundTracingMetricsProvider"/>
-    <variant name="BackgroundTracingMetricsProvider"/>
-    <variant name="FileMetricsProvider"/>
-    <variant name="StructuredMetricsProvider"/>
   </token>
 </histogram>
 
@@ -364,7 +352,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.IsClonedInstall" enum="BooleanCloned"
-    expires_after="2024-01-14">
+    expires_after="2024-03-17">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -462,7 +450,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.MetricsReporting.Toggle" enum="MetricsReportingChange"
-    expires_after="2024-01-14">
+    expires_after="2024-03-17">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -606,7 +594,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.NegativeSamples.Histogram" enum="HistogramNameHash"
-    expires_after="2023-12-31">
+    expires_after="2024-11-01">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -615,7 +603,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.NegativeSamples.Increment" units="increment"
-    expires_after="2023-11-01">
+    expires_after="2024-11-01">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -624,7 +612,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.NegativeSamples.Reason" enum="NegativeSampleReason"
-    expires_after="2023-11-01">
+    expires_after="2024-11-01">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -784,9 +772,10 @@ chromium-metrics-reviews@google.com.
   <summary>
     Sample rate applied to this client, expressed as number of clients per 1000
     that are in the sample. Recorded on every log upload but only if the client
-    is eligible for sampling. (As of September 2019, the only clients eligible
-    for sampling are Windows and Android installs on which the UMA checkbox was
-    enabled by default.)
+    is eligible for sampling. (As of February 2021, all clients on Android and
+    Windows are eligible for sampling. Prior to Jan 26 2021, only Windows and
+    Android installs on which the UMA checkbox was enabled by default were
+    eligible, see b/161848997).
 
     Clients not eligible for sampling will not have this histogram recorded.
 
@@ -822,6 +811,17 @@ chromium-metrics-reviews@google.com.
   <summary>
     Whether the session is a background or foreground session. Recorded just
     before the MetricsStateManager is created. Android Chrome only.
+  </summary>
+</histogram>
+
+<histogram name="UMA.StatisticsRecorder.LockWaitTime" units="ms"
+    expires_after="2024-03-01">
+  <owner>asvitkine@chromium.org</owner>
+  <owner>src/base/metrics/OWNERS</owner>
+  <summary>
+    Records the sum of the accumulating wait times for acquiring the lock in
+    StatisticsRecorder. This is logged with every UMA log and reset to 0 at that
+    time.
   </summary>
 </histogram>
 
@@ -956,7 +956,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.TruncatedEvents.UserAction" units="events"
-    expires_after="2024-03-03">
+    expires_after="2024-03-31">
   <owner>rkaplow@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>

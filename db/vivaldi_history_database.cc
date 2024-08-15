@@ -50,16 +50,18 @@ Visit::VisitsList VivaldiHistoryDatabase::VisitSearch(
   base::Time begin_time = options.begin_time;
   base::Time end_time = options.end_time;
 
-  sql::Statement url_sql(GetDB().GetUniqueStatement(
+  const char *query =
       "SELECT "
       "  v.id as id, "
       "  max(v.visit_time) as visit_time, "
       "  u.url, "
       "  u.title, "
-      " v.transition, "
-      " count(*) as visit_count "
-      "  FROM urls u "
+      "  v.transition, "
+      "  count(*) as visit_count, "
+      "  IFNULL(visit_source.source, 1) as source "
+      " FROM urls u "
       "    JOIN visits v on (u.id = v.url) "
+      "    LEFT JOIN visit_source on (v.id = visit_source.id) "
       " WHERE v.visit_time >= ? "
       "  AND v.visit_time < ? "
       " GROUP BY u.url, "
@@ -67,7 +69,10 @@ Visit::VisitsList VivaldiHistoryDatabase::VisitSearch(
       "  (strftime('%s', '1601-01-01')), 'unixepoch')), "
       "  strftime('%HH', datetime(v.visit_time / 1000000 + "
       "  (strftime('%s', '1601-01-01')), 'unixepoch')) "
-      " ORDER BY v.visit_time DESC, v.from_visit DESC"));
+      " ORDER BY v.visit_time DESC, v.from_visit DESC"
+      ;
+
+  sql::Statement url_sql(GetDB().GetUniqueStatement(query));
   int64_t begin = begin_time.ToInternalValue();
   int64_t end = end_time.ToInternalValue();
   url_sql.BindInt64(0, begin ? begin : std::numeric_limits<int64_t>::min());
@@ -85,6 +90,7 @@ Visit::VisitsList VivaldiHistoryDatabase::VisitSearch(
     ui::PageTransition transitionType =
         ui::PageTransitionFromInt(url_sql.ColumnInt(4));
     int visit_count = url_sql.ColumnInt(5);
+    int source = url_sql.ColumnInt(6);
     bool has_chain_start = ui::PAGE_TRANSITION_CHAIN_START &
                         ui::PageTransitionGetQualifier(transitionType);
     bool has_chain_end = ui::PAGE_TRANSITION_CHAIN_END &
@@ -93,7 +99,7 @@ Visit::VisitsList VivaldiHistoryDatabase::VisitSearch(
                         !(has_chain_start || has_chain_end);
     if (!is_redirect) {
       hosts.push_back(
-        Visit(id, visit_time, url, title, transitionType, visit_count));
+        Visit(id, visit_time, url, title, transitionType, visit_count, source));
     }
   }
 

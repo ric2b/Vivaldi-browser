@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 #include <tuple>
+#include <utility>
 
 #include "base/cancelable_callback.h"
 #include "base/containers/flat_set.h"
@@ -20,15 +21,16 @@
 #include "base/scoped_observation_traits.h"
 #include "base/sequence_checker.h"
 #include "base/supports_user_data.h"
-#include "base/uuid.h"
 #include "components/commerce/core/account_checker.h"
 #include "components/commerce/core/commerce_types.h"
 #include "components/commerce/core/proto/commerce_subscription_db_content.pb.h"
 #include "components/commerce/core/proto/discounts_db_content.pb.h"
+#include "components/commerce/core/proto/parcel_tracking_db_content.pb.h"
 #include "components/commerce/core/subscriptions/commerce_subscription.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/optimization_guide/core/optimization_guide_decision.h"
+#include "components/sync/service/sync_service_observer.h"
 #include "components/unified_consent/consent_throttle.h"
 #include "services/data_decoder/public/cpp/data_decoder.h"
 
@@ -87,11 +89,11 @@ extern const char kOgTypeProductItem[];
 extern const long kToMicroCurrency;
 
 extern const char kImageAvailabilityHistogramName[];
-extern const char kProductInfoJavascriptTime[];
+extern const char kProductInfoLocalExtractionTime[];
 
 // The amount of time to wait after the last "stopped loading" event to run the
 // on-page extraction for product info.
-extern const uint64_t kProductInfoJavascriptDelayMs;
+extern const uint64_t kProductInfoLocalExtractionDelayMs;
 
 // The availability of the product image for an offer. This needs to be kept in
 // sync with the ProductImageAvailability enum in enums.xml.
@@ -118,6 +120,7 @@ class ScheduledMetricsManager;
 
 class BookmarkUpdateManager;
 class DiscountsStorage;
+class ParcelsManager;
 class ShoppingPowerBookmarkDataProvider;
 class ShoppingBookmarkModelObserver;
 class SubscriptionsManager;
@@ -137,17 +140,34 @@ struct ProductInfoCacheEntry {
   // The number of pages that have the URL open.
   size_t pages_with_url_open{0};
 
-  // Whether the fallback javascript needs to run for page.
-  bool needs_javascript_run{false};
+  // Whether the fallback local extraction needs to run for page.
+  bool needs_local_extraction_run{false};
 
-  // The time that the javascript execution started. This is primarily used for
-  // metrics.
-  base::Time javascript_execution_start_time;
+  // The time that the local extraction execution started. This is primarily
+  // used for metrics.
+  base::Time local_extraction_execution_start_time;
 
-  std::unique_ptr<base::CancelableOnceClosure> run_javascript_task;
+  std::unique_ptr<base::CancelableOnceClosure> run_local_extraction_task;
 
   // The product info associated with the URL.
   std::unique_ptr<ProductInfo> product_info;
+};
+
+// A struct that keeps track of cached price insights info related data about a
+// url.
+struct PriceInsightsInfoCacheEntry {
+ public:
+  PriceInsightsInfoCacheEntry();
+  PriceInsightsInfoCacheEntry(const PriceInsightsInfoCacheEntry&) = delete;
+  PriceInsightsInfoCacheEntry& operator=(const PriceInsightsInfoCacheEntry&) =
+      delete;
+  ~PriceInsightsInfoCacheEntry();
+
+  // The number of pages that have the URL open.
+  size_t pages_with_url_open{0};
+
+  // The price insights info associated with the URL.
+  std::unique_ptr<PriceInsightsInfo> info;
 };
 
 // Types of shopping pages from backend.
@@ -171,7 +191,7 @@ using DiscountsOptGuideCallback = base::OnceCallback<void(DiscountsPair)>;
 // A callback for getting updated ProductInfo for a bookmark. This provides the
 // bookmark ID being updated, the URL, and the product info.
 using BookmarkProductInfoUpdatedCallback = base::RepeatingCallback<
-    void(const base::Uuid&, const GURL&, absl::optional<ProductInfo>)>;
+    void(const int64_t, const GURL&, absl::optional<ProductInfo>)>;
 
 // Under Desktop browser test or interactive ui test, use
 // ShoppingServiceFactory::SetTestingFactory to create a
@@ -212,12 +232,15 @@ using BookmarkProductInfoUpdatedCallback = base::RepeatingCallback<
 //         browser()->profile()));
 // clang-format on
 
-class ShoppingService : public KeyedService, public base::SupportsUserData {
+class ShoppingService : public KeyedService,
+                        public base::SupportsUserData,
+                        public syncer::SyncServiceObserver {
  public:
   ShoppingService(
       const std::string& country_on_startup,
       const std::string& locale_on_startup,
-      bookmarks::BookmarkModel* bookmark_model,
+      bookmarks::BookmarkModel* local_or_syncable_bookmark_model,
+      bookmarks::BookmarkModel* account_bookmark_model,
       optimization_guide::OptimizationGuideDecider* opt_guide,
       PrefService* pref_service,
       signin::IdentityManager* identity_manager,
@@ -229,6 +252,8 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
       power_bookmarks::PowerBookmarkService* power_bookmark_service,
       SessionProtoStorage<discounts_db::DiscountsContentProto>*
           discounts_proto_db,
+      SessionProtoStorage<parcel_tracking_db::ParcelTrackingContent>*
+          parcel_tracking_proto_db,
       history::HistoryService* history_service);
   ~ShoppingService() override;
 
@@ -254,7 +279,7 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
   // repeating callback that provides the bookmark's ID, URL, and product info.
   // Currently this API should only be used in the BookmarkUpdateManager.
   virtual void GetUpdatedProductInfoForBookmarks(
-      const std::vector<base::Uuid>& bookmark_uuids,
+      const std::vector<int64_t>& bookmark_ids,
       BookmarkProductInfoUpdatedCallback info_updated_callback);
 
   // Gets the maximum number of bookmarks that the backend will retrieve per
@@ -318,6 +343,14 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
   // callback-based version |IsSubscribed| is preferred. Information provided
   // by this API is not guaranteed to be correct.
   virtual bool IsSubscribedFromCache(const CommerceSubscription& subscription);
+
+  // The bookmark model to be used by the service. Depending on feature flags
+  // and sync opt-in state, returns either LocalOrSyncable or Account bookmark
+  // model instance.
+  //
+  // TODO(crbug.com/1462978): Delete this when ConsentLevel::kSync is deleted.
+  //     See ConsentLevel::kSync documentation for details.
+  virtual bookmarks::BookmarkModel* GetBookmarkModelUsedForSync();
 
   // Gets all bookmarks that are price tracked. Internally this calls the
   // function by the same name in price_tracking_utils.h.
@@ -384,6 +417,36 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
   // feature-related infrastructure.
   virtual bool IsDiscountEligibleToShowOnNavigation();
 
+  // Check if parcel tracking is eligible for use. This not only checks the
+  // feature flag, but also checks user's sign in state, country code, etc. The
+  // value returned here can change during runtime so it should not be used
+  // when deciding to build infrastructure.
+  virtual bool IsParcelTrackingEligible();
+
+  // Starts tracking a list of parcels from a given page.
+  void StartTrackingParcels(
+      const std::vector<std::pair<ParcelIdentifier::Carrier, std::string>>&
+          parcel_identifiers,
+      const std::string& source_page_domain,
+      GetParcelStatusCallback callback);
+
+  // Gets the status of all parcel status stored in the db.
+  virtual void GetAllParcelStatuses(GetParcelStatusCallback callback);
+
+  // Called to stop tracking a given parcel.
+  // DEPRECATED: use StopTrackingParcels() below()
+  virtual void StopTrackingParcel(const std::string& tracking_id,
+                                  base::OnceCallback<void(bool)> callback);
+
+  // Called to stop tracking multiple parcels.
+  void StopTrackingParcels(
+      const std::vector<std::pair<ParcelIdentifier::Carrier, std::string>>&
+          parcel_identifiers,
+      base::OnceCallback<void(bool)> callback);
+
+  // Called to stop tracking all parcels.
+  void StopTrackingAllParcels(base::OnceCallback<void(bool)> callback);
+
   // Get a weak pointer for this service instance.
   base::WeakPtr<ShoppingService> AsWeakPtr();
 
@@ -425,14 +488,14 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
   // frame.
   void DidFinishLoad(WebWrapper* web);
 
-  // Schedule (or reschedule) the on-page javascript execution. Calling this
-  // sequentially for the same web wrapper with the same URL will cancel the
-  // pending task and schedule a new one. The script will, at most, run once
+  // Schedule (or reschedule) the on-page local extraction execution. Calling
+  // this sequentially for the same web wrapper with the same URL will cancel
+  // the pending task and schedule a new one. The script will, at most, run once
   // per unique navigation.
-  void ScheduleProductInfoJavascript(WebWrapper* web);
+  void ScheduleProductInfoLocalExtraction(WebWrapper* web);
 
-  // Run the on-page, javascript info extraction if needed.
-  void TryRunningJavascriptForProductInfo(base::WeakPtr<WebWrapper> web);
+  // Run the on-page info extraction if needed.
+  void TryRunningLocalExtractionForProductInfo(base::WeakPtr<WebWrapper> web);
 
   // Whether APIs like |GetProductInfoForURL| are enabled and allowed to be
   // used.
@@ -460,7 +523,7 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
   // info.
   void OnProductInfoUpdatedOnDemand(
       BookmarkProductInfoUpdatedCallback callback,
-      std::unordered_map<std::string, base::Uuid> url_to_uuid_map,
+      std::unordered_map<std::string, int64_t> url_to_id_map,
       const GURL& url,
       const base::flat_map<
           optimization_guide::proto::OptimizationType,
@@ -474,11 +537,12 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
   std::unique_ptr<ProductInfo> OptGuideResultToProductInfo(
       const optimization_guide::OptimizationMetadata& metadata);
 
-  // Handle the result of running the javascript fallback for product info.
-  void OnProductInfoJavascriptResult(const GURL url, base::Value result);
+  // Handle the result of running the local extraction fallback for product
+  // info.
+  void OnProductInfoLocalExtractionResult(const GURL url, base::Value result);
 
-  // Handle the result of JSON parsing obtained from running javascript on the
-  // product info page.
+  // Handle the result of JSON parsing obtained from running local extraction on
+  // the product info page.
   void OnProductInfoJsonSanitizationCompleted(
       const GURL url,
       data_decoder::DataDecoder::ValueOrError result);
@@ -537,6 +601,16 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
       optimization_guide::OptimizationGuideDecision decision,
       const optimization_guide::OptimizationMetadata& metadata);
 
+  std::unique_ptr<PriceInsightsInfo> OptGuideResultToPriceInsightsInfo(
+      const optimization_guide::OptimizationMetadata& metadata);
+
+  // Handle main frame navigation for the price insights info API.
+  void HandleDidNavigatePrimaryMainFrameForPriceInsightsInfo(WebWrapper* web);
+
+  // Update the cache storing price insights info for a navigation away from the
+  // provided URL or closing of a tab.
+  void UpdatePriceInsightsInfoCacheForRemoval(const GURL& url);
+
   void HandleOptGuideShoppingPageTypesResponse(
       const GURL& url,
       IsShoppingPageCallback callback,
@@ -565,6 +639,13 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
 
   void SetDiscountsStorageForTesting(std::unique_ptr<DiscountsStorage> storage);
 
+  void OnStateChanged(syncer::SyncService* sync) override;
+
+  // Updates the bookmark model used for sync (and shopping) if needed. Invoked
+  // when sync state changes.
+  void UpdateBookmarkModelUsedForSync();
+  bookmarks::BookmarkModel* CalculateBookmarkModelUsedForSync();
+
   // The two-letter country code as detected on startup.
   std::string country_on_startup_;
 
@@ -579,7 +660,18 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
 
   raw_ptr<syncer::SyncService> sync_service_;
 
-  raw_ptr<bookmarks::BookmarkModel> bookmark_model_;
+  // Should not be used directly - `bookmark_model_used_for_sync_` should be
+  // used instead.
+  raw_ptr<bookmarks::BookmarkModel> local_or_syncable_bookmark_model_;
+
+  // Should not be used directly - `bookmark_model_used_for_sync_` should be
+  // used instead.
+  raw_ptr<bookmarks::BookmarkModel> account_bookmark_model_;
+
+  // The bookmark model to be used by the service. Depending on feature flags
+  // and sync opt-in state, this is equal to either
+  // `local_or_syncable_bookmark_model_` or `account_bookmark_model_`.
+  raw_ptr<bookmarks::BookmarkModel> bookmark_model_used_for_sync_;
 
   std::unique_ptr<AccountChecker> account_checker_;
 
@@ -601,6 +693,11 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
   std::unordered_map<std::string, std::unique_ptr<ProductInfoCacheEntry>>
       product_info_cache_;
 
+  // This is a cache that maps URL to a cache entry that may or may not contain
+  // price insights info.
+  std::unordered_map<std::string, std::unique_ptr<PriceInsightsInfoCacheEntry>>
+      price_insights_info_cache_;
+
   std::unique_ptr<BookmarkUpdateManager> bookmark_update_manager_;
 
   // The object tracking metrics that are recorded at specific intervals.
@@ -610,9 +707,17 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
   // The object handling discounts storage.
   std::unique_ptr<DiscountsStorage> discounts_storage_;
 
+  // Object for tracking parcel status.
+  std::unique_ptr<ParcelsManager> parcels_manager_;
+
   // A consent throttle that will hold callbacks until the specific consent is
   // obtained.
   unified_consent::ConsentThrottle bookmark_consent_throttle_;
+
+  // TODO(crbug.com/1462978): Delete this when ConsentLevel::kSync is deleted.
+  //     See ConsentLevel::kSync documentation for details.
+  base::ScopedObservation<syncer::SyncService, syncer::SyncServiceObserver>
+      sync_service_observation_{this};
 
   // Ensure certain functions are being executed on the same thread.
   SEQUENCE_CHECKER(sequence_checker_);

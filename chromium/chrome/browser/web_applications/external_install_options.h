@@ -13,9 +13,9 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
-#include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_install_params.h"
+#include "components/webapps/common/web_app_id.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
@@ -129,11 +129,6 @@ struct ExternalInstallOptions {
   // Whether this should not be installed for tablet devices.
   bool disable_if_tablet_form_factor = false;
 
-  // This must only be used by pre-installed default or system apps that are
-  // valid PWAs if loading the real service worker is too costly to verify
-  // programmatically.
-  bool bypass_service_worker_check = false;
-
   // When set to true this will fail installation with
   // |kNotValidManifestForWebApp| if the |install_url| doesn't have a manifest
   // that passes basic validity checks. This is ignored when |app_info_factory|
@@ -188,7 +183,7 @@ struct ExternalInstallOptions {
 
   // A list of app_ids that the Web App System should attempt to uninstall and
   // replace with this app (e.g maintain shelf pins, app list positions).
-  std::vector<AppId> uninstall_and_replace;
+  std::vector<webapps::AppId> uninstall_and_replace;
 
   // Additional keywords that will be used by the OS when searching for the app.
   // Only affects Chrome OS.
@@ -223,7 +218,7 @@ struct ExternalInstallOptions {
   // Does not block installation if the actual app id doesn't match the
   // expectation.
   // Intended to be used for post-install activities like metrics and migration.
-  absl::optional<AppId> expected_app_id;
+  absl::optional<webapps::AppId> expected_app_id;
 };
 
 WebAppInstallParams ConvertExternalInstallOptionsToParams(

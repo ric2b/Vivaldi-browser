@@ -6,9 +6,9 @@
 #ifndef SYNC_TEST_INTEGRATION_NOTES_HELPER_H_
 #define SYNC_TEST_INTEGRATION_NOTES_HELPER_H_
 
-#include "notes/note_node.h"
-#include "notes/notes_model.h"
-#include "notes/tests/notes_contenthelper.h"
+#include "components/notes/note_node.h"
+#include "components/notes/notes_model.h"
+#include "components/notes/tests/notes_contenthelper.h"
 
 class GURL;
 using vivaldi::NoteNode;
@@ -28,66 +28,65 @@ namespace notes_helper {
 // Adds a URL with address |url| and content |content| to the notes of
 // profile |profile|. Returns a pointer to the node that was added.
 [[nodiscard]] const NoteNode* AddNote(int profile,
-                        const std::string& content,
-                        const GURL& url);
+                                      const std::string& content,
+                                      const GURL& url);
 
 // Adds a URL with address |url|, title |title| and content |content| to the
 // notes of profile |profile|. Returns a pointer to the node that was added.
 [[nodiscard]] const NoteNode* AddNote(int profile,
-                        const std::string& title,
-                        const std::string& content,
-                        const GURL& url);
+                                      const std::string& title,
+                                      const std::string& content,
+                                      const GURL& url);
 
 // Adds a URL with address |url| and content |content| to the notes of
 // profile |profile| at position |index|. Returns a pointer to the node that
 // was added.
 [[nodiscard]] const NoteNode* AddNote(int profile,
-                        int index,
-                        const std::string& content,
-                        const GURL& url);
+                                      int index,
+                                      const std::string& content,
+                                      const GURL& url);
 
 // Adds a URL with address |url|, title |title| and content |content| to the
 // notes of profile |profile| at position |index|. Returns a pointer to the node
 // that was added.
 [[nodiscard]] const NoteNode* AddNote(int profile,
-                        int index,
-                        const std::string& content,
-                        const std::string& title,
-                        const GURL& url);
+                                      int index,
+                                      const std::string& content,
+                                      const std::string& title,
+                                      const GURL& url);
 
 // Adds a URL with address |url| and content |content| under the node |parent|
 // of profile |profile| at position |index|. Returns a pointer to the node that
 // was added.
 [[nodiscard]] const NoteNode* AddNote(int profile,
-                        const NoteNode* parent,
-                        int index,
-                        const std::string& content,
-                        const std::string& title,
-                        const GURL& url);
+                                      const NoteNode* parent,
+                                      int index,
+                                      const std::string& content,
+                                      const std::string& title,
+                                      const GURL& url);
 [[nodiscard]] const NoteNode* AddNote(int profile,
-                        const NoteNode* parent,
-                        int index,
-                        const std::string& content,
-                        const GURL& url);
+                                      const NoteNode* parent,
+                                      int index,
+                                      const std::string& content,
+                                      const GURL& url);
 
 // Adds a folder named |title| to the notes profile |profile|.
 // Returns a pointer to the folder that was added.
-[[nodiscard]] const NoteNode* AddFolder(int profile,
-                          const std::string& title);
+[[nodiscard]] const NoteNode* AddFolder(int profile, const std::string& title);
 
 // Adds a folder named |title| to the notes of profile |profile| at
 // position |index|. Returns a pointer to the folder that was added.
 [[nodiscard]] const NoteNode* AddFolder(int profile,
-                          int index,
-                          const std::string& title);
+                                        int index,
+                                        const std::string& title);
 
 // Adds a folder named |title| to the node |parent| in the notes model of
 // profile |profile| at position |index|. Returns a pointer to the node that
 // was added.
 [[nodiscard]] const NoteNode* AddFolder(int profile,
-                          const NoteNode* parent,
-                          int index,
-                          const std::string& title);
+                                        const NoteNode* parent,
+                                        int index,
+                                        const std::string& title);
 
 // Changes the title of the node |node| in the notes model of profile
 // |profile| to |new_content|.
@@ -102,8 +101,8 @@ void SetTitle(int profile, const NoteNode* node, const std::string& new_title);
 // Changes the url of the node |node| in the notes model of profile
 // |profile| to |new_url|. Returns a pointer to the node with the changed url.
 [[nodiscard]] const NoteNode* SetURL(int profile,
-                       const NoteNode* node,
-                       const GURL& new_url);
+                                     const NoteNode* node,
+                                     const GURL& new_url);
 
 // Moves the node |node| in the notes model of profile |profile| so it ends
 // up under the node |new_parent| at position |index|.
@@ -155,8 +154,7 @@ bool HasNodeWithURL(int profile, const GURL& url);
 
 // Gets the node in the notes model of profile |profile| that has the url
 // |url|. Note: Only one instance of |url| is assumed to be present.
-[[nodiscard]] const NoteNode* GetUniqueNodeByURL(int profile,
-                                   const GURL& url);
+[[nodiscard]] const NoteNode* GetUniqueNodeByURL(int profile, const GURL& url);
 
 // Returns the number of notes in notes model of profile |profile|
 // whose content match the string |content|.

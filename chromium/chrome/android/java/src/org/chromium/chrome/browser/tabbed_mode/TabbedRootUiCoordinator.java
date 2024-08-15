@@ -17,6 +17,7 @@ import org.chromium.base.CommandLine;
 import org.chromium.base.ResettersForTesting;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.shared_preferences.SharedPreferencesManager;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneShotCallback;
@@ -77,8 +78,9 @@ import org.chromium.chrome.browser.offlinepages.indicator.OfflineIndicatorContro
 import org.chromium.chrome.browser.offlinepages.indicator.OfflineIndicatorInProductHelpController;
 import org.chromium.chrome.browser.omnibox.UrlFocusChangeListener;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxDialogController;
+import org.chromium.chrome.browser.privacy_sandbox.TrackingProtectionNoticeController;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.read_later.ReadLaterIPHController;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
@@ -112,7 +114,7 @@ import org.chromium.chrome.features.start_surface.StartSurfaceUserData;
 import org.chromium.components.browser_ui.accessibility.PageZoomCoordinator;
 import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
 import org.chromium.components.browser_ui.util.ComposedBrowserControlsVisibilityDelegate;
-import org.chromium.components.browser_ui.widget.InsetObserverView;
+import org.chromium.components.browser_ui.widget.InsetObserver;
 import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController;
 import org.chromium.components.browser_ui.widget.TouchEventObserver;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
@@ -163,7 +165,7 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
     private CommerceSubscriptionsService mCommerceSubscriptionsService;
     private UndoGroupSnackbarController mUndoGroupSnackbarController;
     private final int mControlContainerHeightResource;
-    private final Supplier<InsetObserverView> mInsetObserverViewSupplier;
+    private final Supplier<InsetObserver> mInsetObserverViewSupplier;
     private final Function<Tab, Boolean> mBackButtonShouldCloseTabFn;
     private LayoutStateProvider.LayoutStateObserver mGestureNavLayoutObserver;
     private final ObservableSupplierImpl<EphemeralTabCoordinator> mEphemeralTabCoordinatorSupplier;
@@ -213,13 +215,13 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
 
     /**
      * Construct a new TabbedRootUiCoordinator.
+     *
      * @param activity The activity whose UI the coordinator is responsible for.
-     * @param onOmniboxFocusChangedListener callback to invoke when Omnibox focus
-     *         changes.
+     * @param onOmniboxFocusChangedListener callback to invoke when Omnibox focus changes.
      * @param shareDelegateSupplier Supplies the {@link ShareDelegate}.
      * @param tabProvider The {@link ActivityTabProvider} to get current tab of the activity.
      * @param profileSupplier Supplier of the currently applicable profile.
-     * @param bookmarkModelSupplier Supplier of the bookmark  bridge for the current profile.
+     * @param bookmarkModelSupplier Supplier of the bookmark bridge for the current profile.
      * @param contextualSearchManagerSupplier Supplier of the {@link ContextualSearchManager}.
      * @param tabModelSelectorSupplier Supplies the {@link TabModelSelector}.
      * @param startSurfaceSupplier Supplier of the {@link StartSurface}.
@@ -250,15 +252,16 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
      * @param ephemeralTabCoordinatorSupplier Supplies the {@link EphemeralTabCoordinator}.
      * @param intentRequestTracker Tracks intent requests.
      * @param controlContainerHeightResource The resource for the control container.
-     * @param insetObserverViewSupplier Supplier for the {@link InsetObserverView}.
+     * @param insetObserverViewSupplier Supplier for the {@link InsetObserver}.
      * @param backButtonShouldCloseTabFn Function which supplies whether or not the back button
-     *         should close the tab.
+     *     should close the tab.
      * @param tabReparentingControllerSupplier Supplier for the {@link TabReparentingController}.
      * @param initializeUiWithIncognitoColors Whether to initialize the UI with incognito colors.
      * @param backPressManager The {@link BackPressManager} handling back press.
      * @param savedInstanceState The saved bundle for the last recorded state.
      */
-    public TabbedRootUiCoordinator(@NonNull AppCompatActivity activity,
+    public TabbedRootUiCoordinator(
+            @NonNull AppCompatActivity activity,
             @Nullable Callback<Boolean> onOmniboxFocusChangedListener,
             @NonNull ObservableSupplier<ShareDelegate> shareDelegateSupplier,
             @NonNull ActivityTabProvider tabProvider,
@@ -287,17 +290,20 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
             @NonNull Supplier<CompositorViewHolder> compositorViewHolderSupplier,
             @NonNull Supplier<TabContentManager> tabContentManagerSupplier,
             @NonNull Supplier<SnackbarManager> snackbarManagerSupplier,
-            @ActivityType int activityType, @NonNull Supplier<Boolean> isInOverviewModeSupplier,
+            @ActivityType int activityType,
+            @NonNull Supplier<Boolean> isInOverviewModeSupplier,
             @NonNull Supplier<Boolean> isWarmOnResumeSupplier,
             @NonNull AppMenuDelegate appMenuDelegate,
             @NonNull StatusBarColorProvider statusBarColorProvider,
-            @NonNull ObservableSupplierImpl<EphemeralTabCoordinator>
-                    ephemeralTabCoordinatorSupplier,
-            @NonNull IntentRequestTracker intentRequestTracker, int controlContainerHeightResource,
-            @NonNull Supplier<InsetObserverView> insetObserverViewSupplier,
+            @NonNull
+                    ObservableSupplierImpl<EphemeralTabCoordinator> ephemeralTabCoordinatorSupplier,
+            @NonNull IntentRequestTracker intentRequestTracker,
+            int controlContainerHeightResource,
+            @NonNull Supplier<InsetObserver> insetObserverViewSupplier,
             @NonNull Function<Tab, Boolean> backButtonShouldCloseTabFn,
             OneshotSupplier<TabReparentingController> tabReparentingControllerSupplier,
-            boolean initializeUiWithIncognitoColors, @NonNull BackPressManager backPressManager,
+            boolean initializeUiWithIncognitoColors,
+            @NonNull BackPressManager backPressManager,
             @Nullable Bundle savedInstanceState) {
         super(activity, onOmniboxFocusChangedListener, shareDelegateSupplier, tabProvider,
                 profileSupplier, bookmarkModelSupplier, tabBookmarkerSupplier,
@@ -431,21 +437,13 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
     }
 
     /**
-     * @return The toolbar button IPH controller for the tabbed UI this coordinator controls.
-     * TODO(pnoland, https://crbug.com/865801): remove this in favor of wiring it directly.
-     */
-    public ToolbarButtonInProductHelpController getToolbarButtonInProductHelpController() {
-        return mToolbarButtonInProductHelpController;
-    }
-
-    /**
      * Show navigation history sheet.
      */
     public void showFullHistorySheet() {
         if (mActivity == null) return;
         Tab tab = mActivityTabProvider.get();
         if (tab == null || tab.getWebContents() == null || !tab.isUserInteractable()) return;
-        Profile profile = Profile.fromWebContents(tab.getWebContents());
+        Profile profile = tab.getProfile();
         mNavigationSheet = NavigationSheet.create(
                 mActivity.getWindow().getDecorView().findViewById(android.R.id.content), mActivity,
                 this::getBottomSheetController, profile);
@@ -477,7 +475,7 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
                 mActivityLifecycleDispatcher, mCompositorViewHolderSupplier.get(),
                 mCallbackController.makeCancelable(
                         () -> mLayoutManager.getActiveLayout().requestUpdate()),
-                mActivityTabProvider, mInsetObserverViewSupplier.get(),
+                mActivityTabProvider, mInsetObserverViewSupplier.get(), mStartSurfaceSupplier,
                 new BackActionDelegate() {
                     @Override
                     public @ActionType int getBackActionType(Tab tab) {
@@ -504,8 +502,8 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
                         return isShowingStartSurfaceHomepage();
                     }
                 },
-                mCompositorViewHolderSupplier.get()::addTouchEventObserver,
-                mCompositorViewHolderSupplier.get()::removeTouchEventObserver, mLayoutManager);
+                () -> mCompositorViewHolderSupplier.get(),
+                mLayoutManager);
         mRootUiTabObserver.swapToTab(mActivityTabProvider.get());
 
         if (!ChromeApplicationImpl.isVivaldi())
@@ -666,27 +664,35 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
 
         boolean didTriggerPromo = false;
 
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.PRIVACY_SANDBOX_SETTINGS_3)
-                || ChromeFeatureList.isEnabled(ChromeFeatureList.PRIVACY_SANDBOX_SETTINGS_4)) {
-            String histogramName =
-                    "Startup.Android.PrivacySandbox.DialogNotShownDueToTabLaunchedFromExternalApp";
-            Tab tab = mActivityTabProvider.get();
-            boolean isTabLaunchedFromExternalApp =
-                    tab != null && tab.getLaunchType() == TabLaunchType.FROM_EXTERNAL_APP;
-            boolean shouldSuppressPSDialogForExternalAppLaunches =
-                    ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
-                            ChromeFeatureList.PRIVACY_SANDBOX_SETTINGS_4,
-                            "suppress-dialog-for-external-app-launches", true);
-            boolean shouldSuppressPSDialog =
-                    isTabLaunchedFromExternalApp && shouldSuppressPSDialogForExternalAppLaunches;
+        String histogramName =
+                "Startup.Android.PrivacySandbox.DialogNotShownDueToTabLaunchedFromExternalApp";
+        Tab tab = mActivityTabProvider.get();
+        boolean isTabLaunchedFromExternalApp =
+                tab != null && tab.getLaunchType() == TabLaunchType.FROM_EXTERNAL_APP;
+        boolean shouldSuppressPSDialogForExternalAppLaunches =
+                ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
+                        ChromeFeatureList.PRIVACY_SANDBOX_SETTINGS_4,
+                        "suppress-dialog-for-external-app-launches", true);
+        boolean shouldSuppressPSDialog =
+                isTabLaunchedFromExternalApp && shouldSuppressPSDialogForExternalAppLaunches;
 
-            if (!shouldSuppressPSDialog) {
-                didTriggerPromo = PrivacySandboxDialogController.maybeLaunchPrivacySandboxDialog(
-                        mActivity, new SettingsLauncherImpl(),
-                        mTabModelSelectorSupplier.get().isIncognitoSelected(),
-                        getBottomSheetController());
-            }
-            RecordHistogram.recordBooleanHistogram(histogramName, shouldSuppressPSDialog);
+        if (!shouldSuppressPSDialog) {
+            didTriggerPromo = PrivacySandboxDialogController.maybeLaunchPrivacySandboxDialog(
+                    mActivity, new SettingsLauncherImpl(),
+                    mTabModelSelectorSupplier.get().isIncognitoSelected(),
+                    getBottomSheetController());
+        }
+        RecordHistogram.recordBooleanHistogram(histogramName, shouldSuppressPSDialog);
+
+        if (!didTriggerPromo && TrackingProtectionNoticeController.shouldShowNotice()) {
+            TrackingProtectionNoticeController.create(
+                    mActivity,
+                    mActivityTabProvider,
+                    mMessageDispatcher,
+                    new SettingsLauncherImpl());
+            // Promo will be triggered eventually. We don't want for this promo to clash with other
+            // promos in the same run.
+            didTriggerPromo = true;
         }
 
         if (!didTriggerPromo) {
@@ -746,8 +752,12 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
                         getToolbarManager().getMenuButtonView(),
                         mAppMenuCoordinator.getAppMenuHandler(), R.id.manage_all_windows_menu_id);
             }
-            DesktopSiteSettingsIPHController.create(mActivity, mWindowAndroid, mActivityTabProvider,
-                    Profile.getLastUsedRegularProfile(), getToolbarManager().getMenuButtonView(),
+            DesktopSiteSettingsIPHController.create(
+                    mActivity,
+                    mWindowAndroid,
+                    mActivityTabProvider,
+                    Profile.getLastUsedRegularProfile(),
+                    getToolbarManager().getMenuButtonView(),
                     mAppMenuCoordinator.getAppMenuHandler());
         }
         mPromoShownOneshotSupplier.set(didTriggerPromo);
@@ -782,12 +792,10 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
                         ChromeFeatureList.DARKEN_WEBSITES_CHECKBOX_IN_THEMES_SETTING)) {
             // TODO(crbug.com/1252965): Investigate locking feature engagement system during
             // "second run promos" to avoid !didTriggerPromo check.
-            Tab tab;
             WebContents webContents;
 
             Profile profile;
-            if ((tab = mActivityTabProvider.get()) != null
-                    && (webContents = tab.getWebContents()) != null) {
+            if (tab != null && (webContents = tab.getWebContents()) != null) {
                 profile = Profile.fromWebContents(webContents);
             } else {
                 profile = Profile.getLastUsedRegularProfile();
@@ -812,7 +820,6 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
 
         if (!didTriggerPromo && PageZoomCoordinator.shouldShowMenuItem()) {
             // Page Zoom IPH should only show if the menu item is visible, and not on NTP or CCT.
-            Tab tab = mActivityTabProvider.get();
             if (tab != null && tab.getWebContents() != null && !tab.isNativePage()) {
                 PageZoomIPHController mPageZoomIPHController = new PageZoomIPHController(mActivity,
                         mAppMenuCoordinator.getAppMenuHandler(),
@@ -939,7 +946,7 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
                 return false;
             }
 
-            SharedPreferencesManager preferenceManager = SharedPreferencesManager.getInstance();
+            SharedPreferencesManager preferenceManager = ChromeSharedPreferences.getInstance();
             // Promos can only be shown when we start with ACTION_MAIN intent and
             // after FRE is complete. Native initialization can finish before the FRE flow is
             // complete, and this will only show promos on the second opportunity. This is

@@ -42,9 +42,9 @@ void BrowserPluginGuest::Init() {
 }
 
 std::unique_ptr<WebContentsImpl> BrowserPluginGuest::CreateNewGuestWindow(
-    const WebContents::CreateParams& params, int disposition) {
+    const WebContents::CreateParams& params) {
   std::unique_ptr<WebContents> new_contents =
-      delegate_->CreateNewGuestWindow(params, disposition);
+      delegate_->CreateNewGuestWindow(params);
   DCHECK(new_contents);
   return base::WrapUnique(
       static_cast<WebContentsImpl*>(new_contents.release()));

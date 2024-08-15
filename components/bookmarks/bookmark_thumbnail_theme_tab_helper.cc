@@ -63,7 +63,7 @@ void BookmarkThumbnailThemeTabHelper::UpdateBookmarkThemeColor() {
 
   std::vector<const bookmarks::BookmarkNode*> nodes;
   for (const GURL& url : redirect_chain_) {
-    bookmark_model_->GetNodesByURL(url, &nodes);
+    nodes = bookmark_model_->GetNodesByURL(url);
   }
   for (const auto* node : nodes) {
     SetNodeThemeColor(bookmark_model_, node, *theme_color);

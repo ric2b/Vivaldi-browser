@@ -34,7 +34,6 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.keyboard_accessory.ManualFillingTestHelper;
@@ -55,9 +54,8 @@ import org.chromium.ui.test.util.UiDisableIf;
 import org.chromium.url.GURL;
 
 import java.util.concurrent.TimeoutException;
-/**
- * Integration tests for password accessory views.
- */
+
+/** Integration tests for password accessory views. */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "show-autofill-signatures"})
 public class PasswordAccessoryIntegrationTest {
@@ -78,19 +76,25 @@ public class PasswordAccessoryIntegrationTest {
     public void testPasswordSheetIsAvailable() {
         mHelper.loadTestPage(false);
 
-        CriteriaHelper.pollUiThread(() -> {
-            return mHelper.getOrCreatePasswordAccessorySheet() != null;
-        }, " Password Sheet should be bound to accessory sheet.");
+        CriteriaHelper.pollUiThread(
+                () -> {
+                    return mHelper.getOrCreatePasswordAccessorySheet() != null;
+                },
+                " Password Sheet should be bound to accessory sheet.");
     }
 
     @Test
     @MediumTest
     public void testPasswordSheetDisplaysProvidedItems() throws TimeoutException {
         preparePasswordBridge();
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            mPasswordStoreBridge.insertPasswordCredential(new PasswordStoreCredential(
-                    new GURL(mTestServer.getURL("/")), "mayapark@gmail.com", "SomeHiddenPassword"));
-        });
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    mPasswordStoreBridge.insertPasswordCredential(
+                            new PasswordStoreCredential(
+                                    new GURL(mTestServer.getURL("/")),
+                                    "mayapark@gmail.com",
+                                    "SomeHiddenPassword"));
+                });
         mActivityTestRule.loadUrl(
                 mTestServer.getURL("/chrome/test/data/password/password_form.html"));
         mHelper.focusPasswordField(false);
@@ -112,7 +116,9 @@ public class PasswordAccessoryIntegrationTest {
         mActivityTestRule.startMainActivityOnBlankPage();
         mTestServer = mActivityTestRule.getTestServer();
         TestThreadUtils.runOnUiThreadBlocking(
-                () -> { mPasswordStoreBridge = new PasswordStoreBridge(); });
+                () -> {
+                    mPasswordStoreBridge = new PasswordStoreBridge();
+                });
     }
 
     @Test
@@ -139,10 +145,14 @@ public class PasswordAccessoryIntegrationTest {
     @DisableFeatures({ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_LOCAL_PWD_MIGRATION_WARNING})
     public void testFillsPasswordOnTap() throws TimeoutException {
         preparePasswordBridge();
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            mPasswordStoreBridge.insertPasswordCredential(new PasswordStoreCredential(
-                    new GURL(mTestServer.getURL("/")), "mpark@abc.com", "ShorterPassword"));
-        });
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    mPasswordStoreBridge.insertPasswordCredential(
+                            new PasswordStoreCredential(
+                                    new GURL(mTestServer.getURL("/")),
+                                    "mpark@abc.com",
+                                    "ShorterPassword"));
+                });
         mHelper.loadUrl("/chrome/test/data/password/password_form.html");
         mHelper.focusPasswordField(false);
         mHelper.waitForKeyboardAccessoryToBeShown();
@@ -178,14 +188,17 @@ public class PasswordAccessoryIntegrationTest {
     @Test
     @SmallTest
     @EnableFeatures(ChromeFeatureList.RECOVER_FROM_NEVER_SAVE_ANDROID)
-    @DisabledTest(message = "https://crbug.com/1465414")
     public void testEnablesUndenylistingToggle() throws TimeoutException, InterruptedException {
-        mHelper.loadTestPage(false);
-        mHelper.cacheCredentials(new String[0], new String[0], true);
-
-        // Focus the field to bring up the accessory.
-        mHelper.focusPasswordField();
+        preparePasswordBridge();
+        String url = mTestServer.getURL("/chrome/test/data/password/password_form.html");
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    mPasswordStoreBridge.blocklistForTesting(url);
+                });
+        mActivityTestRule.loadUrl(url);
+        mHelper.focusPasswordField(false);
         mHelper.waitForKeyboardAccessoryToBeShown();
+        mHelper.waitForKeyboardToShow();
         whenDisplayed(isKeyboardAccessoryTabLayout()).perform(selectTabAtPosition(0));
 
         whenDisplayed(withId(R.id.option_toggle_switch)).check(matches(isNotChecked()));

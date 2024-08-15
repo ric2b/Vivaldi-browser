@@ -11,8 +11,8 @@ source_set("vivaldi_account") {
   ]
 
   deps = [
-    "//ios/chrome/browser/browser_state",
-    "//ios/chrome/browser/passwords:store_factory",
+    "//ios/chrome/browser/browser_state/model",
+    "//ios/chrome/browser/passwords/model:store_factory",
     "//vivaldi/prefs",
     "//vivaldi/vivaldi_account",
     "//third_party/boringssl",

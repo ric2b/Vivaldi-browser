@@ -91,6 +91,10 @@ bool URLDatabase::GetDetailedMatchesWStatement(
     info.typed_count = statement.ColumnInt(4);
     info.last_visit_time = statement.ColumnTime(5);
     info.transition_type = ui::PageTransitionFromInt(statement.ColumnInt(6));
+    // The source is optional so far. Prevents crash in the debug build.
+    if (statement.ColumnCount() >= 8) {
+      info.source = statement.ColumnInt(7);
+    }
 
     if (info.url.is_valid())
       results->push_back(info);

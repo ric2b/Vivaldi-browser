@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 import 'chrome://personalization/strings.m.js';
-import 'chrome://webui-test/mojo_webui_test_support.js';
 
 import {AvatarCameraElement, AvatarCameraMode, GetUserMediaProxy, setWebcamUtilsForTesting} from 'chrome://personalization/js/personalization_app.js';
 import * as webcamUtils from 'chrome://resources/ash/common/cr_picture/webcam_utils.js';
@@ -17,8 +16,8 @@ import {TestUserProvider} from './test_user_interface_provider';
 type WebcamUtilsInterface = typeof webcamUtils;
 
 class MockWebcamUtils extends TestBrowserProxy implements WebcamUtilsInterface {
-  public captureFramesResponse = [];
-  public pngUint8Array = new Uint8Array(10);
+  captureFramesResponse = [];
+  pngUint8Array = new Uint8Array(10);
 
   /* eslint-disable @typescript-eslint/naming-convention */
   CAPTURE_SIZE = {height: 10, width: 10};

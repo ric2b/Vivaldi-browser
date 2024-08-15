@@ -63,6 +63,9 @@ void FullscreenMediator::EnterFullscreen() {
 }
 
 void FullscreenMediator::ExitFullscreen() {
+  if (model_->IsForceFullscreenMode()) {
+    return;
+  }
   // Instruct the model to ignore the remainder of the current scroll when
   // starting this animator.  This prevents the toolbar from immediately being
   // hidden if AnimateModelReset() is called while a scroll view is
@@ -118,7 +121,10 @@ void FullscreenMediator::FullscreenModelProgressUpdated(
 void FullscreenMediator::FullscreenModelEnabledStateChanged(
     FullscreenModel* model) {
   DCHECK_EQ(model_, model);
-  StopAnimating(true /* update_model */);
+  // Stops the animation only if there is a current animation running.
+  if (animator_ && animator_.state == UIViewAnimatingStateActive) {
+    StopAnimating(true /* update_model */);
+  }
   for (auto& observer : observers_) {
     observer.FullscreenEnabledStateChanged(controller_, model->enabled());
   }

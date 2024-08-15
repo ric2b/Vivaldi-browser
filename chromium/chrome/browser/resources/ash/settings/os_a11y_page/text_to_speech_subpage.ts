@@ -36,7 +36,7 @@ import {TextToSpeechSubpageBrowserProxy, TextToSpeechSubpageBrowserProxyImpl} fr
  * and should always reflect it (do not change one without changing the other).
  */
 export enum PdfOcrUserSelection {
-  TURN_ON_ONCE_FROM_CONTEXT_MENU = 0,
+  DEPRECATED_TURN_ON_ONCE_FROM_CONTEXT_MENU = 0,
   TURN_ON_ALWAYS_FROM_CONTEXT_MENU = 1,
   TURN_OFF_FROM_CONTEXT_MENU = 2,
   TURN_ON_ALWAYS_FROM_MORE_ACTIONS = 3,
@@ -85,14 +85,6 @@ export class SettingsTextToSpeechSubpageElement extends
        */
       hasScreenReader: Boolean,
 
-      isAccessibilityChromeVoxPageMigrationEnabled_: {
-        type: Boolean,
-        value() {
-          return loadTimeData.getBoolean(
-              'isAccessibilityChromeVoxPageMigrationEnabled');
-        },
-      },
-
       /**
        * |pdfOcrProgress_| stores the downloading progress in percentage of
        * the ScreenAI library.
@@ -128,7 +120,6 @@ export class SettingsTextToSpeechSubpageElement extends
   hasScreenReader: boolean;
   private deviceBrowserProxy_: DevicePageBrowserProxy;
   private hasKeyboard_: boolean;
-  private isAccessibilityChromeVoxPageMigrationEnabled_: boolean;
   private pdfOcrProgress_: number;
   private pdfOcrStatus_: ScreenAiInstallStatus;
   private showPdfOcrToggle_: boolean;
@@ -146,7 +137,7 @@ export class SettingsTextToSpeechSubpageElement extends
     this.deviceBrowserProxy_ = DevicePageBrowserProxyImpl.getInstance();
   }
 
-  override connectedCallback() {
+  override connectedCallback(): void {
     super.connectedCallback();
 
     this.addWebUiListener(
@@ -167,7 +158,7 @@ export class SettingsTextToSpeechSubpageElement extends
     }
   }
 
-  override ready() {
+  override ready(): void {
     super.ready();
 
     this.addFocusConfig(
@@ -195,18 +186,18 @@ export class SettingsTextToSpeechSubpageElement extends
     }
   }
 
-  private onPdfOcrStateChanged_(pdfOcrState: ScreenAiInstallStatus) {
+  private onPdfOcrStateChanged_(pdfOcrState: ScreenAiInstallStatus): void {
     this.pdfOcrStatus_ = pdfOcrState;
   }
 
-  private onPdfOcrDownloadingProgressChanged_(progress: number) {
+  private onPdfOcrDownloadingProgressChanged_(progress: number): void {
     this.pdfOcrProgress_ = progress;
   }
 
   /**
    * Note: Overrides RouteOriginMixin implementation
    */
-  override currentRouteChanged(newRoute: Route, prevRoute?: Route) {
+  override currentRouteChanged(newRoute: Route, prevRoute?: Route): void {
     super.currentRouteChanged(newRoute, prevRoute);
 
     // Does not apply to this page.
@@ -255,10 +246,6 @@ export class SettingsTextToSpeechSubpageElement extends
   }
 
   private onChromeVoxSettingsClick_(): void {
-    this.textToSpeechBrowserProxy_.showChromeVoxSettings();
-  }
-
-  private onChromeVoxNewSettingsClick_(): void {
     Router.getInstance().navigateTo(routes.A11Y_CHROMEVOX);
   }
 
@@ -267,10 +254,6 @@ export class SettingsTextToSpeechSubpageElement extends
   }
 
   private onSelectToSpeakSettingsClick_(): void {
-    this.textToSpeechBrowserProxy_.showSelectToSpeakSettings();
-  }
-
-  private onSelectToSpeakClick_(): void {
     Router.getInstance().navigateTo(routes.A11Y_SELECT_TO_SPEAK);
   }
 

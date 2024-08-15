@@ -31,22 +31,12 @@
 # You should specify the tests one-by-one in most cases, instead of this.
 tast_disabled_tests_from_chrome_all = [
   # https://crbug.com/1379756
-  "inputs.VirtualKeyboardGlideTyping.clamshell_a11y_floating",
-  "inputs.VirtualKeyboardGlideTyping.tablet_floating",
   "inputs.VirtualKeyboardHandwriting.floating",
-
-  # crbug.com/1259127
-  "ui.TabletOperations",
 
   # crbug.com/1263233
   "security.SharedFilesystemState",
 
-  # https://crbug.com/1269880: Flaky.
-  "ui.ChromeCrashReporterMetrics.success_crashpad",
-
   # https://crbug.com/1276549: Flaky.
-  "ui.ChromeCrashLoop.breakpad",
-  "ui.ChromeCrashLoop.breakpad_mock_consent",
   "ui.ChromeCrashReporterMetrics.success_breakpad",
   "ui.ChromeCrashReporterMetrics.miss_breakpad",
 
@@ -54,52 +44,27 @@ tast_disabled_tests_from_chrome_all = [
   # still investigating.
   "ui.ChromeCrashNotLoggedIn.browser_crashpad",
 
-  # https://crbug.com/1279285: Flaky.
-  "policy.AllowWakeLocks",
-
-  # https://crbug.com/1311242
-  "policy.ImagesForURLCheck.allowlist",
+  # b/296821415
+  "ui.ChromeCrashLoggedIn.browser_crashpad",
+  "ui.ChromeCrashLoggedIn.browser_crashpad_mock_consent",
 
   # https://crbug.com/1282372
   "security.SELinuxFilesARC",
   "security.NetworkListenersARC",
   "security.SELinuxProcessesARC",
 
-  # https://crbug.com/1430753
-  "mlservice.WebHandwritingRecognitionNotSupported",
-  "security.ChromeSandboxed",
-  "security.GPUSandboxed",
-
   # https://crbug.com/1282481
-  "quicksettings.OpenSettings",
   "quicksettings.OpenSettings.qs_revamp_disabled",
   "quicksettings.OpenSettings.qs_revamp_enabled",
 
   # http://b/212644512
   "security.SELinuxFilesDataDir",
 
-  # https://crbug.com/1260046
-  "wmp.WindowCycle",
-
-  # crbug.com/1364513
-  "policy.ArcEnabled.vm",
-
   # https://crbug.com/1309331
   "policy.CookiesAllowedForUrls",
 
   # https://crbug.com/1307940
   "policy.URLCheck.blocklist",
-
-  # https://crbug.com/1309288
-  "policy.AudioCaptureAllowed",
-  "policy.AlternateErrorPagesEnabled",
-
-  # https://crbug.com/1309052
-  "policy.ShowHomeButton",
-  "policy.ShowLogoutButtonInTray",
-
-  # https://crbug.com/1309466
-  "arc.StartStop.vm",
 
   # https://crbug.com/1309492
   "arc.DragDrop.chrome_to_android",
@@ -122,12 +87,6 @@ tast_disabled_tests_from_chrome_all = [
   # http://crbug.com/1363667
   "apps.CalculatorSmoke",
 
-  # https://crbug.com/1341074
-  "launcher.BubbleLaunchApp.enable_launcher_app_sort",
-
-  # https://crbug.com/1341076
-  "launcher.BubbleLaunchApp.disable_launcher_app_sort",
-
   # b/241122961
   "policy.BlockThirdPartyCookies",
 
@@ -137,79 +96,23 @@ tast_disabled_tests_from_chrome_all = [
   # https://crbug.com/1350880
   "arc.PIPRoundedCornersUnderlay",
 
-  # https://crbug.com/1352525
-  "apps.ContentPreview",
-
   # https://crbug.com/1362182
   "feedback.AttachFile",
-
-  # https://crbug.com/1360969
-  "launcher.SearchBuiltInApps.productivity_launcher_tablet_mode",
-
-  # https://crbug.com/1365284
-  "crostini.RestartApp.clamshell_stable",
-
-  # https://crbug.com/1366112
-  "crostini.ResizeInstallation.stable",
-
-  # b/271636906
-  "crostini.SecureCopyPaste.copy_wayland_bullseye_stable",
-  "crostini.SecureCopyPaste.copy_x11_bullseye_stable",
-  "crostini.SecureCopyPaste.paste_wayland_bullseye_stable",
-  "crostini.RestartIcon.buster_stable",
-  "crostini.RestartIcon.bullseye_stable",
-
-  # https://crbug.com/1455410
-  "crostini.RestartApp.bullseye_clamshell_stable",
-
-  # https://crbug.com/1368586
-  "u2fd.WebauthnUsingPassword.tpm1",
-  "u2fd.WebauthnUsingPassword.tpm1_lacros",
-  "u2fd.WebauthnUsingPassword.gsc",
-  "u2fd.WebauthnUsingPassword.gsc_lacros",
 
   # https://crbug.com/1368859
   "arc.Drivefs",
   "arc.Drivefs.vm",
 
-  # https://crbug.com/1374943
-  "hwsec.CrossVersionLogin",
-
-  # https://crbug.com/1375191
-  "login.ChangePassword.auth_factor_experiment_on",
-  "login.ChangePassword.auth_factor_experiment_off",
-
-  # https://crbug.com/1361163
-  "lacros.AudioPinnedStream.play",
-
   # https://crbug.com/1392911
   "login.RestrictSignin",
-
-  # https://crbug.com/1401605
-  "hwsec.CrossVersionLogin.small",
-  "hwsec.CrossVersionLogin.tpm_dynamic_small",
 
   # https://crbug.com/1402224
   "audio.PlaybackAudioControls",
 
-  # https://crbug.com/1236234
-  "lacros.AudioPlay",
-
-  # https://crbug.com/1415861
+  # https://crbug.com/1415861, b/302636099
   "crostini.ResizeRestart.bullseye_stable",
   "crostini.ResizeRestart.buster_stable",
-
-  # https://b/272357159
-  "crostini.AppAudacity.bullseye_clamshell_stable",
-  "crostini.AppAudacity.buster_clamshell_stable",
-  "crostini.AppEmacs.bullseye_clamshell_stable",
-  "crostini.AppEmacs.clamshell_stable",
-  "crostini.AppGedit.bullseye_clamshell_stable",
-  "crostini.AppGedit.clamshell_stable",
-  "crostini.AppGeditUnshareFolder.bullseye_clamshell_stable",
-  "crostini.AppGeditUnshareFolder.clamshell_stable",
-  "crostini.AppVscode.bullseye_clamshell_stable",
-  "crostini.AppVscode.clamshell_stable",
+  "crostini.ResizeRestart.bookworm_stable",
 
   # b/287525851
   "arc.AudioValidity.playback",
@@ -226,12 +129,6 @@ tast_disabled_tests_from_chrome_all = [
 
   # b/296913657
   "secagentd.ProcessEvents@amd64-generic",
-
-  # b/297113736
-  "wmp.AdminTemplatesLaunch",
-  "wmp.DesksTemplatesBasic",
-  "wmp.DesksTemplatesLaunch",
-  "wmp.SavedDeskDelete",
 
   # READ COMMENT AT TOP BEFORE ADDING NEW TESTS HERE.
 ]
@@ -270,11 +167,21 @@ tast_disabled_tests_from_lacros_all = [
   # https://crbug.com/1446233
   "tast.arc.IntentForward.lacros_vm",
 
+  # https://crbug.com/1497315
+  "ui.ChromeCrashEarly.strict_lacros",
+
   # https://b/294268366
   "ui.ForceRegion.lacros",
 
   # https://crbug.com/1470305
   "inputs.VirtualKeyboardTypingOmnibox.a11y_lacros",
+
+  # On branch day, Lacros is +3 newer than ash which break the test.
+  "lacros.CompareVersionWithAsh",
+
+  # b/b/288933829, until LKGM containing 120.0.6049.0-onward ASH Chrome comes.
+  "inputs.PhysicalKeyboardMultiwordSuggestion.lacros",
+  "inputs.VirtualKeyboardHandwriting.floating_lacros",
 
   # THIS IS THE LACROS LIST, SCROLL UP FOR CHROME/CHROMEOS.
 ]

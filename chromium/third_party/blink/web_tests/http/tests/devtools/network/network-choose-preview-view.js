@@ -6,13 +6,14 @@ import {TestRunner} from 'test_runner';
 import {NetworkTestRunner} from 'network_test_runner';
 
 import * as Common from 'devtools/core/common/common.js';
-import * as SDK from 'devtools/core/sdk/sdk.js';
 import * as Network from 'devtools/panels/network/network.js';
+import * as SourceFrame from 'devtools/ui/legacy/components/source_frame/source_frame.js';
+import * as UIModule from 'devtools/ui/legacy/legacy.js';
+import * as SDK from 'devtools/core/sdk/sdk.js';
 
 (async function() {
   'use strict';
   TestRunner.addResult(`Tests to make sure the proper view is used for the data that is received in network panel.\n`);
-  await TestRunner.loadLegacyModule('source_frame');
   await TestRunner.showPanel('network');
 
   function createNetworkRequest(mimeType, content, statusCode, resourceType) {
@@ -30,7 +31,7 @@ import * as Network from 'devtools/panels/network/network.js';
       return '** NONE **';
     if (previewer instanceof SourceFrame.ResourceSourceFrame.SearchableContainer)
       return 'SearchableContainer > ' + getViewName(previewer.children()[0]);
-    if (previewer instanceof UI.SearchableView)
+    if (previewer instanceof UIModule.SearchableView.SearchableView)
       return 'SearchableView > ' + getViewName(previewer.searchProvider);
     return previewer.contentElement.className;
   }

@@ -51,7 +51,7 @@ declare_overrides() {
   if (is_linux) {
     if (!is_component_build) {
       enable_linux_installer = is_linux
-      # enable_snap_package = true
+      enable_snap_package = is_official_build && (target_cpu == "x64" || target_cpu == "arm64") && (VIVALDI_RELEASE_KIND == "vivaldi_final" || release_kind == "snapshot" || release_kind == "vivaldi-snap")
     }
     if (is_official_build) {
       symbol_level = 1
@@ -65,7 +65,6 @@ declare_overrides() {
     enable_gvr_services = false
     enable_cardboard = false
     enable_arcore = false
-    webview_includes_weblayer = false
     enable_vr = false
     ffmpeg_branding = "Chrome"
     if (is_vivaldi_automotive) { # Potential fix for VAB-7448.
@@ -94,9 +93,9 @@ declare_overrides() {
 
   if (is_mac) {
     use_system_xcode = true
-    if (getenv("CHROME_HEADLESS") == "1") {
-      mac_use_sdk = "13.3"
-    }
+    #if (getenv("CHROME_HEADLESS") == "1") {
+    #  mac_use_sdk = "12.3"
+    #}
   }
 
   if (is_win) {
@@ -116,7 +115,7 @@ declare_overrides() {
     enable_cdm_storage_id = (is_mac || is_win) && is_official_build && !vivaldi_disable_widevine_verification
   }
   if(is_ios) {
-    if (release_kind == "final") {
+    if (release_kind == "final" || test_ios_app_as_final) {
       ios_app_bundle_id_prefix = "com.vivaldi"
     } else {
       ios_app_bundle_id_prefix = "com.vivaldi.snapshot"
@@ -127,6 +126,9 @@ declare_overrides() {
     is_component_build = false
     # Needed until we understand chromium partition allocator better.
     ios_partition_alloc_enabled = false
+    # We need to make sure the most visited sites work for us before making
+    # this widgets available for users.
+    ios_enable_shortcuts_widget = false
 
     ios_application_icons_target = "//vivaldi/ios/app/resources/appicons:vivaldi_appicons"
     ios_launchscreen_assets_target = "//vivaldi/ios/app/resources:launchscreen_assets"

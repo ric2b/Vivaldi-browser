@@ -4,13 +4,14 @@
 
 #import "ios/chrome/browser/ui/tab_switcher/web_state_tab_switcher_item.h"
 
+#import "base/apple/foundation_util.h"
 #import "base/memory/weak_ptr.h"
 #import "components/favicon/ios/web_favicon_driver.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/url/url_util.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
-#import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
-#import "ios/chrome/browser/tabs/tab_title_util.h"
+#import "ios/chrome/browser/snapshots/model/snapshot_tab_helper.h"
+#import "ios/chrome/browser/tabs/model/tab_title_util.h"
 #import "ios/web/public/web_state.h"
 
 // Vivaldi
@@ -36,27 +37,9 @@ const CGFloat kSymbolSize = 16;
 
 - (instancetype)initWithWebState:(web::WebState*)webState {
   DCHECK(webState);
-  self = [super initWithIdentifier:webState->GetStableIdentifier()];
+  self = [super initWithIdentifier:webState->GetUniqueIdentifier()];
   if (self) {
     _webState = webState->GetWeakPtr();
-
-    // chrome://newtab (NTP) tabs have no title.
-    if (IsUrlNtp(webState->GetVisibleURL())) {
-
-      if (!IsVivaldiRunning()) {
-      self.hidesTitle = YES;
-      } // End Vivaldi
-
-    }
-
-    // Vivaldi
-    if (IsUrlNtp(webState->GetVisibleURL())) {
-      self.title = l10n_util::GetNSString(IDS_IOS_TABS_SPEED_DIAL);
-    } else {
-    self.title = tab_util::GetTabTitle(webState);
-    } // End Vivaldi
-
-    self.showsActivity = webState->IsLoading();
 
     [[NSNotificationCenter defaultCenter]
         addObserver:self
@@ -65,6 +48,39 @@ const CGFloat kSymbolSize = 16;
              object:nil];
   }
   return self;
+}
+
+- (NSString*)title {
+  if (!_webState) {
+    return nil;
+  }
+
+  if (IsVivaldiRunning() && IsUrlNtp(_webState->GetVisibleURL())) {
+    NSString* pageTitle = _webState->GetBrowserState()->IsOffTheRecord() ?
+        l10n_util::GetNSString(IDS_IOS_TABS_NEW_PRIVATE_TAB) :
+        l10n_util::GetNSString(IDS_IOS_TABS_SPEED_DIAL);
+    return pageTitle;
+  } // End Vivaldi
+
+  return tab_util::GetTabTitle(_webState.get());
+}
+
+- (BOOL)hidesTitle {
+
+  if (IsVivaldiRunning())
+    return NO; // End Vivaldi
+
+  if (!_webState) {
+    return NO;
+  }
+  return IsUrlNtp(_webState->GetVisibleURL());
+}
+
+- (BOOL)showsActivity {
+  if (!_webState) {
+    return NO;
+  }
+  return _webState->IsLoading();
 }
 
 #pragma mark - Image Fetching
@@ -168,6 +184,24 @@ const CGFloat kSymbolSize = 16;
 
 - (void)lowMemoryWarningReceived:(NSNotification*)notification {
   [self clearPrefetchedSnapshot];
+}
+
+#pragma mark - NSObject
+
+- (BOOL)isEqual:(id)object {
+  if (self == object) {
+    return YES;
+  }
+  if (![object isKindOfClass:[WebStateTabSwitcherItem class]]) {
+    return NO;
+  }
+  WebStateTabSwitcherItem* otherTabStrip =
+      base::apple::ObjCCastStrict<WebStateTabSwitcherItem>(object);
+  return self.identifier == otherTabStrip.identifier;
+}
+
+- (NSUInteger)hash {
+  return static_cast<NSUInteger>(self.identifier.identifier());
 }
 
 @end
